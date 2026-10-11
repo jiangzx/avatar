@@ -128,10 +128,10 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
    - 收到客户端 `playback.stopped(interrupted)`：立即调用 `cancelResponse()`。
    - 只收到模型侧 `userSpeechStarted`、本地 VAD 没有触发：等 300 ms，期间本地 VAD 确认说话才取消，否则忽略（多半是回声）。不在 AI 播放期间时，直接以模型侧事件为准。
    - 模型自带的自动打断：能关就关（例如 Qwen 的 turn_detection 打断开关，如果有的话），统一交给网关判断；关不掉的，网关接受模型侧取消，计入"误打断"指标，并按第 5 条处理。各模型是否可关，Day 1 拿到 Key 后核实。
-   - 取消后，并把该 `responseSeq` 记入已取消集合；之后这个回复迟到的音频、文本、工具调用全部丢弃。
+   - 取消后，把该 `responseSeq` 记入已取消集合；之后这个回复迟到的音频、文本、工具调用全部丢弃。
 3. **客户端门控**：只播放和显示 `responseSeq` 等于当前激活回复的数据；`response.cancelled` 到达后，把该回复的字幕截断到已播放的位置。
 4. **上下文对齐**：Ledger 把这条助手回复截断到已播放部分。截断点 = 已收到文本长度 × `playedMs` ÷ 截至取消时已收到的音频时长（取近似值），并标注"（被用户打断）"。模型不支持按播放进度截断时，网关调用 `injectContextNote("助手上一句只说到：『…』，被用户打断")`。
-5. **误打断**：如果 VAD 触发后 600 ms 内模型侧没有识别到任何用户文字，就视为噪声或回声。这时**不恢复**旧回复（宁可少说，也不重复），由 Director 判断是否补一句"你刚刚是想说什么吗？"【待调参】。
+5. **误打断**：如果 VAD 触发后 600 ms【待调参，Day 1 实测 `userTranscript(delta)` 首字延迟后确定】内模型侧没有识别到任何用户文字，就视为噪声或回声。这时**不恢复**旧回复（宁可少说，也不重复），由 Director 判断是否补一句"你刚刚是想说什么吗？"【待调参】。
 6. **外放期间的保护**：AI 播放期间，本地 VAD 的触发阈值提高一档【预估，待调参】，降低回声自打断。
 
 ## 6. 多轮上下文记忆（会话内）
@@ -151,8 +151,16 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
   - 摘要通过 `updateInstructions` 注入，格式：「人设 + 对话摘要 + 最近 8 轮」。
   - 摘要在后台异步执行，不阻塞对话。
 - **会话重建**：模型连接断开、或达到时长上限时，用「人设 + 摘要 + 最近 8 轮」新建模型会话，客户端连接不断开。重建期间虚拟人保持 listening 状态，并显示"网络有点慢，稍等我一下"。
+- **模型侧上下文瘦身**：`updateInstructions` 不会清掉模型会话里已经积累的历史。所以模型侧上下文估算接近上限（Seeduplex 按 12K tokens 的 80% 算【预估】），或者已经累计 30 轮时，网关在下一次用户说完、AI 回复开始之前，主动做一次"会话重建"（见下条）来瘦身。模型自己会不会截断上下文，Day 1 拿到 Key 后核实。
 - **接话**：人设提示词要求"优先接住用户上一句里的具体内容，再自然延伸"。Director 发起追问时，优先从 open topics 里挑话题。
 - **验收**（见 §10）：第 2 轮说出的事实，第 10 轮能正确引用；被打断后问"你刚才说到哪了"，回答与已播放内容一致；断线重连后能接上之前的话题。
+
+### 6.1 客户端重连与会话保留
+- `POST /session` 返回 `sessionId` + 一次性 `connectToken`（5 分钟）+ `resumeToken`（只在本会话内有效，每次重连成功后轮换）。
+- WSS 断开**不等于** `session.end`。网关为断开的会话保留 Ledger、摘要和模型连接 60 秒【预估】的宽限期；期间丢弃模型下发的音频，并取消进行中的回复。
+- 客户端重连：带 `sessionId` + `resumeToken` 调用 `POST /session/resume`，换取新的 `connectToken` 并重新连接 WSS，发送 `session.resume`。网关回复 `session.resumed {lastResponseSeq}`；客户端清空播放缓冲，丢弃所有 `responseSeq ≤ lastResponseSeq` 的数据，只接受更大的序号。之后由 Director 决定是否说一句"刚才网络断了一下，我们接着聊～"，再接上之前的话题。
+- 宽限期过了还没重连，或者收到 `session.end`：销毁 Ledger 并关闭模型连接。客户端之后再连就是新会话，重新迎宾。
+- 协议新增：C→G `session.resume`；G→C `session.resumed {lastResponseSeq}`。
 
 ## 7. 主动性：Director
 
@@ -255,10 +263,13 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 
 ## 12. 安全与隐私
 - 模型 Key 只放在网关环境变量中，不进 APK、不进仓库（`.env` 加入 `.gitignore`）；客户端只持有短期 session token。
-- 全链路 HTTPS/WSS；开发阶段局域网 `ws://` 仅限 debug 构建（Android `networkSecurityConfig` 只在 debug 下放行）。
+- 全链路 HTTPS/WSS。Android `networkSecurityConfig`：
+  - **release 和 debug** 都用 `domain-config` 放行明文访问 `127.0.0.1`（只放这一个地址，给 WebView 加载本地页面用）；
+  - 开发用的局域网网关 `ws://` 只在 debug 构建中放行；
+  - 其他地址一律只允许 HTTPS/WSS。
 - **日志不记录任何对话内容**（音频、ASR 文本、回复文本都属于 L4 用户内容）；只记录事件类型、时延、错误码。Ledger 只在内存里，会话结束即释放。
 - 网关校验客户端消息：JSON schema 校验、单帧大小上限、上行音频速率上限，每个 token 只允许一个连接。
-- WebView 只加载 App 内打包的本地页面；不开文件访问；麦克风权限只授予 `RESOURCE_AUDIO_CAPTURE`。
+- WebView 只加载 App 内打包的本地页面；不开文件访问。麦克风：先申请 App 级别的 `RECORD_AUDIO` 运行时权限，再在 `setOnPlatformPermissionRequest` 里只授予 `RESOURCE_AUDIO_CAPTURE`（Day 1 ① 的验证项）。
 - 界面常驻"AI"标识；人设中如实承认 AI 身份（拟人化办法第 18 条）。POC 仅限内部演示。
 
 ## 13. 仓库结构
