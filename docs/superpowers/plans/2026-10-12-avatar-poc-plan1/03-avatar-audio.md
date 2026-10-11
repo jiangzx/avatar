@@ -1,0 +1,1572 @@
+# Plan 1 · 03 avatar-core 音频与网络（Task 9–12）
+
+> 先读 [00-overview.md](00-overview.md) 的 Global Constraints。浏览器 API（AudioContext、AudioWorklet、getUserMedia、MicVAD）相关代码无法在 vitest/node 中运行：**纯逻辑拆到独立模块做单元测试，浏览器胶水代码在 Task 14 用桌面 Chrome 手动验证。**
+
+---
+
+### Task 9: avatar-core 骨架与纯音频工具（PCM、口型、能量触发）
+
+**Files:**
+- Create: `avatar-core/package.json`, `avatar-core/tsconfig.json`, `avatar-core/vite.config.ts`, `avatar-core/index.html`, `avatar-core/.env.example`, `avatar-core/scripts/copy-vad-assets.mjs`, `avatar-core/src/types/audioworklet.d.ts`, `avatar-core/src/audio/pcm.ts`, `avatar-core/src/audio/mouth.ts`, `avatar-core/src/audio/energy.ts`
+- Test: `avatar-core/test/pcm.test.ts`, `avatar-core/test/mouth.test.ts`, `avatar-core/test/energy.test.ts`
+
+**Interfaces:**
+- Produces:
+  - `int16ToFloat32(src: Int16Array): Float32Array`、`float32ToInt16(src: Float32Array): Int16Array`、`rmsInt16(pcm: Int16Array): number`
+  - `class LinearResampler(inRate, outRate)`：`process(input: Float32Array): Float32Array`（流式，跨块保持相位）
+  - `class FrameChunker(frameSamples)`：`push(samples: Int16Array): Int16Array[]`
+  - `interface AudioFeatures { rms: number; zcr: number }`、`computeFeatures(frame: Float32Array): AudioFeatures`
+  - `interface MouthShape { jawOpen: number; funnel: number; stretch: number }`、`class MouthAnalyzer(opts?)`：`update(features, dtMs): MouthShape`、`reset()`
+  - `class EnergyTrigger(thresholdRms = 1200, minMs = 150, frameMs = 20)`：`push(frame: Int16Array): boolean`、`count`
+
+- [ ] **Step 1: 包与构建配置**
+
+`avatar-core/package.json`（`three` 必须固定 0.180.x，与 TalkingHead 依赖 `^0.180.0` 去重，避免打包两份 three）:
+
+```json
+{
+  "name": "@anyidea/avatar-core",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/copy-vad-assets.mjs",
+    "dev": "npm run assets && vite",
+    "build": "npm run assets && vite build",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@anyidea/protocol": "*",
+    "@met4citizen/talkinghead": "1.7.0",
+    "@ricky0123/vad-web": "0.0.31",
+    "onnxruntime-web": "1.30.0",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.180.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.3"
+  }
+}
+```
+
+`avatar-core/tsconfig.json`:
+
+```json
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"]
+  },
+  "include": ["src", "test", "vite.config.ts"]
+}
+```
+
+`avatar-core/vite.config.ts`:
+
+```ts
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  base: './',
+  server: { host: '0.0.0.0', port: 5173 },
+  optimizeDeps: { exclude: ['onnxruntime-web', '@ricky0123/vad-web'] },
+  build: {
+    target: 'es2022',
+    outDir: 'dist',
+    assetsInlineLimit: 0,
+    rollupOptions: { input: { main: 'index.html', spike: 'spike-aec.html' } },
+  },
+  test: { environment: 'node', include: ['test/**/*.test.ts'] },
+});
+```
+
+`avatar-core/.env.example`（只在 `vite dev` 桌面调试时读取；生产构建不使用）:
+
+```
+# Copy to .env.local (git-ignored). Desktop debugging only.
+VITE_GATEWAY_URL=http://127.0.0.1:8787
+VITE_APP_SECRET=same-as-gateway-APP_SECRET
+```
+
+`avatar-core/index.html`（占位，Task 14 补全 UI）:
+
+```html
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>avatar-core</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #10131a; overflow: hidden; }
+      #avatar { position: fixed; inset: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="avatar"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+```
+
+`avatar-core/scripts/copy-vad-assets.mjs`:
+
+```js
+// Copies Silero VAD + onnxruntime-web runtime files into public/vad so they are served same-origin.
+import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const pkgRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const out = join(pkgRoot, 'public', 'vad');
+mkdirSync(out, { recursive: true });
+
+function findDist(pkg) {
+  for (const base of [join(pkgRoot, 'node_modules'), join(pkgRoot, '..', 'node_modules')]) {
+    const dist = join(base, pkg, 'dist');
+    if (existsSync(dist)) return dist;
+  }
+  throw new Error(`Cannot find ${pkg}/dist; run npm install at the repo root`);
+}
+
+const vadDist = findDist('@ricky0123/vad-web');
+for (const f of ['vad.worklet.bundle.min.js', 'silero_vad_v5.onnx', 'silero_vad_legacy.onnx']) {
+  cpSync(join(vadDist, f), join(out, f));
+}
+const ortDist = findDist('onnxruntime-web');
+const ortFiles = readdirSync(ortDist).filter((f) => /^ort-wasm.*\.(wasm|mjs)$/.test(f));
+for (const f of ortFiles) cpSync(join(ortDist, f), join(out, f));
+console.log(`copied ${3 + ortFiles.length} VAD assets to public/vad`);
+```
+
+`avatar-core/src/types/audioworklet.d.ts`:
+
+```ts
+// Minimal AudioWorkletGlobalScope declarations (TS ships no "audioworklet" lib).
+declare abstract class AudioWorkletProcessor {
+  readonly port: MessagePort;
+  constructor();
+  abstract process(inputs: Float32Array[][], outputs: Float32Array[][], parameters: Record<string, Float32Array>): boolean;
+}
+declare function registerProcessor(name: string, ctor: new () => AudioWorkletProcessor): void;
+declare const sampleRate: number;
+```
+
+```bash
+npm install
+npm run assets -w avatar-core
+ls avatar-core/public/vad
+```
+
+Expected: 打印 `copied N VAD assets`；目录里有 `vad.worklet.bundle.min.js`、`silero_vad_v5.onnx` 和若干 `ort-wasm*.wasm/.mjs`。`npm ls three` 只出现一个 `three@0.180.0`（deduped）。
+
+- [ ] **Step 2: 写失败的测试**
+
+`avatar-core/test/pcm.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { FrameChunker, LinearResampler, computeFeatures, float32ToInt16, int16ToFloat32, rmsInt16 } from '../src/audio/pcm.ts';
+
+describe('sample conversion', () => {
+  it('round-trips int16 ↔ float32 with clipping', () => {
+    expect(Array.from(float32ToInt16(Float32Array.from([0, 1, -1, 2, -2])))).toEqual([0, 32767, -32768, 32767, -32768]);
+    const back = int16ToFloat32(Int16Array.from([16384, -16384]));
+    expect(back[0]).toBeCloseTo(0.5);
+    expect(back[1]).toBeCloseTo(-0.5);
+  });
+  it('computes RMS', () => {
+    expect(rmsInt16(new Int16Array(0))).toBe(0);
+    expect(rmsInt16(Int16Array.from([3, -3, 3, -3]))).toBe(3);
+  });
+});
+
+describe('LinearResampler', () => {
+  it('downsamples 48k → 16k across chunks with the right length', () => {
+    const r = new LinearResampler(48000, 16000);
+    let total = 0;
+    for (let i = 0; i < 10; i++) total += r.process(new Float32Array(480).fill(0.25)).length;
+    expect(Math.abs(total - 1600)).toBeLessThanOrEqual(1);
+  });
+  it('keeps a constant signal constant', () => {
+    const r = new LinearResampler(44100, 16000);
+    const out = [...r.process(new Float32Array(441).fill(0.5)), ...r.process(new Float32Array(441).fill(0.5))];
+    expect(out.every((v) => Math.abs(v - 0.5) < 1e-6)).toBe(true);
+  });
+  it('is a copy when rates match', () => {
+    const r = new LinearResampler(24000, 24000);
+    const input = Float32Array.from([1, 2, 3]);
+    const out = r.process(input);
+    expect(Array.from(out)).toEqual([1, 2, 3]);
+    expect(out).not.toBe(input);
+  });
+  it('upsamples 24k → 48k by interpolation', () => {
+    const r = new LinearResampler(24000, 48000);
+    expect(Array.from(r.process(Float32Array.from([0, 1, 0])))).toEqual([0, 0.5, 1, 0.5, 0]);
+  });
+});
+
+describe('FrameChunker', () => {
+  it('emits fixed-size frames and carries the remainder', () => {
+    const c = new FrameChunker(4);
+    expect(c.push(Int16Array.from([1, 2, 3]))).toEqual([]);
+    const frames = c.push(Int16Array.from([4, 5, 6, 7, 8, 9]));
+    expect(frames.map((f) => Array.from(f))).toEqual([[1, 2, 3, 4], [5, 6, 7, 8]]);
+    expect(c.push(Int16Array.from([10, 11, 12])).map((f) => Array.from(f))).toEqual([[9, 10, 11, 12]]);
+  });
+});
+
+describe('computeFeatures', () => {
+  it('reports rms and zero-crossing rate', () => {
+    const f = computeFeatures(Float32Array.from([0.5, -0.5, 0.5, -0.5]));
+    expect(f.rms).toBeCloseTo(0.5);
+    expect(f.zcr).toBeCloseTo(1);
+    expect(computeFeatures(new Float32Array(4)).rms).toBe(0);
+  });
+});
+```
+
+`avatar-core/test/mouth.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { MouthAnalyzer } from '../src/audio/mouth.ts';
+
+describe('MouthAnalyzer', () => {
+  it('stays closed in silence', () => {
+    const m = new MouthAnalyzer();
+    const s = m.update({ rms: 0.002, zcr: 0.01 }, 16);
+    expect(s).toEqual({ jawOpen: 0, funnel: 0, stretch: 0 });
+  });
+
+  it('opens with loud low-frequency sound and rounds the lips', () => {
+    const m = new MouthAnalyzer();
+    let s = m.update({ rms: 0.2, zcr: 0.015 }, 16);
+    for (let i = 0; i < 10; i++) s = m.update({ rms: 0.2, zcr: 0.015 }, 16);
+    expect(s.jawOpen).toBeGreaterThan(0.5);
+    expect(s.funnel).toBeGreaterThan(s.stretch);
+  });
+
+  it('stretches the lips for bright, noisy sound', () => {
+    const m = new MouthAnalyzer();
+    let s = m.update({ rms: 0.2, zcr: 0.4 }, 16);
+    for (let i = 0; i < 10; i++) s = m.update({ rms: 0.2, zcr: 0.4 }, 16);
+    expect(s.stretch).toBeGreaterThan(s.funnel);
+  });
+
+  it('opens faster than it closes', () => {
+    const m = new MouthAnalyzer();
+    const opened = m.update({ rms: 0.2, zcr: 0.1 }, 16).jawOpen;
+    for (let i = 0; i < 20; i++) m.update({ rms: 0.2, zcr: 0.1 }, 16);
+    const full = m.update({ rms: 0.2, zcr: 0.1 }, 16).jawOpen;
+    const closing = m.update({ rms: 0, zcr: 0 }, 16).jawOpen;
+    expect(full - closing).toBeLessThan(opened); // one release step moves less than one attack step
+    m.reset();
+    expect(m.update({ rms: 0, zcr: 0 }, 16).jawOpen).toBe(0);
+  });
+});
+```
+
+`avatar-core/test/energy.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { EnergyTrigger } from '../src/audio/energy.ts';
+
+const loud = () => new Int16Array(320).fill(2000);
+const quiet = () => new Int16Array(320);
+
+describe('EnergyTrigger', () => {
+  it('fires once per sustained loud segment', () => {
+    const t = new EnergyTrigger(1200, 150, 20);
+    const fired: boolean[] = [];
+    for (let i = 0; i < 20; i++) fired.push(t.push(loud()));
+    expect(fired.filter(Boolean)).toHaveLength(1);
+    expect(fired.indexOf(true)).toBe(7); // 8 frames × 20 ms = 160 ms ≥ 150 ms
+    t.push(quiet());
+    for (let i = 0; i < 8; i++) t.push(loud());
+    expect(t.count).toBe(2);
+  });
+
+  it('ignores short bursts', () => {
+    const t = new EnergyTrigger(1200, 150, 20);
+    for (let k = 0; k < 5; k++) {
+      for (let i = 0; i < 5; i++) t.push(loud());
+      t.push(quiet());
+    }
+    expect(t.count).toBe(0);
+  });
+});
+```
+
+- [ ] **Step 3: 运行测试确认失败**
+
+Run: `npm test -w avatar-core`
+Expected: FAIL，无法解析 `../src/audio/pcm.ts` 等模块。
+
+- [ ] **Step 4: 实现**
+
+`avatar-core/src/audio/pcm.ts`:
+
+```ts
+export function int16ToFloat32(src: Int16Array): Float32Array {
+  const out = new Float32Array(src.length);
+  for (let i = 0; i < src.length; i++) out[i] = src[i] / 32768;
+  return out;
+}
+
+export function float32ToInt16(src: Float32Array): Int16Array {
+  const out = new Int16Array(src.length);
+  for (let i = 0; i < src.length; i++) {
+    const s = Math.max(-1, Math.min(1, src[i]));
+    out[i] = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
+  }
+  return out;
+}
+
+export function rmsInt16(pcm: Int16Array): number {
+  if (pcm.length === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < pcm.length; i++) sum += pcm[i] * pcm[i];
+  return Math.sqrt(sum / pcm.length);
+}
+
+/** Streaming linear-interpolation resampler; keeps phase across chunks. */
+export class LinearResampler {
+  private readonly step: number;
+  private pos = 0;
+  private prev = 0;
+
+  constructor(readonly inRate: number, readonly outRate: number) {
+    this.step = inRate / outRate;
+  }
+
+  process(input: Float32Array): Float32Array {
+    if (this.inRate === this.outRate) return input.slice();
+    const n = input.length;
+    if (n === 0) return new Float32Array(0);
+    const out: number[] = [];
+    // pos is relative to input[0]; a negative pos interpolates between the previous chunk's last sample and input[0].
+    while (this.pos <= n - 1) {
+      const i = Math.floor(this.pos);
+      const frac = this.pos - i;
+      const a = i < 0 ? this.prev : input[i];
+      const b = i + 1 < n ? input[i + 1] : a;
+      out.push(a + (b - a) * frac);
+      this.pos += this.step;
+    }
+    this.pos -= n;
+    this.prev = input[n - 1];
+    return Float32Array.from(out);
+  }
+}
+
+export class FrameChunker {
+  private readonly buf: Int16Array;
+  private len = 0;
+
+  constructor(private readonly frameSamples: number) {
+    this.buf = new Int16Array(frameSamples);
+  }
+
+  push(samples: Int16Array): Int16Array[] {
+    const frames: Int16Array[] = [];
+    let off = 0;
+    while (off < samples.length) {
+      const take = Math.min(this.frameSamples - this.len, samples.length - off);
+      this.buf.set(samples.subarray(off, off + take), this.len);
+      this.len += take;
+      off += take;
+      if (this.len === this.frameSamples) {
+        frames.push(this.buf.slice());
+        this.len = 0;
+      }
+    }
+    return frames;
+  }
+}
+
+export interface AudioFeatures {
+  rms: number;
+  /** Zero crossings per sample, 0..1. */
+  zcr: number;
+}
+
+export function computeFeatures(frame: Float32Array): AudioFeatures {
+  if (frame.length === 0) return { rms: 0, zcr: 0 };
+  let sum = 0;
+  let crossings = 0;
+  for (let i = 0; i < frame.length; i++) {
+    sum += frame[i] * frame[i];
+    if (i > 0 && frame[i] >= 0 !== frame[i - 1] >= 0) crossings++;
+  }
+  return { rms: Math.sqrt(sum / frame.length), zcr: frame.length > 1 ? crossings / (frame.length - 1) : 0 };
+}
+```
+
+`avatar-core/src/audio/mouth.ts`:
+
+```ts
+import type { AudioFeatures } from './pcm.ts';
+
+export interface MouthShape {
+  jawOpen: number;
+  /** Rounded lips (o/u). */
+  funnel: number;
+  /** Spread lips (i/e, fricatives). */
+  stretch: number;
+}
+
+export interface MouthOptions {
+  noiseFloor: number;
+  gain: number;
+  attackMs: number;
+  releaseMs: number;
+}
+
+/** 【预估】values, tuned on device in Task 18. */
+export const DEFAULT_MOUTH: MouthOptions = { noiseFloor: 0.01, gain: 6, attackMs: 30, releaseMs: 80 };
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+/** Approximate Mandarin lip-sync from loudness and brightness of the audio being played. */
+export class MouthAnalyzer {
+  private jaw = 0;
+
+  constructor(private readonly o: MouthOptions = DEFAULT_MOUTH) {}
+
+  update(f: AudioFeatures, dtMs: number): MouthShape {
+    const target = clamp01((f.rms - this.o.noiseFloor) * this.o.gain);
+    const tau = target > this.jaw ? this.o.attackMs : this.o.releaseMs;
+    this.jaw += (target - this.jaw) * (1 - Math.exp(-dtMs / tau));
+    if (this.jaw < 1e-4) this.jaw = 0;
+    const bright = clamp01((f.zcr - 0.08) / 0.12);
+    const dark = clamp01((0.06 - f.zcr) / 0.04);
+    return { jawOpen: this.jaw * 0.7, funnel: this.jaw * dark * 0.6, stretch: this.jaw * bright * 0.5 };
+  }
+
+  reset(): void {
+    this.jaw = 0;
+  }
+}
+```
+
+`avatar-core/src/audio/energy.ts`:
+
+```ts
+import { rmsInt16 } from './pcm.ts';
+
+/** Counts sustained loud segments. Used by the AEC spike to compare capture paths A and B. */
+export class EnergyTrigger {
+  count = 0;
+  private aboveMs = 0;
+  private armed = true;
+
+  constructor(
+    private readonly thresholdRms = 1200,
+    private readonly minMs = 150,
+    private readonly frameMs = 20,
+  ) {}
+
+  /** Returns true when a new trigger fires; re-arms after a quiet frame. */
+  push(frame: Int16Array): boolean {
+    if (rmsInt16(frame) >= this.thresholdRms) {
+      this.aboveMs += this.frameMs;
+      if (this.armed && this.aboveMs >= this.minMs) {
+        this.armed = false;
+        this.count++;
+        return true;
+      }
+      return false;
+    }
+    this.aboveMs = 0;
+    this.armed = true;
+    return false;
+  }
+}
+```
+
+- [ ] **Step 5: 运行测试确认通过**
+
+Run: `npm test -w avatar-core`
+Expected: 全部 PASS（pcm 8 个、mouth 4 个、energy 2 个）。
+
+若 `opens faster than it closes` 失败：attack 一步 = `1-exp(-16/30)` ≈ 0.41，release 一步 = `1-exp(-16/80)` ≈ 0.18，前者乘以 target 0.7 后仍大于后者乘以 full 值，检查 `tau` 的分支是否写反。
+
+- [ ] **Step 6: 提交**
+
+```bash
+git add avatar-core package-lock.json
+git commit -m "feat(avatar-core): scaffold and pure audio utilities (resampler, mouth, energy)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 10: 播放器（PlaybackGate + AudioWorklet + PlaybackController）
+
+**Files:**
+- Create: `avatar-core/src/audio/playbackGate.ts`, `avatar-core/src/audio/player-worklet.ts`, `avatar-core/src/audio/player.ts`
+- Test: `avatar-core/test/playbackGate.test.ts`
+
+**Interfaces:**
+- Consumes: `AI_SAMPLE_RATE`（Task 1）；`int16ToFloat32`、`LinearResampler`、`AudioFeatures`（Task 9）
+- Produces:
+  - `class PlaybackGate`：`active: number | null`、`start(seq)`、`accepts(seq): boolean`、`cancel(seq)`、`finish(seq)`、`resetBelow(lastSeq)`
+  - `interface PlaybackEvents { onFirstAudio(seq): void; onEnded(seq, playedMs): void; onStopped(seq, playedMs): void; onProgress(seq, playedMs): void; onLevel(features: AudioFeatures, dtMs: number): void }`
+  - `class PlaybackController(events)`：`init(): Promise<void>`、`resume(): Promise<void>`、`activeSeq`、`onResponseStart(seq)`、`push(seq, pcm24k)`、`end(seq)`、`interrupt(): { seq: number; playedMs: number } | null`、`cancelled(seq)`、`resetAfterResume(lastSeq)`、`playedMsFor(seq)`
+
+Worklet 消息协议（主线程 → worklet）：`{type:'push', seq, samples: Float32Array}`、`{type:'end', seq}`、`{type:'stop', fadeMs}`；（worklet → 主线程）：`{type:'started', seq}`、`{type:'progress', seq, playedSamples}`（约每 100 ms）、`{type:'drained', seq, playedSamples}`、`{type:'stopped', seq, playedSamples}`、`{type:'level', rms, zcr, samples}`（约每 16 ms）。
+
+- [ ] **Step 1: 写失败的测试**
+
+`avatar-core/test/playbackGate.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { PlaybackGate } from '../src/audio/playbackGate.ts';
+
+describe('PlaybackGate', () => {
+  it('accepts only the active response', () => {
+    const g = new PlaybackGate();
+    expect(g.accepts(1)).toBe(false);
+    g.start(1);
+    expect(g.accepts(1)).toBe(true);
+    expect(g.accepts(2)).toBe(false);
+    g.start(2);
+    expect(g.accepts(1)).toBe(false);
+    expect(g.accepts(2)).toBe(true);
+  });
+
+  it('never accepts a cancelled response again', () => {
+    const g = new PlaybackGate();
+    g.start(3);
+    g.cancel(3);
+    expect(g.active).toBeNull();
+    g.start(3);
+    expect(g.accepts(3)).toBe(false);
+  });
+
+  it('finish clears only the matching response', () => {
+    const g = new PlaybackGate();
+    g.start(4);
+    g.finish(5);
+    expect(g.active).toBe(4);
+    g.finish(4);
+    expect(g.active).toBeNull();
+  });
+
+  it('after resume, rejects everything up to the last server sequence', () => {
+    const g = new PlaybackGate();
+    g.start(5);
+    g.resetBelow(5);
+    expect(g.active).toBeNull();
+    g.start(5);
+    expect(g.accepts(5)).toBe(false);
+    g.start(6);
+    expect(g.accepts(6)).toBe(true);
+  });
+});
+```
+
+- [ ] **Step 2: 运行测试确认失败**
+
+Run: `npm test -w avatar-core -- playbackGate`
+Expected: FAIL，无法解析模块。
+
+- [ ] **Step 3: 实现 PlaybackGate**
+
+`avatar-core/src/audio/playbackGate.ts`:
+
+```ts
+/** Decides which response's audio may be played. Guarantees no stale audio after cancel/resume. */
+export class PlaybackGate {
+  private activeSeq: number | null = null;
+  private readonly cancelledSeqs = new Set<number>();
+  private floor = 0;
+
+  get active(): number | null {
+    return this.activeSeq;
+  }
+
+  start(seq: number): void {
+    if (seq <= this.floor || this.cancelledSeqs.has(seq)) return;
+    this.activeSeq = seq;
+  }
+
+  accepts(seq: number): boolean {
+    return seq === this.activeSeq && seq > this.floor && !this.cancelledSeqs.has(seq);
+  }
+
+  cancel(seq: number): void {
+    this.cancelledSeqs.add(seq);
+    if (this.activeSeq === seq) this.activeSeq = null;
+  }
+
+  finish(seq: number): void {
+    if (this.activeSeq === seq) this.activeSeq = null;
+  }
+
+  resetBelow(lastSeq: number): void {
+    this.floor = Math.max(this.floor, lastSeq);
+    this.activeSeq = null;
+  }
+}
+```
+
+- [ ] **Step 4: 运行测试确认通过**
+
+Run: `npm test -w avatar-core -- playbackGate`
+Expected: 4 个测试 PASS。
+
+- [ ] **Step 5: 实现播放 worklet（自包含，不 import 其他模块）**
+
+`avatar-core/src/audio/player-worklet.ts`:
+
+```ts
+type InMsg =
+  | { type: 'push'; seq: number; samples: Float32Array }
+  | { type: 'end'; seq: number }
+  | { type: 'stop'; fadeMs: number };
+
+class PlayerProcessor extends AudioWorkletProcessor {
+  private queue: Float32Array[] = [];
+  private offset = 0;
+  private seq = -1;
+  private played = 0;
+  private startedSent = false;
+  private ended = false;
+  private stopping = false;
+  private gain = 1;
+  private gainStep = 0;
+  private prevSample = 0;
+  private accSq = 0;
+  private accZc = 0;
+  private accN = 0;
+  private sinceProgress = 0;
+
+  constructor() {
+    super();
+    this.port.onmessage = (e: MessageEvent<InMsg>) => this.onMessage(e.data);
+  }
+
+  private onMessage(m: InMsg): void {
+    if (m.type === 'push') {
+      if (m.seq !== this.seq) this.reset(m.seq);
+      this.queue.push(m.samples);
+    } else if (m.type === 'end') {
+      if (m.seq === this.seq) this.ended = true;
+    } else if (this.seq >= 0 && !this.stopping) {
+      this.stopping = true;
+      this.gain = 1;
+      this.gainStep = 1 / Math.max(1, (m.fadeMs / 1000) * sampleRate);
+    }
+  }
+
+  private reset(seq: number): void {
+    this.queue = [];
+    this.offset = 0;
+    this.seq = seq;
+    this.played = 0;
+    this.startedSent = false;
+    this.ended = false;
+    this.stopping = false;
+    this.gain = 1;
+  }
+
+  private finishStop(): void {
+    this.port.postMessage({ type: 'stopped', seq: this.seq, playedSamples: this.played });
+    this.queue = [];
+    this.offset = 0;
+    this.seq = -1;
+    this.stopping = false;
+    this.ended = false;
+  }
+
+  process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
+    const channels = outputs[0];
+    const out = channels?.[0];
+    if (!out) return true;
+    let sumSq = 0;
+    let zc = 0;
+    for (let i = 0; i < out.length; i++) {
+      let s = 0;
+      const head = this.queue[0];
+      if (head) {
+        s = head[this.offset++];
+        if (this.offset >= head.length) {
+          this.queue.shift();
+          this.offset = 0;
+        }
+        this.played++;
+        if (!this.startedSent) {
+          this.startedSent = true;
+          this.port.postMessage({ type: 'started', seq: this.seq });
+        }
+      }
+      if (this.stopping) {
+        s *= Math.max(0, this.gain);
+        this.gain -= this.gainStep;
+        if (this.gain <= 0) {
+          this.finishStop();
+          s = 0;
+        }
+      }
+      out[i] = s;
+      sumSq += s * s;
+      if (s >= 0 !== this.prevSample >= 0) zc++;
+      this.prevSample = s;
+    }
+    for (let c = 1; c < channels.length; c++) channels[c].set(out);
+
+    this.accSq += sumSq;
+    this.accZc += zc;
+    this.accN += out.length;
+    if (this.accN >= sampleRate * 0.016) {
+      this.port.postMessage({ type: 'level', rms: Math.sqrt(this.accSq / this.accN), zcr: this.accZc / this.accN, samples: this.accN });
+      this.accSq = 0;
+      this.accZc = 0;
+      this.accN = 0;
+    }
+    if (this.seq >= 0) {
+      this.sinceProgress += out.length;
+      if (this.sinceProgress >= sampleRate * 0.1) {
+        this.sinceProgress = 0;
+        this.port.postMessage({ type: 'progress', seq: this.seq, playedSamples: this.played });
+      }
+      if (this.ended && this.queue.length === 0 && !this.stopping) {
+        this.port.postMessage({ type: 'drained', seq: this.seq, playedSamples: this.played });
+        this.seq = -1;
+        this.ended = false;
+      }
+    }
+    return true;
+  }
+}
+
+registerProcessor('player', PlayerProcessor);
+```
+
+- [ ] **Step 6: 实现 PlaybackController**
+
+`avatar-core/src/audio/player.ts`:
+
+```ts
+import { AI_SAMPLE_RATE } from '@anyidea/protocol';
+import { LinearResampler, int16ToFloat32, type AudioFeatures } from './pcm.ts';
+import { PlaybackGate } from './playbackGate.ts';
+import playerWorkletUrl from './player-worklet.ts?worker&url';
+
+export interface PlaybackEvents {
+  onFirstAudio(seq: number): void;
+  onEnded(seq: number, playedMs: number): void;
+  onStopped(seq: number, playedMs: number): void;
+  onProgress(seq: number, playedMs: number): void;
+  onLevel(features: AudioFeatures, dtMs: number): void;
+}
+
+type OutMsg =
+  | { type: 'started'; seq: number }
+  | { type: 'progress'; seq: number; playedSamples: number }
+  | { type: 'drained'; seq: number; playedSamples: number }
+  | { type: 'stopped'; seq: number; playedSamples: number }
+  | { type: 'level'; rms: number; zcr: number; samples: number };
+
+const FADE_MS = 30;
+
+/** Plays streamed 24 kHz PCM with per-response gating and instant barge-in. */
+export class PlaybackController {
+  readonly gate = new PlaybackGate();
+  private ctx: AudioContext | null = null;
+  private node: AudioWorkletNode | null = null;
+  private resampler: LinearResampler | null = null;
+  private readonly playedSamples = new Map<number, number>();
+
+  constructor(private readonly ev: PlaybackEvents) {}
+
+  async init(): Promise<void> {
+    const ctx = new AudioContext({ sampleRate: AI_SAMPLE_RATE, latencyHint: 'interactive' });
+    await ctx.audioWorklet.addModule(playerWorkletUrl);
+    const node = new AudioWorkletNode(ctx, 'player', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
+    node.port.onmessage = (e: MessageEvent<OutMsg>) => this.onWorklet(e.data);
+    node.connect(ctx.destination);
+    if (ctx.sampleRate !== AI_SAMPLE_RATE) this.resampler = new LinearResampler(AI_SAMPLE_RATE, ctx.sampleRate);
+    this.ctx = ctx;
+    this.node = node;
+  }
+
+  async resume(): Promise<void> {
+    if (this.ctx && this.ctx.state !== 'running') await this.ctx.resume();
+  }
+
+  get activeSeq(): number | null {
+    return this.gate.active;
+  }
+
+  get contextState(): AudioContextState | 'none' {
+    return this.ctx?.state ?? 'none';
+  }
+
+  onResponseStart(seq: number): void {
+    this.gate.start(seq);
+  }
+
+  push(seq: number, pcm24k: Int16Array): void {
+    if (!this.node || !this.gate.accepts(seq)) return;
+    let samples = int16ToFloat32(pcm24k);
+    if (this.resampler) samples = this.resampler.process(samples);
+    this.node.port.postMessage({ type: 'push', seq, samples }, [samples.buffer]);
+  }
+
+  end(seq: number): void {
+    if (this.gate.accepts(seq)) this.node?.port.postMessage({ type: 'end', seq });
+  }
+
+  /** Barge-in: fade out and drop the active response. */
+  interrupt(): { seq: number; playedMs: number } | null {
+    const seq = this.gate.active;
+    if (seq === null) return null;
+    this.gate.cancel(seq);
+    this.node?.port.postMessage({ type: 'stop', fadeMs: FADE_MS });
+    return { seq, playedMs: this.playedMsFor(seq) };
+  }
+
+  /** The server cancelled a response. */
+  cancelled(seq: number): void {
+    const wasActive = this.gate.active === seq;
+    this.gate.cancel(seq);
+    if (wasActive) this.node?.port.postMessage({ type: 'stop', fadeMs: FADE_MS });
+  }
+
+  resetAfterResume(lastSeq: number): void {
+    this.gate.resetBelow(lastSeq);
+    this.node?.port.postMessage({ type: 'stop', fadeMs: 10 });
+  }
+
+  playedMsFor(seq: number): number {
+    const rate = this.ctx?.sampleRate ?? AI_SAMPLE_RATE;
+    return ((this.playedSamples.get(seq) ?? 0) / rate) * 1000;
+  }
+
+  private onWorklet(m: OutMsg): void {
+    const rate = this.ctx?.sampleRate ?? AI_SAMPLE_RATE;
+    switch (m.type) {
+      case 'started':
+        this.ev.onFirstAudio(m.seq);
+        break;
+      case 'progress':
+        this.playedSamples.set(m.seq, m.playedSamples);
+        this.ev.onProgress(m.seq, (m.playedSamples / rate) * 1000);
+        break;
+      case 'drained':
+        this.playedSamples.set(m.seq, m.playedSamples);
+        this.gate.finish(m.seq);
+        this.ev.onEnded(m.seq, (m.playedSamples / rate) * 1000);
+        break;
+      case 'stopped':
+        this.playedSamples.set(m.seq, m.playedSamples);
+        this.ev.onStopped(m.seq, (m.playedSamples / rate) * 1000);
+        break;
+      case 'level':
+        this.ev.onLevel({ rms: m.rms, zcr: m.zcr }, (m.samples / rate) * 1000);
+        break;
+    }
+  }
+}
+```
+
+- [ ] **Step 7: 类型检查与提交**
+
+Run: `npm run typecheck -w avatar-core && npm test -w avatar-core`
+Expected: 无类型错误；测试全部 PASS。若 `?worker&url` 导入报"找不到模块"，确认 `tsconfig.json` 的 `types` 含 `vite/client`。
+
+```bash
+git add avatar-core/src/audio avatar-core/test/playbackGate.test.ts
+git commit -m "feat(avatar-core): gated AudioWorklet player with instant barge-in
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 11: 麦克风采集与本地 VAD
+
+**Files:**
+- Create: `avatar-core/src/audio/capture-worklet.ts`, `avatar-core/src/audio/capture.ts`, `avatar-core/src/audio/vad.ts`
+- Test: `avatar-core/test/vad.test.ts`
+
+**Interfaces:**
+- Consumes: `MIC_SAMPLE_RATE`、`MIC_FRAME_SAMPLES`（Task 1）；`LinearResampler`、`FrameChunker`、`float32ToInt16`（Task 9）
+- Produces:
+  - `type EchoMode = 'true' | 'all'`；`class MicCapture`：`start({ onFrame(pcm16k: Int16Array): void; echo: EchoMode }): Promise<MediaStream>`、`setEnabled(on)`、`stop()`、`settings(): MediaTrackSettings | null`
+  - `interface DetectorOptions { frameMs; threshold; bargeInThreshold; startMs; endMs; hysteresis }`、`DEFAULT_DETECTOR`
+  - `class SpeechDetector(opts?)`：`aiPlaying`、`speaking`、`onsetAt: number | null`、`push(probability, nowMs): 'start' | 'end' | null`
+  - `class LocalVad`：`detector`、`start(stream, { onStart(onsetAt: number): void; onEnd(): void; onProbability?(p: number): void }): Promise<void>`、`set aiPlaying(v)`、`destroy()`
+
+- [ ] **Step 1: 写失败的测试（SpeechDetector 纯逻辑）**
+
+`avatar-core/test/vad.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { SpeechDetector } from '../src/audio/vad.ts';
+
+const opts = { frameMs: 32, threshold: 0.5, bargeInThreshold: 0.75, startMs: 150, endMs: 600, hysteresis: 0.15 };
+
+function feed(d: SpeechDetector, p: number, frames: number, t0: number) {
+  const events: Array<{ e: string; t: number }> = [];
+  for (let i = 0; i < frames; i++) {
+    const t = t0 + i * 32;
+    const r = d.push(p, t);
+    if (r) events.push({ e: r, t });
+  }
+  return events;
+}
+
+describe('SpeechDetector', () => {
+  it('starts after sustained speech and records the onset time', () => {
+    const d = new SpeechDetector(opts);
+    const ev = feed(d, 0.9, 6, 1000);
+    expect(ev).toEqual([{ e: 'start', t: 1000 + 4 * 32 }]); // 5 frames × 32 ms = 160 ms
+    expect(d.onsetAt).toBe(1000);
+    expect(d.speaking).toBe(true);
+  });
+
+  it('ends after sustained silence below threshold minus hysteresis', () => {
+    const d = new SpeechDetector(opts);
+    feed(d, 0.9, 6, 0);
+    expect(feed(d, 0.4, 10, 1000)).toEqual([]); // 0.4 is not below 0.35
+    const ev = feed(d, 0.1, 20, 2000);
+    expect(ev).toEqual([{ e: 'end', t: 2000 + 18 * 32 }]); // 19 frames × 32 ms = 608 ms
+    expect(d.speaking).toBe(false);
+  });
+
+  it('requires a higher probability while the AI is playing', () => {
+    const d = new SpeechDetector(opts);
+    d.aiPlaying = true;
+    expect(feed(d, 0.6, 10, 0)).toEqual([]);
+    expect(feed(d, 0.8, 6, 1000).map((x) => x.e)).toEqual(['start']);
+  });
+
+  it('a single dip resets the start counter', () => {
+    const d = new SpeechDetector(opts);
+    feed(d, 0.9, 4, 0);
+    feed(d, 0.1, 1, 128);
+    expect(feed(d, 0.9, 4, 160)).toEqual([]);
+    expect(d.speaking).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 2: 运行测试确认失败**
+
+Run: `npm test -w avatar-core -- vad`
+Expected: FAIL，无法解析模块。
+
+- [ ] **Step 3: 实现 VAD**
+
+`avatar-core/src/audio/vad.ts`:
+
+```ts
+import { MicVAD } from '@ricky0123/vad-web';
+
+export interface DetectorOptions {
+  frameMs: number;
+  threshold: number;
+  /** Higher threshold while the AI is speaking, to resist echo. */
+  bargeInThreshold: number;
+  startMs: number;
+  endMs: number;
+  hysteresis: number;
+}
+
+/** 【预估】values; Silero v5 frames are 512 samples @16 kHz = 32 ms. */
+export const DEFAULT_DETECTOR: DetectorOptions = {
+  frameMs: 32,
+  threshold: 0.5,
+  bargeInThreshold: 0.75,
+  startMs: 150,
+  endMs: 600,
+  hysteresis: 0.15,
+};
+
+/** Turns per-frame speech probabilities into start/end events with hysteresis. */
+export class SpeechDetector {
+  aiPlaying = false;
+  speaking = false;
+  onsetAt: number | null = null;
+  private aboveMs = 0;
+  private belowMs = 0;
+  private candidateAt: number | null = null;
+
+  constructor(private readonly o: DetectorOptions = DEFAULT_DETECTOR) {}
+
+  push(p: number, nowMs: number): 'start' | 'end' | null {
+    const threshold = this.aiPlaying ? this.o.bargeInThreshold : this.o.threshold;
+    if (!this.speaking) {
+      if (p >= threshold) {
+        if (this.candidateAt === null) this.candidateAt = nowMs;
+        this.aboveMs += this.o.frameMs;
+        if (this.aboveMs >= this.o.startMs) {
+          this.speaking = true;
+          this.onsetAt = this.candidateAt;
+          this.aboveMs = 0;
+          this.belowMs = 0;
+          this.candidateAt = null;
+          return 'start';
+        }
+      } else {
+        this.aboveMs = 0;
+        this.candidateAt = null;
+      }
+      return null;
+    }
+    if (p < threshold - this.o.hysteresis) {
+      this.belowMs += this.o.frameMs;
+      if (this.belowMs >= this.o.endMs) {
+        this.speaking = false;
+        this.belowMs = 0;
+        return 'end';
+      }
+    } else {
+      this.belowMs = 0;
+    }
+    return null;
+  }
+}
+
+export interface VadCallbacks {
+  onStart(onsetAt: number): void;
+  onEnd(): void;
+  onProbability?(p: number): void;
+}
+
+/** Silero VAD on the shared microphone stream; only probabilities are used from MicVAD. */
+export class LocalVad {
+  readonly detector: SpeechDetector;
+  private vad: MicVAD | null = null;
+
+  constructor(opts: DetectorOptions = DEFAULT_DETECTOR) {
+    this.detector = new SpeechDetector(opts);
+  }
+
+  set aiPlaying(v: boolean) {
+    this.detector.aiPlaying = v;
+  }
+
+  async start(stream: MediaStream, cb: VadCallbacks): Promise<void> {
+    this.vad = await MicVAD.new({
+      model: 'v5',
+      baseAssetPath: './vad/',
+      onnxWASMBasePath: './vad/',
+      getStream: async () => stream,
+      pauseStream: async () => {},
+      resumeStream: async () => stream,
+      ortConfig: (ort) => {
+        ort.env.wasm.numThreads = 1; // no cross-origin isolation in the WebView
+      },
+      onFrameProcessed: (probs) => {
+        cb.onProbability?.(probs.isSpeech);
+        const r = this.detector.push(probs.isSpeech, performance.now());
+        if (r === 'start') cb.onStart(this.detector.onsetAt ?? performance.now());
+        else if (r === 'end') cb.onEnd();
+      },
+      onSpeechStart: () => {},
+      onSpeechEnd: () => {},
+      onVADMisfire: () => {},
+      onSpeechRealStart: () => {},
+      startOnLoad: true,
+    });
+  }
+
+  async destroy(): Promise<void> {
+    await this.vad?.destroy();
+    this.vad = null;
+  }
+}
+```
+
+注：`MicVAD` 的实例方法名以 `node_modules/@ricky0123/vad-web/dist/real-time-vad.d.ts` 为准；若没有 `destroy`，改用 `pause()`，并记入 `docs/blockers.md`。
+
+- [ ] **Step 4: 运行测试确认通过**
+
+Run: `npm test -w avatar-core -- vad`
+Expected: 4 个测试 PASS。
+
+- [ ] **Step 5: 实现采集 worklet 与 MicCapture**
+
+`avatar-core/src/audio/capture-worklet.ts`:
+
+```ts
+/** Batches microphone input into ~20 ms Float32 chunks for the main thread. */
+class CaptureProcessor extends AudioWorkletProcessor {
+  private buf = new Float32Array(Math.round(sampleRate * 0.02));
+  private len = 0;
+
+  process(inputs: Float32Array[][]): boolean {
+    const input = inputs[0]?.[0];
+    if (!input) return true;
+    let off = 0;
+    while (off < input.length) {
+      const take = Math.min(this.buf.length - this.len, input.length - off);
+      this.buf.set(input.subarray(off, off + take), this.len);
+      this.len += take;
+      off += take;
+      if (this.len === this.buf.length) {
+        const out = this.buf;
+        this.port.postMessage(out, [out.buffer]);
+        this.buf = new Float32Array(out.length);
+        this.len = 0;
+      }
+    }
+    return true;
+  }
+}
+
+registerProcessor('capture', CaptureProcessor);
+```
+
+`avatar-core/src/audio/capture.ts`:
+
+```ts
+import { MIC_FRAME_SAMPLES, MIC_SAMPLE_RATE } from '@anyidea/protocol';
+import { FrameChunker, LinearResampler, float32ToInt16 } from './pcm.ts';
+import captureWorkletUrl from './capture-worklet.ts?worker&url';
+
+/** 'all' asks Chrome 141+ to cancel all page audio, not just remote WebRTC audio (spec §2.1). */
+export type EchoMode = 'true' | 'all';
+
+export interface CaptureOptions {
+  onFrame(pcm16k: Int16Array): void;
+  echo: EchoMode;
+}
+
+export class MicCapture {
+  private stream: MediaStream | null = null;
+  private ctx: AudioContext | null = null;
+
+  async start(o: CaptureOptions): Promise<MediaStream> {
+    const audio = {
+      channelCount: 1,
+      echoCancellation: o.echo === 'all' ? 'all' : true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    } as unknown as MediaTrackConstraints; // 'all' is newer than the DOM typings
+    const stream = await navigator.mediaDevices.getUserMedia({ audio });
+    const ctx = new AudioContext({ latencyHint: 'interactive' });
+    await ctx.audioWorklet.addModule(captureWorkletUrl);
+    const source = ctx.createMediaStreamSource(stream);
+    const node = new AudioWorkletNode(ctx, 'capture', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+    const sink = ctx.createGain();
+    sink.gain.value = 0; // keeps the node pulled by the graph without making sound
+    const resampler = new LinearResampler(ctx.sampleRate, MIC_SAMPLE_RATE);
+    const chunker = new FrameChunker(MIC_FRAME_SAMPLES);
+    node.port.onmessage = (e: MessageEvent<Float32Array>) => {
+      for (const frame of chunker.push(float32ToInt16(resampler.process(e.data)))) o.onFrame(frame);
+    };
+    source.connect(node);
+    node.connect(sink);
+    sink.connect(ctx.destination);
+    this.stream = stream;
+    this.ctx = ctx;
+    return stream;
+  }
+
+  settings(): MediaTrackSettings | null {
+    return this.stream?.getAudioTracks()[0]?.getSettings() ?? null;
+  }
+
+  setEnabled(on: boolean): void {
+    this.stream?.getAudioTracks().forEach((t) => {
+      t.enabled = on;
+    });
+  }
+
+  async stop(): Promise<void> {
+    this.stream?.getTracks().forEach((t) => t.stop());
+    await this.ctx?.close();
+    this.stream = null;
+    this.ctx = null;
+  }
+}
+```
+
+- [ ] **Step 6: 类型检查与提交**
+
+Run: `npm run typecheck -w avatar-core && npm test -w avatar-core`
+Expected: 无类型错误；测试全部 PASS。
+
+```bash
+git add avatar-core/src/audio avatar-core/test/vad.test.ts
+git commit -m "feat(avatar-core): mic capture worklet and Silero-based speech detector
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 12: GatewayClient（会话创建、WSS、断线续接）
+
+**Files:**
+- Create: `avatar-core/src/net/gatewayClient.ts`
+- Test: `avatar-core/test/gatewayClient.test.ts`
+
+**Interfaces:**
+- Consumes: Task 8 的 HTTP/WS 契约；`encodeAudioFrame`、`decodeAudioFrame`、`FRAME_AI`、`FRAME_MIC`、`ClientMessage`、`ServerMessage`、`SessionTokens`、`AudioPath`
+- Produces:
+  - `interface WebSocketLike`、`type WebSocketCtor = new (url: string) => WebSocketLike`
+  - `type ClientStatus = 'connecting' | 'open' | 'reconnecting' | 'closed'`
+  - `class GatewayClient(options: { baseUrl; appSecret; clientInfo: { platform: string; audioPath: AudioPath }; fetchFn?; WebSocketCtor?; maxResumeMs? }, events: { onMessage(m: ServerMessage); onAudio(seq, pcm); onStatus(s: ClientStatus) })`：`start(): Promise<void>`、`send(m: ClientMessage)`、`sendAudio(pcm16k)`、`close()`、`isOpen`
+  - `class HttpError extends Error { status: number }`
+
+续接逻辑：非用户主动断开 → 退避 500 ms、1 s、2 s、4 s（封顶 4 s）调用 `POST /session/resume` → 新 WS 发 `session.resume`；`404/401` 或累计断开超过 `maxResumeMs`（默认 55 秒，小于网关 60 秒宽限期）→ 改为新建会话并发 `session.start`。
+
+- [ ] **Step 1: 写失败的测试**
+
+`avatar-core/test/gatewayClient.test.ts`:
+
+```ts
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FRAME_AI, encodeAudioFrame, type ServerMessage } from '@anyidea/protocol';
+import { GatewayClient, type ClientStatus, type WebSocketLike } from '../src/net/gatewayClient.ts';
+
+class FakeWS implements WebSocketLike {
+  static instances: FakeWS[] = [];
+  readyState = 0;
+  binaryType = 'blob';
+  sent: Array<string | Uint8Array> = [];
+  onopen: (() => void) | null = null;
+  onmessage: ((e: { data: unknown }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  constructor(readonly url: string) {
+    FakeWS.instances.push(this);
+  }
+  send(d: string | Uint8Array) { this.sent.push(d); }
+  close() { this.readyState = 3; this.onclose?.(); }
+  open() { this.readyState = 1; this.onopen?.(); }
+  drop() { this.readyState = 3; this.onclose?.(); }
+  json(i: number) { return JSON.parse(this.sent[i] as string); }
+}
+
+const tokens = (n: number) => ({ sessionId: 's1', connectToken: `c${n}`, resumeToken: `r${n}` });
+
+function setup(responses: Array<{ status: number; body: unknown }>) {
+  FakeWS.instances = [];
+  const calls: Array<{ url: string; body: unknown; secret: string | null }> = [];
+  const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    calls.push({ url, body: init?.body ? JSON.parse(init.body as string) : null, secret: headers.get('x-app-secret') });
+    const r = responses.shift() ?? { status: 500, body: {} };
+    return new Response(JSON.stringify(r.body), { status: r.status });
+  }) as unknown as typeof fetch;
+  const messages: ServerMessage[] = [];
+  const audio: Array<[number, number[]]> = [];
+  const statuses: ClientStatus[] = [];
+  const client = new GatewayClient(
+    { baseUrl: 'http://gw.test', appSecret: 'sekret', clientInfo: { platform: 'android', audioPath: 'A' }, fetchFn, WebSocketCtor: FakeWS, maxResumeMs: 10_000 },
+    { onMessage: (m) => messages.push(m), onAudio: (s, p) => audio.push([s, Array.from(p)]), onStatus: (s) => statuses.push(s) },
+  );
+  return { client, calls, messages, audio, statuses };
+}
+
+describe('GatewayClient', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('creates a session and sends session.start on open', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }]);
+    await t.client.start();
+    expect(t.calls[0]).toEqual({ url: 'http://gw.test/session', body: {}, secret: 'sekret' });
+    const ws = FakeWS.instances[0];
+    expect(ws.url).toBe('ws://gw.test/ws?token=c1');
+    expect(ws.binaryType).toBe('arraybuffer');
+    ws.open();
+    expect(ws.json(0)).toEqual({ type: 'session.start', clientInfo: { platform: 'android', audioPath: 'A' } });
+    expect(t.statuses).toEqual(['connecting', 'open']);
+  });
+
+  it('routes text and audio frames', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }]);
+    await t.client.start();
+    const ws = FakeWS.instances[0];
+    ws.open();
+    ws.onmessage?.({ data: JSON.stringify({ type: 'response.start', responseSeq: 1, kind: 'greeting' }) });
+    const frame = encodeAudioFrame(FRAME_AI, 1, Int16Array.from([5, -5]));
+    ws.onmessage?.({ data: frame.buffer.slice(frame.byteOffset, frame.byteOffset + frame.byteLength) });
+    expect(t.messages).toEqual([{ type: 'response.start', responseSeq: 1, kind: 'greeting' }]);
+    expect(t.audio).toEqual([[1, [5, -5]]]);
+  });
+
+  it('only sends when open', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }]);
+    await t.client.start();
+    const ws = FakeWS.instances[0];
+    t.client.send({ type: 'client.mute', muted: true });
+    t.client.sendAudio(new Int16Array(320));
+    expect(ws.sent).toEqual([]);
+    ws.open();
+    t.client.sendAudio(new Int16Array(320));
+    expect(ws.sent[1]).toBeInstanceOf(Uint8Array);
+  });
+
+  it('resumes after an unexpected drop', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }, { status: 200, body: tokens(2) }]);
+    await t.client.start();
+    FakeWS.instances[0].open();
+    FakeWS.instances[0].drop();
+    expect(t.statuses.at(-1)).toBe('reconnecting');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(t.calls[1]).toEqual({ url: 'http://gw.test/session/resume', body: { sessionId: 's1', resumeToken: 'r1' }, secret: 'sekret' });
+    const ws2 = FakeWS.instances[1];
+    expect(ws2.url).toBe('ws://gw.test/ws?token=c2');
+    ws2.open();
+    expect(ws2.json(0)).toEqual({ type: 'session.resume', sessionId: 's1' });
+  });
+
+  it('starts a fresh session when the old one is gone', async () => {
+    const t = setup([
+      { status: 200, body: tokens(1) },
+      { status: 404, body: { error: 'session_gone' } },
+      { status: 200, body: tokens(3) },
+    ]);
+    await t.client.start();
+    FakeWS.instances[0].open();
+    FakeWS.instances[0].drop();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(t.calls.map((c) => c.url)).toEqual(['http://gw.test/session', 'http://gw.test/session/resume', 'http://gw.test/session']);
+    const ws = FakeWS.instances[1];
+    ws.open();
+    expect(ws.json(0).type).toBe('session.start');
+  });
+
+  it('backs off while the gateway is unreachable, then gives up resuming after maxResumeMs', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }, ...Array.from({ length: 10 }, () => ({ status: 503, body: {} })), { status: 200, body: tokens(9) }]);
+    await t.client.start();
+    FakeWS.instances[0].open();
+    FakeWS.instances[0].drop();
+    await vi.advanceTimersByTimeAsync(12_000);
+    const urls = t.calls.map((c) => c.url);
+    expect(urls.filter((u) => u.endsWith('/session/resume')).length).toBeGreaterThanOrEqual(3);
+    expect(urls.lastIndexOf('http://gw.test/session')).toBeGreaterThan(0); // fell back to a fresh session
+  });
+
+  it('close() ends the session without reconnecting', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }]);
+    await t.client.start();
+    const ws = FakeWS.instances[0];
+    ws.open();
+    t.client.close();
+    expect(ws.json(0).type).toBe('session.start');
+    expect(ws.json(1)).toEqual({ type: 'session.end' });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(FakeWS.instances).toHaveLength(1);
+    expect(t.statuses.at(-1)).toBe('closed');
+  });
+});
+```
+
+- [ ] **Step 2: 运行测试确认失败**
+
+Run: `npm test -w avatar-core -- gatewayClient`
+Expected: FAIL，无法解析模块。
+
+- [ ] **Step 3: 实现**
+
+`avatar-core/src/net/gatewayClient.ts`:
+
+```ts
+import {
+  FRAME_AI,
+  FRAME_MIC,
+  decodeAudioFrame,
+  encodeAudioFrame,
+  type AudioPath,
+  type ClientMessage,
+  type ServerMessage,
+  type SessionTokens,
+} from '@anyidea/protocol';
+
+export interface WebSocketLike {
+  readyState: number;
+  binaryType: string;
+  send(data: string | Uint8Array): void;
+  close(code?: number): void;
+  onopen: (() => void) | null;
+  onmessage: ((e: { data: unknown }) => void) | null;
+  onclose: (() => void) | null;
+  onerror: (() => void) | null;
+}
+export type WebSocketCtor = new (url: string) => WebSocketLike;
+export type ClientStatus = 'connecting' | 'open' | 'reconnecting' | 'closed';
+
+export interface GatewayClientOptions {
+  baseUrl: string;
+  appSecret: string;
+  clientInfo: { platform: string; audioPath: AudioPath };
+  fetchFn?: typeof fetch;
+  WebSocketCtor?: WebSocketCtor;
+  /** Must stay below the gateway grace period (60 s). */
+  maxResumeMs?: number;
+}
+
+export interface GatewayClientEvents {
+  onMessage(m: ServerMessage): void;
+  onAudio(seq: number, pcm: Int16Array): void;
+  onStatus(s: ClientStatus): void;
+}
+
+export class HttpError extends Error {
+  constructor(readonly status: number) {
+    super(`http_${status}`);
+  }
+}
+
+const OPEN = 1;
+
+export class GatewayClient {
+  private ws: WebSocketLike | null = null;
+  private tokens: SessionTokens | null = null;
+  private closedByUser = false;
+  private disconnectedAt = 0;
+  private attempt = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    private readonly o: GatewayClientOptions,
+    private readonly ev: GatewayClientEvents,
+  ) {}
+
+  get isOpen(): boolean {
+    return this.ws?.readyState === OPEN;
+  }
+
+  async start(): Promise<void> {
+    this.closedByUser = false;
+    this.tokens = await this.post('/session', {});
+    this.open('session.start');
+  }
+
+  send(m: ClientMessage): void {
+    if (this.ws?.readyState === OPEN) this.ws.send(JSON.stringify(m));
+  }
+
+  sendAudio(pcm16k: Int16Array): void {
+    if (this.ws?.readyState === OPEN) this.ws.send(encodeAudioFrame(FRAME_MIC, 0, pcm16k));
+  }
+
+  close(): void {
+    this.closedByUser = true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.send({ type: 'session.end' });
+    this.ws?.close(1000);
+  }
+
+  private open(first: 'session.start' | 'session.resume'): void {
+    const t = this.tokens;
+    if (!t) return;
+    const Ctor = this.o.WebSocketCtor ?? (WebSocket as unknown as WebSocketCtor);
+    const url = `${this.o.baseUrl.replace(/^http/, 'ws')}/ws?token=${encodeURIComponent(t.connectToken)}`;
+    const ws = new Ctor(url);
+    ws.binaryType = 'arraybuffer';
+    this.ws = ws;
+    this.ev.onStatus(first === 'session.start' ? 'connecting' : 'reconnecting');
+    ws.onopen = () => {
+      this.attempt = 0;
+      this.disconnectedAt = 0;
+      this.ev.onStatus('open');
+      this.send(first === 'session.start' ? { type: 'session.start', clientInfo: this.o.clientInfo } : { type: 'session.resume', sessionId: t.sessionId });
+    };
+    ws.onmessage = (e) => {
+      if (typeof e.data === 'string') {
+        this.ev.onMessage(JSON.parse(e.data) as ServerMessage);
+        return;
+      }
+      if (e.data instanceof ArrayBuffer) {
+        const frame = decodeAudioFrame(new Uint8Array(e.data));
+        if (frame && frame.kind === FRAME_AI) this.ev.onAudio(frame.responseSeq, frame.pcm);
+      }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => {
+      if (this.ws !== ws) return;
+      this.ws = null;
+      if (this.closedByUser) {
+        this.ev.onStatus('closed');
+        return;
+      }
+      if (!this.disconnectedAt) this.disconnectedAt = Date.now();
+      this.scheduleResume();
+    };
+  }
+
+  private scheduleResume(): void {
+    if (this.closedByUser) return;
+    if (Date.now() - this.disconnectedAt > (this.o.maxResumeMs ?? 55_000)) {
+      void this.restartFresh();
+      return;
+    }
+    const delay = Math.min(4000, 500 * 2 ** this.attempt++);
+    this.ev.onStatus('reconnecting');
+    this.retryTimer = setTimeout(() => void this.tryResume(), delay);
+  }
+
+  private async tryResume(): Promise<void> {
+    if (this.closedByUser || !this.tokens) return;
+    try {
+      this.tokens = await this.post('/session/resume', { sessionId: this.tokens.sessionId, resumeToken: this.tokens.resumeToken });
+      this.open('session.resume');
+    } catch (e) {
+      if (e instanceof HttpError && (e.status === 404 || e.status === 401)) await this.restartFresh();
+      else this.scheduleResume();
+    }
+  }
+
+  private async restartFresh(): Promise<void> {
+    if (this.closedByUser) return;
+    this.attempt = 0;
+    try {
+      this.tokens = await this.post('/session', {});
+      this.disconnectedAt = 0;
+      this.open('session.start');
+    } catch {
+      this.disconnectedAt = Date.now();
+      this.scheduleResume();
+    }
+  }
+
+  private async post(path: string, body: unknown): Promise<SessionTokens> {
+    const fetchFn = this.o.fetchFn ?? fetch;
+    const res = await fetchFn(`${this.o.baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-app-secret': this.o.appSecret },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new HttpError(res.status);
+    return (await res.json()) as SessionTokens;
+  }
+}
+```
+
+- [ ] **Step 4: 运行测试确认通过**
+
+Run: `npm test -w avatar-core -- gatewayClient`
+Expected: 7 个测试 PASS。
+
+若 "backs off ... gives up" 失败：退避序列为 500、1000、2000、4000、4000 ms，累计约 11.5 秒，`maxResumeMs: 10_000` 应在第 5 次重试前切换为新建会话；确认 `scheduleResume` 每次都先检查 `Date.now() - disconnectedAt`。
+
+- [ ] **Step 5: 全量测试、类型检查与提交**
+
+Run: `npm test -w avatar-core && npm run typecheck -w avatar-core`
+Expected: 全部 PASS。
+
+```bash
+git add avatar-core/src/net avatar-core/test/gatewayClient.test.ts
+git commit -m "feat(avatar-core): gateway client with resume and fresh-session fallback
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
