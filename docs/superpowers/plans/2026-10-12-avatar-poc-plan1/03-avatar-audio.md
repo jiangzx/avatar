@@ -77,7 +77,7 @@ export default defineConfig({
     target: 'es2022',
     outDir: 'dist',
     assetsInlineLimit: 0,
-    rollupOptions: { input: { main: 'index.html', spike: 'spike-aec.html' } },
+    rollupOptions: { input: { main: 'index.html' } }, // Task 17 adds the spike page
   },
   test: { environment: 'node', include: ['test/**/*.test.ts'] },
 });
