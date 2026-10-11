@@ -95,7 +95,7 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 
 ## 4. 客户端 ↔ 网关协议（WSS）
 
-- 鉴权：App 启动时向网关 `POST /session` 换取一次性 session token（有效期 5 分钟），然后带着 token 连接 WSS。模型 Key 只存在网关的环境变量中。
+- 鉴权：令牌、重连流程见 §6.1。`POST /session` 和 `POST /session/resume` 都要求请求头携带 App 密钥；`connectToken` 只能用于建立一个连接，`resumeToken` 用过一次即失效。模型 Key 只存在网关的环境变量中。
 - 二进制帧：`[1 字节类型][4 字节 responseSeq（uint32 BE），上行为 0][PCM16 数据]`。类型：`0x01` 上行麦克风音频，`0x02` 下行 AI 音频。
   - 上行：16 kHz、20 ms 一帧。
   - 下行：24 kHz。
@@ -109,6 +109,8 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 | C→G | `playback.stopped` | `responseSeq`, `playedMs`, `reason: interrupted\|ended` | 打断或播放结束 |
 | C→G | `client.mute` | `muted: bool` | 关闭/打开麦克风：静音期间停止上行音频，Director 暂停主动发言 |
 | C→G | `session.end` | — | 结束会话 |
+| C→G | `session.resume` | `sessionId` | 重连后恢复会话（§6.1） |
+| G→C | `session.resumed` | `lastResponseSeq` | 恢复成功（§6.1） |
 | G→C | `response.start` | `responseSeq`, `kind: reply\|greeting\|followup` | 新回复开始；客户端把它设为当前激活回复 |
 | G→C | `response.end` / `response.cancelled` | `responseSeq` | 回复结束 / 已取消 |
 | G→C | `transcript.user` | `text`, `final` | 用户字幕 |
@@ -118,7 +120,7 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 | G→C | `metric` | `name`, `ms` | 时延回显，供指标面板显示 |
 | G→C | `error` | `code`, `retryable` | 错误 |
 
-- `POST /session` 要求请求头携带静态 App 密钥（网关环境变量配置，不进仓库，只在 debug/内测 APK 中注入）；公网部署时再加 IP 白名单（Day 7）。
+- App 密钥：配置在网关环境变量中，不进仓库。构建 APK 时通过 `--dart-define` 从本机或 CI 环境变量注入。Day 7 交付的 release APK 就是内测包，同样注入。公网部署时再加 IP 白名单（Day 7）。
 - Bridge（WebView ↔ Flutter）：在 JS 和 Flutter 之间转发字幕、状态、指标、错误事件，以及 Flutter 发出的静音和结束指令。方案 B 下还要承载 `audio.level`（约每 30 ms 一条）。
 
 ## 5. 打断与零残留
@@ -157,7 +159,7 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 
 ### 6.1 客户端重连与会话保留
 - `POST /session` 返回 `sessionId` + 一次性 `connectToken`（5 分钟）+ `resumeToken`（只在本会话内有效，每次重连成功后轮换）。
-- WSS 断开**不等于** `session.end`。网关为断开的会话保留 Ledger、摘要和模型连接 60 秒【预估】的宽限期；期间丢弃模型下发的音频，并取消进行中的回复。
+- WSS 断开**不等于** `session.end`。网关为断开的会话保留 Ledger、摘要和模型连接 60 秒【预估】的宽限期；期间丢弃模型下发的音频，并取消进行中的回复；网关按实时节奏给模型补发静音帧，保持模型连接。如果模型连接仍然断开，客户端重连时按 §6 的"会话重建"流程恢复。Director 的计时器在断线期间暂停，重连后清零。
 - 客户端重连：带 `sessionId` + `resumeToken` 调用 `POST /session/resume`，换取新的 `connectToken` 并重新连接 WSS，发送 `session.resume`。网关回复 `session.resumed {lastResponseSeq}`；客户端清空播放缓冲，丢弃所有 `responseSeq ≤ lastResponseSeq` 的数据，只接受更大的序号。之后由 Director 决定是否说一句"刚才网络断了一下，我们接着聊～"，再接上之前的话题。
 - 宽限期过了还没重连，或者收到 `session.end`：销毁 Ledger 并关闭模型连接。客户端之后再连就是新会话，重新迎宾。
 - 协议新增：C→G `session.resume`；G→C `session.resumed {lastResponseSeq}`。
@@ -214,7 +216,7 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 
 | Day | 任务 | 产出 | 验收 | 风险 |
 |---|---|---|---|---|
-| 1 | ① 安装 Android SDK 和 adb，Flutter 应用加 WebView（本地 127.0.0.1 服务加载页面）在小米真机上跑通：麦克风权限、免手势播放、AudioWorklet、wasm、WebGL<br>② 网关骨架 + MockAdapter，真机上走通"说话→Mock 回放"<br>③ 音频方案 A 和 B 在真机外放下对比（用 Mock 播放长音频，测自打断次数和本地停播延迟）<br>④ TalkingHead 加载候选 GLB，测真机帧率<br>⑤ 拿到 Key 后：Seeduplex 和 Qwen 连通，测首响应延迟和工具调用 | `app/`、`avatar-core/`、`gateway/` 骨架；`spikes/`；`docs/adr/ADR-001-选型.md` | 真机上 Mock 链路能语音往返；A/B 方案选定（选外放 10 分钟自打断更少的；持平时选 A）；GLB 帧率 ≥30 fps | 没有 Key 时，⑤顺延，主模型选择推迟到拿到 Key 的当天；国产 ROM 的 WebView 版本；当天任务量大，人物定稿可以顺延到 Day 2，先用临时 GLB 测帧率 |
+| 1 | ① 安装 Android SDK 和 adb，Flutter 应用加 WebView（本地 127.0.0.1 服务加载页面）在小米真机上跑通：麦克风权限、免手势播放、AudioWorklet、wasm、WebGL；**release 构建**也要能加载 127.0.0.1 页面。如果明文放行不生效，退路是用 Android 原生 `WebViewAssetLoader` 提供 `https://appassets.androidplatform.net`：通过 platform channel 写少量 Kotlin 代码，或者改用 flutter_inappwebview<br>② 网关骨架 + MockAdapter，真机上走通"说话→Mock 回放"<br>③ 音频方案 A 和 B 在真机外放下对比（用 Mock 播放长音频，测自打断次数和本地停播延迟）<br>④ TalkingHead 加载候选 GLB，测真机帧率<br>⑤ 拿到 Key 后：Seeduplex 和 Qwen 连通，测首响应延迟和工具调用 | `app/`、`avatar-core/`、`gateway/` 骨架；`spikes/`；`docs/adr/ADR-001-选型.md` | 真机上 Mock 链路能语音往返；A/B 方案选定（选外放 10 分钟自打断更少的；持平时选 A）；GLB 帧率 ≥30 fps | 没有 Key 时，⑤顺延，主模型选择推迟到拿到 Key 的当天；国产 ROM 的 WebView 版本；当天任务量大，人物定稿可以顺延到 Day 2，先用临时 GLB 测帧率 |
 | 2 | 真实模型适配器；迎宾；字幕；Ledger | 适配器、Director 迎宾、字幕 UI | 打开 App ≤2 秒开始迎宾；连续 5 轮对话 | 模型协议细节 |
 | 3 | 打断全链路（§5）；会话重建；断线重连 | InterruptCoordinator 及其测试 | 50 次打断残留 0 次；停播延迟达标 | 模型不支持按播放进度截断上下文 |
 | 4 | 状态机、口型、表情、5 个动作（工具调用 + 快速通道） | `avatar-core` 动作层与状态机 | 5 个动作 × 10 种说法全部执行正确 | 比心动作、发热 |
