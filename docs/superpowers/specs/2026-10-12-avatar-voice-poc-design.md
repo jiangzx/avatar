@@ -22,7 +22,7 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 
 ### 1.4 已确定约束
 - 只用境内模型；暂不考虑 API 成本，但控制工程复杂度。
-- 模型 API Key 暂未提供：Day 1 之前的代码必须能在**无 Key 情况下用 Mock 模型跑通**。
+- 模型 API Key 暂未提供：拿到 Key 之前，所有模块（含摘要）必须能用 Mock 跑通。
 - 本机：Flutter 3.47.6 / Dart 3.13.5、Node 24、Python 3.12；需安装 Android SDK 与 adb。
 
 ## 2. 总体架构
@@ -54,9 +54,22 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 ### 2.1 为什么是这个形态
 - **WebView 渲染 3D**：Flutter 侧没有成熟的实时 3D 方案（flutter_scene 还没到 1.0；flutter_3d_controller 不能控制 blendshape）【已核实】。
 - **音频默认放在 WebView（方案 A）**：口型分析只能读取同一 JS 上下文里播放的音频【已核实】。另外，avatar-core 可以在电脑 Chrome 里快速调试（只当调试环境，不交付）。
+- **本地页面加载**：avatar-core 构建产物放在 Flutter assets 中，由 App 内启动的 **127.0.0.1 本地 HTTP 服务**（`dart:io` HttpServer，随机端口，只绑定回环地址，路径带随机 token，`.wasm` 返回 `application/wasm`）提供，WebView 加载 `http://127.0.0.1:<port>/<token>/index.html`。localhost 属于安全上下文，ES module、AudioWorklet、onnx/wasm、GLB 都能正常 fetch，同时不需要开启 WebView 的文件访问。这一项是 Day 1 ① 的显式验证项。
 - **方案 B（Flutter 原生音频）作为 Day 1 对照**：`record`（VOICE_COMMUNICATION 音源 + echoCancel）采集，`flutter_pcm_sound` 播放，原生侧计算音量和频带后通过 Bridge 驱动口型。两个方案都实现 `AudioIO` 接口，网关协议完全相同。选定标准见 §9 Day 1。
 - **自建网关，不引入 LiveKit**：LiveKit 官方实时模型插件里没有 Qwen 和豆包【已核实】；使用实时模型自带的服务端 VAD 时，LiveKit 的大部分打断参数会被忽略【已核实】；自部署还要 TURN、TLS、UDP 端口段。另外两家模型的 WS 接口都要求请求头鉴权，本来就需要服务端代理【已核实】。
-- **Plan B 传输**：如果方案 A、B 都压不住外放回声（判定阈值见 §8），改用 `flutter_webrtc`。优先直连 Qwen 原生 WebRTC（官方称自带回声消除和降噪【已核实】），其次自部署 LiveKit。这个切换只影响 Transport/AudioIO 层。
+- **Plan B 传输**：如果方案 A、B 都压不住外放回声（判定阈值见 §10），改用 `flutter_webrtc`。优先直连 Qwen 原生 WebRTC（官方称自带回声消除和降噪【已核实】），其次自部署 LiveKit。这个切换只影响 Transport/AudioIO 层。
+
+### 2.2 方案 A / B 职责归属
+
+| 职责 | 方案 A（默认，完整实现） | 方案 B（Day 1 只做 spike 对照） |
+|---|---|---|
+| 采集 + AEC | WebView getUserMedia | Dart `record`（VOICE_COMMUNICATION + echoCancel） |
+| 本地 VAD | avatar-core（vad-web / Silero） | spike 阶段只用能量阈值，不做 Silero |
+| 播放、淡出、清空、`responseSeq` 门控、进度上报 | avatar-core AudioWorklet | Dart `flutter_pcm_sound` |
+| WSS GatewayClient | avatar-core（TS） | Dart |
+| 口型输入 | JS 内直接读取 PCM | Dart 计算音量后通过 Bridge 发送 `audio.level` |
+
+方案 B 在 Day 1 只验证一件事：真机外放下回放 Mock 长音频，原生采集里的残余回声会不会触发自打断（按能量阈值计数），并和方案 A 对比。如果 B 明显胜出，就把上表 B 列的职责迁到 Dart，并在 ADR-001 里重排 Day 2–4 的任务，预计多花约 1 天；这个代价计入风险。
 
 ## 3. 语音模型
 
@@ -74,12 +87,16 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 - `RealtimeAdapter` 接口（网关内部）：
   - `connect(sessionConfig)`、`sendAudio(pcm16k)`、`updateInstructions(text)`、`createResponse(instructions?)`、`cancelResponse()`、`sendToolResult(callId, result)`、`injectContextNote(text)`、`close()`。
   - 事件：`userSpeechStarted`、`userTranscript(delta|final)`、`responseStarted(id)`、`audioDelta(id, pcm)`、`textDelta(id, text)`、`toolCall(id, name, args)`、`responseDone(id)`、`responseCancelled(id)`、`error`。
-- **MockAdapter**：不需要 Key。它根据用户音频的能量判断"说完"，回放预录的 PCM 和文本，并能按脚本发出 toolCall。所有集成测试和无 Key 开发都依赖它。
+- **MockAdapter**：不需要 Key。所有集成测试和无 Key 开发都依赖它。
+  - 按用户音频能量判断开口和说完，发出 `userSpeechStarted`。
+  - 按脚本（`gateway/mock/script.json`，第 N 句话对应一条记录）发出 `userTranscript(delta, final)`。真机上也可以在调试面板里直接输入文本，代替语音识别结果。
+  - 回放预录的 PCM（或合成的正弦波语音包络）和对应文本，并按脚本发出 toolCall。
+- **Summarizer 接口**：`LlmSummarizer`（拿到 Key 后使用）/ `MockSummarizer`（按条目拼接后截断到 800 字）。
 
 ## 4. 客户端 ↔ 网关协议（WSS）
 
 - 鉴权：App 启动时向网关 `POST /session` 换取一次性 session token（有效期 5 分钟），然后带着 token 连接 WSS。模型 Key 只存在网关的环境变量中。
-- 二进制帧：`[1 字节类型][4 字节 responseSeq（uint32 BE），上行为 0][PCM16 数据]`。
+- 二进制帧：`[1 字节类型][4 字节 responseSeq（uint32 BE），上行为 0][PCM16 数据]`。类型：`0x01` 上行麦克风音频，`0x02` 下行 AI 音频。
   - 上行：16 kHz、20 ms 一帧。
   - 下行：24 kHz。
 - JSON 帧：
@@ -90,7 +107,8 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 | C→G | `vad` | `state: speaking\|silent`, `t` | 本地 VAD 状态，供 Director 和打断使用 |
 | C→G | `playback.progress` | `responseSeq`, `playedMs` | 每 200 ms 上报一次已播放进度 |
 | C→G | `playback.stopped` | `responseSeq`, `playedMs`, `reason: interrupted\|ended` | 打断或播放结束 |
-| C→G | `client.mute` / `session.end` | — | 静音 / 结束会话 |
+| C→G | `client.mute` | `muted: bool` | 关闭/打开麦克风：静音期间停止上行音频，Director 暂停主动发言 |
+| C→G | `session.end` | — | 结束会话 |
 | G→C | `response.start` | `responseSeq`, `kind: reply\|greeting\|followup` | 新回复开始；客户端把它设为当前激活回复 |
 | G→C | `response.end` / `response.cancelled` | `responseSeq` | 回复结束 / 已取消 |
 | G→C | `transcript.user` | `text`, `final` | 用户字幕 |
@@ -100,14 +118,19 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 | G→C | `metric` | `name`, `ms` | 时延回显，供指标面板显示 |
 | G→C | `error` | `code`, `retryable` | 错误 |
 
+- `POST /session` 要求请求头携带静态 App 密钥（网关环境变量配置，不进仓库，只在 debug/内测 APK 中注入）；公网部署时再加 IP 白名单（Day 7）。
 - Bridge（WebView ↔ Flutter）：在 JS 和 Flutter 之间转发字幕、状态、指标、错误事件，以及 Flutter 发出的静音和结束指令。方案 B 下还要承载 `audio.level`（约每 30 ms 一条）。
 
 ## 5. 打断与零残留
 
 1. **本地抢先停播**：本地 VAD（Silero，vad-web）检测到用户开口超过 150 ms【预估，待调参】时，AudioWorklet 立即把当前回复淡出 30 ms 并清空缓冲，然后上报 `playback.stopped(interrupted, playedMs)`。在模型侧检测到用户说话（`userSpeechStarted`）之前就已经停了。
-2. **网关取消**：收到 `playback.stopped(interrupted)` 或 `userSpeechStarted` 中的任何一个，就调用 `cancelResponse()`，并把该 `responseSeq` 记入已取消集合；之后这个回复迟到的音频、文本、工具调用全部丢弃。
+2. **网关取消（AI 播放期间需要本地确认）**：
+   - 收到客户端 `playback.stopped(interrupted)`：立即调用 `cancelResponse()`。
+   - 只收到模型侧 `userSpeechStarted`、本地 VAD 没有触发：等 300 ms，期间本地 VAD 确认说话才取消，否则忽略（多半是回声）。不在 AI 播放期间时，直接以模型侧事件为准。
+   - 模型自带的自动打断：能关就关（例如 Qwen 的 turn_detection 打断开关，如果有的话），统一交给网关判断；关不掉的，网关接受模型侧取消，计入"误打断"指标，并按第 5 条处理。各模型是否可关，Day 1 拿到 Key 后核实。
+   - 取消后，并把该 `responseSeq` 记入已取消集合；之后这个回复迟到的音频、文本、工具调用全部丢弃。
 3. **客户端门控**：只播放和显示 `responseSeq` 等于当前激活回复的数据；`response.cancelled` 到达后，把该回复的字幕截断到已播放的位置。
-4. **上下文对齐**：Ledger 把这条助手回复截断到已播放部分（按 `playedMs` 占总时长的比例对应文本，取近似值），并标注"（被用户打断）"。模型不支持按播放进度截断时，网关调用 `injectContextNote("助手上一句只说到：『…』，被用户打断")`。
+4. **上下文对齐**：Ledger 把这条助手回复截断到已播放部分。截断点 = 已收到文本长度 × `playedMs` ÷ 截至取消时已收到的音频时长（取近似值），并标注"（被用户打断）"。模型不支持按播放进度截断时，网关调用 `injectContextNote("助手上一句只说到：『…』，被用户打断")`。
 5. **误打断**：如果 VAD 触发后 600 ms 内模型侧没有识别到任何用户文字，就视为噪声或回声。这时**不恢复**旧回复（宁可少说，也不重复），由 Director 判断是否补一句"你刚刚是想说什么吗？"【待调参】。
 6. **外放期间的保护**：AI 播放期间，本地 VAD 的触发阈值提高一档【预估，待调参】，降低回声自打断。
 
@@ -129,7 +152,7 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
   - 摘要在后台异步执行，不阻塞对话。
 - **会话重建**：模型连接断开、或达到时长上限时，用「人设 + 摘要 + 最近 8 轮」新建模型会话，客户端连接不断开。重建期间虚拟人保持 listening 状态，并显示"网络有点慢，稍等我一下"。
 - **接话**：人设提示词要求"优先接住用户上一句里的具体内容，再自然延伸"。Director 发起追问时，优先从 open topics 里挑话题。
-- **验收**（见 §8）：第 2 轮说出的事实，第 10 轮能正确引用；被打断后问"你刚才说到哪了"，回答与已播放内容一致；断线重连后能接上之前的话题。
+- **验收**（见 §10）：第 2 轮说出的事实，第 10 轮能正确引用；被打断后问"你刚才说到哪了"，回答与已播放内容一致；断线重连后能接上之前的话题。
 
 ## 7. 主动性：Director
 
@@ -183,13 +206,13 @@ Web 端、平板适配（后期）、方言、跨会话长期记忆、危机/诈
 
 | Day | 任务 | 产出 | 验收 | 风险 |
 |---|---|---|---|---|
-| 1 | ① 安装 Android SDK 和 adb，Flutter 应用加 WebView 在小米真机上跑通：麦克风权限、免手势播放、WebGL<br>② 网关骨架 + MockAdapter，真机上走通"说话→Mock 回放"<br>③ 音频方案 A 和 B 在真机外放下对比（用 Mock 播放长音频，测自打断次数和本地停播延迟）<br>④ TalkingHead 加载候选 GLB，测真机帧率<br>⑤ 拿到 Key 后：Seeduplex 和 Qwen 连通，测首响应延迟和工具调用 | `app/`、`avatar-core/`、`gateway/` 骨架；`spikes/`；`docs/adr/ADR-001-选型.md` | 真机上 Mock 链路能语音往返；A/B 方案选定（选外放 10 分钟自打断更少的；持平时选 A）；GLB 帧率 ≥30 fps | 没有 Key 时，⑤顺延，主模型选择推迟到拿到 Key 的当天；国产 ROM 的 WebView 版本 |
+| 1 | ① 安装 Android SDK 和 adb，Flutter 应用加 WebView（本地 127.0.0.1 服务加载页面）在小米真机上跑通：麦克风权限、免手势播放、AudioWorklet、wasm、WebGL<br>② 网关骨架 + MockAdapter，真机上走通"说话→Mock 回放"<br>③ 音频方案 A 和 B 在真机外放下对比（用 Mock 播放长音频，测自打断次数和本地停播延迟）<br>④ TalkingHead 加载候选 GLB，测真机帧率<br>⑤ 拿到 Key 后：Seeduplex 和 Qwen 连通，测首响应延迟和工具调用 | `app/`、`avatar-core/`、`gateway/` 骨架；`spikes/`；`docs/adr/ADR-001-选型.md` | 真机上 Mock 链路能语音往返；A/B 方案选定（选外放 10 分钟自打断更少的；持平时选 A）；GLB 帧率 ≥30 fps | 没有 Key 时，⑤顺延，主模型选择推迟到拿到 Key 的当天；国产 ROM 的 WebView 版本；当天任务量大，人物定稿可以顺延到 Day 2，先用临时 GLB 测帧率 |
 | 2 | 真实模型适配器；迎宾；字幕；Ledger | 适配器、Director 迎宾、字幕 UI | 打开 App ≤2 秒开始迎宾；连续 5 轮对话 | 模型协议细节 |
 | 3 | 打断全链路（§5）；会话重建；断线重连 | InterruptCoordinator 及其测试 | 50 次打断残留 0 次；停播延迟达标 | 模型不支持按播放进度截断上下文 |
 | 4 | 状态机、口型、表情、5 个动作（工具调用 + 快速通道） | `avatar-core` 动作层与状态机 | 5 个动作 × 10 种说法全部执行正确 | 比心动作、发热 |
 | 5 | Director 调参、滚动摘要、人设提示词；主备模型 A/B | 配置文件、提示词、摘要模块 | 抢话率 ≤10%；第 10 轮能回忆第 2 轮的事实 | 主动性过强或过弱 |
 | 6 | 真机测试：30 分钟连续运行、发热、断网、切后台、来电打断；指标表填入实测值 | 测试报告 | 指标逐项给出实测值，与目标值分开列 | 小米后台限制 |
-| 7 | 回归测试、修 bug；网关部署到境内云服务器（WSS + TLS）；打 release APK；交付文档 | APK、README、演示脚本 | §10 的 7 个场景全部走通 | 云服务器与域名/证书的准备 |
+| 7 | 回归测试、修 bug；网关部署到境内云服务器（WSS + TLS + App 密钥 + IP 白名单）；打 release APK；交付文档 | APK、README、演示脚本 | §10 的 7 个场景全部走通 | 云服务器与域名/证书的准备 |
 
 ## 10. 验收场景与指标
 
@@ -249,7 +272,7 @@ anyidea/
 ```
 
 ## 14. 主要风险
-1. 外放回声：方案 A/B 对比；播放期间提高 VAD 阈值；以 WebRTC 传输作为 Plan B。
+1. 外放回声：方案 A/B 对比（如果 B 胜出，需要迁移职责，多花约 1 天）；播放期间提高 VAD 阈值；以 WebRTC 传输作为 Plan B。
 2. 国内模型的实际延迟和自然度没有公开数据：用 Mock 先开发，拿到 Key 后立即双模型实测。
 3. API Key 暂未提供：所有模块都先基于 MockAdapter 开发；拿到 Key 后真实模型的接入和调参会挤压后续进度，尤其是 Day 2 和 Day 5。
 4. 人物素材与比心动作：Day 1 定稿人物，比心准备了退路方案。
