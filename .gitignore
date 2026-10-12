@@ -16,3 +16,4 @@ avatar-core/public/avatars/*.glb
 avatar-core/public/animations/*.fbx
 app/assets/web/
 coverage/
+app/dev.json
