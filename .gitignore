@@ -6,3 +6,13 @@ dist/
 build/
 .dart_tool/
 .superpowers/
+!.env.example
+
+# generated / third-party assets
+gateway/mock/speech-24k.pcm
+avatar-core/public/spike/speech-24k.pcm
+avatar-core/public/vad/
+avatar-core/public/avatars/*.glb
+avatar-core/public/animations/*.fbx
+app/assets/web/
+coverage/
