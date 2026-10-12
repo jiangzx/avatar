@@ -5,6 +5,15 @@ export interface ActionAssets {
   waveFbx?: string;
 }
 
+const FBX_BINARY_MAGIC = 'Kaydara FBX Binary';
+
+/** True only for a non-HTML response whose first bytes carry the FBX binary magic (SPA servers answer 200 + index.html for missing files). */
+export function looksLikeFbx(contentType: string | null, head: Uint8Array): boolean {
+  if (contentType?.toLowerCase().includes('text/html')) return false;
+  if (head.length < FBX_BINARY_MAGIC.length) return false;
+  return new TextDecoder().decode(head.subarray(0, FBX_BINARY_MAGIC.length)) === FBX_BINARY_MAGIC;
+}
+
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 
 /** TUNABLE (estimates): action parameters tuned on device in Task 18. */
@@ -52,7 +61,7 @@ export class ActionPlayer {
   play(action: ActionName): void {
     switch (action) {
       case 'wave':
-        void this.wave();
+        void this.wave().catch(() => undefined); // wave() never rejects; belt and braces
         break;
       case 'nod':
         this.nod(false);
@@ -74,15 +83,32 @@ export class ActionPlayer {
     this.head.stopAnimation();
   }
 
+  /** Never rejects: a missing/invalid FBX falls back to the built-in "handup" gesture. */
   async wave(): Promise<void> {
-    if (this.assets.waveFbx && this.waveFbxOk === null) {
-      // GET, not HEAD: the app's LocalAssetServer (Task 15) only serves GET.
-      const res = await fetch(this.assets.waveFbx).catch(() => null);
-      this.waveFbxOk = res?.ok ?? false;
-      void res?.body?.cancel();
+    if (this.assets.waveFbx && this.waveFbxOk === null) this.waveFbxOk = await this.probeWaveFbx(this.assets.waveFbx);
+    if (this.assets.waveFbx && this.waveFbxOk) {
+      try {
+        await this.head.playAnimation(this.assets.waveFbx, null, ACTION_TUNING.wave.durationSec);
+        return;
+      } catch {
+        this.waveFbxOk = false;
+      }
     }
-    if (this.assets.waveFbx && this.waveFbxOk) await this.head.playAnimation(this.assets.waveFbx, null, ACTION_TUNING.wave.durationSec);
-    else this.head.playGesture('handup', ACTION_TUNING.wave.durationSec, true, ACTION_TUNING.wave.fadeMs);
+    this.head.playGesture('handup', ACTION_TUNING.wave.durationSec, true, ACTION_TUNING.wave.fadeMs);
+  }
+
+  private async probeWaveFbx(url: string): Promise<boolean> {
+    try {
+      // GET, not HEAD: the app's LocalAssetServer (Task 15) only serves GET.
+      const res = await fetch(url);
+      if (!res.ok || !res.body) return false;
+      const reader = res.body.getReader();
+      const first = await reader.read();
+      void reader.cancel().catch(() => undefined);
+      return looksLikeFbx(res.headers.get('content-type'), first.value ?? new Uint8Array(0));
+    } catch {
+      return false;
+    }
   }
 
   /** Procedural nod on TalkingHead's headRotateX channel; subtle = listening backchannel. */
