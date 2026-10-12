@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LocalVad, SpeechDetector } from '../src/audio/vad.ts';
+import { LocalVad, SpeechDetector, vadAssetBase } from '../src/audio/vad.ts';
 
 const opts = { frameMs: 32, threshold: 0.5, bargeInThreshold: 0.75, startMs: 150, endMs: 600, hysteresis: 0.15 };
 
@@ -78,5 +78,19 @@ describe('LocalVad.destroy', () => {
     const { v, calls } = vadWithCounter();
     await v.destroy();
     expect(calls.end).toBe(0);
+  });
+});
+
+describe('vadAssetBase', () => {
+  it('resolves against the dev server root', () => {
+    expect(vadAssetBase('http://127.0.0.1:5173/')).toBe('http://127.0.0.1:5173/vad/');
+  });
+
+  it('resolves against the page directory under a token prefix', () => {
+    expect(vadAssetBase('http://127.0.0.1:41234/abcdef/index.html')).toBe('http://127.0.0.1:41234/abcdef/vad/');
+  });
+
+  it('drops query and hash from the base', () => {
+    expect(vadAssetBase('http://127.0.0.1:41234/abcdef/spike-aec.html?x=1#y')).toBe('http://127.0.0.1:41234/abcdef/vad/');
   });
 });

@@ -75,6 +75,11 @@ export class SpeechDetector {
   }
 }
 
+/** Absolute vad/ asset URL under the page base; a relative path would resolve against the bundled JS in assets/. */
+export function vadAssetBase(baseURI: string): string {
+  return new URL('vad/', baseURI).href;
+}
+
 export interface VadCallbacks {
   onStart(onsetAt: number): void;
   onEnd(): void;
@@ -100,10 +105,11 @@ export class LocalVad {
     await this.destroy();
     this.callbacks = cb;
     const { MicVAD } = await import('@ricky0123/vad-web');
+    const assetBase = vadAssetBase(document.baseURI);
     this.vad = await MicVAD.new({
       model: 'v5',
-      baseAssetPath: './vad/',
-      onnxWASMBasePath: './vad/',
+      baseAssetPath: assetBase,
+      onnxWASMBasePath: assetBase,
       getStream: async () => stream,
       pauseStream: async () => {},
       resumeStream: async () => stream,

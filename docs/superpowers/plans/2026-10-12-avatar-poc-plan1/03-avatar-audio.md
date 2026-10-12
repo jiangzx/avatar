@@ -976,7 +976,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { LocalVad, SpeechDetector } from '../src/audio/vad.ts';
+import { LocalVad, SpeechDetector, vadAssetBase } from '../src/audio/vad.ts';
 
 const opts = { frameMs: 32, threshold: 0.5, bargeInThreshold: 0.75, startMs: 150, endMs: 600, hysteresis: 0.15 };
 
@@ -1055,6 +1055,20 @@ describe('LocalVad.destroy', () => {
     const { v, calls } = vadWithCounter();
     await v.destroy();
     expect(calls.end).toBe(0);
+  });
+});
+
+describe('vadAssetBase', () => {
+  it('resolves against the dev server root', () => {
+    expect(vadAssetBase('http://127.0.0.1:5173/')).toBe('http://127.0.0.1:5173/vad/');
+  });
+
+  it('resolves against the page directory under a token prefix', () => {
+    expect(vadAssetBase('http://127.0.0.1:41234/abcdef/index.html')).toBe('http://127.0.0.1:41234/abcdef/vad/');
+  });
+
+  it('drops query and hash from the base', () => {
+    expect(vadAssetBase('http://127.0.0.1:41234/abcdef/spike-aec.html?x=1#y')).toBe('http://127.0.0.1:41234/abcdef/vad/');
   });
 });
 ```
@@ -1146,6 +1160,11 @@ export class SpeechDetector {
   }
 }
 
+/** Absolute vad/ asset URL under the page base; a relative path would resolve against the bundled JS in assets/. */
+export function vadAssetBase(baseURI: string): string {
+  return new URL('vad/', baseURI).href;
+}
+
 export interface VadCallbacks {
   onStart(onsetAt: number): void;
   onEnd(): void;
@@ -1171,10 +1190,11 @@ export class LocalVad {
     await this.destroy();
     this.callbacks = cb;
     const { MicVAD } = await import('@ricky0123/vad-web');
+    const assetBase = vadAssetBase(document.baseURI);
     this.vad = await MicVAD.new({
       model: 'v5',
-      baseAssetPath: './vad/',
-      onnxWASMBasePath: './vad/',
+      baseAssetPath: assetBase,
+      onnxWASMBasePath: assetBase,
       getStream: async () => stream,
       pauseStream: async () => {},
       resumeStream: async () => stream,
@@ -1207,6 +1227,8 @@ export class LocalVad {
 ```
 
 注：`vad.ts` 顶部只做 `import type`，`MicVAD` 在 `start()` 里动态 import，所以 `vad.test.ts` 在 node 中只加载 `SpeechDetector` 纯逻辑，不会加载 vad-web / onnxruntime-web。已按 vad-web 0.0.31 的 `dist/real-time-vad.d.ts` 核实：`MicVAD.new` 接受上面全部选项（含 `getStream`/`pauseStream`/`resumeStream`/`ortConfig`/`startOnLoad`），实例有 `destroy()`；`onFrameProcessed` 的 `probs.isSpeech` 是 number。
+
+注（Task 17 冒烟后修正）：`baseAssetPath`/`onnxWASMBasePath` 必须是基于 `document.baseURI` 的绝对 URL（`vadAssetBase`）。相对的 `./vad/` 在打包后被 ORT 的动态 `import()` 按 `assets/*.js` 解析成不存在的 `assets/vad/`，APK 内报 `no available backend found`（见 `docs/blockers.md` #5）。`document` 只在 `start()` 里访问，node 测试不受影响。
 
 - [ ] **Step 4: 运行测试确认通过**
 
