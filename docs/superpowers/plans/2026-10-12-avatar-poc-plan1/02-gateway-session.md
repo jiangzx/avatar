@@ -10,6 +10,8 @@
 - Create: `gateway/src/session/session.ts`
 - Test: `gateway/test/session.test.ts`
 
+**Depends on:** Task 2–6 全部完成并提交（含 Task 5 的 `onResponseStart` 返回值与 Task 6 的 `onAiTurnStarted`）。
+
 **Interfaces:**
 - Consumes: `RealtimeAdapter`、`AdapterFactory`、`PERFORM_ACTION_TOOL`（Task 2）；`ConversationLedger`、`Summarizer`、`LedgerOptions`（Task 3）；`ActionRouter`（Task 4）；`InterruptCoordinator`（Task 5）；`Director`、`DirectorConfig`（Task 6）；`truncateByPlayback`、`AI_SAMPLE_RATE`、`MIC_FRAME_SAMPLES`、`ClientMessage`、`ServerMessage`、`ResponseKind`（Task 1）；`log`
 - Produces:
@@ -18,7 +20,9 @@
   - `class Session`：`ledger`、`lastResponseSeq`、`falseInterruptions`、`start(transport): Promise<void>`、`attachTransport(transport)`、`detachTransport()`、`handleClientMessage(msg)`、`handleMicAudio(pcm)`、`end()`
 
 行为要点（对应 spec §5–§7）：
-- 每个模型回复分配递增的 `responseSeq`；被取消的回复，其迟到的音频、文本、动作一律丢弃。
+- 每个模型回复分配递增的 `responseSeq`（只在本会话内递增；新会话从 1 开始，客户端在 `session.ready` 时重置门控，见 Task 14）；被取消的回复，其迟到的音频、文本、动作一律丢弃。
+- 新回复开始时若上一条仍在客户端播放（被顶替）：先发 `response.cancelled(旧)`，按已上报的 `playedMs` 截断写入 Ledger，再发 `response.start(新)`。顺序保证客户端先停旧、再接新。
+- 新回复开始时调用 `director.onAiTurnStarted()`，清掉静默计时。
 - 助手条目在客户端报告"播放结束 / 被打断"时才写入 Ledger；被打断时按 `truncateByPlayback` 截断，并在模型不支持截断时注入上下文说明。
 - 用户终稿：写 Ledger → 关键词动作 → 视需要触发摘要。
 - 模型连接 `error(retryable)` / `closed` → 重建模型会话（客户端不断开），并发 `error(model_reconnecting)`；AI 一轮播放自然结束后，若模型侧上下文估算超过 `modelContextTokenLimit × 0.8` 或累计 `rebuildAfterTurns` 轮，静默重建瘦身（这是 spec §6 "下一次用户说完前"的落地点：选在 AI 播放自然结束后的空闲点，避免打断进行中的回复）。
@@ -141,6 +145,19 @@ describe('Session', () => {
     s.mocks[0].emit('userSpeechStarted');
     s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 0 });
     expect(of(s.sent, 'response.cancelled')).toEqual([{ type: 'response.cancelled', responseSeq: 2 }]);
+  });
+
+  it('cancels and records a still-playing response when the model starts a new one', async () => {
+    const s = setup();
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(1000); // greeting streamed; the client is still playing it
+    s.session.handleClientMessage({ type: 'playback.progress', responseSeq: 1, playedMs: 150 });
+    s.mocks[0].sendUserText('随便聊聊'); // e.g. the model took echo or a barge-in as a new turn
+    await vi.advanceTimersByTimeAsync(100);
+    const types = s.sent.map((m) => (m.type === 'response.cancelled' || m.type === 'response.start' ? `${m.type}:${m.responseSeq}` : null)).filter(Boolean);
+    expect(types).toEqual(['response.start:1', 'response.cancelled:1', 'response.start:2']);
+    expect(s.session.ledger.recent.at(-1)).toEqual({ role: 'assistant', text: '你好', ts: expect.any(Number), interrupted: true });
+    expect(s.mocks[0].notes).toHaveLength(1);
   });
 
   it('runs an action once when keyword and tool call agree', async () => {
@@ -431,7 +448,14 @@ export class Session {
       this.pendingKind = null;
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
-      this.interrupt.onResponseStart(s.seq);
+      this.director.onAiTurnStarted();
+      const superseded = this.interrupt.onResponseStart(s.seq);
+      if (superseded !== null) {
+        // The previous reply is still playing on the client: stop it there first, then record what was heard.
+        this.send({ type: 'response.cancelled', responseSeq: superseded });
+        const prev = this.bySeq.get(superseded);
+        if (prev) this.finalize(prev, true);
+      }
       this.send({ type: 'response.start', responseSeq: s.seq, kind: s.kind });
       if (!this.transport) this.interrupt.cancelActive('local'); // nobody is listening
     });
@@ -579,7 +603,7 @@ export class Session {
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w gateway -- session`
-Expected: 11 个测试 PASS。
+Expected: 12 个测试 PASS。
 
 如果 "summarizes older turns" 失败：检查 `greetAndFinish` 之后 Ledger 内容应为 `[助手:你好呀]`，第一句后为 `[助手:你好呀, 用户:第一句, 助手:我在听]`，第二句写入后 `keepRecentTurns: 1` 的切点在"用户：第二句"，因此摘要包含前三条。
 
@@ -605,6 +629,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `gateway/src/session/tokens.ts`, `gateway/src/session/manager.ts`, `gateway/src/server/schemas.ts`, `gateway/src/server/server.ts`, `gateway/src/index.ts`
 - Test: `gateway/test/server.test.ts`
 
+**Depends on:** Task 7。本任务产出的 HTTP/WS 契约是 avatar-core Task 12 的依据，完成后冻结。
+
 **Interfaces:**
 - Consumes: `Session`、`Transport`（Task 7）；`loadConfig`、`makeOriginCheck`、`loadDirectorConfig`、`loadPersona`（Task 6）；`MockAdapter`、`loadMockScript`、`loadMockSpeech`（Task 2）；`MockSummarizer`（Task 3）；`encodeAudioFrame`、`decodeAudioFrame`、`FRAME_AI`、`FRAME_MIC`、`MIC_FRAME_SAMPLES`、`SessionTokens`、`ClientMessage`
 - Produces（HTTP/WS 契约，avatar-core Task 12 依赖）:
@@ -612,9 +638,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `POST /session/resume`（请求头 `x-app-secret`，body `{ sessionId, resumeToken }`）→ `200 SessionTokens`；会话不存在或令牌无效 → `404 {"error":"session_gone"}`
   - `GET /healthz` → `200 {"ok":true}`
   - `GET /ws?token=<connectToken>` 升级为 WebSocket；无效令牌 → `401`。首条消息必须是 `session.start` 或 `session.resume`；之后文本帧为 `ClientMessage` JSON，二进制帧为 `FRAME_MIC` 音频
+  - 连接接管：同一会话出现新的合法连接时，**新连接生效**，服务端主动断开旧连接（手机切网后旧 TCP 可能处于半开状态，服务端迟迟收不到关闭）。旧连接之后的关闭事件被忽略，不会影响新连接
+  - 心跳：服务端每 `heartbeatMs`（默认 10 秒）发一次 WS ping；上一个周期内既没收到 pong 也没收到任何消息就断开该连接，进入 60 秒宽限期
   - CORS：只对 `http://127.0.0.1:<port>` 与 `DEV_ORIGINS` 返回 `Access-Control-Allow-Origin`
-  - `class TokenStore`、`safeEqual(a, b)`；`class SessionManager(makeSession, graceMs = 60000)`：`create()`、`resume(sessionId, resumeToken)`、`claim(connectToken)`、`begin(sessionId, kind, transport)`、`route(sessionId)`、`disconnected(sessionId)`、`end(sessionId)`、`shutdown()`、`size`
-  - `createGatewayServer(opts: GatewayServerOptions): Server`
+  - `class TokenStore`、`safeEqual(a, b)`；`class SessionManager(makeSession, graceMs = 60000)`：`create()`、`resume(sessionId, resumeToken)`、`claim(connectToken): { sessionId; connId } | null`、`attachSocket(sessionId, connId, terminate)`、`begin(sessionId, connId, kind, transport)`、`route(sessionId, connId)`、`disconnected(sessionId, connId)`、`end(sessionId)`、`shutdown()`、`size`
+  - `createGatewayServer(opts: GatewayServerOptions): Server`（`GatewayServerOptions.heartbeatMs?`）
 
 - [ ] **Step 1: 写失败的测试**
 
@@ -645,7 +673,7 @@ let server: Server | null = null;
 let manager: SessionManager | null = null;
 const sockets: WebSocket[] = [];
 
-async function boot(opts: { graceMs?: number; allowDebugText?: boolean } = {}) {
+async function boot(opts: { graceMs?: number; allowDebugText?: boolean; heartbeatMs?: number } = {}) {
   manager = new SessionManager(
     () => new Session({
       adapterFactory: () => new MockAdapter({ script, replyDelayMs: 10, charMs: 20, chunkMs: 20, paceFactor: 1 }),
@@ -660,6 +688,7 @@ async function boot(opts: { graceMs?: number; allowDebugText?: boolean } = {}) {
     appSecret: SECRET,
     allowedOrigin: makeOriginCheck([]),
     allowDebugText: opts.allowDebugText ?? true,
+    heartbeatMs: opts.heartbeatMs,
   });
   await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
   const { port } = server.address() as AddressInfo;
@@ -690,9 +719,9 @@ interface Client {
   waitFor(pred: (m: ServerMessage) => boolean, timeoutMs?: number): Promise<ServerMessage>;
 }
 
-function connect(base: string, token: string): Promise<Client> {
+function connect(base: string, token: string, options: WebSocket.ClientOptions = {}): Promise<Client> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?token=${encodeURIComponent(token)}`);
+    const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?token=${encodeURIComponent(token)}`, options);
     sockets.push(ws);
     const client: Client = {
       ws,
@@ -801,6 +830,35 @@ describe('gateway server', () => {
     await c2.waitFor((m) => m.type === 'session.resumed');
   });
 
+  it('lets a new connection take over a half-open one', async () => {
+    const base = await boot();
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    const c1 = await connect(base, t.connectToken);
+    start(c1);
+    await c1.waitFor((m) => m.type === 'session.ready');
+    const c1Closed = new Promise<void>((r) => c1.ws.on('close', () => r()));
+    // The phone switched networks: the old socket still looks open to the server.
+    const r1 = await post(base, '/session/resume', { sessionId: t.sessionId, resumeToken: t.resumeToken });
+    expect(r1.status).toBe(200);
+    const c2 = await connect(base, (r1.json as unknown as SessionTokens).connectToken);
+    await c1Closed; // the server dropped the superseded socket
+    c2.ws.send(JSON.stringify({ type: 'session.resume', sessionId: t.sessionId }));
+    await c2.waitFor((m) => m.type === 'session.resumed');
+    c2.ws.send(JSON.stringify({ type: 'debug.userText', text: '你好' }));
+    await c2.waitFor((m) => m.type === 'transcript.user');
+    expect(manager!.size).toBe(1);
+  });
+
+  it('drops a socket that stops answering pings and keeps the session for resume', async () => {
+    const base = await boot({ heartbeatMs: 50 });
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    const c = await connect(base, t.connectToken, { autoPong: false });
+    start(c);
+    await c.waitFor((m) => m.type === 'session.ready');
+    await new Promise<void>((r) => c.ws.on('close', () => r()));
+    expect((await post(base, '/session/resume', { sessionId: t.sessionId, resumeToken: t.resumeToken })).status).toBe(200);
+  });
+
   it('forgets sessions after the grace period', async () => {
     const base = await boot({ graceMs: 100 });
     const t = (await post(base, '/session')).json as unknown as SessionTokens;
@@ -894,13 +952,17 @@ import { TokenStore } from './tokens.ts';
 interface Entry {
   session: Session;
   started: boolean;
-  connected: boolean;
+  /** Id of the newest WS connection; 0 = none. Events from older connections are ignored. */
+  connId: number;
+  /** Drops the current socket when a newer connection supersedes it. */
+  terminate: (() => void) | null;
   grace: NodeJS.Timeout | null;
 }
 
 export class SessionManager {
   readonly tokens = new TokenStore();
   private readonly sessions = new Map<string, Entry>();
+  private nextConnId = 0;
 
   constructor(
     private readonly makeSession: () => Session,
@@ -913,7 +975,7 @@ export class SessionManager {
 
   create(): SessionTokens {
     const sessionId = randomUUID();
-    this.sessions.set(sessionId, { session: this.makeSession(), started: false, connected: false, grace: null });
+    this.sessions.set(sessionId, { session: this.makeSession(), started: false, connId: 0, terminate: null, grace: null });
     log('session_created', { sessions: this.sessions.size });
     return this.tokens.issue(sessionId);
   }
@@ -923,23 +985,38 @@ export class SessionManager {
     return this.tokens.rotate(sessionId, resumeToken);
   }
 
-  /** A WS connection presents a connect token. Returns the session id or null. */
-  claim(connectToken: string): string | null {
+  /**
+   * A WS connection presents a (one-time) connect token. The newest connection always wins:
+   * after a network change the previous socket may still look open here (half-open TCP).
+   */
+  claim(connectToken: string): { sessionId: string; connId: number } | null {
     const sessionId = this.tokens.consumeConnect(connectToken);
     if (!sessionId) return null;
     const entry = this.sessions.get(sessionId);
-    if (!entry || entry.connected) return null;
-    entry.connected = true;
+    if (!entry) return null;
     if (entry.grace) {
       clearTimeout(entry.grace);
       entry.grace = null;
     }
-    return sessionId;
+    if (entry.connId !== 0) {
+      const terminate = entry.terminate;
+      entry.terminate = null;
+      if (entry.started) entry.session.detachTransport();
+      terminate?.();
+      log('connection_superseded', {});
+    }
+    entry.connId = ++this.nextConnId;
+    return { sessionId, connId: entry.connId };
   }
 
-  async begin(sessionId: string, kind: 'start' | 'resume', transport: Transport): Promise<boolean> {
+  attachSocket(sessionId: string, connId: number, terminate: () => void): void {
     const entry = this.sessions.get(sessionId);
-    if (!entry) return false;
+    if (entry && entry.connId === connId) entry.terminate = terminate;
+  }
+
+  async begin(sessionId: string, connId: number, kind: 'start' | 'resume', transport: Transport): Promise<boolean> {
+    const entry = this.sessions.get(sessionId);
+    if (!entry || entry.connId !== connId) return false;
     if (kind === 'start') {
       if (entry.started) return false;
       entry.started = true;
@@ -953,14 +1030,17 @@ export class SessionManager {
     return true;
   }
 
-  route(sessionId: string): Session | null {
-    return this.sessions.get(sessionId)?.session ?? null;
+  /** The session, but only for its current connection. */
+  route(sessionId: string, connId: number): Session | null {
+    const entry = this.sessions.get(sessionId);
+    return entry && entry.connId === connId ? entry.session : null;
   }
 
-  disconnected(sessionId: string): void {
+  disconnected(sessionId: string, connId: number): void {
     const entry = this.sessions.get(sessionId);
-    if (!entry) return;
-    entry.connected = false;
+    if (!entry || entry.connId !== connId) return; // unknown session or an older, superseded socket
+    entry.connId = 0;
+    entry.terminate = null;
     if (entry.started) entry.session.detachTransport();
     if (entry.grace) clearTimeout(entry.grace);
     entry.grace = setTimeout(() => this.destroy(sessionId, 'grace_expired'), this.graceMs);
@@ -1047,6 +1127,8 @@ export interface GatewayServerOptions {
   allowDebugText: boolean;
   /** Uplink frames are 20 ms (50/s); allow bursts up to 2x. */
   maxFramesPerSecond?: number;
+  /** WS ping interval; a socket silent for a whole interval (no pong, no message) is dropped. */
+  heartbeatMs?: number;
 }
 
 export function createGatewayServer(opts: GatewayServerOptions): Server {
@@ -1062,13 +1144,13 @@ export function createGatewayServer(opts: GatewayServerOptions): Server {
       socket.destroy();
       return;
     }
-    const sessionId = opts.manager.claim(url.searchParams.get('token') ?? '');
-    if (!sessionId) {
+    const claimed = opts.manager.claim(url.searchParams.get('token') ?? '');
+    if (!claimed) {
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => bindConnection(ws, sessionId, opts));
+    wss.handleUpgrade(req, socket, head, (ws) => bindConnection(ws, claimed.sessionId, claimed.connId, opts));
   });
   return server;
 }
@@ -1121,12 +1203,13 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
   json(res, 404, { error: 'not_found' });
 }
 
-function bindConnection(ws: WebSocket, sessionId: string, opts: GatewayServerOptions): void {
+function bindConnection(ws: WebSocket, sessionId: string, connId: number, opts: GatewayServerOptions): void {
   const { manager } = opts;
   const maxFrames = opts.maxFramesPerSecond ?? 100;
   let begun = false;
   let frames = 0;
   let windowStart = Date.now();
+  let alive = true;
   const transport: Transport = {
     send: (msg) => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
@@ -1135,8 +1218,22 @@ function bindConnection(ws: WebSocket, sessionId: string, opts: GatewayServerOpt
       if (ws.readyState === ws.OPEN) ws.send(encodeAudioFrame(FRAME_AI, seq, pcm));
     },
   };
+  manager.attachSocket(sessionId, connId, () => ws.terminate());
+  const heartbeat = setInterval(() => {
+    if (!alive) {
+      log('ws_heartbeat_timeout', {});
+      ws.terminate();
+      return;
+    }
+    alive = false;
+    ws.ping();
+  }, opts.heartbeatMs ?? 10_000);
+  ws.on('pong', () => {
+    alive = true;
+  });
 
   ws.on('message', (data, isBinary) => {
+    alive = true;
     if (isBinary) {
       if (!begun) return;
       const now = Date.now();
@@ -1147,7 +1244,7 @@ function bindConnection(ws: WebSocket, sessionId: string, opts: GatewayServerOpt
       if (++frames > maxFrames) return;
       const frame = decodeAudioFrame(toBytes(data));
       if (!frame || frame.kind !== FRAME_MIC || frame.pcm.length > 4 * MIC_FRAME_SAMPLES) return;
-      manager.route(sessionId)?.handleMicAudio(frame.pcm);
+      manager.route(sessionId, connId)?.handleMicAudio(frame.pcm);
       return;
     }
     const msg = parseClientMessage(data.toString());
@@ -1163,7 +1260,7 @@ function bindConnection(ws: WebSocket, sessionId: string, opts: GatewayServerOpt
       }
       begun = true;
       manager
-        .begin(sessionId, msg.type === 'session.start' ? 'start' : 'resume', transport)
+        .begin(sessionId, connId, msg.type === 'session.start' ? 'start' : 'resume', transport)
         .then((ok) => {
           if (!ok) ws.close(4002, 'bad_state');
         })
@@ -1176,15 +1273,16 @@ function bindConnection(ws: WebSocket, sessionId: string, opts: GatewayServerOpt
     if (!begun) return;
     if (msg.type === 'debug.userText' && !opts.allowDebugText) return;
     if (msg.type === 'session.end') {
-      manager.end(sessionId);
+      if (manager.route(sessionId, connId)) manager.end(sessionId);
       ws.close(1000);
       return;
     }
-    manager.route(sessionId)?.handleClientMessage(msg);
+    manager.route(sessionId, connId)?.handleClientMessage(msg);
   });
 
   ws.on('close', () => {
-    if (manager.route(sessionId)) manager.disconnected(sessionId);
+    clearInterval(heartbeat);
+    manager.disconnected(sessionId, connId); // ignored if this socket was superseded or the session ended
   });
 }
 
@@ -1226,7 +1324,7 @@ function readJson(req: IncomingMessage, limit: number): Promise<unknown> {
 - [ ] **Step 7: 运行测试确认通过**
 
 Run: `npm test -w gateway -- server`
-Expected: 8 个测试 PASS。
+Expected: 10 个测试 PASS。
 
 - [ ] **Step 8: 入口文件**
 
@@ -1249,9 +1347,22 @@ const persona = loadPersona(`${root}prompts/persona.md`);
 const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
+// Lets the mock answer each Director instruction with the matching scripted line (idle notice, resume line, ...).
+const instructionReplies = new Map([
+  [director.greetingInstruction, script.greeting],
+  [director.followupInstruction, script.followup],
+  [director.idleNoticeInstruction, script.idleNotice ?? script.followup],
+  [director.resumeInstruction, script.resume ?? script.followup],
+]);
 
 const manager = new SessionManager(
-  () => new Session({ adapterFactory: () => new MockAdapter({ script, speech }), summarizer: new MockSummarizer(), persona, director }),
+  () =>
+    new Session({
+      adapterFactory: () => new MockAdapter({ script, speech, instructionReplies, speechThreshold: config.mockSpeechThreshold }),
+      summarizer: new MockSummarizer(),
+      persona,
+      director,
+    }),
 );
 const server = createGatewayServer({
   manager,
@@ -1273,8 +1384,11 @@ process.on('SIGTERM', shutdown);
 - [ ] **Step 9: 本地冒烟**
 
 ```bash
-cp gateway/.env.example gateway/.env
-sed -i '' "s/^APP_SECRET=.*/APP_SECRET=$(openssl rand -hex 16)/" gateway/.env
+[ -f gateway/.env ] || cp gateway/.env.example gateway/.env
+# The secret is generated once: reuse app/dev.json if Task 15 already created it.
+SECRET="$(grep -s '"APP_SECRET"' app/dev.json | sed -E 's/.*"APP_SECRET": *"([^"]*)".*/\1/')"
+if [ -z "$SECRET" ] || [ "$SECRET" = "same-as-gateway-APP_SECRET" ]; then SECRET="$(openssl rand -hex 16)"; fi
+sed -i '' "s/^APP_SECRET=.*/APP_SECRET=$SECRET/" gateway/.env
 npm run start -w gateway &
 sleep 2
 curl -s http://127.0.0.1:8787/healthz

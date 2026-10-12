@@ -12,7 +12,7 @@
 
 **不在本计划内（Plan 2，Key 到位并核实协议后再写）：** Seeduplex / Qwen 真实适配器、LlmSummarizer、人设与 Director 真实调参、云端部署（WSS + TLS + IP 白名单）、release APK 交付、Day 6 真机测试报告。
 
-## 文件索引（按顺序执行）
+## 文件索引（按模块）
 
 | 文件 | 内容 |
 |---|---|
@@ -21,15 +21,18 @@
 | [02-gateway-session.md](02-gateway-session.md) | Task 7 Session 编排、Task 8 SessionManager + HTTP/WS 服务 |
 | [03-avatar-audio.md](03-avatar-audio.md) | Task 9 PCM/口型工具、Task 10 播放器、Task 11 采集 + VAD、Task 12 GatewayClient |
 | [04-avatar-view.md](04-avatar-view.md) | Task 13 状态机 + 虚拟人 + 动作、Task 14 AppController + 桌面调试 |
-| [05-flutter-app.md](05-flutter-app.md) | Task 15 本地服务 + Bridge + Metrics、Task 16 WebView 页面与 Android 配置 |
-| [06-spikes-e2e.md](06-spikes-e2e.md) | Task 17 音频 A/B spike、Task 18 真机 Mock 全链路验收 |
+| [05-flutter-app.md](05-flutter-app.md) | Task 15 本地服务 + Bridge + Metrics + Web 资源脚本与 WebView 探针页、Task 16 WebView 页面、Android 配置与真机能力探针 |
+| [06-spikes-e2e.md](06-spikes-e2e.md) | Task 17 音频 A/B spike、Task 18 真机完整页面首跑与 Mock 全链路验收 |
+
+文件按模块组织，**执行顺序以下文"任务依赖与执行顺序"为准**（用户已确认：先写代码，用模拟器 + 桌面 Chrome 联调，中间插两次真机检查）。
 
 ## Global Constraints
 
-- 只做 Android 手机（小米，Android 12+）；不做 Web 端、平板。
+- 只做 Android 手机（小米，Android 12+）；不交付 Web 端、平板。兼容性边界：avatar-core 是普通 Web 应用（桌面 Chrome 能跑，是将来 Web 端的基础），Bridge 只通过 `window.FlutterBridge` / `window.avatarBridge` 两个入口；`dart:io` 本地服务、WebView 权限与网络安全配置只属于 Android 壳。Plan 1 不为平板/Web 写任何适配代码，也不引入只能在手机上成立的假设（例如把屏幕尺寸写死在逻辑里）。
+- 依赖版本：本计划固定的 npm 与 pub 版本已于 2026-10-12 在注册表核实存在。若安装时因 peer 依赖或工具链不兼容失败，限时 20 分钟；仍不行就换成同一主版本中最新可用的版本，并记入 `docs/blockers.md`，不得静默改主版本。
 - 拿到 Key 之前，所有模块（含摘要）必须能用 Mock 跑通；`ADAPTER` 只接受 `mock`。
 - **日志不记录任何对话内容**（音频、ASR 文本、回复文本均为 L4）：`log()` 只允许事件名、编号、计数、时长、错误码。
-- 模型 Key / App 密钥只放环境变量或 `--dart-define`，不进仓库、不进日志；`.env*` 已在 `.gitignore`。
+- 模型 Key / App 密钥只放环境变量或 `--dart-define`，不进仓库、不进日志；`.env*` 已在 `.gitignore`（`.env.example` 例外，见 Task 0 Step 4）。
 - 协议常量：上行 PCM16 / 16 kHz / 单声道 / 20 ms（320 样本）；下行 PCM16 / 24 kHz / 单声道；二进制帧 `[1B 类型][4B responseSeq BE][PCM16 LE]`，类型 `0x01` 上行、`0x02` 下行。
 - 动作集合固定：`wave` `nod` `smile` `turn` `heart`；同一动作 3 秒内只执行一次。
 - 打断：AI 播放期间，模型侧 `userSpeechStarted` 需本地 VAD 在 300 ms 内确认才取消；客户端 `playback.stopped(interrupted)` 立即取消。
@@ -39,6 +42,57 @@
 - 所有【预估】/待调参数值集中在配置文件，不散落在代码里。
 - **阻塞处理规则（用户要求）：** 任何步骤卡住（环境、SDK、真机、无法核实的第三方 API、工具不稳定）时，限时排查（≤20 分钟）；仍未解决则做一次手动验证，按模板记入 `docs/blockers.md`，然后跳过继续下一个任务；进度汇报中列出所有跳过项。不得静默跳过。
 
+## Plan 1 范围分级
+
+| 级别 | 内容 |
+|---|---|
+| 必须（Mock 下真机可演示） | 打开即迎宾；按脚本多轮对话与字幕；本地 VAD 打断，旧语音/字幕零残留；5 个动作（工具 + 关键词，去重）；静默追问与限流；短断线续接、长断线新建会话；Ledger/摘要/模型会话重建（自动化测试覆盖）；Day 1 真机能力探针与音频 A/B spike |
+| 允许降级（记入报告，不阻塞） | 比心改"大比心"；挥手退回内置 `handup`；点头/转身幅度；口型只做"大体同步"；thinking 超 1.5 秒的"嗯"表情与 200 ms 动作交叉淡入不实现；免手势播放失败时退为"首次点一下开始"；指标只给 Mock 链路实测值 |
+| Plan 2 | 真实模型适配器、LlmSummarizer、首响应延迟/抢话率/上下文回忆的真实结论、误打断后的"你刚刚是想说什么吗"话术调优、人设与 Director 调参、方案 B 迁移（若 ADR-001 选 B）、云端部署、release 交付、Day 6 压力测试 |
+
+## 任务依赖与执行顺序
+
+| Task | 必须先完成 | 写入范围（只改这些） | 可与之并行 |
+|---|---|---|---|
+| 0 | — | 根 `package.json`、`tsconfig.base.json`、`.gitignore`、`README.md`、`docs/blockers.md`、`scripts/make-mock-speech.sh` | — |
+| 1 | 0 | `protocol/` | 15 |
+| 2 | 1 | `gateway/` 骨架、`gateway/src/{log,audio}.ts`、`gateway/src/adapters/`、`gateway/mock/` | 15 |
+| 3 / 4 / 5 / 6 | 2 | 各自的 `gateway/src/session/*.ts` 与测试；Task 6 另含 `gateway/src/config.ts`、`gateway/config/`、`gateway/prompts/` | 彼此、9–13、15–16 |
+| 7 | 2–6 | `gateway/src/session/session.ts` | 9–17 |
+| 8 | 7 | `gateway/src/session/{tokens,manager}.ts`、`gateway/src/server/`、`gateway/src/index.ts` | 9–17 |
+| 9 | 1，且在 Task 2 提交之后（两者都改 `package-lock.json`） | `avatar-core/` 骨架、`src/audio/{pcm,mouth,energy}.ts`、占位 `src/main.ts` | 3–8、15–16 |
+| 10 / 11 / 12 / 13 | 9 | 各自文件（见任务）；Task 12 只依赖 Task 8 的文档契约，不依赖其代码 | 彼此、3–8、15–16 |
+| 14 | 10–13 | `avatar-core/src/{bridge,subtitles,app,main}.ts`、`index.html` | 17 |
+| 15 | 0（Flutter/Android 工具链） | `app/` 骨架、`scripts/build-web.sh`、`spikes/webview-probe/`、`.gitignore` 末尾一行 | 1–13 |
+| 16 | 15、模拟器（真机复测见检查点 ①） | `app/lib/{overlay,avatar_page,main}.dart`、Android 配置 | 2–13 |
+| 17 | 9–11、16；代码步骤可在模拟器上写完，**测量与结论只能用真机** | spike 页、`app/lib/spike/`、`app/lib/{config,main}.dart`、`avatar-core/vite.config.ts`、ADR-001 | 12–14 |
+| 18 | 8、14、16、17；模拟器联调部分 + 真机部分 | `docs/testing/`、调参常量 | — |
+
+**推荐顺序（单个执行者，先写代码）：** 0 → 1 → 2 → 3–6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14（桌面 Chrome 联调）→ 15 → 16（模拟器跑探针）→ 17 Step 1–4（只写代码）→ 18 Step 0–2 中标为【模拟器】的项。真机检查点按下文插入。
+
+**真机检查点（必须做，不能用模拟器代替）：**
+
+| 检查点 | 时机 | 内容（约用时） | 决定什么 |
+|---|---|---|---|
+| ① 真机能力探针 | 一拿到真机就做，最好在 Task 16 完成时；最迟在 Task 18 之前 | Task 0 Step 2b 连接真机；Task 16 Step 8–9 的探针 debug 包 + release 包；Task 17 方案 A `echo=true` 外放 10 分钟快测（约 1 小时） | 是否改用 `WebViewAssetLoader`、是否加"点一下开始"、回声风险的初步量级 |
+| ② 真机验收 | 全部代码与模拟器联调完成后 | Task 17 Step 5–6 完整 A/B 与 ADR-001；Task 18 清单中标为【真机】和【两者】的项、帧率/发热/30 分钟、VAD/口型/Mock 阈值调参（约半天） | ADR-001 结论、Plan 1 能否宣称"真机可演示" |
+
+模拟器结果一律标【模拟器】，不能当作小米真机结论。检查点 ① 若发现需要换 `WebViewAssetLoader`，返工限于 Task 15/16 和网关 CORS 允许的 origin（avatar-core 全部用相对路径，不受影响）。长期拿不到真机时：按阻塞规则在 `docs/blockers.md` 记"缺少真机"，验收报告中相关项写"未测"，Plan 1 只能宣称"模拟器功能链路通过"。
+
+**并行规则（subagent-driven）：**
+1. 每个并行 subagent 使用独立 git worktree（任务里有 `git add <目录>` 的写法，同一工作区并行会误提交别人的文件）。合并顺序按上表依赖。
+2. 共享契约先冻结再开下游：`protocol/src/index.ts`（Task 1）、`RealtimeAdapter`/`MockScript`（Task 2）、`InterruptCoordinator`/`Director` 签名（Task 5/6）、HTTP/WS 契约（Task 8）、Bridge 契约（Task 14）。下游发现契约需要改时停下回报，不在下游任务里顺手改上游文件。
+3. 会改同一文件的任务必须串行：`package.json`/`package-lock.json`（0、1、2、9）；`.gitignore`（0、15）；`avatar-core/index.html`、`src/main.ts`（9 占位 → 14 替换）；`avatar-core/vite.config.ts`（9 → 17）；`app/lib/config.dart`（15 → 17）；`app/lib/main.dart`（16 → 17）。
+4. 用到设备的步骤（16、17、18）同一时间只能有一个在用同一台模拟器或手机。
+
+## 技术假设状态
+
+| 类别 | 内容 | 在哪里验证 / 失败时的退路 |
+|---|---|---|
+| 已由项目事实验证（2026-10-12） | 本机 Node 24.21、Flutter 3.47.6、Python 3.12、`say` 有 zh_CN 音色；`~/Library/Android/sdk/platform-tools/adb` 存在但不在 PATH；默认 JDK 为 25，另有 JDK 17。固定的 npm/pub 版本均存在。包源码核对：vad-web 0.0.31 的 `MicVAD` 选项/`destroy()`/资源文件名，TalkingHead 1.7.0 的 `mtAvatar.realtime`、`headRotateX`、`handup`、`lipsyncModules` 只在构造时动态 import，`brunette.glb` 为 CC BY-NC 4.0；`flutter_pcm_sound` 3.3.3 用 `USAGE_MEDIA`；`record` 的 `AndroidRecordConfig` 字段；`webview_flutter_android` 的 `setAllowFileAccess`/`setMediaPlaybackRequiresUserGesture`；ws 8.22 的 `autoPong` | — |
+| 基于可靠技术知识的判断 | `http://127.0.0.1` 是安全上下文；pubspec 列出的 assets 目录不存在时 Flutter 构建/测试报错；`adb reverse` 走 USB，飞行模式不会断开它；移动网络切换时服务端可能长时间看不到 TCP 断开（半开连接）；Vite 8 dev 下 `?worker&url` 以 module 方式加载，可用于 AudioWorklet | Task 15、16、18 的步骤已按此设计 |
+| 尚待验证 | ① 小米 WebView 在 `setMediaPlaybackRequiresUserGesture(false)` 下 AudioContext 免手势为 `running`；② release 包按 `domain-config` 放行 127.0.0.1 明文；③ WebView 内 AudioWorklet、wasm、WebGL2、getUserMedia 可用；④ WebView 的 AEC 能否消掉外放的 Web Audio（自打断次数）；⑤ `echoCancellation:'all'` 是否生效；⑥ GLB 真机帧率 ≥30 fps；⑦ TalkingHead 骨骼转身/点头/比心的视觉效果；⑧ Mock 能量阈值 800 在外放回声下是否误触发；⑨ TypeScript 7 的 `tsc` 与本配置兼容 | ①②③ Task 16 探针：模拟器先测，真机检查点 ① 确认（退路：首次点击开始 / `WebViewAssetLoader` / 记阻塞）；④⑤ Task 17，只能在真机检查点 ①② 测（退路：方案 B 或 Plan 2 评估 WebRTC）；⑥⑦ Task 18 真机部分（退路见 Task 18 Step 3）；⑧ Task 18 真机部分（`MOCK_SPEECH_THRESHOLD` 可调，调试框文字输入兜底）；⑨ Task 1（退回 5.9.3，已核实存在） |
+
 ## 文件结构
 
 ```
@@ -46,8 +100,9 @@ anyidea/
   package.json                     npm workspaces 根（protocol, gateway, avatar-core）
   tsconfig.base.json               共享 TS 配置
   scripts/make-mock-speech.sh      用 macOS say 生成中文测试语音 PCM
-  scripts/build-web.sh             构建 avatar-core 并拷入 app/assets/web
+  scripts/build-web.sh             准备 app/assets/web：构建 avatar-core（或 --probe-only 只放探针页与占位）
   scripts/fetch-assets.sh          下载临时虚拟人 GLB
+  spikes/webview-probe/            Day 1 WebView 能力探针页（Task 15 创建，Task 16 真机运行）
   docs/blockers.md                 阻塞记录
   docs/adr/ADR-001-day1-selection.md
   docs/testing/mock-e2e-checklist.md
@@ -85,10 +140,10 @@ anyidea/
     src/audio/capture.ts  capture-worklet.ts  vad.ts
     src/net/gatewayClient.ts
     src/avatar/stateMachine.ts  avatarView.ts  actions.ts
-    src/bridge.ts  src/app.ts  src/main.ts  src/spike/aec.ts
+    src/bridge.ts  src/subtitles.ts  src/app.ts  src/main.ts  src/spike/aec.ts
     test/*.test.ts
   app/                             Flutter 工程（flutter create 生成后修改）
-    lib/main.dart  config.dart  local_asset_server.dart  bridge.dart  metrics.dart  avatar_page.dart
+    lib/main.dart  config.dart  local_asset_server.dart  bridge.dart  metrics.dart  overlay.dart  avatar_page.dart
     lib/spike/energy_trigger.dart  lib/spike/native_audio_spike.dart
     android/app/src/main/res/xml/network_security_config.xml
     android/app/src/debug/res/xml/network_security_config.xml
@@ -103,30 +158,41 @@ anyidea/
 - Create: `package.json`, `tsconfig.base.json`, `docs/blockers.md`, `scripts/make-mock-speech.sh`, `README.md`
 - Modify: `.gitignore`
 
+**Depends on:** 无。Step 1–2（工具链与设备）卡住时可按阻塞规则先跳过，但 Task 15 之前必须解决 Step 1；Task 16 之前至少要有 Step 2 的模拟器，真机在检查点 ① 之前接上。
+
 **Interfaces:**
 - Produces: npm workspaces 根；`docs/blockers.md` 模板（后续所有任务卡住时追加）；`gateway/mock/speech-24k.pcm` 与 `avatar-core/public/spike/speech-24k.pcm`（24 kHz PCM16 LE 中文语音，Task 2/17 使用）。
 
 - [ ] **Step 1: 确认 Android 工具链**
 
-本机已有 `~/Library/Android/sdk`（含 platform-tools），但 `adb` 不在 PATH。
+本机已有 `~/Library/Android/sdk`（含 platform-tools），但 `adb` 不在 PATH；默认 JDK 是 25，另装有 JDK 17（2026-10-12 核实）。只在当前 shell 里 export；是否写入 `~/.zshrc` 由用户决定，执行者不要自行修改用户的 shell 配置。
 
 ```bash
 export ANDROID_HOME="$HOME/Library/Android/sdk"
 export PATH="$ANDROID_HOME/platform-tools:$PATH"
-grep -q 'ANDROID_HOME' ~/.zshrc || cat >> ~/.zshrc <<'EOF'
-export ANDROID_HOME="$HOME/Library/Android/sdk"
-export PATH="$ANDROID_HOME/platform-tools:$PATH"
-EOF
 adb version
 flutter config --android-sdk "$ANDROID_HOME"
 flutter doctor -v 2>&1 | sed -n '/Android toolchain/,/^\[/p'
 ```
 
-Expected: `adb version` 打印 `Android Debug Bridge version ...`；`flutter doctor` 的 Android toolchain 项为 `[✓]`。若提示 licenses 未接受，执行 `flutter doctor --android-licenses` 并全部输入 `y`。若提示 JDK 版本问题，执行 `flutter config --jdk-dir /Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home`。卡住超过 20 分钟按阻塞规则记录后继续 Task 1（Task 15 之前必须解决）。
+Expected: `adb version` 打印 `Android Debug Bridge version ...`；`flutter doctor` 的 Android toolchain 项为 `[✓]`。若提示 licenses 未接受，执行 `flutter doctor --android-licenses` 并全部输入 `y`。Gradle 若因 JDK 25 报错（例如 "Unsupported class file major version"），执行 `flutter config --jdk-dir /Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home`。后续每个新开的终端都要先执行上面两行 export。卡住超过 20 分钟按阻塞规则记录后继续 Task 1。
 
-- [ ] **Step 2: 连接小米手机**
+- [ ] **Step 2: 准备模拟器；有真机时连接小米手机**
 
-手机上：设置 → 我的设备 → 全部参数 → 连点"MIUI/HyperOS 版本"7 次开启开发者模式；设置 → 更多设置 → 开发者选项：打开"USB 调试"和"USB 安装"（小米需要登录小米账号才能打开 USB 安装）。USB 连接后：
+**2a 模拟器（写代码阶段的联调设备）。** 本机已有 AVD `Medium_Phone_API_36.1`、`Pixel_9_Pro_XL`（Android 16，arm64，2026-10-12 核实）。另建一个 Android 12（API 31）的 AVD，覆盖 spec 的系统版本下限（需下载约 1–2 GB 镜像；下载失败按阻塞规则记录，先只用 API 36）：
+
+```bash
+SDK="$HOME/Library/Android/sdk"
+"$SDK/cmdline-tools/latest/bin/sdkmanager" "system-images;android-31;google_apis;arm64-v8a"
+echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n API31_Phone -k "system-images;android-31;google_apis;arm64-v8a" -d pixel_6
+"$SDK/emulator/emulator" -list-avds
+"$SDK/emulator/emulator" -avd Medium_Phone_API_36.1 >/dev/null 2>&1 &
+adb wait-for-device && adb shell getprop ro.build.version.release
+```
+
+Expected: `-list-avds` 里有 `API31_Phone`；`adb devices -l` 列出 `emulator-5554`。模拟器每次启动后，若要用麦克风，在模拟器侧边栏 `…`（Extended controls）→ Microphone 里打开"使用主机音频输入"类开关（默认关闭；具体名称以模拟器界面为准）。模拟器的结果只能标【模拟器】，见上文"真机检查点"。
+
+**2b 真机（检查点 ① 之前完成）。** 手机上：设置 → 我的设备 → 全部参数 → 连点"MIUI/HyperOS 版本"7 次开启开发者模式；设置 → 更多设置 → 开发者选项：打开"USB 调试"和"USB 安装"（小米需要登录小米账号才能打开 USB 安装）。USB 连接后：
 
 ```bash
 adb devices -l
@@ -134,7 +200,7 @@ adb shell getprop ro.build.version.release
 adb shell dumpsys package com.google.android.webview | grep versionName | head -1
 ```
 
-Expected: 列出一台 `device`；Android 版本 ≥12；WebView `versionName` 主版本号 ≥120（若为空，改查 `adb shell dumpsys webviewupdate | grep -i 'current webview'`）。把型号、Android 版本、WebView 版本记入 `docs/adr/ADR-001-day1-selection.md`（Task 17 创建；此处先记在终端输出里）。
+Expected: 列出这台手机（`device` 状态；模拟器同时开着时会列出两台，之后 `adb` 加 `-s <序列号>`、`flutter run` 加 `-d <设备 id>`）；Android 版本 ≥12；WebView `versionName` 主版本号 ≥120（若为空，改查 `adb shell dumpsys webviewupdate | grep -i 'current webview'`）。把型号、Android 版本、WebView 版本记入 `docs/adr/ADR-001-day1-selection.md`（Task 17 创建；此处先记在终端输出里）。
 
 - [ ] **Step 3: 创建 workspaces 根与共享 TS 配置**
 
@@ -186,9 +252,11 @@ Expected: 列出一台 `device`；Android 版本 ≥12；WebView `versionName` �
 |---|---|---|---|---|---|---|---|
 ```
 
-在 `.gitignore` 末尾追加：
+在 `.gitignore` 末尾追加（第一行很重要：现有的 `.env.*` 规则会把 `gateway/.env.example`、`avatar-core/.env.example` 一起忽略，干净克隆后 README 的 `cp .env.example` 会失败）：
 
 ```
+!.env.example
+
 # generated / third-party assets
 gateway/mock/speech-24k.pcm
 avatar-core/public/spike/speech-24k.pcm
@@ -198,6 +266,8 @@ avatar-core/public/animations/*.fbx
 app/assets/web/
 coverage/
 ```
+
+验证：`git check-ignore -q gateway/.env.example && echo BAD || echo OK` 打印 `OK`；`git check-ignore -q gateway/.env && echo OK` 打印 `OK`。
 
 - [ ] **Step 5: 生成测试语音**
 
@@ -275,6 +345,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Create: `protocol/package.json`, `protocol/tsconfig.json`, `protocol/src/index.ts`
 - Test: `protocol/test/protocol.test.ts`
+
+**Depends on:** Task 0 Step 3–4。本任务的导出是全局共享契约，完成后冻结；后续任务需要改它时先停下回报。
 
 **Interfaces:**
 - Produces（gateway 与 avatar-core 都从 `@anyidea/protocol` 导入）:

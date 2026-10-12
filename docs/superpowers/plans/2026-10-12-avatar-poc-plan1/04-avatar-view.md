@@ -10,6 +10,8 @@
 - Create: `scripts/fetch-assets.sh`, `avatar-core/src/types/talkinghead.d.ts`, `avatar-core/src/avatar/stateMachine.ts`, `avatar-core/src/avatar/avatarView.ts`, `avatar-core/src/avatar/actions.ts`, `avatar-core/public/animations/README.md`
 - Test: `avatar-core/test/stateMachine.test.ts`
 
+**Depends on:** Task 9（`MouthShape` 类型）。可与 Task 10/11/12 并行。
+
 **Interfaces:**
 - Consumes: `ActionName`（Task 1）；`MouthShape`（Task 9）
 - Produces:
@@ -17,7 +19,7 @@
   - `class AvatarView(el)`：`load(url, body?)`、`setMouth(shape | null)`、`enterState(state)`、`setEmotion(emotion)`、`setRendering(on)`、`talkingHead`
   - `class ActionPlayer(head, assets: { waveFbx?: string })`：`play(action: ActionName)`、`nod(subtle?: boolean)`、`stopAll()`
 
-素材说明：临时人物用 TalkingHead 仓库的示例 `brunette.glb`（Ready Player Me 制作，**CC BY-NC 4.0，仅限内部演示**，正式人物在 Day 1–2 按 spec §8.1 另行定稿）。挥手动作可选用 Mixamo 的 "Waving" FBX（需 Adobe 账号手动下载）；没有 FBX 时退回 TalkingHead 内置的 `handup` 手势。
+素材说明：临时人物用 TalkingHead 仓库的示例 `brunette.glb`（Ready Player Me 制作，**CC BY-NC 4.0，仅限内部演示**——已在 TalkingHead 1.7.0 包内 README 核实；正式人物在 Day 1–2 按 spec §8.1 另行定稿）。下文用到的 TalkingHead API（`showAvatar`、`mtAvatar[*].realtime/needsUpdate`、`headRotateX`、`gestureTemplates.handup`、`playGesture`、`playAnimation`、`setFixedValue`、`start/stop`）已在 1.7.0 源码中核实存在；`lipsyncModules: []` 时构造函数不会动态 import 唇形模块，`showAvatar` 也不会加载（打包后不会因找不到 `lipsync-*.mjs` 报错）。视觉效果（转身、点头、比心）仍需真机确认。挥手动作可选用 Mixamo 的 "Waving" FBX（需 Adobe 账号手动下载）；没有 FBX 时退回 TalkingHead 内置的 `handup` 手势。
 
 - [ ] **Step 1: 下载临时人物**
 
@@ -47,7 +49,7 @@ echo "avatar.glb bytes=$(wc -c < avatar-core/public/avatars/avatar.glb)"
 chmod +x scripts/fetch-assets.sh && ./scripts/fetch-assets.sh
 ```
 
-Expected: `avatar.glb bytes=4721528`（约 4.7 MB）。下载失败超过 20 分钟按阻塞规则记录，并临时改用 `avatars/vroid.glb`（2.3 MB）：把脚本中的 `brunette.glb` 换成 `vroid.glb` 后重跑。
+Expected: 打印 `avatar.glb bytes=…`，大小为数 MB（以实际为准；小于 100 KB 说明下到的是错误页，删除后重试）。下载失败超过 20 分钟按阻塞规则记录，并临时改用同仓库 `avatars/` 下的其他示例 GLB（把脚本中的 `brunette.glb` 换掉后重跑，并在报告中写明许可）。
 
 - [ ] **Step 2: TalkingHead 类型声明（只声明本项目用到的 API，依据 1.7.0 README）**
 
@@ -416,9 +418,16 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 14: Bridge、字幕跟踪、AppController 与桌面调试
 
 **Files:**
-- Create: `avatar-core/src/bridge.ts`, `avatar-core/src/subtitles.ts`, `avatar-core/src/app.ts`, `avatar-core/src/main.ts`
-- Modify: `avatar-core/index.html`
+- Create: `avatar-core/src/bridge.ts`, `avatar-core/src/subtitles.ts`, `avatar-core/src/app.ts`
+- Modify: `avatar-core/index.html`, `avatar-core/src/main.ts`（整体替换 Task 9 的占位）
 - Test: `avatar-core/test/subtitles.test.ts`
+
+**Depends on:** Task 10–13。Bridge 契约（下方 `ToFlutter`/`FromFlutter`）是 Flutter Task 16 的依据；Task 15/16 已按此契约编写，执行中若需修改，两边同步并回报。
+
+客户端会话状态约定（与 Task 7/10 对应）：
+- `session.ready`（新会话，`responseSeq` 从 1 重新开始）→ 清空播放门控、字幕缓存、回复类型表，状态回到 idle。
+- `session.resumed{lastResponseSeq}`（同一会话续接）→ 丢弃 `≤ lastResponseSeq` 的数据，停止残留播放，口型归零，状态回到 idle。
+- 点"结束"→ 发 `session.end`，同时停止麦克风与 VAD（麦克风指示灯应熄灭）。
 
 **Interfaces:**
 - Consumes: Task 9–13 全部模块；`truncateByPlayback`、`ServerMessage`、`ResponseKind`、`AudioPath`
@@ -434,7 +443,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - Flutter → JS（调用 `window.avatarBridge.receive(obj)`）`FromFlutter`：
     - `{type:'config', gatewayUrl, appSecret, audioPath, echo?: 'true'|'all'}`
     - `{type:'mute', muted}`、`{type:'end'}`、`{type:'debugText', text}`
-  - `class SubtitleTracker`：`onDelta(seq, delta): string | null`、`onAudio(seq, samples24k)`、`truncate(seq, playedMs): string`
+  - `class SubtitleTracker`：`onDelta(seq, delta): string | null`、`onAudio(seq, samples24k)`、`truncate(seq, playedMs): string`、`reset()`
   - `class AppController(el, config)`：`start()`、`handleFlutter(msg)`
 
 - [ ] **Step 1: 写失败的测试**
@@ -460,6 +469,14 @@ describe('SubtitleTracker', () => {
     expect(t.truncate(1, 500)).toBe('一二三四五');
     expect(t.onDelta(1, '后面的')).toBeNull();
     expect(t.truncate(1, 900)).toBe('一二三四五'); // second cancel signal keeps the first result
+  });
+
+  it('reset() lets a new session reuse sequence numbers', () => {
+    const t = new SubtitleTracker();
+    t.onDelta(1, '旧会话');
+    t.truncate(1, 0);
+    t.reset();
+    expect(t.onDelta(1, '新会话')).toBe('新会话');
   });
 });
 ```
@@ -499,6 +516,13 @@ export class SubtitleTracker {
     const cut = truncateByPlayback(this.text.get(seq) ?? '', playedMs, this.audioMs.get(seq) ?? 0);
     this.text.set(seq, cut);
     return cut;
+  }
+
+  /** New gateway session: sequence numbers start again from 1. */
+  reset(): void {
+    this.text.clear();
+    this.audioMs.clear();
+    this.frozen.clear();
   }
 }
 ```
@@ -555,7 +579,7 @@ export function setDevSink(sink: DevSink): void {
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w avatar-core -- subtitles`
-Expected: 2 个测试 PASS。
+Expected: 3 个测试 PASS。
 
 - [ ] **Step 5: 实现 AppController**
 
@@ -678,6 +702,10 @@ export class AppController {
         break;
       case 'end':
         this.client?.close();
+        this.playback.interrupt(); // no metric: this is not a barge-in
+        this.resetSpeakingState();
+        void this.vad.destroy();
+        void this.capture.stop(); // releases the microphone
         break;
       case 'debugText':
         this.lastUserFinalAt = performance.now();
@@ -727,9 +755,15 @@ export class AppController {
   private onServer(m: ServerMessage): void {
     switch (m.type) {
       case 'session.ready':
+        // New session (first start or fallback after the old one expired): sequence numbers restart at 1.
+        this.playback.resetForNewSession();
+        this.subtitles.reset();
+        this.kinds.clear();
+        this.resetSpeakingState();
         break;
       case 'session.resumed':
         this.playback.resetAfterResume(m.lastResponseSeq);
+        this.resetSpeakingState();
         break;
       case 'response.start':
         this.kinds.set(m.responseSeq, m.kind);
@@ -775,6 +809,12 @@ export class AppController {
         else postToFlutter({ type: 'error', code: m.code });
         break;
     }
+  }
+
+  private resetSpeakingState(): void {
+    this.vad.aiPlaying = false;
+    this.avatar?.setMouth(null);
+    this.transition('cancelled');
   }
 
   private transition(input: AvatarInput): void {
@@ -919,15 +959,16 @@ npm run dev -w avatar-core      # terminal 2，打开 http://localhost:5173
 
 在 Chrome 中点"开始对话"，允许麦克风，**戴耳机**（桌面阶段先排除回声），逐项核对并把结果记入 `docs/testing/mock-e2e-checklist.md`（Task 18 创建，此处先在终端记下）：
 
+0. DevTools 控制台没有 `addModule`/worklet 加载错误、wasm 加载错误、TalkingHead 加载错误（worklet 报错时按 Task 10 的退路处理）。
 1. 2 秒内虚拟人开口说出 Mock 问候语，嘴部随语音开合，日志出现 `⏱ greeting_ms`。
-2. 说一句话（Mock 按脚本识别为"挥挥手"等），日志依次出现 `● listening`、`● thinking`、`● speaking`；字幕显示脚本文本。
+2. 随便说一句话：Mock 不识别内容，按 `gateway/mock/script.json` 的 `turns` 顺序给出识别结果（第一句是"挺好的，刚吃完午饭"）；日志依次出现 `● listening`、`● thinking`、`● speaking`；字幕显示脚本文本。
 3. AI 说话时开口插话：声音在约 0.2 秒内停止，日志出现 `⏱ interrupt_stop_ms`，AI 字幕停在被打断处，之后不再出现旧回复的声音或文字。
 4. 调试框输入"给我比个心"回车：虚拟人做比心手势（效果粗糙可以接受，Task 18 调参），并说"给你比个心！"；只执行一次动作。
 5. 分别输入"挥挥手""点点头""对我笑一下""转个身看看"，各动作可见且不打断口型。
-6. 停止网关（Ctrl-C）再在 10 秒内重启：日志出现 `[reconnecting]` → `[open]`，但网关重启后旧会话已不存在，客户端应新建会话并重新问候（真正的续接在 Task 18 用断网测试）。
+6. 停止网关（Ctrl-C）再在 10 秒内重启：日志出现 `[reconnecting]` → `[open]`，但网关重启后旧会话已不存在，客户端应新建会话并重新问候，**问候有声音、有字幕**（验证 `session.ready` 重置了门控；之前被打断过的序号不能把新会话的回复静音）。真正的续接在 Task 18 用断网测试。
 7. 网关终端日志里没有任何对话文本。
 
-任何一项卡住超过 20 分钟：按阻塞规则记入 `docs/blockers.md`，继续 Task 15。
+任何一项卡住超过 20 分钟：按阻塞规则记入 `docs/blockers.md`，继续推荐顺序中的下一个任务。
 
 - [ ] **Step 8: 构建检查与提交**
 

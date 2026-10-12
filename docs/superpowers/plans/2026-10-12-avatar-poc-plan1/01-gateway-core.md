@@ -10,6 +10,8 @@
 - Create: `gateway/package.json`, `gateway/tsconfig.json`, `gateway/.env.example`, `gateway/src/log.ts`, `gateway/src/audio.ts`, `gateway/src/adapters/types.ts`, `gateway/src/adapters/mock.ts`, `gateway/mock/script.json`
 - Test: `gateway/test/mock.test.ts`
 
+**Depends on:** Task 1。本任务会 `npm install`（改 `package-lock.json`），不要与 Task 9 并行。`RealtimeAdapter`、`AdapterEvents`、`MockScript` 完成后冻结（Plan 2 的真实适配器也实现同一接口）。
+
 **Interfaces:**
 - Consumes: `@anyidea/protocol` 的 `ACTION_NAMES`、`AI_SAMPLE_RATE`、`MIC_SAMPLE_RATE`
 - Produces:
@@ -18,7 +20,8 @@
   - `type AdapterEvents`（`userSpeechStarted` / `userTranscript(text, final)` / `responseStarted(id)` / `audioDelta(id, pcm24k)` / `textDelta(id, text)` / `toolCall(id, callId, name, args)` / `responseDone(id)` / `responseCancelled(id)` / `error(code, retryable)` / `closed`）
   - `interface RealtimeAdapter`：`supportsPlaybackTruncate`、`connect(config)`、`sendAudio(pcm16k)`、`sendUserText(text)`、`updateInstructions(text)`、`createResponse(instructions?)`、`cancelResponse()`、`sendToolResult(callId, result)`、`injectContextNote(text)`、`close()`
   - `type AdapterFactory = () => RealtimeAdapter`；`interface SessionConfig { instructions: string; tools: ToolSpec[] }`；`PERFORM_ACTION_TOOL`
-  - `class MockAdapter`（额外公开：`instructions`、`notes`、`toolResults`、`simulateDrop()`）；`loadMockScript(path)`、`loadMockSpeech(path)`；`interface MockScript`
+  - `class MockAdapter`（额外公开：`instructions`、`notes`、`toolResults`、`simulateDrop()`）；`loadMockScript(path)`、`loadMockSpeech(path)`；`interface MockScript`（可选 `idleNotice`、`resume` 台词）；`MockOptions.instructionReplies?: ReadonlyMap<string, string>`（Director 指令 → 台词；Task 8 入口按 `director.json` 构造）
+  - Mock 行为约定（真机验收按此理解）：Mock **不识别语音内容**——检测到一段说话（RMS ≥ `speechThreshold` 后静默 800 ms）就按 `turns` 顺序取下一条作为识别结果；`createResponse(instructions)` 先查 `instructionReplies`，查不到时第一次用 `greeting`、之后用 `followup`
 
 - [ ] **Step 1: 包配置**
 
@@ -70,6 +73,8 @@ ADAPTER=mock
 ALLOW_DEBUG_TEXT=1
 # Comma-separated extra CORS origins for desktop debugging
 DEV_ORIGINS=http://localhost:5173
+# MockAdapter speech detection threshold (RMS of 16-bit PCM). Raise it if speaker echo triggers fake turns.
+MOCK_SPEECH_THRESHOLD=800
 ```
 
 ```bash
@@ -179,6 +184,8 @@ export const PERFORM_ACTION_TOOL: ToolSpec = {
 {
   "greeting": "你好呀！我是小暖，很高兴见到你。今天过得怎么样？",
   "followup": "刚才聊到这儿，你还想多说说吗？",
+  "idleNotice": "我在这儿呢，想聊随时叫我。",
+  "resume": "刚才网络断了一下，我们接着聊吧。",
   "fallbackReply": "嗯嗯，我在听，你接着说。",
   "turns": [
     { "user": "挺好的，刚吃完午饭", "reply": "吃饱了心情就好！今天吃的什么呀？" },
@@ -281,6 +288,20 @@ describe('MockAdapter', () => {
     expect(c.text()).toBe('你好还在吗');
   });
 
+  it('uses the scripted line mapped to a known Director instruction', async () => {
+    const m = new MockAdapter({
+      script, replyDelayMs: 100, charMs: 200, chunkMs: 100, paceFactor: 1,
+      instructionReplies: new Map([['IDLE', '我在呢']]),
+    });
+    const c = collect(m);
+    m.createResponse('IDLE');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(c.text()).toBe('我在呢');
+    m.createResponse('unknown');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(c.text()).toBe('我在呢还在吗'); // a mapped reply still counts as the first response
+  });
+
   it('records context notes, instructions and tool results', async () => {
     const m = make();
     await m.connect({ instructions: 'v1', tools: [] });
@@ -331,12 +352,17 @@ export interface MockTurn {
 export interface MockScript {
   greeting: string;
   followup: string;
+  /** Optional lines for the Director's idle notice and resume instructions (see instructionReplies). */
+  idleNotice?: string;
+  resume?: string;
   fallbackReply: string;
   turns: MockTurn[];
 }
 
 export interface MockOptions {
   script: MockScript;
+  /** Exact Director instruction text → scripted reply; unmatched instructions fall back to greeting/followup. */
+  instructionReplies?: ReadonlyMap<string, string>;
   /** 24 kHz PCM16 played back as reply audio; synthetic tone if absent. */
   speech?: Int16Array;
   speechThreshold?: number;
@@ -407,8 +433,10 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
     this.instructions = text;
   }
 
-  createResponse(_instructions?: string): void {
-    const text = this.createCount++ === 0 ? this.opts.script.greeting : this.opts.script.followup;
+  createResponse(instructions?: string): void {
+    const mapped = instructions === undefined ? undefined : this.opts.instructionReplies?.get(instructions);
+    const text = mapped ?? (this.createCount === 0 ? this.opts.script.greeting : this.opts.script.followup);
+    this.createCount++;
     this.scheduleReply(text);
   }
 
@@ -527,7 +555,7 @@ export function loadMockSpeech(path: string): Int16Array | undefined {
 - [ ] **Step 8: 运行测试确认通过**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
-Expected: 6 个测试 PASS；typecheck 无输出。
+Expected: 7 个测试 PASS；typecheck 无输出。
 
 - [ ] **Step 9: 提交**
 
@@ -545,6 +573,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Create: `gateway/src/session/ledger.ts`
 - Test: `gateway/test/ledger.test.ts`
+
+**Depends on:** Task 2（gateway 包与 vitest）。可与 Task 4/5/6 并行。
 
 **Interfaces:**
 - Produces:
@@ -800,6 +830,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `gateway/src/session/actions.ts`
 - Test: `gateway/test/actions.test.ts`
 
+**Depends on:** Task 2。可与 Task 3/5/6 并行。
+
 **Interfaces:**
 - Consumes: `ActionName`、`ACTION_NAMES`
 - Produces: `matchKeyword(text): ActionName | null`、`parseActionArgs(args: unknown): ActionName | null`、`class ActionRouter(dedupeMs = 3000, now = Date.now)`：`fromKeyword(text): ActionName | null`、`fromTool(args): { action: ActionName | null; result: { ok: boolean; error?: string } }`
@@ -965,10 +997,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `gateway/src/session/interrupt.ts`
 - Test: `gateway/test/interrupt.test.ts`
 
-**Interfaces:**
-- Produces: `type CancelSource = 'local' | 'model'`；`class InterruptCoordinator({ cancel(seq, source), confirmWindowMs })`：`active: number | null`、`falseInterruptions: number`、`isCancelled(seq)`、`onResponseStart(seq)`、`onResponseFinished(seq)`、`onLocalVad(speaking)`、`onClientInterrupted(seq)`、`onModelSpeechStarted()`、`onModelAutoCancelled(seq): boolean`、`cancelActive(source)`、`dispose()`
+**Depends on:** Task 2。可与 Task 3/4/6 并行。
 
-规则（spec §5）：`active` 从 `response.start` 一直到客户端报告播放结束；客户端打断立即取消；只有模型侧检测到说话时，需本地 VAD 在 `confirmWindowMs` 内确认；模型自行取消且本地没有说话 → 计一次误打断。
+**Interfaces:**
+- Produces: `type CancelSource = 'local' | 'model'`；`class InterruptCoordinator({ cancel(seq, source), confirmWindowMs })`：`active: number | null`、`falseInterruptions: number`、`isCancelled(seq)`、`onResponseStart(seq): number | null`（返回被顶替的旧回复序号）、`onResponseFinished(seq)`、`onLocalVad(speaking)`、`onClientInterrupted(seq)`、`onModelSpeechStarted()`、`onModelAutoCancelled(seq): boolean`、`cancelActive(source)`、`dispose()`
+
+规则（spec §5）：`active` 从 `response.start` 一直到客户端报告播放结束；客户端打断立即取消；只有模型侧检测到说话时，需本地 VAD 在 `confirmWindowMs` 内确认；模型自行取消且本地没有说话 → 计一次误打断。**顶替：** 上一条回复还在客户端播放（未报告结束、未取消）时模型又开始了新回复（例如 Mock/模型把回声或插话识别成新一轮），旧回复记为已取消并由 `onResponseStart` 返回，由 Session 通知客户端并写 Ledger；此时**不**调用 `cancel()`，否则会把模型侧刚开始的新回复取消掉。
 
 - [ ] **Step 1: 写失败的测试**
 
@@ -1068,6 +1102,17 @@ describe('InterruptCoordinator', () => {
     expect(c.active).toBeNull();
     expect(cancels).toEqual([]);
   });
+
+  it('reports a still-playing response superseded by a new one, without cancelling the model', () => {
+    const { c, cancels } = make();
+    expect(c.onResponseStart(1)).toBeNull();
+    expect(c.onResponseStart(2)).toBe(1);
+    expect(c.isCancelled(1)).toBe(true);
+    expect(c.active).toBe(2);
+    expect(cancels).toEqual([]);
+    c.onResponseFinished(2);
+    expect(c.onResponseStart(3)).toBeNull();
+  });
 });
 ```
 
@@ -1113,9 +1158,14 @@ export class InterruptCoordinator {
     return this.cancelled.has(seq);
   }
 
-  onResponseStart(seq: number): void {
+  /** Returns the previous response if it was still active (superseded); it is marked cancelled but not cancelled upstream. */
+  onResponseStart(seq: number): number | null {
     this.clearPending();
+    const previous = this.activeSeq;
     this.activeSeq = seq;
+    if (previous === null || previous === seq || this.cancelled.has(previous)) return null;
+    this.cancelled.add(previous);
+    return previous;
   }
 
   onResponseFinished(seq: number): void {
@@ -1180,7 +1230,7 @@ export class InterruptCoordinator {
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w gateway -- interrupt`
-Expected: 9 个测试 PASS。
+Expected: 10 个测试 PASS。
 
 - [ ] **Step 5: 提交**
 
@@ -1199,12 +1249,16 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `gateway/src/session/director.ts`, `gateway/src/config.ts`, `gateway/config/director.json`, `gateway/prompts/persona.md`
 - Test: `gateway/test/director.test.ts`, `gateway/test/config.test.ts`
 
+**Depends on:** Task 2。可与 Task 3/4/5 并行。
+
 **Interfaces:**
 - Consumes: `ResponseKind`
 - Produces:
   - `interface DirectorConfig { followupAfterMs; idleNoticeAfterMs; maxConsecutive; maxPerWindow; windowMs; quietPhrases: string[]; greetingInstruction; followupInstruction; idleNoticeInstruction; resumeInstruction }`
-  - `class Director(cfg, { requestResponse(kind, instructions) })`：`onSessionStart()`、`onUserSpeech(speaking)`、`onUserActivity()`、`onUserFinal(text)`、`onAiTurnEnded()`、`setMuted(muted)`、`pause()`、`resume()`、`stop()`
-  - `interface GatewayConfig { port; appSecret; adapter: 'mock'; allowDebugText; devOrigins }`、`loadConfig(env)`、`makeOriginCheck(devOrigins)`、`loadDirectorConfig(path)`、`loadPersona(path)`
+  - `class Director(cfg, { requestResponse(kind, instructions) })`：`onSessionStart()`、`onUserSpeech(speaking)`、`onUserActivity()`、`onUserFinal(text)`、`onAiTurnStarted()`、`onAiTurnEnded()`、`setMuted(muted)`、`pause()`、`resume()`、`stop()`
+  - `interface GatewayConfig { port; appSecret; adapter: 'mock'; allowDebugText; devOrigins; mockSpeechThreshold }`、`loadConfig(env)`、`makeOriginCheck(devOrigins)`、`loadDirectorConfig(path)`、`loadPersona(path)`
+
+静默计时规则：计时器在"AI 一轮播放结束"或"用户说完（本地 VAD 由 speaking 变 silent）"时启动，在用户开口或新一轮 AI 回复开始时清除。后一种启动点覆盖误打断：用户（或噪声）打断了 AI 却没有产生识别结果、模型也不回复时，8 秒后照常追问一次，而不是从此一直沉默（spec §5.5 的兜底；专门的"你刚刚是想说什么吗"话术留给 Plan 2）。`resume()` 在用户要求安静或静音时不说续接语。
 
 - [ ] **Step 1: 配置文件与人设**
 
@@ -1363,6 +1417,32 @@ describe('Director', () => {
     expect(calls).toEqual([['followup', 'R']]);
   });
 
+  it('follows up when the user goes quiet and no reply starts (e.g. a false interruption)', () => {
+    const { d, calls } = make();
+    d.onUserSpeech(true);
+    d.onUserSpeech(false);
+    vi.advanceTimersByTime(8000);
+    expect(calls).toEqual([['followup', 'F']]);
+  });
+
+  it('a starting AI turn cancels the pending follow-up', () => {
+    const { d, calls } = make();
+    d.onUserSpeech(true);
+    d.onUserSpeech(false);
+    vi.advanceTimersByTime(1500);
+    d.onAiTurnStarted();
+    vi.advanceTimersByTime(60000);
+    expect(calls).toEqual([]);
+  });
+
+  it('does not announce the resume line after a quiet request', () => {
+    const { d, calls } = make();
+    d.onUserFinal('别说了');
+    d.pause();
+    d.resume();
+    expect(calls).toEqual([]);
+  });
+
   it('does nothing after stop', () => {
     const { d, calls } = make();
     d.onAiTurnEnded();
@@ -1393,7 +1473,12 @@ describe('config', () => {
 
   it('parses defaults and dev origins', () => {
     const c = loadConfig({ APP_SECRET: 'x'.repeat(16), DEV_ORIGINS: 'http://localhost:5173, http://a.test' });
-    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'] });
+    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800 });
+  });
+
+  it('validates the mock speech threshold', () => {
+    expect(loadConfig({ APP_SECRET: 'x'.repeat(16), MOCK_SPEECH_THRESHOLD: '1500' }).mockSpeechThreshold).toBe(1500);
+    expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), MOCK_SPEECH_THRESHOLD: 'loud' })).toThrow(/MOCK_SPEECH_THRESHOLD/);
   });
 
   it('allows loopback app origins and listed dev origins only', () => {
@@ -1467,8 +1552,10 @@ export class Director {
 
   /** Local VAD state from the client. */
   onUserSpeech(speaking: boolean): void {
+    const wasSpeaking = this.userSpeaking;
     this.userSpeaking = speaking;
     if (speaking) this.onUserActivity();
+    else if (wasSpeaking) this.arm(); // if no reply starts (false interruption, nothing recognized), follow up later
   }
 
   /** Any sign of the user engaging (model-side speech, transcripts). */
@@ -1482,13 +1569,13 @@ export class Director {
     if (this.cfg.quietPhrases.some((p) => text.includes(p))) this.quiet = true;
   }
 
-  onAiTurnEnded(): void {
+  /** A new assistant response started: the silence timer no longer applies. */
+  onAiTurnStarted(): void {
     this.clear();
-    if (this.blocked() || this.consecutive >= this.cfg.maxConsecutive) return;
-    const isLast = this.consecutive === this.cfg.maxConsecutive - 1;
-    const delay = this.consecutive === 0 ? this.cfg.followupAfterMs : this.cfg.idleNoticeAfterMs;
-    const instruction = isLast ? this.cfg.idleNoticeInstruction : this.cfg.followupInstruction;
-    this.timer = setTimeout(() => this.fire(instruction), delay);
+  }
+
+  onAiTurnEnded(): void {
+    this.arm();
   }
 
   setMuted(muted: boolean): void {
@@ -1504,12 +1591,22 @@ export class Director {
   resume(): void {
     this.paused = false;
     this.consecutive = 0;
-    if (!this.stopped) this.deps.requestResponse('followup', this.cfg.resumeInstruction);
+    if (!this.blocked()) this.deps.requestResponse('followup', this.cfg.resumeInstruction);
   }
 
   stop(): void {
     this.stopped = true;
     this.clear();
+  }
+
+  /** Starts the silence timer: first a follow-up, then (if still silent) the idle notice. */
+  private arm(): void {
+    this.clear();
+    if (this.blocked() || this.consecutive >= this.cfg.maxConsecutive) return;
+    const isLast = this.consecutive === this.cfg.maxConsecutive - 1;
+    const delay = this.consecutive === 0 ? this.cfg.followupAfterMs : this.cfg.idleNoticeAfterMs;
+    const instruction = isLast ? this.cfg.idleNoticeInstruction : this.cfg.followupInstruction;
+    this.timer = setTimeout(() => this.fire(instruction), delay);
   }
 
   private blocked(): boolean {
@@ -1550,6 +1647,8 @@ export interface GatewayConfig {
   adapter: 'mock';
   allowDebugText: boolean;
   devOrigins: string[];
+  /** MockAdapter speech threshold (RMS, 16-bit). 【预估】; raise if speaker echo triggers fake turns. */
+  mockSpeechThreshold: number;
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): GatewayConfig {
@@ -1559,12 +1658,17 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (adapter !== 'mock') throw new Error(`Unsupported ADAPTER "${adapter}" (real adapters arrive in Plan 2)`);
   const port = Number(env.PORT ?? 8787);
   if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('PORT must be a valid port number');
+  const mockSpeechThreshold = Number(env.MOCK_SPEECH_THRESHOLD ?? 800);
+  if (!Number.isInteger(mockSpeechThreshold) || mockSpeechThreshold < 100 || mockSpeechThreshold > 20000) {
+    throw new Error('MOCK_SPEECH_THRESHOLD must be an integer between 100 and 20000');
+  }
   return {
     port,
     appSecret,
     adapter,
     allowDebugText: env.ALLOW_DEBUG_TEXT === '1',
     devOrigins: (env.DEV_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    mockSpeechThreshold,
   };
 }
 

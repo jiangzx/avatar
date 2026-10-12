@@ -7,8 +7,10 @@
 ### Task 9: avatar-core 骨架与纯音频工具（PCM、口型、能量触发）
 
 **Files:**
-- Create: `avatar-core/package.json`, `avatar-core/tsconfig.json`, `avatar-core/vite.config.ts`, `avatar-core/index.html`, `avatar-core/.env.example`, `avatar-core/scripts/copy-vad-assets.mjs`, `avatar-core/src/types/audioworklet.d.ts`, `avatar-core/src/audio/pcm.ts`, `avatar-core/src/audio/mouth.ts`, `avatar-core/src/audio/energy.ts`
+- Create: `avatar-core/package.json`, `avatar-core/tsconfig.json`, `avatar-core/vite.config.ts`, `avatar-core/index.html`, `avatar-core/src/main.ts`（占位）, `avatar-core/.env.example`, `avatar-core/scripts/copy-vad-assets.mjs`, `avatar-core/src/types/audioworklet.d.ts`, `avatar-core/src/audio/pcm.ts`, `avatar-core/src/audio/mouth.ts`, `avatar-core/src/audio/energy.ts`
 - Test: `avatar-core/test/pcm.test.ts`, `avatar-core/test/mouth.test.ts`, `avatar-core/test/energy.test.ts`
+
+**Depends on:** Task 1，且在 Task 2 提交之后开始（两者都 `npm install`，会同时改 `package-lock.json`）。完成后 Task 10–13 可以并行。
 
 **Interfaces:**
 - Produces:
@@ -112,7 +114,14 @@ VITE_APP_SECRET=same-as-gateway-APP_SECRET
 </html>
 ```
 
-`avatar-core/scripts/copy-vad-assets.mjs`:
+`avatar-core/src/main.ts`（占位，保证 Task 14 之前 `vite build` 也能成功，Task 17 的 spike 页面因此不必等 Task 14；Task 14 整体替换）:
+
+```ts
+// Placeholder entry; replaced by the real app wiring in Task 14.
+export {};
+```
+
+`avatar-core/scripts/copy-vad-assets.mjs`（文件名已按 vad-web 0.0.31 包内容核实）:
 
 ```js
 // Copies Silero VAD + onnxruntime-web runtime files into public/vad so they are served same-origin.
@@ -513,14 +522,20 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `avatar-core/src/audio/playbackGate.ts`, `avatar-core/src/audio/player-worklet.ts`, `avatar-core/src/audio/player.ts`
 - Test: `avatar-core/test/playbackGate.test.ts`
 
+**Depends on:** Task 9。可与 Task 11/12/13 并行。
+
 **Interfaces:**
 - Consumes: `AI_SAMPLE_RATE`（Task 1）；`int16ToFloat32`、`LinearResampler`、`AudioFeatures`（Task 9）
 - Produces:
-  - `class PlaybackGate`：`active: number | null`、`start(seq)`、`accepts(seq): boolean`、`cancel(seq)`、`finish(seq)`、`resetBelow(lastSeq)`
+  - `class PlaybackGate`：`active: number | null`、`start(seq)`、`accepts(seq): boolean`、`cancel(seq)`、`finish(seq)`、`resetBelow(lastSeq)`、`reset()`
   - `interface PlaybackEvents { onFirstAudio(seq): void; onEnded(seq, playedMs): void; onStopped(seq, playedMs): void; onProgress(seq, playedMs): void; onLevel(features: AudioFeatures, dtMs: number): void }`
-  - `class PlaybackController(events)`：`init(): Promise<void>`、`resume(): Promise<void>`、`activeSeq`、`onResponseStart(seq)`、`push(seq, pcm24k)`、`end(seq)`、`interrupt(): { seq: number; playedMs: number } | null`、`cancelled(seq)`、`resetAfterResume(lastSeq)`、`playedMsFor(seq)`
+  - `class PlaybackController(events)`：`init(): Promise<void>`、`resume(): Promise<void>`、`activeSeq`、`onResponseStart(seq)`、`push(seq, pcm24k)`、`end(seq)`、`interrupt(): { seq: number; playedMs: number } | null`、`cancelled(seq)`、`resetAfterResume(lastSeq)`、`resetForNewSession()`、`playedMsFor(seq)`
 
 Worklet 消息协议（主线程 → worklet）：`{type:'push', seq, samples: Float32Array}`、`{type:'end', seq}`、`{type:'stop', fadeMs}`；（worklet → 主线程）：`{type:'started', seq}`、`{type:'progress', seq, playedSamples}`（约每 100 ms）、`{type:'drained', seq, playedSamples}`、`{type:'stopped', seq, playedSamples}`、`{type:'level', rms, zcr, samples}`（约每 16 ms）。
+
+生命周期约定：
+- 一条回复的"播放结束"只由 worklet 的 `drained` 触发；**没有任何音频的回复**（例如只有工具调用）收到 `end` 时，worklet 立即回 `drained(seq, 0)`，否则网关永远等不到 `playback.stopped(ended)`，Director 会被卡住。
+- 门控状态按会话划分：`responseSeq` 只在一个会话内递增，新会话从 1 重新开始，所以新会话开始时必须 `resetForNewSession()`（清空已取消集合和下限），否则旧会话取消过的序号会把新会话的回复静音。续接同一会话时用 `resetAfterResume(lastSeq)`。
 
 - [ ] **Step 1: 写失败的测试**
 
@@ -570,6 +585,16 @@ describe('PlaybackGate', () => {
     g.start(6);
     expect(g.accepts(6)).toBe(true);
   });
+
+  it('reset() forgets everything so a new session can reuse sequence numbers', () => {
+    const g = new PlaybackGate();
+    g.start(2);
+    g.cancel(2);
+    g.resetBelow(3);
+    g.reset();
+    g.start(2);
+    expect(g.accepts(2)).toBe(true);
+  });
 });
 ```
 
@@ -615,13 +640,20 @@ export class PlaybackGate {
     this.floor = Math.max(this.floor, lastSeq);
     this.activeSeq = null;
   }
+
+  /** New gateway session: sequence numbers start again from 1. */
+  reset(): void {
+    this.activeSeq = null;
+    this.cancelledSeqs.clear();
+    this.floor = 0;
+  }
 }
 ```
 
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w avatar-core -- playbackGate`
-Expected: 4 个测试 PASS。
+Expected: 5 个测试 PASS。
 
 - [ ] **Step 5: 实现播放 worklet（自包含，不 import 其他模块）**
 
@@ -660,6 +692,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       this.queue.push(m.samples);
     } else if (m.type === 'end') {
       if (m.seq === this.seq) this.ended = true;
+      else this.port.postMessage({ type: 'drained', seq: m.seq, playedSamples: 0 }); // a response without any audio
     } else if (this.seq >= 0 && !this.stopping) {
       this.stopping = true;
       this.gain = 1;
@@ -847,6 +880,13 @@ export class PlaybackController {
     this.node?.port.postMessage({ type: 'stop', fadeMs: 10 });
   }
 
+  /** A fresh gateway session (sequence numbers restart at 1). */
+  resetForNewSession(): void {
+    this.gate.reset();
+    this.playedSamples.clear();
+    this.node?.port.postMessage({ type: 'stop', fadeMs: 10 });
+  }
+
   playedMsFor(seq: number): number {
     const rate = this.ctx?.sampleRate ?? AI_SAMPLE_RATE;
     return ((this.playedSamples.get(seq) ?? 0) / rate) * 1000;
@@ -884,6 +924,8 @@ export class PlaybackController {
 Run: `npm run typecheck -w avatar-core && npm test -w avatar-core`
 Expected: 无类型错误；测试全部 PASS。若 `?worker&url` 导入报"找不到模块"，确认 `tsconfig.json` 的 `types` 含 `vite/client`。
 
+worklet 加载方式的说明（基于 Vite 8.3.4 源码的判断，以 Task 14 Step 7 和 Task 17 的实际运行为准）：dev 下 `?worker&url` 以 module 方式提供并注入 `import "/@vite/env"`，生产构建输出 IIFE，两者都能被 `audioWorklet.addModule` 加载。若实测 `addModule` 报错，退路是把两个 worklet 改写成纯 JS 放到 `avatar-core/public/worklets/`，用 `new URL('./worklets/player-worklet.js', document.baseURI).href` 加载，并记入 `docs/blockers.md`。
+
 ```bash
 git add avatar-core/src/audio avatar-core/test/playbackGate.test.ts
 git commit -m "feat(avatar-core): gated AudioWorklet player with instant barge-in
@@ -898,6 +940,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Create: `avatar-core/src/audio/capture-worklet.ts`, `avatar-core/src/audio/capture.ts`, `avatar-core/src/audio/vad.ts`
 - Test: `avatar-core/test/vad.test.ts`
+
+**Depends on:** Task 9。可与 Task 10/12/13 并行。
 
 **Interfaces:**
 - Consumes: `MIC_SAMPLE_RATE`、`MIC_FRAME_SAMPLES`（Task 1）；`LinearResampler`、`FrameChunker`、`float32ToInt16`（Task 9）
@@ -1090,7 +1134,7 @@ export class LocalVad {
 }
 ```
 
-注：`MicVAD` 的实例方法名以 `node_modules/@ricky0123/vad-web/dist/real-time-vad.d.ts` 为准；若没有 `destroy`，改用 `pause()`，并记入 `docs/blockers.md`。
+注：已按 vad-web 0.0.31 的 `dist/real-time-vad.d.ts` 核实：`MicVAD.new` 接受上面全部选项（含 `getStream`/`pauseStream`/`resumeStream`/`ortConfig`/`startOnLoad`），实例有 `destroy()`；`onFrameProcessed` 的 `probs.isSpeech` 是 number。
 
 - [ ] **Step 4: 运行测试确认通过**
 
@@ -1214,6 +1258,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Create: `avatar-core/src/net/gatewayClient.ts`
 - Test: `avatar-core/test/gatewayClient.test.ts`
+
+**Depends on:** Task 9。只依赖 Task 8 写在文档里的 HTTP/WS 契约（不 import gateway 代码），可与 Task 7/8/10/11/13 并行；若 Task 8 的契约在执行中被改，先同步本任务。
 
 **Interfaces:**
 - Consumes: Task 8 的 HTTP/WS 契约；`encodeAudioFrame`、`decodeAudioFrame`、`FRAME_AI`、`FRAME_MIC`、`ClientMessage`、`ServerMessage`、`SessionTokens`、`AudioPath`

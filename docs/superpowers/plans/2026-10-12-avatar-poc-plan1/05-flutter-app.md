@@ -1,20 +1,23 @@
 # Plan 1 · 05 Flutter Android 壳（Task 15–16）
 
-> 先读 [00-overview.md](00-overview.md) 的 Global Constraints。Task 0 Step 1–2 必须已完成（adb 可用、小米手机已连接）。真机调试统一用 `adb reverse tcp:8787 tcp:8787`，App 通过 `http://127.0.0.1:8787` 访问电脑上的网关，与 release 版"只对 127.0.0.1 放行明文"的规则一致。
+> 先读 [00-overview.md](00-overview.md) 的 Global Constraints。Task 15 需要 Task 0 Step 1（Flutter/Android 工具链），Task 16 另需 Step 2（模拟器；真机在检查点 ① 接上）。这两个任务不依赖任何 TypeScript 任务；按"先写代码"的推荐顺序放在 Task 14 之后，也可以与 TS 任务并行。模拟器和真机调试统一用 `adb reverse tcp:8787 tcp:8787`，App 通过 `http://127.0.0.1:8787` 访问电脑上的网关，与 release 版"只对 127.0.0.1 放行明文"的规则一致。
 
 ---
 
 ### Task 15: Flutter 工程、本地资源服务、Bridge 解析与指标统计
 
 **Files:**
-- Create（`flutter create` 生成后修改）: `app/pubspec.yaml`, `app/lib/config.dart`, `app/lib/local_asset_server.dart`, `app/lib/bridge.dart`, `app/lib/metrics.dart`, `app/dev.example.json`
+- Create（`flutter create` 生成后修改）: `app/pubspec.yaml`, `app/lib/config.dart`, `app/lib/local_asset_server.dart`, `app/lib/bridge.dart`, `app/lib/metrics.dart`, `app/dev.example.json`, `scripts/build-web.sh`, `spikes/webview-probe/index.html`, `spikes/webview-probe/probe-worklet.js`
 - Modify: `.gitignore`
 - Test: `app/test/local_asset_server_test.dart`, `app/test/bridge_test.dart`, `app/test/metrics_test.dart`
 
+**Depends on:** Task 0（Flutter/Android 工具链；真机在 Task 16 才需要）。不依赖任何 TypeScript 任务：Bridge 契约按 Task 14 的文档编写，`app/assets/web` 先用 `build-web.sh --probe-only` 生成探针页与占位目录。可与 Task 1–13 并行。
+
 **Interfaces:**
-- Consumes: Task 14 的 Bridge 契约（`ToFlutter` / `FromFlutter`）
+- Consumes: Task 14 的 Bridge 契约（`ToFlutter` / `FromFlutter`，以文档为准）
 - Produces:
-  - `class AppConfig`：`gatewayUrl`、`appSecret`、`audioPath`、`echo`、`static String? validate()`
+  - `scripts/build-web.sh [--probe-only]`：重建 `app/assets/web`。默认构建 avatar-core 并拷入；`--probe-only` 不构建，只放探针页与占位目录（pubspec 列出的 assets 目录不存在时 Flutter 构建和 `flutter test` 都会报错，而 `app/assets/web/` 不入库，干净克隆后必须先跑一次本脚本）。两种模式都会放入 `probe.html`
+  - `class AppConfig`：`gatewayUrl`、`appSecret`、`audioPath`、`echo`、`page`（dart-define `PAGE`，默认 `index.html`）、`static String? validate()`
   - `typedef AssetLoader = Future<ByteData> Function(String key)`；`class LocalAssetServer({required AssetLoader loadAsset, String assetRoot = 'assets/web'})`：`start()`、`stop()`、`baseUri`、`token`
   - `String? resolveAssetPath(String path, String token)`、`ContentType contentTypeFor(String path)`
   - `sealed class JsEvent` 及子类 `JsReady`、`JsSubtitle(role, text, isFinal)`、`JsState(state)`、`JsMetric(name, ms)`、`JsStatus(status)`、`JsDiag(key, value)`、`JsError(code)`；`JsEvent.parse(String raw): JsEvent?`；`String jsCall(Map<String, Object?> message)`
@@ -62,9 +65,154 @@ app/dev.json
 
 ```bash
 cp dev.example.json dev.json
-sed -i '' "s/same-as-gateway-APP_SECRET/$(grep APP_SECRET ../gateway/.env | cut -d= -f2)/" dev.json
+# The secret is generated once: reuse gateway/.env if it exists, otherwise create it here (Task 8 Step 9 copies it back).
+SECRET="$(grep -s '^APP_SECRET=' ../gateway/.env | cut -d= -f2)"
+[ -n "$SECRET" ] || SECRET="$(openssl rand -hex 16)"
+sed -i '' "s/same-as-gateway-APP_SECRET/$SECRET/" dev.json
 rm -f test/widget_test.dart   # generated counter-app test, replaced below
 ```
+
+- [ ] **Step 1b: Web 资源脚本与 WebView 能力探针页**
+
+`scripts/build-web.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Rebuilds app/assets/web for the Flutter app.
+#   ./scripts/build-web.sh               build avatar-core and copy it, plus the WebView probe page
+#   ./scripts/build-web.sh --probe-only  no avatar-core build: probe page and placeholder directories only
+set -euo pipefail
+cd "$(dirname "$0")/.."
+mode="${1:-full}"
+rm -rf app/assets/web
+mkdir -p app/assets/web
+if [ "$mode" != "--probe-only" ]; then
+  if [ ! -f avatar-core/public/avatars/avatar.glb ] && [ -x scripts/fetch-assets.sh ]; then ./scripts/fetch-assets.sh; fi
+  [ -f avatar-core/public/spike/speech-24k.pcm ] || ./scripts/make-mock-speech.sh
+  npm run build -w avatar-core
+  cp -R avatar-core/dist/. app/assets/web/
+fi
+cp spikes/webview-probe/index.html app/assets/web/probe.html
+cp spikes/webview-probe/probe-worklet.js app/assets/web/probe-worklet.js
+printf '\000asm\001\000\000\000' > app/assets/web/probe.wasm   # smallest valid wasm module
+# Flutter refuses to build when a directory listed under pubspec.yaml assets is missing.
+for d in assets vad avatars animations spike; do
+  mkdir -p "app/assets/web/$d"
+  [ -n "$(ls -A "app/assets/web/$d")" ] || echo "placeholder" > "app/assets/web/$d/PLACEHOLDER.txt"
+done
+if [ "$mode" = "--probe-only" ] && [ -f avatar-core/public/spike/speech-24k.pcm ]; then
+  cp avatar-core/public/spike/speech-24k.pcm app/assets/web/spike/   # lets the path-B spike run early
+fi
+echo "web bundle ($mode): $(du -sh app/assets/web | cut -f1)"
+```
+
+`spikes/webview-probe/probe-worklet.js`:
+
+```js
+// Minimal AudioWorklet used by the WebView probe.
+class ProbeProcessor extends AudioWorkletProcessor {
+  process() {
+    return true;
+  }
+}
+registerProcessor('probe', ProbeProcessor);
+```
+
+`spikes/webview-probe/index.html`（不依赖 avatar-core 构建；结果显示在页面上，并作为 `diag` 事件发给 Flutter 调试面板）:
+
+```html
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebView probe</title>
+    <style>
+      body { margin: 0; padding: 72px 16px 16px; background: #10131a; color: #e8ecf3; font: 16px system-ui, sans-serif; }
+      #out { white-space: pre-wrap; font-family: ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <div id="out"></div>
+    <script type="module">
+      // Day-1 capability probe: runs without any user gesture.
+      const out = document.getElementById('out');
+      const post = (m) => window.FlutterBridge?.postMessage(JSON.stringify(m));
+      function report(key, ok, detail) {
+        const value = `${ok ? 'OK' : 'FAIL'} ${detail}`.slice(0, 160);
+        out.textContent += `${key}: ${value}\n`; // textContent only
+        post({ type: 'diag', key: `probe_${key}`, value });
+      }
+      async function check(key, fn) {
+        try {
+          report(key, true, String((await fn()) ?? ''));
+        } catch (e) {
+          report(key, false, `${e?.name ?? 'Error'}: ${e?.message ?? e}`);
+        }
+      }
+
+      await check('secure_context', () => {
+        if (!window.isSecureContext) throw new Error('not a secure context');
+        return location.origin;
+      });
+      await check('webview', () => navigator.userAgent.match(/Chrome\/[\d.]+/)?.[0] ?? navigator.userAgent);
+      await check('autoplay', async () => {
+        const ctx = new AudioContext();
+        if (ctx.state !== 'running') await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 500))]);
+        if (ctx.state !== 'running') throw new Error(`AudioContext state=${ctx.state} without a gesture`);
+        const osc = ctx.createOscillator();
+        osc.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3); // audible beep
+        return `running @ ${ctx.sampleRate} Hz`;
+      });
+      await check('audio_worklet', async () => {
+        const ctx = new AudioContext({ sampleRate: 24000 });
+        await ctx.audioWorklet.addModule('./probe-worklet.js');
+        new AudioWorkletNode(ctx, 'probe');
+        await ctx.close();
+        return 'addModule ok, 24 kHz context ok';
+      });
+      await check('wasm', async () => {
+        await WebAssembly.instantiateStreaming(fetch('./probe.wasm'));
+        return 'instantiateStreaming ok (application/wasm)';
+      });
+      await check('webgl2', () => {
+        const gl = document.createElement('canvas').getContext('webgl2');
+        if (!gl) throw new Error('no WebGL2');
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'WebGL2';
+      });
+      await check('microphone', async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        const s = stream.getAudioTracks()[0]?.getSettings() ?? {};
+        stream.getTracks().forEach((t) => t.stop());
+        return `echoCancellation=${s.echoCancellation} sampleRate=${s.sampleRate}`;
+      });
+      // Flutter answers 'ready' with the config message; use it to test cleartext access to the gateway.
+      window.avatarBridge = {
+        receive: (m) => {
+          if (m.type !== 'config') return;
+          void check('gateway', async () => {
+            const res = await fetch(`${m.gatewayUrl}/healthz`);
+            if (!res.ok) throw new Error(`http_${res.status}`);
+            return m.gatewayUrl;
+          });
+        },
+      };
+      post({ type: 'ready' });
+    </script>
+  </body>
+</html>
+```
+
+```bash
+cd /Users/JedJiang/SourceCode/anyidea
+chmod +x scripts/build-web.sh && ./scripts/build-web.sh --probe-only
+ls app/assets/web app/assets/web/spike
+```
+
+Expected: 打印 `web bundle (--probe-only): …`；`app/assets/web` 下有 `probe.html`、`probe-worklet.js`、`probe.wasm` 和 5 个子目录。
 
 - [ ] **Step 2: 写失败的测试**
 
@@ -231,6 +379,9 @@ class AppConfig {
   static const appSecret = String.fromEnvironment('APP_SECRET');
   static const audioPath = String.fromEnvironment('AUDIO_PATH', defaultValue: 'A');
   static const echo = String.fromEnvironment('ECHO', defaultValue: 'true');
+
+  /// Page inside the web bundle to load: 'index.html' (product), 'probe.html' (Task 16), 'spike-aec.html' (Task 17).
+  static const page = String.fromEnvironment('PAGE', defaultValue: 'index.html');
 
   /// Returns a user-facing problem description, or null when the config is usable.
   static String? validate() {
@@ -456,7 +607,7 @@ class MetricsStore {
 - [ ] **Step 5: 运行测试确认通过**
 
 Run: `cd app && flutter test`
-Expected: 全部 PASS（local_asset_server 6 个、bridge 3 个、metrics 2 个）。
+Expected: 全部 PASS（local_asset_server 6 个、bridge 3 个、metrics 2 个）。若报 "unable to find directory entry in pubspec.yaml: …/assets/web/…" 之类的错误，说明还没生成 `app/assets/web`，先执行 `./scripts/build-web.sh --probe-only`。
 
 - [ ] **Step 6: 静态检查与提交**
 
@@ -465,24 +616,27 @@ Expected: `No issues found!`
 
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea
-git add .gitignore app
-git commit -m "feat(app): Flutter shell scaffold, loopback asset server, bridge parsing, metrics
+git add .gitignore app scripts/build-web.sh spikes/webview-probe
+git status --short app | grep -E 'dev\.json|assets/web' && echo "STOP: secret or generated assets staged" || true
+git commit -m "feat(app): Flutter shell scaffold, loopback asset server, bridge parsing, metrics, web probe
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 16: WebView 页面、Android 配置与真机首跑
+### Task 16: WebView 页面、Android 配置与真机能力探针（Day 1 ①）
 
 **Files:**
-- Create: `app/lib/overlay.dart`, `app/lib/avatar_page.dart`, `app/android/app/src/main/res/xml/network_security_config.xml`, `app/android/app/src/debug/res/xml/network_security_config.xml`, `scripts/build-web.sh`
+- Create: `app/lib/overlay.dart`, `app/lib/avatar_page.dart`, `app/android/app/src/main/res/xml/network_security_config.xml`, `app/android/app/src/debug/res/xml/network_security_config.xml`
 - Modify: `app/lib/main.dart`, `app/android/app/src/main/AndroidManifest.xml`
 - Test: `app/test/overlay_test.dart`
 
+**Depends on:** Task 15；Task 0 Step 2a（模拟器）。**不依赖 avatar-core**：首跑加载 Task 15 的探针页，验证 spec §9 Day 1 ① 的全部能力项。本任务在模拟器上完成即可提交，结果标【模拟器】；Step 8–9 必须在**真机检查点 ①** 用小米手机再跑一遍，以真机结果为准。完整虚拟人页面的首跑在 Task 18 Step 0。探针的 gateway 项需要 Task 8 的网关在跑。
+
 **Interfaces:**
-- Consumes: Task 15 的 `AppConfig`、`LocalAssetServer`、`JsEvent`、`jsCall`、`MetricsStore`；Task 14 的 Bridge 契约
-- Produces: 可安装的 debug APK；`AvatarOverlay` 组件（字幕、AI 标识、状态、静音、结束、长按 AI 标识打开调试面板）
+- Consumes: Task 15 的 `AppConfig`（含 `page`）、`LocalAssetServer`、`JsEvent`、`jsCall`、`MetricsStore`；Task 14 的 Bridge 契约
+- Produces: 可安装的 debug APK；`AvatarOverlay` 组件（字幕、AI 标识、状态、静音、结束、长按 AI 标识打开调试面板）；能力探针结果（模拟器与真机分列，写入 ADR-001 的"其他 Day 1 验证项"；ADR 文件由 Task 17 创建，此前先记在 `docs/blockers.md` 或终端）
 
 - [ ] **Step 1: 写失败的 widget 测试**
 
@@ -759,7 +913,7 @@ class _AvatarPageState extends State<AvatarPage> {
       await platform.setAllowFileAccess(false);
       await AndroidWebViewController.enableDebugging(kDebugMode);
     }
-    await controller.loadRequest(base.resolve('index.html'));
+    await controller.loadRequest(base.resolve(AppConfig.page));
     if (mounted) setState(() => _controller = controller);
   }
 
@@ -956,69 +1110,57 @@ grep -n 'uses-permission\|networkSecurityConfig' android/app/src/main/AndroidMan
 
 Expected: 打印 3 行 `uses-permission` 和 1 行 `android:networkSecurityConfig`。
 
-- [ ] **Step 7: Web 产物打包脚本**
-
-`scripts/build-web.sh`:
-
-```bash
-#!/usr/bin/env bash
-# Builds avatar-core and copies it into the Flutter app's assets.
-set -euo pipefail
-cd "$(dirname "$0")/.."
-[ -f avatar-core/public/avatars/avatar.glb ] || ./scripts/fetch-assets.sh
-[ -f avatar-core/public/spike/speech-24k.pcm ] || ./scripts/make-mock-speech.sh
-npm run build -w avatar-core
-rm -rf app/assets/web
-mkdir -p app/assets
-cp -R avatar-core/dist app/assets/web
-for d in assets vad avatars animations spike; do
-  [ -d "app/assets/web/$d" ] || { echo "missing app/assets/web/$d" >&2; exit 1; }
-done
-echo "web bundle: $(du -sh app/assets/web | cut -f1)"
-```
+- [ ] **Step 7: 准备 Web 资源**
 
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea
-chmod +x scripts/build-web.sh && ./scripts/build-web.sh
+./scripts/build-web.sh --probe-only   # avatar-core 已能构建时也可以不带参数；两种模式都包含 probe.html
 ```
 
-Expected: 打印 `web bundle: …M`（约 15–30 MB，主要是 GLB 与 onnxruntime wasm）。
+- [ ] **Step 8: 能力探针（debug 包；先模拟器，真机检查点 ① 再跑一遍）**
 
-- [ ] **Step 8: 真机首跑**
+先启动模拟器（Task 0 Step 2a），依次在 `Medium_Phone_API_36.1` 和 `API31_Phone` 上跑；到真机检查点 ① 时接上小米手机，用同样的命令再跑（多台设备在线时 `adb -s`、`flutter run -d` 指定设备）。
 
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea
-npm run dev -w gateway &                    # 网关监听 :8787
-adb reverse tcp:8787 tcp:8787               # 手机 127.0.0.1:8787 → 电脑网关
-cd app && flutter run --dart-define-from-file=dev.json
+npm run dev -w gateway &                    # 可选：Task 8 完成后才有；没有就跳过，探针 gateway 项记"未测"
+adb reverse tcp:8787 tcp:8787               # 设备上的 127.0.0.1:8787 → 电脑网关（模拟器同样支持；真机走 USB，不受手机网络影响）
+cd app && flutter run --dart-define-from-file=dev.json --dart-define=PAGE=probe.html
 ```
 
-首次安装时小米会弹"USB 安装"确认，点允许；App 首次启动弹麦克风权限，点允许。电脑 Chrome 打开 `chrome://inspect/#devices` 可以看到 WebView 并打开控制台。
+真机首次安装时小米会弹"USB 安装"确认，点允许；App 首次启动弹麦克风权限，点允许。**之后不要触碰屏幕**，直到探针结果全部出现（autoplay 项要求无手势）。电脑 Chrome 打开 `chrome://inspect/#devices` 可以看到 WebView 并打开控制台。结果显示在页面上；长按左上角"AI 虚拟人"打开的调试面板里也有 `probe_*` 项。
 
-逐项核对（结果记入 Task 18 的验收清单，卡住按阻塞规则处理）：
+通过标准与失败退路（结果记入 ADR-001 的"其他 Day 1 验证项"，标明【模拟器】或【真机】；任一项失败按阻塞规则记录，不要卡住）。**退路只按真机结果执行**：模拟器上某项失败，先记录并继续，到检查点 ① 用真机确认后再决定是否改方案；模拟器上通过也不能代替真机。模拟器 `microphone` 项需要先打开主机音频输入，`webview` 版本以小米真机为准：
 
-1. 页面加载，虚拟人出现，**不需要任何点击**就开始 Mock 问候（验证"免手势播放"）。
-2. 长按左上角"AI 虚拟人"打开调试面板：`audio_context=running`；`mic_settings` 中 `echoCancellation` 为 `true`；`greeting_ms` 有数值。
-3. 在调试面板输入"挥挥手"：虚拟人挥手并说"好呀，来，挥挥手！"。
-4. 对着手机说话：状态依次变为 listening → thinking → speaking；字幕显示 Mock 脚本里的用户文本。
-5. `chrome://inspect` 控制台没有 `ERR_CLEARTEXT_NOT_PERMITTED`、`NotAllowedError`、wasm 加载失败等报错。
+| 探针项 | 通过标准 | 失败时 |
+|---|---|---|
+| `secure_context` | OK，origin 为 `http://127.0.0.1:<端口>` | 本地服务方案不成立：改用 spec 的 `WebViewAssetLoader` 退路，作为 Plan 1 的阻塞项上报 |
+| `webview` | Chrome 主版本号 ≥120 | 记录版本；尝试在应用商店更新"Android System WebView" |
+| `autoplay` | OK（无手势 `running`，并听到 0.3 秒提示音） | 降级为"首次打开点一下开始"：手势必须发生在 WebView 页面内（Flutter 覆盖层上的点击不算），做法同 Task 14 桌面调试页的"开始对话"按钮——点击后再创建 AudioContext；记入报告的"允许降级"项 |
+| `audio_worklet` | OK | 记阻塞；退路是播放/采集改用 ScriptProcessorNode（Plan 1 内只记录，不实现） |
+| `wasm` | OK | 先查 `LocalAssetServer` 是否返回 `application/wasm`；仍失败则 VAD 退回 `EnergyTrigger` 能量阈值（记入报告） |
+| `webgl2` | OK，并记下 GPU 名称 | three.js r180 需要 WebGL2：记阻塞，换设备 |
+| `microphone` | OK，`echoCancellation=true` | 检查 RECORD_AUDIO 运行时权限与 `onPermissionRequest` |
+| `gateway` | OK（需网关在跑） | 查 `adb reverse`、CORS（网关日志）、`ERR_CLEARTEXT_NOT_PERMITTED` |
+
+另外确认 `chrome://inspect` 控制台没有 `ERR_CLEARTEXT_NOT_PERMITTED`、`NotAllowedError` 之外的未预期报错。
 
 - [ ] **Step 9: release 构建加载验证（spec §9 Day 1 ① 要求）**
 
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea/app
-flutter build apk --release --dart-define-from-file=dev.json
+flutter build apk --release --dart-define-from-file=dev.json --dart-define=PAGE=probe.html
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 adb shell am start -n com.anyidea.avatar_app/.MainActivity
 ```
 
-Expected: release 包同样能加载页面并开始问候（`adb reverse` 仍需保持）。若页面空白且 `adb logcat | grep -i cleartext` 出现 `CLEARTEXT_NOT_PERMITTED`：说明 WebView 没有按 `domain-config` 放行 127.0.0.1，按 spec 的退路改用 `WebViewAssetLoader`（`https://appassets.androidplatform.net`），把这件事记入 `docs/blockers.md` 并作为 Plan 2 的第一项；Plan 1 其余验收先用 debug 包继续。
+Expected: release 包的探针结果与 debug 包一致（`adb reverse` 仍需保持）。模拟器上先验证一次，真机检查点 ① 必须再验证。若页面空白且 `adb logcat | grep -i cleartext` 出现 `CLEARTEXT_NOT_PERMITTED`：说明 WebView 没有按 `domain-config` 放行 127.0.0.1，按 spec 的退路改用 `WebViewAssetLoader`（`https://appassets.androidplatform.net`），把这件事记入 `docs/blockers.md` 并作为 Plan 2 的第一项；Plan 1 其余验收先用 debug 包继续。
 
 - [ ] **Step 10: 提交**
 
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea
-git add scripts/build-web.sh app/lib app/test app/android/app/src/main/AndroidManifest.xml app/android/app/src/main/res/xml app/android/app/src/debug/res/xml
+git add app/lib app/test app/android/app/src/main/AndroidManifest.xml app/android/app/src/main/res/xml app/android/app/src/debug/res/xml
 git commit -m "feat(app): WebView avatar page, native overlay, Android permissions and network policy
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
