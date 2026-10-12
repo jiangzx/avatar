@@ -500,6 +500,8 @@ Expected: the app launches with `AUDIO_PATH=B`, the local page loads, and the ga
 
 - [ ] **Step 3: Execute the Plan 1.1 real-device checklist**
 
+  2026-10-13 续验：设备在线、`adb reverse`、Mock 网关和同 secret debug APK 启动完成；16 kHz 单声道采集初始化确认；30 分钟稳定性采样完成（31 点、renderer 31/31 存活）。真实语音/VAD、人工听感、活动回复续接、五个动作逐项验证、10 次真实打断和可靠的 10 分钟自打断计数仍未完成，故本步骤保持未勾选。详见 [native audio report](../../testing/2026-10-13-native-audio-plan1-1-report.md)。
+
 Record timestamps and counts only:
 
 1. Open app: avatar loads, greeting subtitle appears, greeting PCM is audible.

@@ -1,13 +1,13 @@
 # Roadmap
 
-Last updated: 2026-10-13 (Plan 1.1 device smoke). Update at the end of every session.
+Last updated: 2026-10-13 (Plan 1.1 device acceptance continuation). Update at the end of every session.
 
 ## Phases
 
 | Phase | Scope | Status | Plan |
 |---|---|---|---|
 | Plan 1 | Mock-driven end-to-end on a Xiaomi phone: greeting, multi-turn, barge-in with zero residue, 5 actions, reconnect, Day 1 audio A/B spike | **Complete with blockers.** Code Tasks 0–17 implemented, reviewed and merged on `master`; Task 18 checklist/report written but every device/browser item is "not run". Not demonstrated on a device. | [plan1](../superpowers/plans/2026-10-12-avatar-poc-plan1/00-overview.md) |
-| Plan 1.1 | Flutter 原生采集/播放/VAD/网关会话，WebView 头像和界面 | **代码完成；小米设备启动冒烟部分通过，完整真机验收未完成。** | [native-audio-path](../superpowers/plans/2026-10-13-native-audio-path-plan.md) |
+| Plan 1.1 | Flutter 原生采集/播放/VAD/网关会话，WebView 头像和界面 | **代码完成；小米启动冒烟和 30 分钟稳定性采样完成，完整真机验收仍未完成。** | [native-audio-path](../superpowers/plans/2026-10-13-native-audio-path-plan.md) |
 | Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | Not started; plan not written | — |
 
 Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-poc-design.md).
@@ -18,7 +18,7 @@ Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-p
 - Gateway-level headless check (Task 18, not a checklist pass): greeting, keyword actions once each, silence follow-ups (~8.4 s / ~25.3 s after `playback.stopped(ended)`), gateway logs contain no conversation text.
 - 【模拟器】 only: Task 16 capability probe on Medium_Phone_API_36.1 (WebView 134, 8/8) and API31_Phone (WebView 91, below the ≥120 bar); release APK cleartext to 127.0.0.1 OK; autoplay `running` without gesture (no audible check). Emulator results are NOT phone results.
 - NOT verified for the original Plan 1 A path: full desktop Chrome E2E (Task 14 Step 7), Task 18 checklist, WebView mic/VAD capture, AudioWorklet playback, lip-sync, barge-in latency, frame rate, and 30-minute stability. No constants were tuned. ADR-001 (audio path A vs B) is a **DRAFT, undecided**; no A/B measurements exist.
-- Plan 1.1 Xiaomi 22101317C smoke: WebView 104 loaded the avatar and Mock greeting in debug/release, native `AudioRecord` initialized at 16 kHz mono, and one `wave` debug action was visually observed. Real speech/VAD, audible confirmation, full action matrix, resume with an active response, 10-minute false-trigger count, and 30-minute stability remain unmeasured. See [native audio report](../testing/2026-10-13-native-audio-plan1-1-report.md).
+- Plan 1.1 Xiaomi 22101317C: WebView 104 loaded the avatar and Mock greeting, native `AudioRecord` was confirmed at 16 kHz mono with foreground microphone permission, and one `wave` debug action was visually observed. A 30-minute stability sample completed (31 points, renderer alive 31/31; PSS/RSS and 34.0°C recorded). Real speech/VAD, audible confirmation, full action matrix, active-response resume, reliable 10-minute false-trigger count, and 10 true interruptions remain unverified. See [native audio report](../testing/2026-10-13-native-audio-plan1-1-report.md).
 - Known environment limits: Plan 1's 2 GB AVD renderer kill during Silero VAD load remains unresolved for path A; Plan 1.1 does not load Silero in the product path.
 
 ## Plan 1 acceptance (from the plan overview) — status
@@ -38,7 +38,7 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 ## Next steps
 
-1. Complete Plan 1.1 on the connected Xiaomi: real voice/VAD interruption, active-response resume, all five actions, 10-minute false-trigger count, 10 true interruptions, and 30-minute stability. Keep Plan 1's WebView ≥120 and A/B measurements separate.
+1. Complete the remaining Plan 1.1 Xiaomi checklist: real voice/VAD interruption, audible playback confirmation, active-response resume, all five actions, reliable 10-minute false-trigger count, and 10 true interruptions. Keep the completed 30-minute sample, Plan 1's WebView ≥120 gate, and A/B measurements separate.
 2. Run the remaining Plan 1 probe/A-B/Task 18 checks and desktop Chrome E2E when their respective environments are available.
 3. Write Plan 2 only after a model Key is available and ADR-001 has real A/B data.
 

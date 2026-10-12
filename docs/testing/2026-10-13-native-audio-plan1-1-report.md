@@ -2,6 +2,8 @@
 
 日期：2026-10-13
 
+本次续验结论：设备启动冒烟和 30 分钟稳定性采样完成；需要人工说话、人工听感和逐项动作/活动回复操作的项目仍未完成，不将其记为通过。
+
 ## 范围与设备
 
 - 路径：Plan 1.1 / 方案 B。Flutter 负责采集、VAD、播放和网关会话，WebView 负责头像和界面。
@@ -35,25 +37,57 @@ cd app && flutter build apk --release --dart-define=GATEWAY_URL=http://127.0.0.1
 ```text
 ADAPTER=mock APP_SECRET=<临时值> npm run dev -w gateway
 adb -s 88a198720422 reverse tcp:8787 tcp:8787
-adb -s 88a198720422 install -r app-debug.apk
-adb -s 88a198720422 install -r app-release.apk
+cd app && flutter build apk --debug --dart-define=GATEWAY_URL=http://127.0.0.1:8787 --dart-define=APP_SECRET=<同一临时值> --dart-define=AUDIO_PATH=B --dart-define=AUDIO_MODE=native
+adb -s 88a198720422 install -r build/app/outputs/flutter-apk/app-debug.apk
+adb -s 88a198720422 shell am force-stop com.anyidea.avatar_app
+adb -s 88a198720422 shell monkey -p com.anyidea.avatar_app 1
+adb -s 88a198720422 shell appops get com.anyidea.avatar_app RECORD_AUDIO
+adb -s 88a198720422 shell dumpsys media.audio_flinger
+adb -s 88a198720422 reverse --remove tcp:8787
+adb -s 88a198720422 reverse tcp:8787 tcp:8787
 ```
 
 观察结果：
 
 | 项目 | 状态 | 证据或限制 |
 |---|---|---|
-| WebView 页面和头像加载 | 已验证 | debug/release 截图均显示 TalkingHead 头像 |
-| Mock 问候字幕 | 已验证 | 页面显示问候字幕；未把文本复制到报告 |
-| 原生采集初始化 | 部分验证 | logcat 显示 `AudioRecord` 为 16000 Hz、单声道；未做真实说话检出 |
+| WebView 页面和头像加载 | 已验证 | debug APK 启动后截图显示 TalkingHead 头像；设备前台进程持续存在 |
+| Mock 问候字幕 | 已验证 | 页面显示 Mock 问候字幕；未把文本复制到报告 |
+| 原生采集初始化 | 已验证初始化，真实检出未验证 | `dumpsys media.audio_flinger` 显示产品进程有 16000 Hz、PCM16、单输入通道；`RECORD_AUDIO` 为 foreground/allow；未做真实说话检出 |
 | WebView 麦克风授权 | 已验证未走 WebView 授权回调 | 产品页面未配置 `onPermissionRequest`；权限由 Flutter/record 处理 |
-| 原生播放听感 | 未由自动化环境确认 | 设备上出现问候播放流程，但本报告不声称人工听感通过 |
+| 原生播放听感 | 未验证 | 自动化截图和系统音频状态无法证明人工听感；不声称可听播放通过 |
 | `wave` 动作 | 部分验证 | 调试面板发送固定 ASCII 测试命令后观察到挥手；其余四个动作未逐项留存视觉证据 |
-| 短断线 | 部分验证 | 停止并重启 Mock 网关后页面、头像和 AudioRecord 仍存活；无活动长回复，未证明 `session.resumed` |
+| 短断线/活动回复续接 | 未验证 | 曾在无活动长回复时移除并恢复 reverse；页面和 AudioRecord 存活，但未证明 `session.resumed` 或旧 PCM 丢弃 |
 | 真实语音/VAD 打断 | 未测 | 需要人工在设备前说话 |
-| 10 分钟静默误触发 | 未测 | — |
+| 10 分钟静默误触发 | 未判定 | 10 分钟匿名 UI 探针得到 1 次变化，但启动残留/控件索引变化无法归因于 VAD；不记为 0 次通过 |
 | 10 句真打断检出 | 未测 | — |
-| 30 分钟稳定性、RSS/PSS、温度 | 未测 | 只记录到一次启动期 `dumpsys meminfo`，不作为稳定性结论 |
+| 30 分钟稳定性、RSS/PSS、温度 | 已采样，音频错误归因不明 | 31 个 60 秒点；应用 PSS 570568→546773 kB，峰值 572259 kB；RSS 569312→543981 kB，峰值 569731 kB；温度 34.0°C；WebView renderer 存活 31/31；产品进程过滤的最终 logcat 音频 `E` 行 0，但 AudioFlinger 系统级输入统计 `err=297`，不能归因到应用 |
+
+## Task 7 Step 3 逐项结果
+
+| 检查项 | 结果 | 备注 |
+|---|---|---|
+| 打开应用、头像、问候、可听播放 | 头像和 Mock 问候已观察；可听播放未由人工确认 | 不把系统播放状态当成人工听感 |
+| 真实一句话、16 kHz 单声道、VAD speaking | 采集配置已确认；真实说话和 VAD speaking 未测 | 当前环境没有人工在设备前说话 |
+| 长回复期间真实打断、旧 PCM/字幕清理 | 未测 | 调试文本不替代真实打断 |
+| wave/nod/smile/turn/heart | 仅 wave 有既有视觉观察 | 其余四项未逐项留证 |
+| 活动回复断开/恢复、session resumed、旧 PCM 不播放 | 未测 | 断线操作发生在无活动长回复窗口 |
+| 静默 10 分钟自打断次数 | 未判定 | 匿名 UI 探针不可归因，不能记为 0 |
+| 10 次真实打断检出数 | 未测 | 未进行人工语音操作 |
+| 30 分钟 RSS/PSS、温度、音频错误、renderer | 已采样 | 见上表；系统级音频 `err=297` 归因不明 |
+
+## 真机采样摘要
+
+```text
+stability_samples=31
+app_pss_kb=570568..546773; peak=572259
+app_rss_kb=569312..543981; peak=569731
+battery_temperature_c=34.0 throughout
+webview_renderer_alive=31/31
+product_scoped_audio_error_lines=0 (final logcat filter)
+audioflinger_input_timestamp_errors=297 (system-level, attribution unknown)
+silent_ui_probe_changes=1 (not attributable; not a self-trigger result)
+```
 
 ## Plan 1 与兼容性边界
 
