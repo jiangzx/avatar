@@ -1,6 +1,7 @@
 {
   "GATEWAY_URL": "http://127.0.0.1:8787",
   "APP_SECRET": "same-as-gateway-APP_SECRET",
-  "AUDIO_PATH": "A",
+  "AUDIO_PATH": "B",
+  "AUDIO_MODE": "native",
   "ECHO": "true"
 }

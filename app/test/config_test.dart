@@ -5,6 +5,11 @@ void main() {
   const url = 'http://127.0.0.1:8787';
   const good = 'a-real-random-secret-0123456789';
 
+  test('native product config defaults to B', () {
+    expect(AppConfig.audioPath, 'B');
+    expect(AppConfig.audioMode, 'native');
+  });
+
   test('accepts a usable config', () {
     expect(AppConfig.check(gatewayUrl: url, appSecret: good, audioPath: 'A'), isNull);
   });

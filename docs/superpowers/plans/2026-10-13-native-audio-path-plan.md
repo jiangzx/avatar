@@ -424,7 +424,7 @@ git commit -m "feat(web): render native audio bridge events"
 - Produces an `AvatarPage` that requests `RECORD_AUDIO` once in Flutter, creates the native session after WebView sends `ready`, and forwards `NativeUiEvent.toJson()` through `runJavaScript(jsCall(...))`.
 - Produces `AppConfig.audioPath == 'B'` and `AppConfig.audioMode == 'native'` defaults for Plan 1.1; `SPIKE=native_audio` remains an independent spike page.
 
-- [ ] **Step 1: Write failing widget/config tests**
+- [x] **Step 1: Write failing widget/config tests**
 
 ```dart
 test('native product config defaults to B', () {
@@ -438,19 +438,19 @@ testWidgets('AvatarPage does not grant WebView microphone permission', (tester) 
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and verify failure**
+- [x] **Step 2: Run the focused tests and verify failure**
 
 Run: `cd app && flutter test test/config_test.dart test/avatar_page_test.dart`
 
 Expected: FAIL because the new defaults and native page wiring are not present.
 
-- [ ] **Step 3: Implement App wiring**
+- [x] **Step 3: Implement App wiring**
 
 `AvatarPage` must keep the local asset server and WebView navigation allowlist, but remove `onPermissionRequest` microphone grants and `setMediaPlaybackRequiresUserGesture(false)`. On `JsReady`, construct `NativeSessionController` with production dependencies and start it; route each emitted event to JS. The overlay continues to display subtitles, state, status, metrics, diagnostics and mute/end controls. `dispose` must await or safely trigger controller shutdown before stopping the local asset server.
 
 Keep a test constructor or dependency factory for `AvatarPage` so widget tests can inject a fake controller and never open a real microphone or socket.
 
-- [ ] **Step 4: Run Flutter tests, analyzer, web build, and APK build**
+- [x] **Step 4: Run Flutter tests, analyzer, web build, and APK build**
 
 Run: `cd app && flutter test && flutter analyze && flutter build apk --debug --dart-define-from-file=dev.json`
 
