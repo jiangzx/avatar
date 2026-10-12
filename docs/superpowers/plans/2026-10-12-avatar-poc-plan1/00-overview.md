@@ -38,8 +38,8 @@
 - 打断：AI 播放期间，模型侧 `userSpeechStarted` 需本地 VAD 在 300 ms 内确认才取消；客户端 `playback.stopped(interrupted)` 立即取消。
 - Ledger 只在内存；摘要触发：>16 轮或 >6000 tokens（按字数估算）；保留最近 8 轮原文。
 - 断线宽限期 60 秒；`connectToken` 5 分钟有效且只用一次；`resumeToken` 每次重连轮换。
-- WebView 只加载 `http://127.0.0.1:<随机端口>/<随机 token>/`；不开文件访问；只授予麦克风权限；release/debug 都只对 `127.0.0.1` 放行明文。
-- 所有【预估】/待调参数值集中在配置文件，不散落在代码里。
+- WebView 只加载 `http://127.0.0.1:<随机端口>/<随机 token>/`；不开文件访问；只授予麦克风权限；release 包只对 `127.0.0.1` 放行明文；debug 包（`app/android/app/src/debug/res/xml/network_security_config.xml`）放开明文，这是有意为之的 debug 专用例外，用于模拟器 `10.0.2.2` / 真机局域网网关联调（见 Task 16、Task 18 第 8 项），不得带入 release。
+- 所有【预估】/待调参数值不散落在代码里：网关运行期参数放配置文件/环境变量（`gateway/config/director.json`、`gateway/.env` 的 `MOCK_SPEECH_THRESHOLD`）；avatar-core 的前端/算法调参值，Plan 1 允许写成**命名并导出的常量**（`DEFAULT_MOUTH`、`DEFAULT_DETECTOR`、`FADE_MS`、`ACTION_TUNING`、`THINKING_TIMEOUT_MS`、`LISTEN_NOD_EVERY_MS`），放在所在模块顶部并在注释里标 `TUNABLE`，函数体内不写裸调参数值；Task 18 调参只改这些常量。
 - **阻塞处理规则（用户要求）：** 任何步骤卡住（环境、SDK、真机、无法核实的第三方 API、工具不稳定）时，限时排查（≤20 分钟）；仍未解决则做一次手动验证，按模板记入 `docs/blockers.md`，然后跳过继续下一个任务；进度汇报中列出所有跳过项。不得静默跳过。
 
 ## Plan 1 范围分级
@@ -62,7 +62,7 @@
 | 8 | 7 | `gateway/src/session/{tokens,manager}.ts`、`gateway/src/server/`、`gateway/src/index.ts` | 9–17 |
 | 9 | 1，且在 Task 2 提交之后（两者都改 `package-lock.json`） | `avatar-core/` 骨架、`src/audio/{pcm,mouth,energy}.ts`、占位 `src/main.ts` | 3–8、15–16 |
 | 10 / 11 / 12 / 13 | 9 | 各自文件（见任务）；Task 12 只依赖 Task 8 的文档契约，不依赖其代码 | 彼此、3–8、15–16 |
-| 14 | 10–13 | `avatar-core/src/{bridge,subtitles,app,main}.ts`、`index.html` | 17 |
+| 14 | 10–13；8（Step 7 运行网关并读取 Task 8 Step 9 生成的 `gateway/.env`） | `avatar-core/src/{bridge,subtitles,app,main}.ts`、`index.html` | 17 |
 | 15 | 0（Flutter/Android 工具链） | `app/` 骨架、`scripts/build-web.sh`、`spikes/webview-probe/`、`.gitignore` 末尾一行 | 1–13 |
 | 16 | 15、模拟器（真机复测见检查点 ①） | `app/lib/{overlay,avatar_page,main}.dart`、Android 配置 | 2–13 |
 | 17 | 9–11、16；代码步骤可在模拟器上写完，**测量与结论只能用真机** | spike 页、`app/lib/spike/`、`app/lib/{config,main}.dart`、`avatar-core/vite.config.ts`、ADR-001 | 12–14 |

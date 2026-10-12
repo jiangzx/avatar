@@ -274,9 +274,30 @@ export interface ActionAssets {
 
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 
+/** TUNABLE (estimates): action parameters tuned on device in Task 18. */
+export const ACTION_TUNING = {
+  nod: {
+    subtle: { amplitude: 0.06, cycles: 1, durationMs: 500 }, // amplitude in radians
+    full: { amplitude: 0.18, cycles: 2, durationMs: 900 },
+  },
+  /** Left-hand finger rotations layered on the "handup" pose for the finger heart. */
+  heartFingers: {
+    'LeftHandThumb1.rotation': { x: 0.6, y: -0.3, z: 0.3 },
+    'LeftHandThumb2.rotation': { x: 0.1, y: 0, z: 0.2 },
+    'LeftHandIndex1.rotation': { x: 0.9, y: 0, z: 0 },
+    'LeftHandIndex2.rotation': { x: 0.6, y: 0, z: 0 },
+    'LeftHandMiddle1.rotation': { x: 1.4, y: 0, z: 0 },
+    'LeftHandMiddle2.rotation': { x: 1.5, y: 0, z: 0 },
+    'LeftHandRing1.rotation': { x: 1.4, y: 0, z: 0 },
+    'LeftHandRing2.rotation': { x: 1.5, y: 0, z: 0 },
+    'LeftHandPinky1.rotation': { x: 1.4, y: 0, z: 0 },
+    'LeftHandPinky2.rotation': { x: 1.5, y: 0, z: 0 },
+  },
+};
+
 /**
  * Executes the fixed action set. Every action layers on top of idle/speaking, so talking while waving works.
- * Values marked 【待调参】 are tuned on device (Task 18).
+ * Tunable values live in ACTION_TUNING above.
  */
 export class ActionPlayer {
   private turning = false;
@@ -317,7 +338,10 @@ export class ActionPlayer {
 
   async wave(): Promise<void> {
     if (this.assets.waveFbx && this.waveFbxOk === null) {
-      this.waveFbxOk = (await fetch(this.assets.waveFbx, { method: 'HEAD' }).catch(() => null))?.ok ?? false;
+      // GET, not HEAD: the app's LocalAssetServer (Task 15) only serves GET.
+      const res = await fetch(this.assets.waveFbx).catch(() => null);
+      this.waveFbxOk = res?.ok ?? false;
+      void res?.body?.cancel();
     }
     if (this.assets.waveFbx && this.waveFbxOk) await this.head.playAnimation(this.assets.waveFbx, null, 2.4);
     else this.head.playGesture('handup', 2.4, true, 400);
@@ -328,9 +352,7 @@ export class ActionPlayer {
     const target = this.head.mtAvatar.headRotateX;
     if (!target || this.nodding) return;
     this.nodding = true;
-    const amplitude = subtle ? 0.06 : 0.18; // radians 【待调参】
-    const cycles = subtle ? 1 : 2;
-    const duration = subtle ? 500 : 900;
+    const { amplitude, cycles, durationMs: duration } = subtle ? ACTION_TUNING.nod.subtle : ACTION_TUNING.nod.full;
     const t0 = performance.now();
     const step = (now: number) => {
       const p = Math.min(1, (now - t0) / duration);
@@ -373,7 +395,7 @@ export class ActionPlayer {
     requestAnimationFrame(step);
   }
 
-  /** One-hand finger heart built from the "handup" arm pose with custom fingers. 【待调参】 */
+  /** One-hand finger heart built from the "handup" arm pose with custom fingers (ACTION_TUNING.heartFingers). */
   heart(): void {
     if (!this.heartRegistered) {
       const base = this.head.gestureTemplates.handup;
@@ -381,19 +403,7 @@ export class ActionPlayer {
         this.head.playGesture('handup', 2.5, true, 400);
         return;
       }
-      this.head.gestureTemplates.heart = {
-        ...base,
-        'LeftHandThumb1.rotation': { x: 0.6, y: -0.3, z: 0.3 },
-        'LeftHandThumb2.rotation': { x: 0.1, y: 0, z: 0.2 },
-        'LeftHandIndex1.rotation': { x: 0.9, y: 0, z: 0 },
-        'LeftHandIndex2.rotation': { x: 0.6, y: 0, z: 0 },
-        'LeftHandMiddle1.rotation': { x: 1.4, y: 0, z: 0 },
-        'LeftHandMiddle2.rotation': { x: 1.5, y: 0, z: 0 },
-        'LeftHandRing1.rotation': { x: 1.4, y: 0, z: 0 },
-        'LeftHandRing2.rotation': { x: 1.5, y: 0, z: 0 },
-        'LeftHandPinky1.rotation': { x: 1.4, y: 0, z: 0 },
-        'LeftHandPinky2.rotation': { x: 1.5, y: 0, z: 0 },
-      };
+      this.head.gestureTemplates.heart = { ...base, ...ACTION_TUNING.heartFingers };
       this.heartRegistered = true;
     }
     this.head.playGesture('heart', 2.5, true, 400);
@@ -606,8 +616,8 @@ export interface AppConfig {
   echo: EchoMode;
 }
 
-const THINKING_TIMEOUT_MS = 8000;
-const LISTEN_NOD_EVERY_MS = 3500; // 【待调参】
+export const THINKING_TIMEOUT_MS = 8000; // TUNABLE
+export const LISTEN_NOD_EVERY_MS = 3500; // TUNABLE (estimate)
 
 export class AppController {
   private readonly playback: PlaybackController;
@@ -951,9 +961,10 @@ function installDevPanel(): void {
 - [ ] **Step 7: 桌面 Chrome 手动验证（Mock 全链路）**
 
 ```bash
+# .env.local is for desktop debugging only (gitignored); scripts/build-web.sh (Task 15) builds without it and refuses a bundle containing the secret.
 cp avatar-core/.env.example avatar-core/.env.local
 sed -i '' "s/^VITE_APP_SECRET=.*/VITE_APP_SECRET=$(grep APP_SECRET gateway/.env | cut -d= -f2)/" avatar-core/.env.local
-npm run dev -w gateway &        # terminal 1
+npm run dev -w gateway         # terminal 1 (foreground: item 6 below stops it with Ctrl-C)
 npm run dev -w avatar-core      # terminal 2，打开 http://localhost:5173
 ```
 
@@ -963,10 +974,12 @@ npm run dev -w avatar-core      # terminal 2，打开 http://localhost:5173
 1. 2 秒内虚拟人开口说出 Mock 问候语，嘴部随语音开合，日志出现 `⏱ greeting_ms`。
 2. 随便说一句话：Mock 不识别内容，按 `gateway/mock/script.json` 的 `turns` 顺序给出识别结果（第一句是"挺好的，刚吃完午饭"）；日志依次出现 `● listening`、`● thinking`、`● speaking`；字幕显示脚本文本。
 3. AI 说话时开口插话：声音在约 0.2 秒内停止，日志出现 `⏱ interrupt_stop_ms`，AI 字幕停在被打断处，之后不再出现旧回复的声音或文字。
-4. 调试框输入"给我比个心"回车：虚拟人做比心手势（效果粗糙可以接受，Task 18 调参），并说"给你比个心！"；只执行一次动作。
+4. 调试框输入"给我比心"回车（Mock 文字匹配用 `includes('比心')`，"比个心"不会命中脚本；关键词路由 `/比个?心/` 两种说法都命中）：虚拟人做比心手势（效果粗糙可以接受，Task 18 调参），并说"给你比个心！"；只执行一次动作。
 5. 分别输入"挥挥手""点点头""对我笑一下""转个身看看"，各动作可见且不打断口型。
 6. 停止网关（Ctrl-C）再在 10 秒内重启：日志出现 `[reconnecting]` → `[open]`，但网关重启后旧会话已不存在，客户端应新建会话并重新问候，**问候有声音、有字幕**（验证 `session.ready` 重置了门控；之前被打断过的序号不能把新会话的回复静音）。真正的续接在 Task 18 用断网测试。
 7. 网关终端日志里没有任何对话文本。
+
+验证结束：两个终端分别 Ctrl-C 停止 avatar-core 与网关；`lsof -nP -iTCP:8787 -sTCP:LISTEN` 应无输出。
 
 任何一项卡住超过 20 分钟：按阻塞规则记入 `docs/blockers.md`，继续推荐顺序中的下一个任务。
 

@@ -436,7 +436,7 @@ export interface MouthOptions {
   releaseMs: number;
 }
 
-/** 【预估】values, tuned on device in Task 18. */
+/** TUNABLE (estimates), tuned on device in Task 18. */
 export const DEFAULT_MOUTH: MouthOptions = { noiseFloor: 0.01, gain: 6, attackMs: 30, releaseMs: 80 };
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -529,7 +529,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces:
   - `class PlaybackGate`：`active: number | null`、`start(seq)`、`accepts(seq): boolean`、`cancel(seq)`、`finish(seq)`、`resetBelow(lastSeq)`、`reset()`
   - `interface PlaybackEvents { onFirstAudio(seq): void; onEnded(seq, playedMs): void; onStopped(seq, playedMs): void; onProgress(seq, playedMs): void; onLevel(features: AudioFeatures, dtMs: number): void }`
-  - `class PlaybackController(events)`：`init(): Promise<void>`、`resume(): Promise<void>`、`activeSeq`、`onResponseStart(seq)`、`push(seq, pcm24k)`、`end(seq)`、`interrupt(): { seq: number; playedMs: number } | null`、`cancelled(seq)`、`resetAfterResume(lastSeq)`、`resetForNewSession()`、`playedMsFor(seq)`
+  - `class PlaybackController(events)`：`init(): Promise<void>`、`resume(): Promise<void>`、`activeSeq`、`onResponseStart(seq)`、`push(seq, pcm24k)`、`end(seq)`、`interrupt(): { seq: number; playedMs: number } | null`、`cancelled(seq)`、`resetAfterResume(lastSeq)`、`resetForNewSession()`、`playedMsFor(seq)`、`contextState: AudioContextState | 'none'`（getter，Task 14 上报 `audio_context` 诊断用）
 
 Worklet 消息协议（主线程 → worklet）：`{type:'push', seq, samples: Float32Array}`、`{type:'end', seq}`、`{type:'stop', fadeMs}`；（worklet → 主线程）：`{type:'started', seq}`、`{type:'progress', seq, playedSamples}`（约每 100 ms）、`{type:'drained', seq, playedSamples}`、`{type:'stopped', seq, playedSamples}`、`{type:'level', rms, zcr, samples}`（约每 16 ms）。
 
@@ -809,7 +809,7 @@ type OutMsg =
   | { type: 'stopped'; seq: number; playedSamples: number }
   | { type: 'level'; rms: number; zcr: number; samples: number };
 
-const FADE_MS = 30;
+export const FADE_MS = 30; // TUNABLE
 
 /** Plays streamed 24 kHz PCM with per-response gating and instant barge-in. */
 export class PlaybackController {
@@ -1016,7 +1016,8 @@ Expected: FAIL，无法解析模块。
 `avatar-core/src/audio/vad.ts`:
 
 ```ts
-import { MicVAD } from '@ricky0123/vad-web';
+// Type-only import: vad-web/onnxruntime-web load lazily in start(), so vitest (node) can import this module.
+import type { MicVAD } from '@ricky0123/vad-web';
 
 export interface DetectorOptions {
   frameMs: number;
@@ -1028,7 +1029,7 @@ export interface DetectorOptions {
   hysteresis: number;
 }
 
-/** 【预估】values; Silero v5 frames are 512 samples @16 kHz = 32 ms. */
+/** TUNABLE (estimates); Silero v5 frames are 512 samples @16 kHz = 32 ms. */
 export const DEFAULT_DETECTOR: DetectorOptions = {
   frameMs: 32,
   threshold: 0.5,
@@ -1103,6 +1104,7 @@ export class LocalVad {
   }
 
   async start(stream: MediaStream, cb: VadCallbacks): Promise<void> {
+    const { MicVAD } = await import('@ricky0123/vad-web');
     this.vad = await MicVAD.new({
       model: 'v5',
       baseAssetPath: './vad/',
@@ -1134,7 +1136,7 @@ export class LocalVad {
 }
 ```
 
-注：已按 vad-web 0.0.31 的 `dist/real-time-vad.d.ts` 核实：`MicVAD.new` 接受上面全部选项（含 `getStream`/`pauseStream`/`resumeStream`/`ortConfig`/`startOnLoad`），实例有 `destroy()`；`onFrameProcessed` 的 `probs.isSpeech` 是 number。
+注：`vad.ts` 顶部只做 `import type`，`MicVAD` 在 `start()` 里动态 import，所以 `vad.test.ts` 在 node 中只加载 `SpeechDetector` 纯逻辑，不会加载 vad-web / onnxruntime-web。已按 vad-web 0.0.31 的 `dist/real-time-vad.d.ts` 核实：`MicVAD.new` 接受上面全部选项（含 `getStream`/`pauseStream`/`resumeStream`/`ortConfig`/`startOnLoad`），实例有 `destroy()`；`onFrameProcessed` 的 `probs.isSpeech` 是 number。
 
 - [ ] **Step 4: 运行测试确认通过**
 
@@ -1390,15 +1392,26 @@ describe('GatewayClient', () => {
     expect(ws.json(0).type).toBe('session.start');
   });
 
-  it('backs off while the gateway is unreachable, then gives up resuming after maxResumeMs', async () => {
-    const t = setup([{ status: 200, body: tokens(1) }, ...Array.from({ length: 10 }, () => ({ status: 503, body: {} })), { status: 200, body: tokens(9) }]);
+  it('backs off while the gateway is unreachable, then falls back to a fresh session after maxResumeMs', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }, ...Array.from({ length: 5 }, () => ({ status: 503, body: {} })), { status: 200, body: tokens(9) }]);
     await t.client.start();
     FakeWS.instances[0].open();
     FakeWS.instances[0].drop();
-    await vi.advanceTimersByTimeAsync(12_000);
-    const urls = t.calls.map((c) => c.url);
-    expect(urls.filter((u) => u.endsWith('/session/resume')).length).toBeGreaterThanOrEqual(3);
-    expect(urls.lastIndexOf('http://gw.test/session')).toBeGreaterThan(0); // fell back to a fresh session
+    const resumes = () => t.calls.filter((c) => c.url.endsWith('/session/resume')).length;
+    // Retries at 0.5, 1.5, 3.5, 7.5 s (backoff 500/1000/2000/4000 ms).
+    await vi.advanceTimersByTimeAsync(7_500);
+    expect(resumes()).toBe(4);
+    expect(FakeWS.instances).toHaveLength(1);
+    // 5th retry at 11.5 s fails; 11.5 s > maxResumeMs (10 s), so the client creates a fresh session instead of a 6th retry.
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(resumes()).toBe(5);
+    expect(t.calls.map((c) => c.url).at(-1)).toBe('http://gw.test/session');
+    expect(FakeWS.instances).toHaveLength(2);
+    const ws = FakeWS.instances[1];
+    expect(ws.url).toBe('ws://gw.test/ws?token=c9');
+    ws.open();
+    expect(ws.json(0).type).toBe('session.start');
+    expect(t.statuses.at(-1)).toBe('open');
   });
 
   it('close() ends the session without reconnecting', async () => {
@@ -1603,7 +1616,7 @@ export class GatewayClient {
 Run: `npm test -w avatar-core -- gatewayClient`
 Expected: 7 个测试 PASS。
 
-若 "backs off ... gives up" 失败：退避序列为 500、1000、2000、4000、4000 ms，累计约 11.5 秒，`maxResumeMs: 10_000` 应在第 5 次重试前切换为新建会话；确认 `scheduleResume` 每次都先检查 `Date.now() - disconnectedAt`。
+若 "backs off ... falls back" 失败：退避序列为 500、1000、2000、4000、4000 ms，重试发生在断开后 0.5、1.5、3.5、7.5、11.5 秒；第 5 次重试（11.5 s）失败时累计断开已超过 `maxResumeMs: 10_000`，`scheduleResume` 不再排第 6 次重试，而是立即 `restartFresh()`（新建会话成功 → 新 WS 发 `session.start`）。确认 `scheduleResume` 每次都先检查 `Date.now() - disconnectedAt`，且 vitest 的假定时器同时接管了 `Date.now()`。
 
 - [ ] **Step 5: 全量测试、类型检查与提交**
 

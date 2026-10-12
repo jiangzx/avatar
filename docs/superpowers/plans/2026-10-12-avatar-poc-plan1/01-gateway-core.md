@@ -1647,7 +1647,7 @@ export interface GatewayConfig {
   adapter: 'mock';
   allowDebugText: boolean;
   devOrigins: string[];
-  /** MockAdapter speech threshold (RMS, 16-bit). 【预估】; raise if speaker echo triggers fake turns. */
+  /** MockAdapter speech threshold (RMS, 16-bit). TUNABLE (estimate, env MOCK_SPEECH_THRESHOLD); raise if speaker echo triggers fake turns. */
   mockSpeechThreshold: number;
 }
 

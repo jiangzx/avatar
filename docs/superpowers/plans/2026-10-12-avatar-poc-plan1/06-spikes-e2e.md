@@ -255,6 +255,8 @@ spike A 页面用 Task 15/16 已有的 `--dart-define=PAGE=spike-aec.html` 打�
 
 - [ ] **Step 4: Spike B 页面（Flutter 原生链路）**
 
+**未核实假设（AGENTS.md）：** 下面用到的 `flutter_pcm_sound` 3.3.3 API（`FlutterPcmSound.setup(sampleRate:, channelCount:)`、`setFeedThreshold`、`setFeedCallback`、`feed(PcmArrayInt16(bytes: ...))`、`start()`）尚未按包源码核实（2026-10-12 本机 `~/.pub-cache` 中没有该包）。写代码前先 `cd app && flutter pub get`，然后对照 `~/.pub-cache/hosted/pub.dev/flutter_pcm_sound-3.3.3/lib/` 核对方法名、参数名与回调签名；若不一致，按包源码改写本文件，并把差异记入 `docs/blockers.md`（模板见 Task 0）。
+
 `app/lib/spike/native_audio_spike.dart`:
 
 ```dart
@@ -485,7 +487,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `docs/testing/mock-e2e-checklist.md`, `docs/testing/YYYY-MM-DD-mock-e2e-report.md`
-- Modify（按调参结果）: `avatar-core/src/audio/mouth.ts`（`DEFAULT_MOUTH`）、`avatar-core/src/avatar/actions.ts`（比心手指角度、点头幅度）、`avatar-core/src/audio/vad.ts`（`DEFAULT_DETECTOR`）、`gateway/.env`（`MOCK_SPEECH_THRESHOLD`，不入库）
+- Modify（按调参结果）: `avatar-core/src/audio/mouth.ts`（`DEFAULT_MOUTH`）、`avatar-core/src/avatar/actions.ts`（`ACTION_TUNING`：比心手指角度、点头幅度）、`avatar-core/src/audio/vad.ts`（`DEFAULT_DETECTOR`）、`gateway/.env`（`MOCK_SPEECH_THRESHOLD`，不入库）
 
 - [ ] **Step 0: 完整页面首跑（先模拟器，检查点 ② 再用真机）**
 
@@ -494,7 +496,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea
 ./scripts/build-web.sh                      # 完整模式
-npm run dev -w gateway &
+# Run the gateway in a separate terminal (foreground): `npm run dev -w gateway`; later steps restart it, stop it with Ctrl-C after Task 18.
 adb reverse tcp:8787 tcp:8787
 cd app && flutter run --dart-define-from-file=dev.json   # PAGE 默认 index.html
 ```
@@ -541,12 +543,12 @@ Mock 不识别语音内容：每检测到一段说话，就按 `gateway/mock/scr
 
 写代码阶段先在模拟器上执行【模拟器】和【两者】项；真机检查点 ② 执行【真机】和【两者】项。按清单执行；每项结束后在调试面板点"复制 CSV"，粘贴到报告文件的附录。帧率测量：`chrome://inspect` → inspect WebView → Performance 面板录制 10 秒，分别在 idle 和 speaking 状态下读取 FPS。
 
-- [ ] **Step 3: 调参（只改配置常量，改完重新 `./scripts/build-web.sh` 并复测对应项）**
+- [ ] **Step 3: 调参（优先只改 `TUNABLE` 常量/配置；下面标"逻辑改动"的退路会改代码，需跑 `npm run typecheck -w avatar-core && npm test -w avatar-core` 并在报告中注明。改完重新 `./scripts/build-web.sh` 并复测对应项）**
 
 - 口型张合过小/过大：调 `DEFAULT_MOUTH.gain`（建议 4–10）、`noiseFloor`（0.005–0.03）。
-- 比心手势不像：在 `chrome://inspect` 控制台里临时修改 `gestureTemplates.heart` 的手指角度并实时调用 `playGesture('heart', 2.5, true)`，得到满意值后写回 `actions.ts`。若到本步结束仍不过关，改为 spec §8.4 的退路"双臂举过头顶的大比心"（用 `playPose` 或新的 gesture 模板），并在报告中注明。
-- 点头太僵/太小：调 `nod()` 的 `amplitude` 与 `duration`。如果 `mtAvatar.headRotateX` 不存在导致不点头，记入 `docs/blockers.md`，改用 Mixamo "Head Nod Yes" FBX + `playAnimation`。
-- 转身出画面：在 `turn()` 中把整圈改为 ±90° 往返，或在转身期间调用 `setView('full')` 后恢复 `'mid'`。
+- 比心手势不像：在 `chrome://inspect` 控制台里临时修改 `gestureTemplates.heart` 的手指角度并实时调用 `playGesture('heart', 2.5, true)`，得到满意值后写回 `actions.ts` 的 `ACTION_TUNING.heartFingers`。若到本步结束仍不过关（逻辑改动），改为 spec §8.4 的退路"双臂举过头顶的大比心"（用 `playPose` 或新的 gesture 模板），并在报告中注明。
+- 点头太僵/太小：调 `ACTION_TUNING.nod` 的 `amplitude` 与 `durationMs`。如果 `mtAvatar.headRotateX` 不存在导致不点头，记入 `docs/blockers.md`，（逻辑改动）改用 Mixamo "Head Nod Yes" FBX + `playAnimation`。
+- 转身出画面（逻辑改动）：在 `turn()` 中把整圈改为 ±90° 往返，或在转身期间调用 `setView('full')` 后恢复 `'mid'`。
 - 打断太灵敏/不灵敏：调 `DEFAULT_DETECTOR.bargeInThreshold`（0.6–0.9）与 `startMs`（100–250），以 Task 17 的数据为依据。
 - Mock 被回声误触发（没人说话却出现用户字幕）：调高 `gateway/.env` 的 `MOCK_SPEECH_THRESHOLD`，重启网关后复测第 3、5 项。
 

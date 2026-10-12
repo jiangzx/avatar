@@ -101,6 +101,7 @@ describe('Session', () => {
     expect(of(s.sent, 'response.start')).toEqual([{ type: 'response.start', responseSeq: 1, kind: 'greeting' }]);
     expect(assistantText(s.sent, 1)).toBe('你好呀');
     expect(of(s.sent, 'response.end')).toEqual([{ type: 'response.end', responseSeq: 1 }]);
+    expect(s.audio.length).toBeGreaterThan(0);
     expect(s.audio.every((a) => a.seq === 1)).toBe(true);
     expect(s.session.ledger.recent).toEqual([{ role: 'assistant', text: '你好呀', ts: expect.any(Number) }]);
   });
@@ -132,6 +133,17 @@ describe('Session', () => {
     expect(last.interrupted).toBe(true);
     expect('我在听'.startsWith(last.text)).toBe(true);
     expect(s.mocks[0].notes).toHaveLength(1);
+  });
+
+  it('does not inject a context note when nothing of the reply was played', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(150);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 0, reason: 'interrupted' });
+    expect(of(s.sent, 'response.cancelled')).toEqual([{ type: 'response.cancelled', responseSeq: 2 }]);
+    expect(s.session.ledger.recent.some((e) => e.role === 'assistant' && e.interrupted)).toBe(false); // blank text is not recorded
+    expect(s.mocks[0].notes).toEqual([]);
   });
 
   it('ignores model-only speech during playback but cancels once local VAD confirms', async () => {
@@ -217,6 +229,7 @@ describe('Session', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(of(second.sent, 'response.start')).toEqual([{ type: 'response.start', responseSeq: 2, kind: 'followup' }]);
     expect(assistantText(second.sent, 2)).toBe('还在吗');
+    expect(second.audio.length).toBeGreaterThan(0);
     expect(second.audio.every((a) => a.seq === 2)).toBe(true);
   });
 
@@ -529,7 +542,8 @@ export class Session {
     s.finalized = true;
     const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
     this.ledger.addAssistant(text, Date.now(), interrupted);
-    if (interrupted && s.text.length > 0 && !this.adapter.supportsPlaybackTruncate) {
+    // Skip the note when nothing was played: an empty quote would mislead the model.
+    if (interrupted && text.length > 0 && !this.adapter.supportsPlaybackTruncate) {
       this.adapter.injectContextNote(`助手上一句只说到：「${text}」，被用户打断。`);
     }
     this.maybeSummarize();
@@ -603,7 +617,7 @@ export class Session {
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w gateway -- session`
-Expected: 12 个测试 PASS。
+Expected: 13 个测试 PASS。
 
 如果 "summarizes older turns" 失败：检查 `greetAndFinish` 之后 Ledger 内容应为 `[助手:你好呀]`，第一句后为 `[助手:你好呀, 用户:第一句, 助手:我在听]`，第二句写入后 `keepRecentTurns: 1` 的切点在"用户：第二句"，因此摘要包含前三条。
 
@@ -641,7 +655,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - 连接接管：同一会话出现新的合法连接时，**新连接生效**，服务端主动断开旧连接（手机切网后旧 TCP 可能处于半开状态，服务端迟迟收不到关闭）。旧连接之后的关闭事件被忽略，不会影响新连接
   - 心跳：服务端每 `heartbeatMs`（默认 10 秒）发一次 WS ping；上一个周期内既没收到 pong 也没收到任何消息就断开该连接，进入 60 秒宽限期
   - CORS：只对 `http://127.0.0.1:<port>` 与 `DEV_ORIGINS` 返回 `Access-Control-Allow-Origin`
-  - `class TokenStore`、`safeEqual(a, b)`；`class SessionManager(makeSession, graceMs = 60000)`：`create()`、`resume(sessionId, resumeToken)`、`claim(connectToken): { sessionId; connId } | null`、`attachSocket(sessionId, connId, terminate)`、`begin(sessionId, connId, kind, transport)`、`route(sessionId, connId)`、`disconnected(sessionId, connId)`、`end(sessionId)`、`shutdown()`、`size`
+  - `class TokenStore`、`safeEqual(a, b)`；`class SessionManager(makeSession, graceMs = 60000, unclaimedMs = 300000)`（`POST /session` 后 `unclaimedMs` 内没有 WS 认领的会话被回收，与 `connectToken` 5 分钟有效期一致）：`create()`、`resume(sessionId, resumeToken)`、`claim(connectToken): { sessionId; connId } | null`、`attachSocket(sessionId, connId, terminate)`、`begin(sessionId, connId, kind, transport)`、`route(sessionId, connId)`、`disconnected(sessionId, connId)`、`end(sessionId)`、`shutdown()`、`size`
   - `createGatewayServer(opts: GatewayServerOptions): Server`（`GatewayServerOptions.heartbeatMs?`）
 
 - [ ] **Step 1: 写失败的测试**
@@ -673,7 +687,7 @@ let server: Server | null = null;
 let manager: SessionManager | null = null;
 const sockets: WebSocket[] = [];
 
-async function boot(opts: { graceMs?: number; allowDebugText?: boolean; heartbeatMs?: number } = {}) {
+async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugText?: boolean; heartbeatMs?: number } = {}) {
   manager = new SessionManager(
     () => new Session({
       adapterFactory: () => new MockAdapter({ script, replyDelayMs: 10, charMs: 20, chunkMs: 20, paceFactor: 1 }),
@@ -682,6 +696,7 @@ async function boot(opts: { graceMs?: number; allowDebugText?: boolean; heartbea
       director,
     }),
     opts.graceMs ?? 60_000,
+    opts.unclaimedMs,
   );
   server = createGatewayServer({
     manager,
@@ -870,6 +885,15 @@ describe('gateway server', () => {
     expect((await post(base, '/session/resume', { sessionId: t.sessionId, resumeToken: t.resumeToken })).status).toBe(404);
     expect(manager!.size).toBe(0);
   });
+
+  it('reclaims sessions that are never connected', async () => {
+    const base = await boot({ unclaimedMs: 100 });
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    expect(manager!.size).toBe(1);
+    await new Promise((r) => setTimeout(r, 250));
+    expect(manager!.size).toBe(0);
+    await expect(connect(base, t.connectToken)).rejects.toThrow('http_401');
+  });
 });
 ```
 
@@ -967,6 +991,8 @@ export class SessionManager {
   constructor(
     private readonly makeSession: () => Session,
     private readonly graceMs = 60_000,
+    /** Matches the connect token TTL: a session nobody connects to is dropped. */
+    private readonly unclaimedMs = 5 * 60_000,
   ) {}
 
   get size(): number {
@@ -975,7 +1001,9 @@ export class SessionManager {
 
   create(): SessionTokens {
     const sessionId = randomUUID();
-    this.sessions.set(sessionId, { session: this.makeSession(), started: false, connId: 0, terminate: null, grace: null });
+    // claim() clears this timer, like the disconnect grace timer.
+    const grace = setTimeout(() => this.destroy(sessionId, 'unclaimed'), this.unclaimedMs);
+    this.sessions.set(sessionId, { session: this.makeSession(), started: false, connId: 0, terminate: null, grace });
     log('session_created', { sessions: this.sessions.size });
     return this.tokens.issue(sessionId);
   }
@@ -1324,7 +1352,7 @@ function readJson(req: IncomingMessage, limit: number): Promise<unknown> {
 - [ ] **Step 7: 运行测试确认通过**
 
 Run: `npm test -w gateway -- server`
-Expected: 10 个测试 PASS。
+Expected: 11 个测试 PASS。
 
 - [ ] **Step 8: 入口文件**
 
@@ -1390,14 +1418,17 @@ SECRET="$(grep -s '"APP_SECRET"' app/dev.json | sed -E 's/.*"APP_SECRET": *"([^"
 if [ -z "$SECRET" ] || [ "$SECRET" = "same-as-gateway-APP_SECRET" ]; then SECRET="$(openssl rand -hex 16)"; fi
 sed -i '' "s/^APP_SECRET=.*/APP_SECRET=$SECRET/" gateway/.env
 npm run start -w gateway &
+GW_PID=$!
 sleep 2
 curl -s http://127.0.0.1:8787/healthz
 curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8787/session
 curl -s -X POST -H "x-app-secret: $(grep APP_SECRET gateway/.env | cut -d= -f2)" http://127.0.0.1:8787/session
-kill %1
+kill "$GW_PID"
+sleep 1
+lsof -nP -iTCP:8787 -sTCP:LISTEN || echo 'gateway stopped'
 ```
 
-Expected: `{"ok":true}`；`401`；一段含 `sessionId`、`connectToken`、`resumeToken` 的 JSON。终端日志中只出现事件名和数值，没有任何对话文本。
+Expected: `{"ok":true}`；`401`；一段含 `sessionId`、`connectToken`、`resumeToken` 的 JSON；最后打印 `gateway stopped`（若仍有进程监听 8787，用 `lsof -ti tcp:8787 | xargs kill` 停掉）。终端日志中只出现事件名和数值，没有任何对话文本。
 
 - [ ] **Step 10: 全量测试、类型检查与提交**
 

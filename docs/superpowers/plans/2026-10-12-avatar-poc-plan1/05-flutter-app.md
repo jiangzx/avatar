@@ -89,7 +89,14 @@ mkdir -p app/assets/web
 if [ "$mode" != "--probe-only" ]; then
   if [ ! -f avatar-core/public/avatars/avatar.glb ] && [ -x scripts/fetch-assets.sh ]; then ./scripts/fetch-assets.sh; fi
   [ -f avatar-core/public/spike/speech-24k.pcm ] || ./scripts/make-mock-speech.sh
-  npm run build -w avatar-core
+  # The app receives APP_SECRET at runtime via --dart-define; never bake avatar-core/.env.local's desktop-debug
+  # VITE_APP_SECRET into the APK. Variables already in the environment take priority over Vite .env files.
+  VITE_APP_SECRET= npm run build -w avatar-core
+  gw_secret="$(grep -sE '^APP_SECRET=' gateway/.env | cut -d= -f2- || true)"
+  if [ -n "$gw_secret" ] && grep -rqF -- "$gw_secret" avatar-core/dist; then
+    echo "refusing: the gateway APP_SECRET was found in avatar-core/dist; check avatar-core/.env*" >&2
+    exit 1
+  fi
   cp -R avatar-core/dist/. app/assets/web/
 fi
 cp spikes/webview-probe/index.html app/assets/web/probe.html
@@ -913,8 +920,10 @@ class _AvatarPageState extends State<AvatarPage> {
       await platform.setAllowFileAccess(false);
       await AndroidWebViewController.enableDebugging(kDebugMode);
     }
+    if (!mounted) return;
+    // Assign before loading: the page may post 'ready' before loadRequest returns, and _send needs the controller.
+    setState(() => _controller = controller);
     await controller.loadRequest(base.resolve(AppConfig.page));
-    if (mounted) setState(() => _controller = controller);
   }
 
   void _onJs(String raw) {
@@ -1123,7 +1132,7 @@ cd /Users/JedJiang/SourceCode/anyidea
 
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea
-npm run dev -w gateway &                    # 可选：Task 8 完成后才有；没有就跳过，探针 gateway 项记"未测"
+npm run dev -w gateway & GW_PID=$!         # 可选：Task 8 完成后才有；没有就跳过，探针 gateway 项记"未测"
 adb reverse tcp:8787 tcp:8787               # 设备上的 127.0.0.1:8787 → 电脑网关（模拟器同样支持；真机走 USB，不受手机网络影响）
 cd app && flutter run --dart-define-from-file=dev.json --dart-define=PAGE=probe.html
 ```
@@ -1155,6 +1164,8 @@ adb shell am start -n com.anyidea.avatar_app/.MainActivity
 ```
 
 Expected: release 包的探针结果与 debug 包一致（`adb reverse` 仍需保持）。模拟器上先验证一次，真机检查点 ① 必须再验证。若页面空白且 `adb logcat | grep -i cleartext` 出现 `CLEARTEXT_NOT_PERMITTED`：说明 WebView 没有按 `domain-config` 放行 127.0.0.1，按 spec 的退路改用 `WebViewAssetLoader`（`https://appassets.androidplatform.net`），把这件事记入 `docs/blockers.md` 并作为 Plan 2 的第一项；Plan 1 其余验收先用 debug 包继续。
+
+Step 8–9 结束后停止网关：同一终端执行 `kill "$GW_PID"`；换过终端则 `lsof -ti tcp:8787 | xargs kill`。确认 `lsof -nP -iTCP:8787 -sTCP:LISTEN` 无输出。
 
 - [ ] **Step 10: 提交**
 
