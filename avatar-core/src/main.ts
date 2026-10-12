@@ -1,5 +1,6 @@
 import { AppController, type AppConfig } from './app.ts';
 import { hasFlutter, onFlutterMessage, postToFlutter, setDevSink, type ToFlutter } from './bridge.ts';
+import { parseFromFlutter } from './bridgeValidate.ts';
 
 const el = document.getElementById('avatar');
 if (!el) throw new Error('#avatar missing');
@@ -21,7 +22,14 @@ async function boot(cfg: AppConfig): Promise<void> {
   }
 }
 
-onFlutterMessage((m) => {
+// window.avatarBridge is reachable by any page script: validate before dispatch, never echo values.
+onFlutterMessage((raw: unknown) => {
+  const m = parseFromFlutter(raw);
+  if (!m) {
+    const isConfig = typeof raw === 'object' && raw !== null && (raw as { type?: unknown }).type === 'config';
+    postToFlutter({ type: 'error', code: isConfig ? 'bad_config' : 'bad_message' });
+    return;
+  }
   if (m.type === 'config') {
     void boot({ gatewayUrl: m.gatewayUrl, appSecret: m.appSecret, audioPath: m.audioPath, avatarUrl: './avatars/avatar.glb', echo: m.echo ?? 'true' });
   } else {

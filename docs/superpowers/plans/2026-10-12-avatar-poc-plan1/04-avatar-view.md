@@ -496,9 +496,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 14: Bridge、字幕跟踪、AppController 与桌面调试
 
 **Files:**
-- Create: `avatar-core/src/bridge.ts`, `avatar-core/src/subtitles.ts`, `avatar-core/src/app.ts`
+- Create: `avatar-core/src/bridge.ts`, `avatar-core/src/bridgeValidate.ts`, `avatar-core/src/subtitles.ts`, `avatar-core/src/app.ts`
 - Modify: `avatar-core/index.html`, `avatar-core/src/main.ts`（整体替换 Task 9 的占位）
-- Test: `avatar-core/test/subtitles.test.ts`
+- Test: `avatar-core/test/subtitles.test.ts`, `avatar-core/test/bridgeValidate.test.ts`
 
 **Depends on:** Task 10–13。Bridge 契约（下方 `ToFlutter`/`FromFlutter`）是 Flutter Task 16 的依据；Task 15/16 已按此契约编写，执行中若需修改，两边同步并回报。
 
@@ -521,6 +521,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - Flutter → JS（调用 `window.avatarBridge.receive(obj)`）`FromFlutter`：
     - `{type:'config', gatewayUrl, appSecret, audioPath, echo?: 'true'|'all'}`
     - `{type:'mute', muted}`、`{type:'end'}`、`{type:'debugText', text}`
+    - 入站消息先经 `parseFromFlutter` 校验（形状不变）：`gatewayUrl` 须为 http/https、无 userinfo、主机在 `GATEWAY_HOST_ALLOWLIST`（127.0.0.1、localhost、10.0.2.2、10/8、172.16/12、192.168/16；Plan 2 扩展云端主机）；`appSecret` 非空且 ≤ `MAX_APP_SECRET_LEN`；`debugText.text` ≤ `MAX_DEBUG_TEXT_LEN`；非法消息回 `error` `bad_config`/`bad_message`
   - `class SubtitleTracker`：`onDelta(seq, delta): string | null`、`onAudio(seq, samples24k)`、`truncate(seq, playedMs): string`、`reset()`
   - `class AppController(el, config)`：`start()`、`handleFlutter(msg)`
 
@@ -991,11 +992,168 @@ export class AppController {
 
 - [x] **Step 6: 入口与桌面调试页**
 
+`avatar-core/src/bridgeValidate.ts`（Bridge 入站校验：`window.avatarBridge` 可被页面内任意脚本调用，FromFlutter 一律视为不可信；校验失败丢弃消息并回 `{type:'error', code:'bad_config'|'bad_message'}`，不回显、不记录取值。网关主机白名单 `GATEWAY_HOST_ALLOWLIST` 仅含开发/回环/局域网地址，Plan 2 接入云端主机时需扩展该常量）:
+
+```ts
+import type { FromFlutter } from './bridge.ts';
+
+/** Gateway hosts the WebView may talk to (dev/loopback/LAN only). Plan 2 adds the cloud host. */
+export const GATEWAY_HOST_ALLOWLIST = {
+  hosts: ['127.0.0.1', 'localhost', '10.0.2.2'],
+  cidrs: ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'],
+} as const; // TUNABLE
+export const MAX_APP_SECRET_LEN = 256; // TUNABLE
+export const MAX_DEBUG_TEXT_LEN = 500; // TUNABLE
+
+const AUDIO_PATHS = ['A', 'B'];
+const ECHO_MODES = ['true', 'all'];
+
+function ipv4ToInt(host: string): number | null {
+  const parts = host.split('.');
+  if (parts.length !== 4 || !parts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255)) return null;
+  return parts.reduce((acc, p) => acc * 256 + Number(p), 0);
+}
+
+function inCidr(ip: number, cidr: string): boolean {
+  const [base, bits] = cidr.split('/');
+  const b = ipv4ToInt(base!);
+  if (b === null) return false;
+  const size = 2 ** (32 - Number(bits));
+  return Math.floor(ip / size) === Math.floor(b / size);
+}
+
+function isAllowedGatewayUrl(raw: unknown): raw is string {
+  if (typeof raw !== 'string') return false;
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+  if (u.username || u.password) return false;
+  const host = u.hostname;
+  if ((GATEWAY_HOST_ALLOWLIST.hosts as readonly string[]).includes(host)) return true;
+  const ip = ipv4ToInt(host);
+  return ip !== null && GATEWAY_HOST_ALLOWLIST.cidrs.some((c) => inCidr(ip, c));
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Validates an untrusted Flutter -> JS message; returns a clean copy or null (fail closed). */
+export function parseFromFlutter(raw: unknown): FromFlutter | null {
+  if (!isObject(raw)) return null;
+  switch (raw.type) {
+    case 'config': {
+      const { gatewayUrl, appSecret, audioPath, echo } = raw;
+      if (!isAllowedGatewayUrl(gatewayUrl)) return null;
+      if (typeof appSecret !== 'string' || appSecret.length === 0 || appSecret.length > MAX_APP_SECRET_LEN) return null;
+      if (typeof audioPath !== 'string' || !AUDIO_PATHS.includes(audioPath)) return null;
+      if (echo !== undefined && (typeof echo !== 'string' || !ECHO_MODES.includes(echo))) return null;
+      return { type: 'config', gatewayUrl, appSecret, audioPath: audioPath as 'A' | 'B', echo: echo as 'true' | 'all' | undefined };
+    }
+    case 'mute':
+      return typeof raw.muted === 'boolean' ? { type: 'mute', muted: raw.muted } : null;
+    case 'end':
+      return { type: 'end' };
+    case 'debugText':
+      return typeof raw.text === 'string' && raw.text.length <= MAX_DEBUG_TEXT_LEN ? { type: 'debugText', text: raw.text } : null;
+    default:
+      return null;
+  }
+}
+```
+
+`avatar-core/test/bridgeValidate.test.ts`（先写，确认因模块不存在而失败，再实现）:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { MAX_APP_SECRET_LEN, MAX_DEBUG_TEXT_LEN, parseFromFlutter } from '../src/bridgeValidate.ts';
+
+const cfg = (over: Record<string, unknown> = {}) => ({
+  type: 'config',
+  gatewayUrl: 'http://10.0.2.2:8787',
+  appSecret: 's3cret',
+  audioPath: 'A',
+  echo: 'true',
+  ...over,
+});
+
+describe('parseFromFlutter', () => {
+  it('accepts a valid config and keeps only contract fields', () => {
+    expect(parseFromFlutter({ ...cfg(), extra: 1 })).toEqual(cfg());
+    expect(parseFromFlutter(cfg({ echo: undefined }))).toEqual({ ...cfg(), echo: undefined });
+    expect(parseFromFlutter(cfg({ audioPath: 'B', echo: 'all' }))).toEqual(cfg({ audioPath: 'B', echo: 'all' }));
+  });
+
+  it('accepts loopback, emulator and RFC1918 gateway hosts', () => {
+    for (const url of [
+      'http://127.0.0.1:8787',
+      'http://localhost:8787',
+      'http://10.0.2.2:8787',
+      'https://192.168.1.20:8787',
+      'http://10.1.2.3',
+      'http://172.16.0.1',
+      'http://172.31.255.254',
+    ]) {
+      expect(parseFromFlutter(cfg({ gatewayUrl: url })), url).not.toBeNull();
+    }
+  });
+
+  it('rejects public hosts, userinfo and non-http schemes', () => {
+    for (const url of [
+      'https://evil.example',
+      'http://user@127.0.0.1',
+      'http://user:pw@127.0.0.1',
+      'ws://127.0.0.1:8787',
+      'javascript:alert(1)',
+      'file:///etc/passwd',
+      'http://172.32.0.1',
+      'http://172.15.255.255',
+      'http://192.168.1.1.evil.example',
+      'http://8.8.8.8',
+      'not a url',
+      42,
+    ]) {
+      expect(parseFromFlutter(cfg({ gatewayUrl: url })), String(url)).toBeNull();
+    }
+  });
+
+  it('rejects bad config enums and secrets', () => {
+    expect(parseFromFlutter(cfg({ audioPath: 'C' }))).toBeNull();
+    expect(parseFromFlutter(cfg({ audioPath: undefined }))).toBeNull();
+    expect(parseFromFlutter(cfg({ echo: 'none' }))).toBeNull();
+    expect(parseFromFlutter(cfg({ echo: true }))).toBeNull();
+    expect(parseFromFlutter(cfg({ appSecret: '' }))).toBeNull();
+    expect(parseFromFlutter(cfg({ appSecret: 7 }))).toBeNull();
+    expect(parseFromFlutter(cfg({ appSecret: 'x'.repeat(MAX_APP_SECRET_LEN + 1) }))).toBeNull();
+  });
+
+  it('validates mute, end and debugText', () => {
+    expect(parseFromFlutter({ type: 'mute', muted: true })).toEqual({ type: 'mute', muted: true });
+    expect(parseFromFlutter({ type: 'mute', muted: 'false' })).toBeNull();
+    expect(parseFromFlutter({ type: 'mute' })).toBeNull();
+    expect(parseFromFlutter({ type: 'end' })).toEqual({ type: 'end' });
+    expect(parseFromFlutter({ type: 'debugText', text: '给我比心' })).toEqual({ type: 'debugText', text: '给我比心' });
+    expect(parseFromFlutter({ type: 'debugText', text: 'x'.repeat(MAX_DEBUG_TEXT_LEN) })).not.toBeNull();
+    expect(parseFromFlutter({ type: 'debugText', text: 'x'.repeat(MAX_DEBUG_TEXT_LEN + 1) })).toBeNull();
+    expect(parseFromFlutter({ type: 'debugText', text: 5 })).toBeNull();
+  });
+
+  it('rejects unknown types and garbage', () => {
+    for (const raw of [null, undefined, [], ['config'], 'config', 1, {}, { type: 'reboot' }, { type: 7 }]) {
+      expect(parseFromFlutter(raw), JSON.stringify(raw)).toBeNull();
+    }
+  });
+});
+```
+
 `avatar-core/src/main.ts`:
 
 ```ts
 import { AppController, type AppConfig } from './app.ts';
 import { hasFlutter, onFlutterMessage, postToFlutter, setDevSink, type ToFlutter } from './bridge.ts';
+import { parseFromFlutter } from './bridgeValidate.ts';
 
 const el = document.getElementById('avatar');
 if (!el) throw new Error('#avatar missing');
@@ -1017,7 +1175,14 @@ async function boot(cfg: AppConfig): Promise<void> {
   }
 }
 
-onFlutterMessage((m) => {
+// window.avatarBridge is reachable by any page script: validate before dispatch, never echo values.
+onFlutterMessage((raw: unknown) => {
+  const m = parseFromFlutter(raw);
+  if (!m) {
+    const isConfig = typeof raw === 'object' && raw !== null && (raw as { type?: unknown }).type === 'config';
+    postToFlutter({ type: 'error', code: isConfig ? 'bad_config' : 'bad_message' });
+    return;
+  }
   if (m.type === 'config') {
     void boot({ gatewayUrl: m.gatewayUrl, appSecret: m.appSecret, audioPath: m.audioPath, avatarUrl: './avatars/avatar.glb', echo: m.echo ?? 'true' });
   } else {
@@ -1131,7 +1296,7 @@ Run: `npm run typecheck -w avatar-core && npm test -w avatar-core && npm run bui
 Expected: 无类型错误；测试 PASS；`dist/` 下有 `index.html`、`assets/`、`vad/`、`avatars/`。
 
 ```bash
-git add avatar-core/src avatar-core/index.html avatar-core/test/subtitles.test.ts
+git add avatar-core/src avatar-core/index.html avatar-core/test/subtitles.test.ts avatar-core/test/bridgeValidate.test.ts
 git commit -m "feat(avatar-core): app controller wiring audio, avatar and gateway; desktop debug panel
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
