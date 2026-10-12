@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SpeechDetector } from '../src/audio/vad.ts';
+import { LocalVad, SpeechDetector } from '../src/audio/vad.ts';
 
 const opts = { frameMs: 32, threshold: 0.5, bargeInThreshold: 0.75, startMs: 150, endMs: 600, hysteresis: 0.15 };
 
@@ -44,5 +44,39 @@ describe('SpeechDetector', () => {
     feed(d, 0.1, 1, 128);
     expect(feed(d, 0.9, 4, 160)).toEqual([]);
     expect(d.speaking).toBe(false);
+  });
+
+  it('reset clears speaking and pending start state', () => {
+    const d = new SpeechDetector(opts);
+    feed(d, 0.9, 4, 0); // candidate pending, one frame short of start
+    d.reset();
+    expect(feed(d, 0.9, 1, 128)).toEqual([]);
+    expect(d.speaking).toBe(false);
+    expect(d.onsetAt).toBeNull();
+  });
+});
+
+describe('LocalVad.destroy', () => {
+  function vadWithCounter() {
+    const v = new LocalVad(opts);
+    const calls = { end: 0 };
+    v.callbacks = { onStart: () => {}, onEnd: () => calls.end++ };
+    return { v, calls };
+  }
+
+  it('emits exactly one end when destroyed mid-speech', async () => {
+    const { v, calls } = vadWithCounter();
+    feed(v.detector, 0.9, 6, 0);
+    expect(v.detector.speaking).toBe(true);
+    await v.destroy();
+    await v.destroy();
+    expect(calls.end).toBe(1);
+    expect(v.detector.speaking).toBe(false);
+  });
+
+  it('emits nothing when destroyed while silent', async () => {
+    const { v, calls } = vadWithCounter();
+    await v.destroy();
+    expect(calls.end).toBe(0);
   });
 });

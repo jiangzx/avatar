@@ -64,6 +64,15 @@ export class SpeechDetector {
     }
     return null;
   }
+
+  /** Clears speaking and pending start/end state; aiPlaying is kept. */
+  reset(): void {
+    this.speaking = false;
+    this.onsetAt = null;
+    this.aboveMs = 0;
+    this.belowMs = 0;
+    this.candidateAt = null;
+  }
 }
 
 export interface VadCallbacks {
@@ -75,6 +84,8 @@ export interface VadCallbacks {
 /** Silero VAD on the shared microphone stream; only probabilities are used from MicVAD. */
 export class LocalVad {
   readonly detector: SpeechDetector;
+  /** Callbacks from the last start(); destroy() uses them to close an open speech segment. */
+  callbacks: VadCallbacks | null = null;
   private vad: MicVAD | null = null;
 
   constructor(opts: DetectorOptions = DEFAULT_DETECTOR) {
@@ -86,6 +97,8 @@ export class LocalVad {
   }
 
   async start(stream: MediaStream, cb: VadCallbacks): Promise<void> {
+    await this.destroy();
+    this.callbacks = cb;
     const { MicVAD } = await import('@ricky0123/vad-web');
     this.vad = await MicVAD.new({
       model: 'v5',
@@ -112,6 +125,10 @@ export class LocalVad {
   }
 
   async destroy(): Promise<void> {
+    // Emit the end edge so downstream (gateway localSpeaking) never stays stuck on.
+    const wasSpeaking = this.detector.speaking;
+    this.detector.reset();
+    if (wasSpeaking) this.callbacks?.onEnd();
     await this.vad?.destroy();
     this.vad = null;
   }

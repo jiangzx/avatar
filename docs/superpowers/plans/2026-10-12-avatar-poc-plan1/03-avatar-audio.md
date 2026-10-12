@@ -967,8 +967,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces:
   - `type EchoMode = 'true' | 'all'`；`class MicCapture`：`start({ onFrame(pcm16k: Int16Array): void; echo: EchoMode }): Promise<MediaStream>`、`setEnabled(on)`、`stop()`、`settings(): MediaTrackSettings | null`
   - `interface DetectorOptions { frameMs; threshold; bargeInThreshold; startMs; endMs; hysteresis }`、`DEFAULT_DETECTOR`
-  - `class SpeechDetector(opts?)`：`aiPlaying`、`speaking`、`onsetAt: number | null`、`push(probability, nowMs): 'start' | 'end' | null`
-  - `class LocalVad`：`detector`、`start(stream, { onStart(onsetAt: number): void; onEnd(): void; onProbability?(p: number): void }): Promise<void>`、`set aiPlaying(v)`、`destroy()`
+  - `class SpeechDetector(opts?)`：`aiPlaying`、`speaking`、`onsetAt: number | null`、`push(probability, nowMs): 'start' | 'end' | null`、`reset()`
+  - `class LocalVad`：`detector`、`start(stream, { onStart(onsetAt: number): void; onEnd(): void; onProbability?(p: number): void }): Promise<void>`、`set aiPlaying(v)`、`callbacks`、`destroy()`（说话中销毁会补发一次 `onEnd`；`start()` 先 `destroy()`）
 
 - [ ] **Step 1: 写失败的测试（SpeechDetector 纯逻辑）**
 
@@ -976,7 +976,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { SpeechDetector } from '../src/audio/vad.ts';
+import { LocalVad, SpeechDetector } from '../src/audio/vad.ts';
 
 const opts = { frameMs: 32, threshold: 0.5, bargeInThreshold: 0.75, startMs: 150, endMs: 600, hysteresis: 0.15 };
 
@@ -1021,6 +1021,40 @@ describe('SpeechDetector', () => {
     feed(d, 0.1, 1, 128);
     expect(feed(d, 0.9, 4, 160)).toEqual([]);
     expect(d.speaking).toBe(false);
+  });
+
+  it('reset clears speaking and pending start state', () => {
+    const d = new SpeechDetector(opts);
+    feed(d, 0.9, 4, 0); // candidate pending, one frame short of start
+    d.reset();
+    expect(feed(d, 0.9, 1, 128)).toEqual([]);
+    expect(d.speaking).toBe(false);
+    expect(d.onsetAt).toBeNull();
+  });
+});
+
+describe('LocalVad.destroy', () => {
+  function vadWithCounter() {
+    const v = new LocalVad(opts);
+    const calls = { end: 0 };
+    v.callbacks = { onStart: () => {}, onEnd: () => calls.end++ };
+    return { v, calls };
+  }
+
+  it('emits exactly one end when destroyed mid-speech', async () => {
+    const { v, calls } = vadWithCounter();
+    feed(v.detector, 0.9, 6, 0);
+    expect(v.detector.speaking).toBe(true);
+    await v.destroy();
+    await v.destroy();
+    expect(calls.end).toBe(1);
+    expect(v.detector.speaking).toBe(false);
+  });
+
+  it('emits nothing when destroyed while silent', async () => {
+    const { v, calls } = vadWithCounter();
+    await v.destroy();
+    expect(calls.end).toBe(0);
   });
 });
 ```
@@ -1101,6 +1135,15 @@ export class SpeechDetector {
     }
     return null;
   }
+
+  /** Clears speaking and pending start/end state; aiPlaying is kept. */
+  reset(): void {
+    this.speaking = false;
+    this.onsetAt = null;
+    this.aboveMs = 0;
+    this.belowMs = 0;
+    this.candidateAt = null;
+  }
 }
 
 export interface VadCallbacks {
@@ -1112,6 +1155,8 @@ export interface VadCallbacks {
 /** Silero VAD on the shared microphone stream; only probabilities are used from MicVAD. */
 export class LocalVad {
   readonly detector: SpeechDetector;
+  /** Callbacks from the last start(); destroy() uses them to close an open speech segment. */
+  callbacks: VadCallbacks | null = null;
   private vad: MicVAD | null = null;
 
   constructor(opts: DetectorOptions = DEFAULT_DETECTOR) {
@@ -1123,6 +1168,8 @@ export class LocalVad {
   }
 
   async start(stream: MediaStream, cb: VadCallbacks): Promise<void> {
+    await this.destroy();
+    this.callbacks = cb;
     const { MicVAD } = await import('@ricky0123/vad-web');
     this.vad = await MicVAD.new({
       model: 'v5',
@@ -1149,6 +1196,10 @@ export class LocalVad {
   }
 
   async destroy(): Promise<void> {
+    // Emit the end edge so downstream (gateway localSpeaking) never stays stuck on.
+    const wasSpeaking = this.detector.speaking;
+    this.detector.reset();
+    if (wasSpeaking) this.callbacks?.onEnd();
     await this.vad?.destroy();
     this.vad = null;
   }
@@ -1160,7 +1211,7 @@ export class LocalVad {
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w avatar-core -- vad`
-Expected: 4 个测试 PASS。
+Expected: 7 个测试 PASS。
 
 - [ ] **Step 5: 实现采集 worklet 与 MicCapture**
 
@@ -1217,6 +1268,7 @@ export class MicCapture {
   private ctx: AudioContext | null = null;
 
   async start(o: CaptureOptions): Promise<MediaStream> {
+    await this.stop();
     const audio = {
       channelCount: 1,
       echoCancellation: o.echo === 'all' ? 'all' : true,
@@ -1224,20 +1276,28 @@ export class MicCapture {
       autoGainControl: true,
     } as unknown as MediaTrackConstraints; // 'all' is newer than the DOM typings
     const stream = await navigator.mediaDevices.getUserMedia({ audio });
-    const ctx = new AudioContext({ latencyHint: 'interactive' });
-    await ctx.audioWorklet.addModule(captureWorkletUrl);
-    const source = ctx.createMediaStreamSource(stream);
-    const node = new AudioWorkletNode(ctx, 'capture', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
-    const sink = ctx.createGain();
-    sink.gain.value = 0; // keeps the node pulled by the graph without making sound
-    const resampler = new LinearResampler(ctx.sampleRate, MIC_SAMPLE_RATE);
-    const chunker = new FrameChunker(MIC_FRAME_SAMPLES);
-    node.port.onmessage = (e: MessageEvent<Float32Array>) => {
-      for (const frame of chunker.push(float32ToInt16(resampler.process(e.data)))) o.onFrame(frame);
-    };
-    source.connect(node);
-    node.connect(sink);
-    sink.connect(ctx.destination);
+    let ctx: AudioContext | null = null;
+    try {
+      ctx = new AudioContext({ latencyHint: 'interactive' });
+      await ctx.audioWorklet.addModule(captureWorkletUrl);
+      const source = ctx.createMediaStreamSource(stream);
+      const node = new AudioWorkletNode(ctx, 'capture', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+      const sink = ctx.createGain();
+      sink.gain.value = 0; // keeps the node pulled by the graph without making sound
+      const resampler = new LinearResampler(ctx.sampleRate, MIC_SAMPLE_RATE);
+      const chunker = new FrameChunker(MIC_FRAME_SAMPLES);
+      node.port.onmessage = (e: MessageEvent<Float32Array>) => {
+        for (const frame of chunker.push(float32ToInt16(resampler.process(e.data)))) o.onFrame(frame);
+      };
+      source.connect(node);
+      node.connect(sink);
+      sink.connect(ctx.destination);
+    } catch (err) {
+      // Release the mic and context so the recording indicator turns off.
+      stream.getTracks().forEach((t) => t.stop());
+      await ctx?.close().catch(() => {});
+      throw err;
+    }
     this.stream = stream;
     this.ctx = ctx;
     return stream;
