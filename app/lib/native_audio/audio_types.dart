@@ -23,7 +23,7 @@ class PlayedAudio {
 enum StopReason { interrupted, ended, reset }
 
 abstract interface class NativeAudioIO {
-  Future<void> start({required AudioFrameCallback onFrame, required AudioLevelCallback onLevel});
+  Future<void> start({required AudioFrameCallback onFrame, required AudioLevelCallback onLevel, required void Function(PlayedAudio) onPlaybackEnded});
   Future<void> startResponse(int responseSeq);
   Future<void> pushResponse(int responseSeq, Int16List pcm24k);
   Future<void> endResponse(int responseSeq);
