@@ -1,0 +1,25 @@
+{
+  "name": "@anyidea/avatar-core",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/copy-vad-assets.mjs",
+    "dev": "npm run assets && vite",
+    "build": "npm run assets && vite build",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@anyidea/protocol": "*",
+    "@met4citizen/talkinghead": "1.7.0",
+    "@ricky0123/vad-web": "0.0.31",
+    "onnxruntime-web": "1.30.0",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.180.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.3"
+  }
+}
