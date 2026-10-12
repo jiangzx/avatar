@@ -1,0 +1,43 @@
+import { describe, expect, it } from 'vitest';
+import { fileURLToPath } from 'node:url';
+import { loadConfig, loadDirectorConfig, loadPersona, makeOriginCheck } from '../src/config.ts';
+
+const root = fileURLToPath(new URL('..', import.meta.url));
+
+describe('config', () => {
+  it('requires a strong APP_SECRET', () => {
+    expect(() => loadConfig({ APP_SECRET: 'short' })).toThrow(/APP_SECRET/);
+  });
+
+  it('only accepts the mock adapter in Plan 1', () => {
+    expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), ADAPTER: 'seeduplex' })).toThrow(/ADAPTER/);
+  });
+
+  it('parses defaults and dev origins', () => {
+    const c = loadConfig({ APP_SECRET: 'x'.repeat(16), DEV_ORIGINS: 'http://localhost:5173, http://a.test' });
+    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800 });
+  });
+
+  it('validates the mock speech threshold', () => {
+    expect(loadConfig({ APP_SECRET: 'x'.repeat(16), MOCK_SPEECH_THRESHOLD: '1500' }).mockSpeechThreshold).toBe(1500);
+    expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), MOCK_SPEECH_THRESHOLD: 'loud' })).toThrow(/MOCK_SPEECH_THRESHOLD/);
+  });
+
+  it('allows loopback app origins and listed dev origins only', () => {
+    const ok = makeOriginCheck(['http://localhost:5173']);
+    expect(ok('http://127.0.0.1:39123')).toBe(true);
+    expect(ok('http://localhost:5173')).toBe(true);
+    expect(ok('http://127.0.0.1.evil.com:1')).toBe(false);
+    expect(ok('https://example.com')).toBe(false);
+  });
+
+  it('loads the shipped director config and persona', () => {
+    const d = loadDirectorConfig(`${root}config/director.json`);
+    expect(d.maxConsecutive).toBe(2);
+    expect(loadPersona(`${root}prompts/persona.md`)).toContain('perform_action');
+  });
+
+  it('rejects an invalid director config', () => {
+    expect(() => loadDirectorConfig(`${root}package.json`)).toThrow();
+  });
+});

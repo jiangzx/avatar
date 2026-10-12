@@ -1,0 +1,12 @@
+{
+  "followupAfterMs": 8000,
+  "idleNoticeAfterMs": 25000,
+  "maxConsecutive": 2,
+  "maxPerWindow": 3,
+  "windowMs": 300000,
+  "quietPhrases": ["别说了", "安静一会", "安静点", "先别说话"],
+  "greetingInstruction": "用户刚打开应用。请用一两句话热情、自然地打个招呼，再问一个轻松的开放式问题。",
+  "followupInstruction": "用户沉默了一会儿。请接着刚才没聊完的话题，温和地追问一句，不超过 20 个字。",
+  "idleNoticeInstruction": "用户仍然没有说话。请只说一句类似「我在这儿呢，想聊随时叫我」的话，然后安静下来。",
+  "resumeInstruction": "网络刚恢复。请自然地说一句「刚才网络断了一下，我们接着聊」，然后接上之前的话题。"
+}
