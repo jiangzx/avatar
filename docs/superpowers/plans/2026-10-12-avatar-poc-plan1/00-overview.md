@@ -6,7 +6,7 @@
 
 **Architecture:** npm workspaces monorepo：`protocol/`（共享协议与工具函数）、`gateway/`（Node 24 + TS，会话编排，基于 `RealtimeAdapter` 接口，本计划只实现 MockAdapter）、`avatar-core/`（Vite + TS：three.js/TalkingHead 虚拟人、AudioWorklet 播放、getUserMedia + Silero VAD 采集）；`app/` 是 Flutter Android 壳，通过 127.0.0.1 本地 HTTP 服务把 avatar-core 构建产物加载进 WebView。
 
-**Tech Stack:** Node 24、TypeScript 7.0.2、vitest 5、ws 8.22、zod 4.6、Vite 8.3、three 0.180、@met4citizen/talkinghead 1.7.0、@ricky0123/vad-web 0.0.31（onnxruntime-web 1.30.0）、Flutter 3.47.6 / Dart 3.13.5、webview_flutter 4.14.1、permission_handler 13.0.2、wakelock_plus 1.8.1、record 7.1.2、flutter_pcm_sound 3.3.3。
+**Tech Stack:** Node 24、TypeScript 7.0.2、vitest 5、ws 8.22、zod 4.6、Vite 8.3、three 0.180、@met4citizen/talkinghead 1.7.0、@ricky0123/vad-web 0.0.31（onnxruntime-web 1.30.0）、Flutter 3.47.7 / Dart 3.13.5、webview_flutter 4.14.1、permission_handler 13.0.2、wakelock_plus 1.8.1、record 7.1.2、flutter_pcm_sound 3.3.3。
 
 **工具链偏差（Task 16 实测，2026-10-12）：** Android `compileSdk` 需为 37（`permission_handler_android` 14.1.0 要求），并在 `app/android/build.gradle.kts` 用一个根级 hook 把 `flutter_pcm_sound` 等低于 36 的插件库提到 36（其 AndroidX 依赖要求 ≥34）；只影响编译，不改 `targetSdk`。Plan 2 应把该 hook 限定到具体插件。
 
@@ -91,7 +91,7 @@
 
 | 类别 | 内容 | 在哪里验证 / 失败时的退路 |
 |---|---|---|
-| 已由项目事实验证（2026-10-12） | 本机 Node 24.21、Flutter 3.47.6、Python 3.12、`say` 有 zh_CN 音色；`~/Library/Android/sdk/platform-tools/adb` 存在但不在 PATH；默认 JDK 为 25，另有 JDK 17。固定的 npm/pub 版本均存在。包源码核对：vad-web 0.0.31 的 `MicVAD` 选项/`destroy()`/资源文件名，TalkingHead 1.7.0 的 `mtAvatar.realtime`、`headRotateX`、`handup`、`lipsyncModules` 只在构造时动态 import，`brunette.glb` 为 CC BY-NC 4.0；`flutter_pcm_sound` 3.3.3 用 `USAGE_MEDIA`；`record` 的 `AndroidRecordConfig` 字段；`webview_flutter_android` 的 `setAllowFileAccess`/`setMediaPlaybackRequiresUserGesture`；ws 8.22 的 `autoPong` | — |
+| 已由项目事实验证（2026-10-12） | 本机 Node 24.21、Flutter 3.47.7、Python 3.12、`say` 有 zh_CN 音色；`~/Library/Android/sdk/platform-tools/adb` 存在但不在 PATH；默认 JDK 为 25，另有 JDK 17。固定的 npm/pub 版本均存在。包源码核对：vad-web 0.0.31 的 `MicVAD` 选项/`destroy()`/资源文件名，TalkingHead 1.7.0 的 `mtAvatar.realtime`、`headRotateX`、`handup`、`lipsyncModules` 只在构造时动态 import，`brunette.glb` 为 CC BY-NC 4.0；`flutter_pcm_sound` 3.3.3 用 `USAGE_MEDIA`；`record` 的 `AndroidRecordConfig` 字段；`webview_flutter_android` 的 `setAllowFileAccess`/`setMediaPlaybackRequiresUserGesture`；ws 8.22 的 `autoPong` | — |
 | 基于可靠技术知识的判断 | `http://127.0.0.1` 是安全上下文；pubspec 列出的 assets 目录不存在时 Flutter 构建/测试报错；`adb reverse` 走 USB，飞行模式不会断开它；移动网络切换时服务端可能长时间看不到 TCP 断开（半开连接）；Vite 8 dev 下 `?worker&url` 以 module 方式加载，可用于 AudioWorklet | Task 15、16、18 的步骤已按此设计 |
 | 尚待验证 | ① 小米 WebView 在 `setMediaPlaybackRequiresUserGesture(false)` 下 AudioContext 免手势为 `running`；② release 包按 `domain-config` 放行 127.0.0.1 明文；③ WebView 内 AudioWorklet、wasm、WebGL2、getUserMedia 可用；④ WebView 的 AEC 能否消掉外放的 Web Audio（自打断次数）；⑤ `echoCancellation:'all'` 是否生效；⑥ GLB 真机帧率 ≥30 fps；⑦ TalkingHead 骨骼转身/点头/比心的视觉效果；⑧ Mock 能量阈值 800 在外放回声下是否误触发；⑨ TypeScript 7 的 `tsc` 与本配置兼容 | ①②③ Task 16 探针：模拟器先测，真机检查点 ① 确认（退路：首次点击开始 / `WebViewAssetLoader` / 记阻塞）；④⑤ Task 17，只能在真机检查点 ①② 测（退路：方案 B 或 Plan 2 评估 WebRTC）；⑥⑦ Task 18 真机部分（退路见 Task 18 Step 3）；⑧ Task 18 真机部分（`MOCK_SPEECH_THRESHOLD` 可调，调试框文字输入兜底）；⑨ Task 1（退回 5.9.3，已核实存在） |
 

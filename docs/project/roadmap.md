@@ -48,3 +48,4 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 
 - Untracked `.codegraph/` is the user's CodeGraph index; not ignored or committed by this work (user's call).
 - Progress ledger for this session lives in the git-ignored `.superpowers/sdd/` (per-task briefs, reports, diffs).
+- 2026-10-12: host Flutter was upgraded 3.41.2 → 3.47.7 (latest stable, via `flutter upgrade`; Dart 3.13.5, DevTools 2.60.0, revision abaf9c523), Android licenses accepted; `flutter doctor` all green. Re-ran `cd app && flutter pub get && flutter analyze && flutter test` → 19 passed, no issues. Version pins updated in the migration guide and plan overview.

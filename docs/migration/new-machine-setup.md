@@ -55,7 +55,7 @@ cd anyidea && git log --oneline | head -3   # 与文末“版本快照”的 HEA
 | npm | **12.1.0** | 使用 workspaces；安装依赖请用 `npm ci`（严格按 `package-lock.json`）。npm 可能提示 `fsevents`/`protobufjs` 的安装脚本被 `allowScripts` 拦截——已确认不影响测试与构建，不要放行 |
 | Python | 3.12.14 | 仅 `make-mock-speech.sh` 内用 `python3 -I` 转 WAV→PCM（只用标准库 `wave`） |
 | git | 2.55.0 | |
-| Flutter | **3.47.6**（stable，framework revision `5fc346839b5d0eef006ed8404392afb4dfae428d`，Engine `692136cb65`，Dart **3.13.5**，DevTools 2.60.0） | 当前安装路径 `/Users/JedJiang/Documents/flutter`（路径可不同）。安装：`git clone https://github.com/flutter/flutter.git -b stable ~/flutter && cd ~/flutter && git checkout 5fc346839b5d0eef006ed8404392afb4dfae428d`（按 revision 固定最稳；若该 revision 已无法检出，先试 `git checkout 3.47.6`——此 tag 名未在本机核实，属假设），然后 `flutter --version` 对照 |
+| Flutter | **3.47.7**（stable，framework revision `abaf9c523780a608bd46686fd5e53740a07077f8`，Engine `d8a2d6c768`（revision `deb287481e`），Dart **3.13.5**，DevTools 2.60.0） | 当前安装路径 `/Users/jed/Documents/lib/flutter`（路径可不同）。安装：`git clone https://github.com/flutter/flutter.git -b stable ~/flutter && cd ~/flutter && git checkout abaf9c523780a608bd46686fd5e53740a07077f8`（按 revision 固定最稳；`3.47.7` tag 已核实存在，也可 `git checkout 3.47.7`），然后 `flutter --version` 对照。2026-10-12 本机已从 3.41.2 执行 `flutter upgrade` 升级到 3.47.7（最新 stable），升级后 `flutter doctor` 全绿 |
 | JDK | **Flutter 用 Android Studio 自带 JBR：OpenJDK 21.0.9**（`flutter doctor -v` 显示）。系统另有 JDK 25.0.4（默认）和 `jdk-17.jdk` | 不需要设置 `flutter config --jdk-dir`；Gradle 编译目标为 Java 17（`sourceCompatibility = VERSION_17`）。若 Gradle 因 JDK 25 报 “Unsupported class file major version”，执行 `flutter config --jdk-dir "/Applications/Android Studio.app/Contents/jbr/Contents/Home"` |
 | Android Studio | 已安装于 `/Applications/Android Studio.app`（用于提供 JBR 21、AVD 管理；本机未核实具体版本，装当前稳定版即可，要求其 JBR 为 21.x） | |
 | Xcode / CocoaPods / Chrome | Xcode 26.2、CocoaPods 1.17.0、Google Chrome 154.0.8037.100 | 本项目只做 Android；Chrome 用于桌面调试 `npm run dev -w avatar-core`（:5173）。Xcode 不是必需 |
@@ -207,7 +207,7 @@ cd app && flutter run --dart-define-from-file=dev.json
 
 ```bash
 node -v && npm -v                               # v24.21.0 / 12.1.0
-flutter --version                               # 3.47.6, Dart 3.13.5, revision 5fc346839b
+flutter --version                               # 3.47.7, Dart 3.13.5, revision abaf9c523
 flutter doctor -v                               # Android toolchain [✓]，Java 21.0.9 (Android Studio JBR)，licenses accepted
 npm ci
 npm test                                        # protocol 6 / gateway 93 / avatar-core 71 全部通过
@@ -243,7 +243,7 @@ git log --oneline | head -3                     # 与文末版本快照对照
 
 1. 用简体中文与我沟通；代码和注释按项目约定（注释英文、简短）。
 2. 先完整阅读 docs/migration/new-machine-setup.md（环境、依赖、复现步骤、验证清单、已知限制），然后阅读 AGENTS.md、docs/project/roadmap.md、docs/blockers.md。
-3. 按该文档第 9 节验证环境与当前机器一致：Node 24.21.0、npm 12.1.0、Flutter 3.47.6（Dart 3.13.5，revision 5fc346839b）、Android SDK 清单、npm ci 的精确依赖、flutter pub get 的精确依赖。不一致就先停下来向我报告差异，不要自行升级或降级任何版本，不要 npm install / pub upgrade。
+3. 按该文档第 9 节验证环境与当前机器一致：Node 24.21.0、npm 12.1.0、Flutter 3.47.7（Dart 3.13.5，revision abaf9c523）、Android SDK 清单、npm ci 的精确依赖、flutter pub get 的精确依赖。不一致就先停下来向我报告差异，不要自行升级或降级任何版本，不要 npm install / pub upgrade。
 4. 按文档第 2、7 节补齐不在 git 里的文件：gateway/.env 与 app/dev.json（APP_SECRET 新生成且两处一致，绝不使用或打印旧密钥，也不要提交）、Mock 语音 PCM、avatar.glb、VAD 资源。
 5. 运行验证并如实汇报真实输出：npm test（期望 protocol 6 / gateway 93 / avatar-core 71）、npm run typecheck、cd app && flutter test（期望 19 个）&& flutter analyze（期望无问题）。
 6. 汇报：环境是否一致、有哪些差异或失败、磁盘/模拟器内存情况，并说明下一步建议（来自 roadmap 的 Next steps 与 blockers #7）。等我确认后再开始任何新开发。
