@@ -1,5 +1,5 @@
 import type { AddressInfo } from 'node:net';
-import type { Server } from 'node:http';
+import { request, type Server } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { FRAME_AI, decodeAudioFrame, type ServerMessage, type SessionTokens } from '@anyidea/protocol';
@@ -9,6 +9,7 @@ import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { SessionManager } from '../src/session/manager.ts';
 import { Session } from '../src/session/session.ts';
+import { TokenStore } from '../src/session/tokens.ts';
 import { createGatewayServer } from '../src/server/server.ts';
 
 const SECRET = 'test-secret-0123456789';
@@ -228,5 +229,55 @@ describe('gateway server', () => {
     await new Promise((r) => setTimeout(r, 250));
     expect(manager!.size).toBe(0);
     await expect(connect(base, t.connectToken)).rejects.toThrow('http_401');
+  });
+
+  it('starts the grace timer when a claimed upgrade fails the WS handshake', async () => {
+    const base = await boot({ graceMs: 100 });
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request(`${base}/ws?token=${encodeURIComponent(t.connectToken)}`, {
+        headers: { Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Key': 'bad', 'Sec-WebSocket-Version': '13' },
+      });
+      req.on('response', (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    expect(status).toBe(400);
+    await new Promise((r) => setTimeout(r, 500));
+    expect(manager!.size).toBe(0);
+  });
+
+  it('keeps a session reconnected within the grace period', async () => {
+    const base = await boot({ graceMs: 100 });
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    const c = await connect(base, t.connectToken);
+    start(c);
+    await c.waitFor((m) => m.type === 'session.ready');
+    const closed = new Promise<void>((r) => c.ws.on('close', () => r()));
+    c.ws.close();
+    await closed;
+    const r1 = await post(base, '/session/resume', { sessionId: t.sessionId, resumeToken: t.resumeToken });
+    const c2 = await connect(base, (r1.json as unknown as SessionTokens).connectToken);
+    c2.ws.send(JSON.stringify({ type: 'session.resume', sessionId: t.sessionId }));
+    await c2.waitFor((m) => m.type === 'session.resumed');
+    await new Promise((r) => setTimeout(r, 250));
+    expect(manager!.size).toBe(1);
+    c2.ws.send(JSON.stringify({ type: 'debug.userText', text: '你好' }));
+    await c2.waitFor((m) => m.type === 'transcript.user');
+  });
+});
+
+describe('TokenStore', () => {
+  it('expires connect tokens after the TTL', () => {
+    let now = 1_000;
+    const store = new TokenStore(1_000, () => now);
+    const fresh = store.issue('s1');
+    expect(store.consumeConnect(fresh.connectToken)).toBe('s1');
+    const stale = store.issue('s1');
+    now += 1_001;
+    expect(store.consumeConnect(stale.connectToken)).toBeNull();
   });
 });

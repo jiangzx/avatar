@@ -37,7 +37,15 @@ export function createGatewayServer(opts: GatewayServerOptions): Server {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => bindConnection(ws, claimed.sessionId, claimed.connId, opts));
+    // handleUpgrade may abort (bad handshake, dead socket) without calling back: start the grace timer then.
+    let bound = false;
+    socket.once('close', () => {
+      if (!bound) opts.manager.disconnected(claimed.sessionId, claimed.connId);
+    });
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      bound = true;
+      bindConnection(ws, claimed.sessionId, claimed.connId, opts);
+    });
   });
   return server;
 }
