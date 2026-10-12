@@ -1,23 +1,25 @@
 # Roadmap
 
-Last updated: 2026-10-12 (end of Plan 1 execution session). Update at the end of every session.
+Last updated: 2026-10-13 (Plan 1.1 device smoke). Update at the end of every session.
 
 ## Phases
 
 | Phase | Scope | Status | Plan |
 |---|---|---|---|
 | Plan 1 | Mock-driven end-to-end on a Xiaomi phone: greeting, multi-turn, barge-in with zero residue, 5 actions, reconnect, Day 1 audio A/B spike | **Complete with blockers.** Code Tasks 0–17 implemented, reviewed and merged on `master`; Task 18 checklist/report written but every device/browser item is "not run". Not demonstrated on a device. | [plan1](../superpowers/plans/2026-10-12-avatar-poc-plan1/00-overview.md) |
+| Plan 1.1 | Flutter 原生采集/播放/VAD/网关会话，WebView 头像和界面 | **代码完成；小米设备启动冒烟部分通过，完整真机验收未完成。** | [native-audio-path](../superpowers/plans/2026-10-13-native-audio-path-plan.md) |
 | Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | Not started; plan not written | — |
 
 Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-poc-design.md).
 
-## What is and is not verified (2026-10-12)
+## What is and is not verified (2026-10-13)
 
-- Verified by running (final run after all fixes): `npm test` → protocol 6, gateway 93, avatar-core 71 passed; `npm run typecheck` clean; `cd app && flutter test` → 19 passed; `flutter analyze` → no issues.
+- Verified by running in the current Plan 1.1 worktree: `npm test` → protocol 6, gateway 93, avatar-core 74 passed; `npm run typecheck` clean; `cd app && flutter test` → 36 passed; `flutter analyze` → no issues.
 - Gateway-level headless check (Task 18, not a checklist pass): greeting, keyword actions once each, silence follow-ups (~8.4 s / ~25.3 s after `playback.stopped(ended)`), gateway logs contain no conversation text.
 - 【模拟器】 only: Task 16 capability probe on Medium_Phone_API_36.1 (WebView 134, 8/8) and API31_Phone (WebView 91, below the ≥120 bar); release APK cleartext to 127.0.0.1 OK; autoplay `running` without gesture (no audible check). Emulator results are NOT phone results.
-- NOT verified anywhere: full avatar page in a real browser or on a device (Task 14 Step 7, Task 18 Step 0 and checklist items 1–12), mic/VAD capture, AudioWorklet playback, lip-sync, barge-in latency, frame rate, 30-min stability, any metric value. No constants were tuned. ADR-001 (audio path A vs B) is a **DRAFT, undecided**; no A/B measurements exist.
-- Known environment limits: no Xiaomi phone; only a 2 GB AVD works (WebView renderer gets low-memory-killed during Silero VAD load); host disk ~1.7 GiB free (do not run `flutter build` until space is freed).
+- NOT verified for the original Plan 1 A path: full desktop Chrome E2E (Task 14 Step 7), Task 18 checklist, WebView mic/VAD capture, AudioWorklet playback, lip-sync, barge-in latency, frame rate, and 30-minute stability. No constants were tuned. ADR-001 (audio path A vs B) is a **DRAFT, undecided**; no A/B measurements exist.
+- Plan 1.1 Xiaomi 22101317C smoke: WebView 104 loaded the avatar and Mock greeting in debug/release, native `AudioRecord` initialized at 16 kHz mono, and one `wave` debug action was visually observed. Real speech/VAD, audible confirmation, full action matrix, resume with an active response, 10-minute false-trigger count, and 30-minute stability remain unmeasured. See [native audio report](../testing/2026-10-13-native-audio-plan1-1-report.md).
+- Known environment limits: Plan 1's 2 GB AVD renderer kill during Silero VAD load remains unresolved for path A; Plan 1.1 does not load Silero in the product path.
 
 ## Plan 1 acceptance (from the plan overview) — status
 
@@ -32,12 +34,13 @@ Plan 2 cannot start until:
 
 ## Blockers
 
-See [docs/blockers.md](../blockers.md): #1 no phone (open), #2 desktop Chrome E2E not run (open), #3 Task 16 Step 8–9 on phone (open), #4 Task 17 Steps 5–7 (open), #5 VAD asset path (path fix done; was found by emulator smoke), #6 2 GB AVD renderer kill (open, inferred for product page), #7 Task 18 remaining checklist (open).
+See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by the Plan 1.1 device smoke; #2 desktop Chrome E2E and #4 A/B measurement remain open.
 
 ## Next steps
 
-1. Free disk space; get a Xiaomi phone (or a larger-RAM AVD) and run blockers #7/#3/#4 exactly as written: checkpoint ① (Task 0 Step 2b, Task 16 Steps 8–9, Task 17 Spike A `echo=true`), then checkpoint ② (full A/B, ADR-001 decision, Task 18 checklist, tuning from device data). Also run the desktop Chrome E2E (Task 14 Step 7) with headphones.
-2. Write Plan 2 (needs the Key + ADR-001).
+1. Complete Plan 1.1 on the connected Xiaomi: real voice/VAD interruption, active-response resume, all five actions, 10-minute false-trigger count, 10 true interruptions, and 30-minute stability. Keep Plan 1's WebView ≥120 and A/B measurements separate.
+2. Run the remaining Plan 1 probe/A-B/Task 18 checks and desktop Chrome E2E when their respective environments are available.
+3. Write Plan 2 only after a model Key is available and ADR-001 has real A/B data.
 
 ## Handed to Plan 2 (accepted minors / hardening, from the final review)
 

@@ -479,13 +479,13 @@ git commit -m "feat(app): wire native audio product path"
 - Produces a report with separate sections for Plan 1, Plan 1.1, emulator, desktop Chrome, and Xiaomi WebView 104. It must include exact commands and results, but no conversation content.
 - Produces an ADR note that B migration is approved and measured independently; it must leave A/B numeric cells as `待真机` until actual measurements exist.
 
-- [ ] **Step 1: Run the full automated suite before device work**
+- [x] **Step 1: Run the full automated suite before device work**
 
 Run: `npm test && npm run typecheck && cd app && flutter test && flutter analyze`
 
 Expected: protocol, gateway, avatar-core, and Flutter tests pass; analyzer reports no issues. If any command fails, fix it in the owning task or record a blocker before proceeding.
 
-- [ ] **Step 2: Start the Mock gateway and install the debug APK**
+- [x] **Step 2: Start the Mock gateway and install the debug APK**
 
 Run from the repository root:
 
@@ -512,7 +512,7 @@ Record timestamps and counts only:
 
 Use the existing debug panel's CSV only for numeric metrics. Do not copy subtitles, ASR text, or audio data into the report.
 
-- [ ] **Step 4: Build and smoke-test release without changing the local gateway contract**
+- [x] **Step 4: Build and smoke-test release without changing the local gateway contract**
 
 Run:
 
@@ -523,15 +523,15 @@ adb -s 88a198720422 install -r build/app/outputs/flutter-apk/app-release.apk
 
 Expected: release APK loads the local `127.0.0.1` page and native audio path; no WebView microphone permission request appears. If release fails, record the exact error in `docs/blockers.md` and do not weaken network security settings.
 
-- [ ] **Step 5: Write the report and update project memory**
+- [x] **Step 5: Write the report and update project memory**
 
 The report must include device identity, WebView version, commands actually run, numeric results, failed/skipped items, and the sentence: “Plan 1 WebView ≥120 兼容性门槛仍未改变；本报告仅证明 Plan 1.1 方案 B 在本设备上的实测状态。” Update `roadmap.md` next task/status, `blockers.md` with any unresolved device issue, and ADR-001 without fabricating A/B values. Tick only the completed checkboxes in this plan.
 
-- [ ] **Step 6: Run final verification before claiming completion**
+- [x] **Step 6: Run final verification before claiming completion**
 
 Run: `git diff --check`, `npm test`, `npm run typecheck`, `cd app && flutter test && flutter analyze`, and inspect `git status --short`. Verify that no `.env`/secret file is staged and that only explicit paths changed.
 
-- [ ] **Step 7: Commit the report and documentation**
+- [x] **Step 7: Commit the report and documentation**
 
 ```bash
 git add docs/testing/2026-10-13-native-audio-plan1-1-report.md docs/project/roadmap.md docs/blockers.md docs/adr/ADR-001-day1-selection.md docs/superpowers/plans/2026-10-13-native-audio-path-plan.md
