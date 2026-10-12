@@ -439,6 +439,16 @@ export interface MouthOptions {
 /** TUNABLE (estimates), tuned on device in Task 18. */
 export const DEFAULT_MOUTH: MouthOptions = { noiseFloor: 0.01, gain: 6, attackMs: 30, releaseMs: 80 };
 
+// TUNABLE: zcr band mapped to "bright" (spread lips) and "dark" (rounded lips).
+export const ZCR_BRIGHT_START = 0.08;
+export const ZCR_BRIGHT_RANGE = 0.12;
+export const ZCR_DARK_START = 0.06;
+export const ZCR_DARK_RANGE = 0.04;
+// TUNABLE: mouth-shape gains applied to the smoothed jaw level.
+export const JAW_OPEN_GAIN = 0.7;
+export const FUNNEL_GAIN = 0.6;
+export const STRETCH_GAIN = 0.5;
+
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
 /** Approximate Mandarin lip-sync from loudness and brightness of the audio being played. */
@@ -452,9 +462,9 @@ export class MouthAnalyzer {
     const tau = target > this.jaw ? this.o.attackMs : this.o.releaseMs;
     this.jaw += (target - this.jaw) * (1 - Math.exp(-dtMs / tau));
     if (this.jaw < 1e-4) this.jaw = 0;
-    const bright = clamp01((f.zcr - 0.08) / 0.12);
-    const dark = clamp01((0.06 - f.zcr) / 0.04);
-    return { jawOpen: this.jaw * 0.7, funnel: this.jaw * dark * 0.6, stretch: this.jaw * bright * 0.5 };
+    const bright = clamp01((f.zcr - ZCR_BRIGHT_START) / ZCR_BRIGHT_RANGE);
+    const dark = clamp01((ZCR_DARK_START - f.zcr) / ZCR_DARK_RANGE);
+    return { jawOpen: this.jaw * JAW_OPEN_GAIN, funnel: this.jaw * dark * FUNNEL_GAIN, stretch: this.jaw * bright * STRETCH_GAIN };
   }
 
   reset(): void {
@@ -468,6 +478,11 @@ export class MouthAnalyzer {
 ```ts
 import { rmsInt16 } from './pcm.ts';
 
+// TUNABLE: defaults for the AEC spike energy trigger.
+export const ENERGY_THRESHOLD_RMS = 1200;
+export const ENERGY_MIN_MS = 150;
+export const ENERGY_FRAME_MS = 20;
+
 /** Counts sustained loud segments. Used by the AEC spike to compare capture paths A and B. */
 export class EnergyTrigger {
   count = 0;
@@ -475,9 +490,9 @@ export class EnergyTrigger {
   private armed = true;
 
   constructor(
-    private readonly thresholdRms = 1200,
-    private readonly minMs = 150,
-    private readonly frameMs = 20,
+    private readonly thresholdRms = ENERGY_THRESHOLD_RMS,
+    private readonly minMs = ENERGY_MIN_MS,
+    private readonly frameMs = ENERGY_FRAME_MS,
   ) {}
 
   /** Returns true when a new trigger fires; re-arms after a quiet frame. */
