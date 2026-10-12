@@ -527,7 +527,7 @@ cd app && flutter run --dart-define-from-file=dev.json   # PAGE 默认 index.htm
 5. `chrome://inspect` 控制台没有 `ERR_CLEARTEXT_NOT_PERMITTED`、`NotAllowedError`、worklet/wasm 加载失败等报错。
 6. 【仅真机】不说话、只让 AI 外放问候和追问：观察是否出现自己冒出来的用户字幕（Mock 把回声当成说话）。若出现，逐步调高 `gateway/.env` 的 `MOCK_SPEECH_THRESHOLD`（如 1200、1600）并重启网关，记录最终值。
 
-- [ ] **Step 1: 创建验收清单**
+- [x] **Step 1: 创建验收清单**
 
 `docs/testing/mock-e2e-checklist.md`:
 
