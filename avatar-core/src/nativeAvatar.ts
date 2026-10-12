@@ -93,8 +93,8 @@ export class NativeAvatarController {
         this.avatar?.setEmotion(event.emotion);
         break;
       case 'audio.level':
-        if (this.state !== 'speaking') this.transition('speaking');
         const shape = this.mouth.update({ rms: event.rms / 32768, zcr: event.zcr }, event.dtMs);
+        if (this.activeSeq !== null && this.state !== 'speaking') this.transition('speaking');
         this.avatar?.setMouth(shape);
         break;
       case 'metric':
