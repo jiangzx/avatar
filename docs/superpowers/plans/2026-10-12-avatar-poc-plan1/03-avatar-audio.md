@@ -1168,8 +1168,10 @@ Expected: 4 个测试 PASS。
 
 ```ts
 /** Batches microphone input into ~20 ms Float32 chunks for the main thread. */
+const CHUNK_S = 0.02; // TUNABLE
+
 class CaptureProcessor extends AudioWorkletProcessor {
-  private buf = new Float32Array(Math.round(sampleRate * 0.02));
+  private buf = new Float32Array(Math.round(sampleRate * CHUNK_S));
   private len = 0;
 
   process(inputs: Float32Array[][]): boolean {
