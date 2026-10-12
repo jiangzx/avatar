@@ -280,7 +280,7 @@ coverage/
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TEXT="你好呀，我是小暖，很高兴见到你。今天天气不错，我们可以随便聊聊，比如你早饭吃了什么，有没有出去走一走，最近有没有什么开心的事情，想跟我分享一下吗？我会一直在这里听你说。"
-VOICE="${VOICE:-$(say -v '?' | awk '/zh_CN/ {print $1; exit}')}"
+VOICE="${VOICE:-$(say -v '?' | awk '/zh_CN/ {sub(/[[:space:]]+zh_CN.*/, ""); print; exit}')}"
 [ -n "$VOICE" ] || { echo "No zh_CN voice installed for 'say'" >&2; exit 1; }
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
