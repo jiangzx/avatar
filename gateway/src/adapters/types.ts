@@ -1,0 +1,61 @@
+import type { EventEmitter } from 'node:events';
+import { ACTION_NAMES } from '@anyidea/protocol';
+
+export interface ToolSpec {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+export interface SessionConfig {
+  instructions: string;
+  tools: ToolSpec[];
+}
+
+export type AdapterEvents = {
+  userSpeechStarted: [];
+  userTranscript: [text: string, final: boolean];
+  responseStarted: [id: string];
+  audioDelta: [id: string, pcm24k: Int16Array];
+  textDelta: [id: string, text: string];
+  toolCall: [id: string, callId: string, name: string, args: unknown];
+  responseDone: [id: string];
+  responseCancelled: [id: string];
+  error: [code: string, retryable: boolean];
+  closed: [];
+};
+
+/** Model-agnostic realtime speech session. One instance = one upstream model connection. */
+export interface RealtimeAdapter extends EventEmitter<AdapterEvents> {
+  /** True if the model can trim its own context to the played portion after an interruption. */
+  readonly supportsPlaybackTruncate: boolean;
+  connect(config: SessionConfig): Promise<void>;
+  sendAudio(pcm16k: Int16Array): void;
+  /** Debug path: treat text as a finished user turn and reply to it. */
+  sendUserText(text: string): void;
+  updateInstructions(text: string): void;
+  createResponse(instructions?: string): void;
+  cancelResponse(): void;
+  sendToolResult(callId: string, result: unknown): void;
+  injectContextNote(text: string): void;
+  /** Intentional close; must not emit `closed`. */
+  close(): void;
+}
+
+export type AdapterFactory = () => RealtimeAdapter;
+
+export const PERFORM_ACTION_TOOL: ToolSpec = {
+  name: 'perform_action',
+  description: '当用户请求虚拟人做动作时调用。只能做列出的动作；调用后用一句话自然回应，不要描述动作过程。',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: [...ACTION_NAMES],
+        description: 'wave=挥手, nod=点头, smile=微笑, turn=转身, heart=比心',
+      },
+    },
+    required: ['action'],
+  },
+};

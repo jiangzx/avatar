@@ -1,0 +1,17 @@
+{
+  "greeting": "你好呀！我是小暖，很高兴见到你。今天过得怎么样？",
+  "followup": "刚才聊到这儿，你还想多说说吗？",
+  "idleNotice": "我在这儿呢，想聊随时叫我。",
+  "resume": "刚才网络断了一下，我们接着聊吧。",
+  "fallbackReply": "嗯嗯，我在听，你接着说。",
+  "turns": [
+    { "user": "挺好的，刚吃完午饭", "reply": "吃饱了心情就好！今天吃的什么呀？" },
+    { "user": "吃了饺子，我女儿包的", "reply": "女儿包的饺子，听着就香！她常回来看你吗？" },
+    { "match": "挥", "user": "你跟我挥挥手", "reply": "好呀，来，挥挥手！", "tool": { "name": "perform_action", "args": { "action": "wave" } } },
+    { "match": "比心", "user": "给我比个心", "reply": "给你比个心！", "tool": { "name": "perform_action", "args": { "action": "heart" } } },
+    { "match": "点头", "user": "点点头", "reply": "嗯嗯，我同意。", "tool": { "name": "perform_action", "args": { "action": "nod" } } },
+    { "match": "笑", "user": "对我笑一下", "reply": "嘿嘿，笑一个！", "tool": { "name": "perform_action", "args": { "action": "smile" } } },
+    { "match": "转", "user": "转个身看看", "reply": "好嘞，转一圈！", "tool": { "name": "perform_action", "args": { "action": "turn" } } },
+    { "user": "你还记得我中午吃了什么吗", "reply": "记得呀，你吃的是女儿包的饺子。" }
+  ]
+}
