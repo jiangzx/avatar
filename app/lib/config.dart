@@ -12,9 +12,15 @@ class AppConfig {
   static const spike = String.fromEnvironment('SPIKE');
 
   /// Returns a user-facing problem description, or null when the config is usable.
-  static String? validate() {
+  static String? validate() => check(gatewayUrl: gatewayUrl, appSecret: appSecret, audioPath: audioPath);
+
+  static final _placeholder = RegExp(r'^(change-me|same-as-)', caseSensitive: false);
+
+  /// Pure check behind [validate]; never echoes the secret.
+  static String? check({required String gatewayUrl, required String appSecret, required String audioPath}) {
     if (!gatewayUrl.startsWith('http')) return 'GATEWAY_URL 未配置';
     if (appSecret.length < 16) return 'APP_SECRET 未配置';
+    if (_placeholder.hasMatch(appSecret)) return 'APP_SECRET 还是模板占位值，请改成网关的真实值';
     if (audioPath != 'A' && audioPath != 'B') return 'AUDIO_PATH 只能是 A 或 B';
     return null;
   }

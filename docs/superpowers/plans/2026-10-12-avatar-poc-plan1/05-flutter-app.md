@@ -9,7 +9,7 @@
 **Files:**
 - Create（`flutter create` 生成后修改）: `app/pubspec.yaml`, `app/lib/config.dart`, `app/lib/local_asset_server.dart`, `app/lib/bridge.dart`, `app/lib/metrics.dart`, `app/dev.example.json`, `scripts/build-web.sh`, `spikes/webview-probe/index.html`, `spikes/webview-probe/probe-worklet.js`
 - Modify: `.gitignore`
-- Test: `app/test/local_asset_server_test.dart`, `app/test/bridge_test.dart`, `app/test/metrics_test.dart`
+- Test: `app/test/local_asset_server_test.dart`, `app/test/bridge_test.dart`, `app/test/metrics_test.dart`, `app/test/config_test.dart`
 
 **Depends on:** Task 0（Flutter/Android 工具链；真机在 Task 16 才需要）。不依赖任何 TypeScript 任务：Bridge 契约按 Task 14 的文档编写，`app/assets/web` 先用 `build-web.sh --probe-only` 生成探针页与占位目录。可与 Task 1–13 并行。
 
@@ -370,6 +370,35 @@ void main() {
 }
 ```
 
+`app/test/config_test.dart`（最终评审修复：拒绝 `change-me…`/`same-as-…` 模板占位密钥，不回显取值）:
+
+```dart
+import 'package:avatar_app/config.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  const url = 'http://127.0.0.1:8787';
+  const good = 'a-real-random-secret-0123456789';
+
+  test('accepts a usable config', () {
+    expect(AppConfig.check(gatewayUrl: url, appSecret: good, audioPath: 'A'), isNull);
+  });
+
+  test('rejects missing, short and template placeholder secrets without echoing them', () {
+    for (final s in ['', 'short', 'same-as-gateway-APP_SECRET', 'Change-Me-to-a-random-32-char-string']) {
+      final problem = AppConfig.check(gatewayUrl: url, appSecret: s, audioPath: 'A');
+      expect(problem, isNotNull, reason: 'secret #${s.length}');
+      if (s.isNotEmpty) expect(problem!.contains(s), isFalse);
+    }
+  });
+
+  test('rejects a bad gateway URL or audio path', () {
+    expect(AppConfig.check(gatewayUrl: '', appSecret: good, audioPath: 'A'), isNotNull);
+    expect(AppConfig.check(gatewayUrl: url, appSecret: good, audioPath: 'C'), isNotNull);
+  });
+}
+```
+
 - [ ] **Step 3: 运行测试确认失败**
 
 Run: `cd app && flutter test`
@@ -391,9 +420,15 @@ class AppConfig {
   static const page = String.fromEnvironment('PAGE', defaultValue: 'index.html');
 
   /// Returns a user-facing problem description, or null when the config is usable.
-  static String? validate() {
+  static String? validate() => check(gatewayUrl: gatewayUrl, appSecret: appSecret, audioPath: audioPath);
+
+  static final _placeholder = RegExp(r'^(change-me|same-as-)', caseSensitive: false);
+
+  /// Pure check behind [validate]; never echoes the secret.
+  static String? check({required String gatewayUrl, required String appSecret, required String audioPath}) {
     if (!gatewayUrl.startsWith('http')) return 'GATEWAY_URL 未配置';
     if (appSecret.length < 16) return 'APP_SECRET 未配置';
+    if (_placeholder.hasMatch(appSecret)) return 'APP_SECRET 还是模板占位值，请改成网关的真实值';
     if (audioPath != 'A' && audioPath != 'B') return 'AUDIO_PATH 只能是 A 或 B';
     return null;
   }
@@ -614,7 +649,7 @@ class MetricsStore {
 - [ ] **Step 5: 运行测试确认通过**
 
 Run: `cd app && flutter test`
-Expected: 全部 PASS（local_asset_server 6 个、bridge 3 个、metrics 2 个）。若报 "unable to find directory entry in pubspec.yaml: …/assets/web/…" 之类的错误，说明还没生成 `app/assets/web`，先执行 `./scripts/build-web.sh --probe-only`。
+Expected: 全部 PASS（local_asset_server 6 个、bridge 3 个、metrics 2 个、config 3 个）。若报 "unable to find directory entry in pubspec.yaml: …/assets/web/…" 之类的错误，说明还没生成 `app/assets/web`，先执行 `./scripts/build-web.sh --probe-only`。
 
 - [ ] **Step 6: 静态检查与提交**
 
@@ -637,7 +672,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Create: `app/lib/overlay.dart`, `app/lib/avatar_page.dart`, `app/android/app/src/main/res/xml/network_security_config.xml`, `app/android/app/src/debug/res/xml/network_security_config.xml`
 - Modify: `app/lib/main.dart`, `app/android/app/src/main/AndroidManifest.xml`
-- Test: `app/test/overlay_test.dart`
+- Test: `app/test/overlay_test.dart`, `app/test/avatar_page_test.dart`
 
 **Depends on:** Task 15；Task 0 Step 2a（模拟器）。**不依赖 avatar-core**：首跑加载 Task 15 的探针页，验证 spec §9 Day 1 ① 的全部能力项。本任务在模拟器上完成即可提交，结果标【模拟器】；Step 8–9 必须在**真机检查点 ①** 用小米手机再跑一遍，以真机结果为准。完整虚拟人页面的首跑在 Task 18 Step 0。探针的 gateway 项需要 Task 8 的网关在跑。
 
@@ -857,7 +892,11 @@ const _statusLabels = {
   'reconnecting': '网络有点慢，稍等我一下',
   'model_reconnecting': '网络有点慢，稍等我一下',
   'closed': '对话已结束',
+  'audio_suspended': '点一下屏幕打开声音',
 };
+
+/// A connection that is open again clears a transient error.
+String? errorAfterStatus(String? error, String status) => status == 'open' ? null : error;
 
 String _errorLabel(String code) => switch (code) {
       'NotAllowedError' => '麦克风被拒绝，请在设置中允许',
@@ -945,7 +984,10 @@ class _AvatarPageState extends State<AvatarPage> {
       case JsMetric(:final name, :final ms):
         setState(() => _metrics.add(name, ms));
       case JsStatus(:final status):
-        setState(() => _status = _statusLabels[status] ?? status);
+        setState(() {
+          _status = _statusLabels[status] ?? status;
+          _error = errorAfterStatus(_error, status);
+        });
       case JsDiag(:final key, :final value):
         setState(() => _diag[key] = value);
       case JsError(:final code):
@@ -1033,6 +1075,24 @@ class _AvatarPageState extends State<AvatarPage> {
   }
 }
 ```
+
+`app/test/avatar_page_test.dart`（最终评审修复：之后的 `open` 状态清掉一时的错误提示）:
+
+```dart
+import 'package:avatar_app/avatar_page.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('a later open status clears a transient error', () {
+    expect(errorAfterStatus('出错了：http_503', 'open'), isNull);
+    expect(errorAfterStatus('出错了：http_503', 'reconnecting'), '出错了：http_503');
+    expect(errorAfterStatus(null, 'connecting'), isNull);
+  });
+}
+```
+
+Run: `cd app && flutter test test/avatar_page_test.dart`
+Expected: 1 个测试 PASS。
 
 注：若 `setAllowFileAccess` 在 webview_flutter_android 4.14.1 中不存在（编译报错），删除该行并记入 `docs/blockers.md`——WebView 只加载 127.0.0.1 页面且导航被限制，风险可接受。
 

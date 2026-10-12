@@ -19,7 +19,11 @@ const _statusLabels = {
   'reconnecting': '网络有点慢，稍等我一下',
   'model_reconnecting': '网络有点慢，稍等我一下',
   'closed': '对话已结束',
+  'audio_suspended': '点一下屏幕打开声音',
 };
+
+/// A connection that is open again clears a transient error.
+String? errorAfterStatus(String? error, String status) => status == 'open' ? null : error;
 
 String _errorLabel(String code) => switch (code) {
       'NotAllowedError' => '麦克风被拒绝，请在设置中允许',
@@ -107,7 +111,10 @@ class _AvatarPageState extends State<AvatarPage> {
       case JsMetric(:final name, :final ms):
         setState(() => _metrics.add(name, ms));
       case JsStatus(:final status):
-        setState(() => _status = _statusLabels[status] ?? status);
+        setState(() {
+          _status = _statusLabels[status] ?? status;
+          _error = errorAfterStatus(_error, status);
+        });
       case JsDiag(:final key, :final value):
         setState(() => _diag[key] = value);
       case JsError(:final code):
