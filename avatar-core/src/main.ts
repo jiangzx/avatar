@@ -1,2 +1,74 @@
-// Placeholder entry; replaced by the real app wiring in Task 14.
-export {};
+import { AppController, type AppConfig } from './app.ts';
+import { hasFlutter, onFlutterMessage, postToFlutter, setDevSink, type ToFlutter } from './bridge.ts';
+
+const el = document.getElementById('avatar');
+if (!el) throw new Error('#avatar missing');
+let app: AppController | null = null;
+
+function errorCode(e: unknown): string {
+  if (e instanceof DOMException) return e.name; // e.g. NotAllowedError for the microphone
+  if (e instanceof Error) return e.message.slice(0, 64);
+  return 'unknown';
+}
+
+async function boot(cfg: AppConfig): Promise<void> {
+  if (app) return;
+  app = new AppController(el!, cfg);
+  try {
+    await app.start();
+  } catch (e) {
+    postToFlutter({ type: 'error', code: errorCode(e) });
+  }
+}
+
+onFlutterMessage((m) => {
+  if (m.type === 'config') {
+    void boot({ gatewayUrl: m.gatewayUrl, appSecret: m.appSecret, audioPath: m.audioPath, avatarUrl: './avatars/avatar.glb', echo: m.echo ?? 'true' });
+  } else {
+    app?.handleFlutter(m);
+  }
+});
+
+if (hasFlutter()) {
+  postToFlutter({ type: 'ready' });
+} else if (import.meta.env.DEV) {
+  installDevPanel();
+}
+
+/** Desktop Chrome debugging only (never in the APK build): start button, subtitles, metrics, debug text. */
+function installDevPanel(): void {
+  const panel = document.getElementById('dev');
+  const log = document.getElementById('dev-log');
+  const startBtn = document.getElementById('dev-start');
+  const input = document.getElementById('dev-text') as HTMLInputElement | null;
+  if (!panel || !log || !startBtn || !input) return;
+  panel.hidden = false;
+  const lines: string[] = [];
+  setDevSink((m: ToFlutter) => {
+    const line =
+      m.type === 'subtitle' ? `${m.role === 'user' ? '你' : 'AI'}${m.final ? '' : '…'}：${m.text}`
+      : m.type === 'metric' ? `⏱ ${m.name} = ${m.ms} ms`
+      : m.type === 'state' ? `● ${m.state}`
+      : m.type === 'status' ? `[${m.status}]`
+      : m.type === 'diag' ? `diag ${m.key}=${m.value}`
+      : m.type === 'error' ? `✖ ${m.code}`
+      : m.type;
+    lines.push(line);
+    log.textContent = lines.slice(-14).join('\n'); // textContent only: never innerHTML
+  });
+  startBtn.addEventListener('click', () => {
+    startBtn.hidden = true;
+    void boot({
+      gatewayUrl: import.meta.env.VITE_GATEWAY_URL ?? 'http://127.0.0.1:8787',
+      appSecret: import.meta.env.VITE_APP_SECRET ?? '',
+      audioPath: 'A',
+      avatarUrl: './avatars/avatar.glb',
+      echo: new URLSearchParams(location.search).get('echo') === 'all' ? 'all' : 'true',
+    });
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !input.value.trim()) return;
+    app?.handleFlutter({ type: 'debugText', text: input.value.trim() });
+    input.value = '';
+  });
+}

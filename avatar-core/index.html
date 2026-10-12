@@ -5,12 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>avatar-core</title>
     <style>
-      html, body { margin: 0; height: 100%; background: #10131a; overflow: hidden; }
+      html, body { margin: 0; height: 100%; background: #10131a; overflow: hidden; font-family: system-ui, sans-serif; }
       #avatar { position: fixed; inset: 0; }
+      #dev { position: fixed; left: 8px; right: 8px; bottom: 8px; color: #e8ecf3; font-size: 14px; }
+      #dev-log { white-space: pre-wrap; background: rgba(0,0,0,.55); padding: 8px; border-radius: 8px; max-height: 45vh; overflow: auto; }
+      #dev input { width: 100%; box-sizing: border-box; margin-top: 6px; padding: 8px; font-size: 16px; }
+      #dev-start { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 22px; padding: 16px 28px; }
     </style>
   </head>
   <body>
     <div id="avatar"></div>
+    <div id="dev" hidden>
+      <button id="dev-start" type="button">开始对话</button>
+      <div id="dev-log"></div>
+      <input id="dev-text" placeholder="调试：输入文字代替语音，回车发送" />
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -524,7 +524,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `class SubtitleTracker`：`onDelta(seq, delta): string | null`、`onAudio(seq, samples24k)`、`truncate(seq, playedMs): string`、`reset()`
   - `class AppController(el, config)`：`start()`、`handleFlutter(msg)`
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 `avatar-core/test/subtitles.test.ts`:
 
@@ -559,12 +559,12 @@ describe('SubtitleTracker', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -w avatar-core -- subtitles`
 Expected: FAIL，无法解析模块。
 
-- [ ] **Step 3: 实现 SubtitleTracker 与 Bridge**
+- [x] **Step 3: 实现 SubtitleTracker 与 Bridge**
 
 `avatar-core/src/subtitles.ts`:
 
@@ -654,12 +654,12 @@ export function setDevSink(sink: DevSink): void {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w avatar-core -- subtitles`
 Expected: 3 个测试 PASS。
 
-- [ ] **Step 5: 实现 AppController**
+- [x] **Step 5: 实现 AppController**
 
 `avatar-core/src/app.ts`:
 
@@ -667,7 +667,7 @@ Expected: 3 个测试 PASS。
 import type { AudioPath, ResponseKind, ServerMessage } from '@anyidea/protocol';
 import { MicCapture, type EchoMode } from './audio/capture.ts';
 import { MouthAnalyzer } from './audio/mouth.ts';
-import { PlaybackController } from './audio/player.ts';
+import { FADE_MS, PlaybackController } from './audio/player.ts';
 import { LocalVad } from './audio/vad.ts';
 import { ActionPlayer } from './avatar/actions.ts';
 import { AvatarView } from './avatar/avatarView.ts';
@@ -686,6 +686,8 @@ export interface AppConfig {
 
 export const THINKING_TIMEOUT_MS = 8000; // TUNABLE
 export const LISTEN_NOD_EVERY_MS = 3500; // TUNABLE (estimate)
+export const PROGRESS_SEND_EVERY = 2; // TUNABLE: forward every Nth worklet progress tick
+export const AUDIO_RESUME_WAIT_MS = 500; // TUNABLE: max wait for AudioContext.resume() without a gesture
 
 export class AppController {
   private readonly playback: PlaybackController;
@@ -698,7 +700,12 @@ export class AppController {
   private client: GatewayClient | null = null;
   private state: AvatarState = 'idle';
   private muted = false;
+  private ended = false;
   private readonly kinds = new Map<number, ResponseKind>();
+  // Responses already reported as stopped/cancelled; late worklet events for them are ignored.
+  private readonly closedSeqs = new Set<number>();
+  // After session.resumed, every seq <= this is stale.
+  private seqFloor = 0;
   private sessionStartAt = 0;
   private greetingMeasured = false;
   private userSpeechEndAt: number | null = null;
@@ -712,19 +719,24 @@ export class AppController {
     private readonly cfg: AppConfig,
   ) {
     this.playback = new PlaybackController({
-      onFirstAudio: (seq) => this.onFirstAudio(seq),
+      onFirstAudio: (seq) => {
+        // A late 'started' from an old response must not flip the state machine.
+        if (this.playback.gate.accepts(seq)) this.onFirstAudio(seq);
+      },
       onEnded: (seq, playedMs) => {
+        if (this.isStale(seq)) return;
+        this.closedSeqs.add(seq);
         this.client?.send({ type: 'playback.stopped', responseSeq: seq, playedMs, reason: 'ended' });
-        this.vad.aiPlaying = false;
-        this.avatar?.setMouth(null);
+        this.clearSpeaking();
         this.transition('playbackEnded');
       },
       onStopped: () => {
-        this.vad.aiPlaying = false;
-        this.avatar?.setMouth(null);
+        // Always follows our own interrupt/cancel/reset, which already reported; only tidy up if nothing newer plays.
+        if (this.playback.activeSeq === null) this.clearSpeaking();
       },
       onProgress: (seq, playedMs) => {
-        if (++this.progressTick % 2 === 0) this.client?.send({ type: 'playback.progress', responseSeq: seq, playedMs });
+        if (this.isStale(seq)) return;
+        if (++this.progressTick % PROGRESS_SEND_EVERY === 0) this.client?.send({ type: 'playback.progress', responseSeq: seq, playedMs });
       },
       onLevel: (features, dtMs) => {
         const shape = this.mouth.update(features, dtMs);
@@ -735,18 +747,20 @@ export class AppController {
 
   async start(): Promise<void> {
     postToFlutter({ type: 'status', status: 'loading' });
+    // Create and resume the player context first, while still inside the user gesture (desktop click).
+    await this.playback.init();
+    await this.resumeAudio();
+    postToFlutter({ type: 'diag', key: 'audio_context', value: this.playback.contextState });
+    if (this.playback.contextState !== 'running') this.resumeOnNextGesture();
+
     this.avatar = new AvatarView(this.el);
     await this.avatar.load(this.cfg.avatarUrl);
     this.actions = new ActionPlayer(this.avatar.talkingHead, { waveFbx: './animations/waving.fbx' });
 
-    await this.playback.init();
-    await this.playback.resume();
-    postToFlutter({ type: 'diag', key: 'audio_context', value: this.playback.contextState });
-
     const stream = await this.capture.start({
       echo: this.cfg.echo,
       onFrame: (pcm) => {
-        if (!this.muted) this.client?.sendAudio(pcm);
+        if (!this.muted && !this.ended) this.client?.sendAudio(pcm);
       },
     });
     postToFlutter({ type: 'diag', key: 'mic_settings', value: JSON.stringify(this.capture.settings()) });
@@ -754,12 +768,19 @@ export class AppController {
       onStart: (onsetAt) => this.onUserSpeechStart(onsetAt),
       onEnd: () => this.onUserSpeechEnd(),
     });
+    if (this.ended) {
+      // 'end' arrived while starting: release what shutdown() could not see yet.
+      await this.vad.destroy().catch(() => undefined);
+      await this.capture.stop().catch(() => undefined);
+      return;
+    }
 
     this.client = new GatewayClient(
       { baseUrl: this.cfg.gatewayUrl, appSecret: this.cfg.appSecret, clientInfo: { platform: 'android', audioPath: this.cfg.audioPath } },
       {
         onMessage: (m) => this.onServer(m),
         onAudio: (seq, pcm) => {
+          if (!this.playback.gate.accepts(seq)) return; // stale/cancelled audio counts for nothing
           this.subtitles.onAudio(seq, pcm.length);
           this.playback.push(seq, pcm);
         },
@@ -779,13 +800,10 @@ export class AppController {
         this.client?.send({ type: 'client.mute', muted: m.muted });
         break;
       case 'end':
-        this.client?.close();
-        this.playback.interrupt(); // no metric: this is not a barge-in
-        this.resetSpeakingState();
-        void this.vad.destroy();
-        void this.capture.stop(); // releases the microphone
+        void this.shutdown();
         break;
       case 'debugText':
+        if (this.ended) break;
         this.lastUserFinalAt = performance.now();
         this.interruptPlayback(performance.now());
         this.client?.send({ type: 'debug.userText', text: m.text });
@@ -793,6 +811,42 @@ export class AppController {
       case 'config':
         break; // handled in main.ts
     }
+  }
+
+  /** End: VAD first (its end edge goes out as vad silent), then the mic, then session.end. */
+  private async shutdown(): Promise<void> {
+    if (this.ended) return;
+    this.ended = true;
+    const r = this.playback.interrupt(); // no metric: this is not a barge-in
+    if (r) this.closedSeqs.add(r.seq);
+    this.actions?.stopAll();
+    await this.vad.destroy().catch(() => undefined);
+    await this.capture.stop().catch(() => undefined); // releases the microphone
+    this.client?.close();
+    this.resetSpeakingState();
+    if (this.thinkingTimer) clearTimeout(this.thinkingTimer);
+    if (this.nodTimer) clearInterval(this.nodTimer);
+    this.thinkingTimer = null;
+    this.nodTimer = null;
+  }
+
+  private async resumeAudio(): Promise<void> {
+    // resume() can stay pending forever without a user gesture; never block start() on it.
+    await Promise.race([this.playback.resume().catch(() => undefined), new Promise((r) => setTimeout(r, AUDIO_RESUME_WAIT_MS))]);
+  }
+
+  private resumeOnNextGesture(): void {
+    const retry = () => {
+      void this.playback.resume().then(
+        () => postToFlutter({ type: 'diag', key: 'audio_context', value: this.playback.contextState }),
+        () => undefined,
+      );
+    };
+    document.addEventListener('pointerdown', retry, { once: true });
+  }
+
+  private isStale(seq: number): boolean {
+    return seq <= this.seqFloor || this.closedSeqs.has(seq);
   }
 
   private onUserSpeechStart(onsetAt: number): void {
@@ -804,11 +858,11 @@ export class AppController {
   private interruptPlayback(onsetAt: number): void {
     const r = this.playback.interrupt();
     if (!r) return;
+    this.closedSeqs.add(r.seq);
     this.client?.send({ type: 'playback.stopped', responseSeq: r.seq, playedMs: r.playedMs, reason: 'interrupted' });
     postToFlutter({ type: 'subtitle', role: 'assistant', text: this.subtitles.truncate(r.seq, r.playedMs), final: true });
-    this.metric('interrupt_stop_ms', performance.now() + 30 - onsetAt); // + fade-out
-    this.vad.aiPlaying = false;
-    this.avatar?.setMouth(null);
+    this.metric('interrupt_stop_ms', performance.now() + FADE_MS - onsetAt); // + fade-out
+    this.clearSpeaking();
     this.actions?.stopAll();
   }
 
@@ -837,27 +891,40 @@ export class AppController {
         this.playback.resetForNewSession();
         this.subtitles.reset();
         this.kinds.clear();
+        this.closedSeqs.clear();
+        this.seqFloor = 0;
+        this.actions?.stopAll();
         this.resetSpeakingState();
         break;
       case 'session.resumed':
         this.playback.resetAfterResume(m.lastResponseSeq);
+        this.seqFloor = Math.max(this.seqFloor, m.lastResponseSeq);
+        this.actions?.stopAll();
         this.resetSpeakingState();
         break;
       case 'response.start':
         this.kinds.set(m.responseSeq, m.kind);
         this.playback.onResponseStart(m.responseSeq);
-        this.vad.aiPlaying = true;
+        if (this.playback.activeSeq === m.responseSeq) this.vad.aiPlaying = true;
         break;
       case 'response.end':
         this.playback.end(m.responseSeq);
         break;
       case 'response.cancelled': {
-        const text = this.subtitles.truncate(m.responseSeq, this.playback.playedMsFor(m.responseSeq));
-        postToFlutter({ type: 'subtitle', role: 'assistant', text, final: true });
-        this.playback.cancelled(m.responseSeq);
-        this.vad.aiPlaying = false;
-        this.avatar?.setMouth(null);
-        this.transition('cancelled');
+        const seq = m.responseSeq;
+        const wasActive = this.playback.activeSeq === seq;
+        if (!this.isStale(seq)) {
+          const text = this.subtitles.truncate(seq, this.playback.playedMsFor(seq));
+          postToFlutter({ type: 'subtitle', role: 'assistant', text, final: true });
+        }
+        this.closedSeqs.add(seq);
+        this.playback.cancelled(seq);
+        // Only touch the avatar if no newer response is playing.
+        if (wasActive || this.playback.activeSeq === null) {
+          this.clearSpeaking();
+          this.actions?.stopAll();
+          this.transition('cancelled');
+        }
         break;
       }
       case 'transcript.user':
@@ -865,6 +932,7 @@ export class AppController {
         postToFlutter({ type: 'subtitle', role: 'user', text: m.text, final: m.final });
         break;
       case 'transcript.assistant': {
+        if (m.responseSeq <= this.seqFloor) break;
         const text = this.subtitles.onDelta(m.responseSeq, m.text);
         if (text !== null) postToFlutter({ type: 'subtitle', role: 'assistant', text, final: false });
         break;
@@ -889,9 +957,13 @@ export class AppController {
     }
   }
 
-  private resetSpeakingState(): void {
+  private clearSpeaking(): void {
     this.vad.aiPlaying = false;
     this.avatar?.setMouth(null);
+  }
+
+  private resetSpeakingState(): void {
+    this.clearSpeaking();
     this.transition('cancelled');
   }
 
@@ -915,7 +987,9 @@ export class AppController {
 }
 ```
 
-- [ ] **Step 6: 入口与桌面调试页**
+集成说明（Task 14 实现时加入）：worklet 在 interrupt/cancel 之后仍可能对该 seq 发 `drained`/`stopped`，用 `closedSeqs`/`seqFloor` 忽略，避免重复 `playback.stopped`；`firstAudio` 与音频计数先经 `gate.accepts(seq)` 过滤；`resume()` 无手势时可能一直挂起，最多等 `AUDIO_RESUME_WAIT_MS` 并在下次 pointerdown 重试；`end` 按 VAD → 麦克风 → `session.end` 顺序关闭（VAD 的结束沿以 `vad silent` 发出）；中断/取消时调用 `ActionPlayer.stopAll()`；`interrupt_stop_ms` 用 `FADE_MS` 代替裸 30；`PROGRESS_SEND_EVERY` 提为 TUNABLE。
+
+- [x] **Step 6: 入口与桌面调试页**
 
 `avatar-core/src/main.ts`:
 
@@ -1051,7 +1125,7 @@ npm run dev -w avatar-core      # terminal 2，打开 http://localhost:5173
 
 任何一项卡住超过 20 分钟：按阻塞规则记入 `docs/blockers.md`，继续推荐顺序中的下一个任务。
 
-- [ ] **Step 8: 构建检查与提交**
+- [x] **Step 8: 构建检查与提交**
 
 Run: `npm run typecheck -w avatar-core && npm test -w avatar-core && npm run build -w avatar-core && ls avatar-core/dist`
 Expected: 无类型错误；测试 PASS；`dist/` 下有 `index.html`、`assets/`、`vad/`、`avatars/`。
