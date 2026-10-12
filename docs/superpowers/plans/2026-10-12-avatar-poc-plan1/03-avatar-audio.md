@@ -1568,6 +1568,12 @@ export class HttpError extends Error {
 
 const OPEN = 1;
 
+// TUNABLE: reconnect backoff (ms): base doubles per attempt up to the cap
+export const RESUME_BACKOFF_BASE_MS = 500;
+export const RESUME_BACKOFF_MAX_MS = 4000;
+// TUNABLE: give up resuming after this long (must stay below gateway 60 s grace)
+export const DEFAULT_MAX_RESUME_MS = 55_000;
+
 export class GatewayClient {
   private ws: WebSocketLike | null = null;
   private tokens: SessionTokens | null = null;
@@ -1646,11 +1652,11 @@ export class GatewayClient {
 
   private scheduleResume(): void {
     if (this.closedByUser) return;
-    if (Date.now() - this.disconnectedAt > (this.o.maxResumeMs ?? 55_000)) {
+    if (Date.now() - this.disconnectedAt > (this.o.maxResumeMs ?? DEFAULT_MAX_RESUME_MS)) {
       void this.restartFresh();
       return;
     }
-    const delay = Math.min(4000, 500 * 2 ** this.attempt++);
+    const delay = Math.min(RESUME_BACKOFF_MAX_MS, RESUME_BACKOFF_BASE_MS * 2 ** this.attempt++);
     this.ev.onStatus('reconnecting');
     this.retryTimer = setTimeout(() => void this.tryResume(), delay);
   }
