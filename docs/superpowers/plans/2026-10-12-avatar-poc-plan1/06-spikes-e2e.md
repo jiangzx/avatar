@@ -23,7 +23,7 @@
 - Consumes: `PlaybackController`、`MicCapture`、`LocalVad`、`SpeechDetector`、`EnergyTrigger`、`DEFAULT_DETECTOR`（Task 9–11）；`LocalAssetServer`、`AppConfig.page`（Task 15/16）
 - Produces: `AppConfig.spike`（dart-define `SPIKE`）；Dart `EnergyTrigger`；`ADR-001` 结论（选定 A 或 B）
 
-- [ ] **Step 1: Dart EnergyTrigger（先写测试）**
+- [x] **Step 1: Dart EnergyTrigger（先写测试）**
 
 `app/test/energy_trigger_test.dart`:
 
@@ -70,6 +70,11 @@ Expected: FAIL，找不到 `package:avatar_app/spike/energy_trigger.dart`。
 import 'dart:math';
 import 'dart:typed_data';
 
+// TUNABLE: same defaults as avatar-core/src/audio/energy.ts.
+const double energyThresholdRms = 1200;
+const int energyMinMs = 150;
+const int energyFrameMs = 20;
+
 double rmsInt16(Int16List pcm) {
   if (pcm.isEmpty) return 0;
   var sum = 0.0;
@@ -81,7 +86,7 @@ double rmsInt16(Int16List pcm) {
 
 /// Mirrors avatar-core/src/audio/energy.ts so paths A and B are judged identically.
 class EnergyTrigger {
-  EnergyTrigger({this.thresholdRms = 1200, this.minMs = 150, this.frameMs = 20});
+  EnergyTrigger({this.thresholdRms = energyThresholdRms, this.minMs = energyMinMs, this.frameMs = energyFrameMs});
 
   final double thresholdRms;
   final int minMs;
@@ -110,7 +115,7 @@ class EnergyTrigger {
 Run: `cd app && flutter test test/energy_trigger_test.dart`
 Expected: 2 个测试 PASS。
 
-- [ ] **Step 2: Spike A 页面（WebView 链路）**
+- [x] **Step 2: Spike A 页面（WebView 链路）**
 
 `avatar-core/spike-aec.html`:
 
@@ -141,10 +146,15 @@ Expected: 2 个测试 PASS。
 `avatar-core/src/spike/aec.ts`:
 
 ```ts
+import { AI_SAMPLE_RATE } from '@anyidea/protocol';
 import { MicCapture, type EchoMode } from '../audio/capture.ts';
 import { EnergyTrigger } from '../audio/energy.ts';
 import { PlaybackController } from '../audio/player.ts';
 import { DEFAULT_DETECTOR, LocalVad, SpeechDetector } from '../audio/vad.ts';
+
+export const FEED_CHUNK_MS = 100; // TUNABLE: playback feed interval and chunk length
+export const PREBUFFER_CHUNKS = 3; // TUNABLE: ~300 ms head start before real-time feeding
+export const RENDER_INTERVAL_MS = 1000; // TUNABLE: stats refresh period
 
 // Posts straight to the Flutter channel so this page does not depend on Task 14's bridge.ts.
 const postDiag = (value: string) =>
@@ -152,7 +162,7 @@ const postDiag = (value: string) =>
     JSON.stringify({ type: 'diag', key: 'spike_a', value }),
   );
 const out = document.getElementById('out')!;
-const CHUNK = 2400; // 100 ms @ 24 kHz
+const CHUNK = (AI_SAMPLE_RATE * FEED_CHUNK_MS) / 1000; // 2400 samples
 let running: { stop(): Promise<void> } | null = null;
 
 async function loadSpeech(): Promise<Int16Array> {
@@ -178,8 +188,8 @@ async function run(echo: EchoMode): Promise<void> {
     offset = (offset + CHUNK) % speech.length;
     player.push(1, chunk);
   };
-  for (let i = 0; i < 3; i++) pushNext(); // ~300 ms head start
-  const feeder = setInterval(pushNext, 100); // then real-time, looping the sample forever
+  for (let i = 0; i < PREBUFFER_CHUNKS; i++) pushNext();
+  const feeder = setInterval(pushNext, FEED_CHUNK_MS); // then real-time, looping the sample forever
 
   const capture = new MicCapture();
   const stream = await capture.start({ echo, onFrame: (pcm) => energy.push(pcm) });
@@ -207,7 +217,7 @@ async function run(echo: EchoMode): Promise<void> {
     out.textContent = text;
     postDiag(text);
   };
-  const ticker = setInterval(render, 1000);
+  const ticker = setInterval(render, RENDER_INTERVAL_MS);
   running = {
     async stop() {
       clearInterval(feeder);
@@ -232,7 +242,7 @@ document.getElementById('stop')!.addEventListener('click', () => void running?.s
     rollupOptions: { input: { main: 'index.html', spike: 'spike-aec.html' } },
 ```
 
-- [ ] **Step 3: 让 App 能打开原生 spike**
+- [x] **Step 3: 让 App 能打开原生 spike**
 
 spike A 页面用 Task 15/16 已有的 `--dart-define=PAGE=spike-aec.html` 打开。`app/lib/config.dart` 在 `AppConfig` 中新增（放在 `page` 下方）：
 
@@ -253,9 +263,11 @@ spike A 页面用 Task 15/16 已有的 `--dart-define=PAGE=spike-aec.html` 打�
 
 并在 `main.dart` 顶部加 `import 'spike/native_audio_spike.dart';`。
 
-- [ ] **Step 4: Spike B 页面（Flutter 原生链路）**
+- [x] **Step 4: Spike B 页面（Flutter 原生链路）**
 
 **未核实假设（AGENTS.md）：** 下面用到的 `flutter_pcm_sound` 3.3.3 API（`FlutterPcmSound.setup(sampleRate:, channelCount:)`、`setFeedThreshold`、`setFeedCallback`、`feed(PcmArrayInt16(bytes: ...))`、`start()`）尚未按包源码核实（2026-10-12 本机 `~/.pub-cache` 中没有该包）。写代码前先 `cd app && flutter pub get`，然后对照 `~/.pub-cache/hosted/pub.dev/flutter_pcm_sound-3.3.3/lib/` 核对方法名、参数名与回调签名；若不一致，按包源码改写本文件，并把差异记入 `docs/blockers.md`（模板见 Task 0）。
+
+**核实结果（2026-10-12，Task 17 实施时）：** 已对照 `flutter_pcm_sound-3.3.3/lib/flutter_pcm_sound.dart` 与 `record_platform_interface-2.1.0`（record 7.1.2 / record_android 2.2.0）源码核对，上述方法名、参数名、回调签名、`AndroidRecordConfig` 字段与枚举值均一致，无需改写。额外发现两点并已在下方代码中处理：① 插件默认日志级别会在每次 `feed` 时打印前 6 个样本字节，因此先调用 `setLogLevel(LogLevel.none)`；② `feed` 发送的是 `bytes.buffer` 整个底层缓冲区而不是视图，所以每次都新建 `Int16List`（不可改成复用大缓冲区的视图）。Android 端播放确认为 `USAGE_MEDIA` / `CONTENT_TYPE_MUSIC`。
 
 `app/lib/spike/native_audio_spike.dart`:
 
@@ -271,6 +283,9 @@ import 'package:record/record.dart';
 
 import 'energy_trigger.dart';
 
+const int nativeFeedChunkSamples = 12000; // TUNABLE: 0.5 s @ 24 kHz per feed and feed threshold
+const Duration nativeRenderInterval = Duration(seconds: 1); // TUNABLE: stats refresh period
+
 /// Path B: native capture (VOICE_COMMUNICATION + in-communication mode + speakerphone + AEC)
 /// while flutter_pcm_sound loops the same speech sample on the loudspeaker.
 class NativeAudioSpikePage extends StatefulWidget {
@@ -281,7 +296,6 @@ class NativeAudioSpikePage extends StatefulWidget {
 }
 
 class _NativeAudioSpikePageState extends State<NativeAudioSpikePage> {
-  static const _chunkSamples = 12000; // 0.5 s @ 24 kHz
   final _recorder = AudioRecorder();
   final _trigger = EnergyTrigger();
   StreamSubscription<Uint8List>? _sub;
@@ -297,8 +311,10 @@ class _NativeAudioSpikePageState extends State<NativeAudioSpikePage> {
     final bytes = await rootBundle.load('assets/web/spike/speech-24k.pcm');
     final raw = Uint8List.fromList(bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes & ~1));
     _speech = raw.buffer.asInt16List(); // copied, so the view is 2-byte aligned
+    // The plugin's default log level prints sample bytes of every feed; keep audio out of logs.
+    await FlutterPcmSound.setLogLevel(LogLevel.none);
     await FlutterPcmSound.setup(sampleRate: 24000, channelCount: 1);
-    await FlutterPcmSound.setFeedThreshold(_chunkSamples);
+    await FlutterPcmSound.setFeedThreshold(nativeFeedChunkSamples);
     FlutterPcmSound.setFeedCallback((_) => _feed());
     await _feed();
     FlutterPcmSound.start();
@@ -318,18 +334,19 @@ class _NativeAudioSpikePageState extends State<NativeAudioSpikePage> {
     ));
     _sub = stream.listen(_onMic);
     _startedAt = DateTime.now();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+    _ticker = Timer.periodic(nativeRenderInterval, (_) => setState(() {}));
     setState(() {});
   }
 
   Future<void> _feed() async {
     final speech = _speech;
     if (speech == null) return;
-    final chunk = Int16List(_chunkSamples);
-    for (var i = 0; i < _chunkSamples; i++) {
+    // A fresh list per feed: the plugin sends the whole backing buffer, not just the view.
+    final chunk = Int16List(nativeFeedChunkSamples);
+    for (var i = 0; i < nativeFeedChunkSamples; i++) {
       chunk[i] = speech[(_offset + i) % speech.length];
     }
-    _offset = (_offset + _chunkSamples) % speech.length;
+    _offset = (_offset + nativeFeedChunkSamples) % speech.length;
     await FlutterPcmSound.feed(PcmArrayInt16(bytes: ByteData.sublistView(chunk)));
   }
 

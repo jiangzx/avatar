@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AEC spike A</title>
+    <style>
+      body { margin: 0; padding: 16px; background: #10131a; color: #e8ecf3; font: 18px system-ui, sans-serif; }
+      button { font-size: 18px; padding: 12px 16px; margin: 4px 4px 12px 0; }
+      #out { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 16px; }
+    </style>
+  </head>
+  <body>
+    <h3>音频方案 A：WebView 采集 + AudioWorklet 外放</h3>
+    <button id="start-true" type="button">开始（EC=true）</button>
+    <button id="start-all" type="button">开始（EC=all）</button>
+    <button id="stop" type="button">停止</button>
+    <div id="out">手机平放，媒体音量 70%，安静房间，测试期间不要说话。</div>
+    <script type="module" src="/src/spike/aec.ts"></script>
+  </body>
+</html>

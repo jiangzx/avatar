@@ -8,6 +8,9 @@ class AppConfig {
   /// Page inside the web bundle to load: 'index.html' (product), 'probe.html' (Task 16), 'spike-aec.html' (Task 17).
   static const page = String.fromEnvironment('PAGE', defaultValue: 'index.html');
 
+  /// 'native_audio' opens the path-B spike instead of the WebView.
+  static const spike = String.fromEnvironment('SPIKE');
+
   /// Returns a user-facing problem description, or null when the config is usable.
   static String? validate() {
     if (!gatewayUrl.startsWith('http')) return 'GATEWAY_URL 未配置';
