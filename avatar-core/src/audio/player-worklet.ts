@@ -3,6 +3,9 @@ type InMsg =
   | { type: 'end'; seq: number }
   | { type: 'stop'; fadeMs: number };
 
+const LEVEL_INTERVAL_S = 0.016; // TUNABLE
+const PROGRESS_INTERVAL_S = 0.1; // TUNABLE
+
 class PlayerProcessor extends AudioWorkletProcessor {
   private queue: Float32Array[] = [];
   private offset = 0;
@@ -97,7 +100,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
     this.accSq += sumSq;
     this.accZc += zc;
     this.accN += out.length;
-    if (this.accN >= sampleRate * 0.016) {
+    if (this.accN >= sampleRate * LEVEL_INTERVAL_S) {
       this.port.postMessage({ type: 'level', rms: Math.sqrt(this.accSq / this.accN), zcr: this.accZc / this.accN, samples: this.accN });
       this.accSq = 0;
       this.accZc = 0;
@@ -105,7 +108,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
     }
     if (this.seq >= 0) {
       this.sinceProgress += out.length;
-      if (this.sinceProgress >= sampleRate * 0.1) {
+      if (this.sinceProgress >= sampleRate * PROGRESS_INTERVAL_S) {
         this.sinceProgress = 0;
         this.port.postMessage({ type: 'progress', seq: this.seq, playedSamples: this.played });
       }

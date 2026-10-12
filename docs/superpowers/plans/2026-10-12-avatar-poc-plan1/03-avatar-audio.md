@@ -680,6 +680,9 @@ type InMsg =
   | { type: 'end'; seq: number }
   | { type: 'stop'; fadeMs: number };
 
+const LEVEL_INTERVAL_S = 0.016; // TUNABLE
+const PROGRESS_INTERVAL_S = 0.1; // TUNABLE
+
 class PlayerProcessor extends AudioWorkletProcessor {
   private queue: Float32Array[] = [];
   private offset = 0;
@@ -774,7 +777,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
     this.accSq += sumSq;
     this.accZc += zc;
     this.accN += out.length;
-    if (this.accN >= sampleRate * 0.016) {
+    if (this.accN >= sampleRate * LEVEL_INTERVAL_S) {
       this.port.postMessage({ type: 'level', rms: Math.sqrt(this.accSq / this.accN), zcr: this.accZc / this.accN, samples: this.accN });
       this.accSq = 0;
       this.accZc = 0;
@@ -782,7 +785,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
     }
     if (this.seq >= 0) {
       this.sinceProgress += out.length;
-      if (this.sinceProgress >= sampleRate * 0.1) {
+      if (this.sinceProgress >= sampleRate * PROGRESS_INTERVAL_S) {
         this.sinceProgress = 0;
         this.port.postMessage({ type: 'progress', seq: this.seq, playedSamples: this.played });
       }
@@ -825,6 +828,7 @@ type OutMsg =
   | { type: 'level'; rms: number; zcr: number; samples: number };
 
 export const FADE_MS = 30; // TUNABLE
+export const RESET_FADE_MS = 10; // TUNABLE
 
 /** Plays streamed 24 kHz PCM with per-response gating and instant barge-in. */
 export class PlaybackController {
@@ -892,14 +896,14 @@ export class PlaybackController {
 
   resetAfterResume(lastSeq: number): void {
     this.gate.resetBelow(lastSeq);
-    this.node?.port.postMessage({ type: 'stop', fadeMs: 10 });
+    this.node?.port.postMessage({ type: 'stop', fadeMs: RESET_FADE_MS });
   }
 
   /** A fresh gateway session (sequence numbers restart at 1). */
   resetForNewSession(): void {
     this.gate.reset();
     this.playedSamples.clear();
-    this.node?.port.postMessage({ type: 'stop', fadeMs: 10 });
+    this.node?.port.postMessage({ type: 'stop', fadeMs: RESET_FADE_MS });
   }
 
   playedMsFor(seq: number): number {

@@ -19,6 +19,7 @@ type OutMsg =
   | { type: 'level'; rms: number; zcr: number; samples: number };
 
 export const FADE_MS = 30; // TUNABLE
+export const RESET_FADE_MS = 10; // TUNABLE
 
 /** Plays streamed 24 kHz PCM with per-response gating and instant barge-in. */
 export class PlaybackController {
@@ -86,14 +87,14 @@ export class PlaybackController {
 
   resetAfterResume(lastSeq: number): void {
     this.gate.resetBelow(lastSeq);
-    this.node?.port.postMessage({ type: 'stop', fadeMs: 10 });
+    this.node?.port.postMessage({ type: 'stop', fadeMs: RESET_FADE_MS });
   }
 
   /** A fresh gateway session (sequence numbers restart at 1). */
   resetForNewSession(): void {
     this.gate.reset();
     this.playedSamples.clear();
-    this.node?.port.postMessage({ type: 'stop', fadeMs: 10 });
+    this.node?.port.postMessage({ type: 'stop', fadeMs: RESET_FADE_MS });
   }
 
   playedMsFor(seq: number): number {
