@@ -186,6 +186,15 @@ import type { AvatarState } from './stateMachine.ts';
 const MOUTH_KEYS = ['jawOpen', 'mouthFunnel', 'mouthPucker', 'mouthStretchLeft', 'mouthStretchRight'] as const;
 const MOODS = new Set(['neutral', 'happy', 'sad', 'love']);
 
+// TUNABLE: renderer and gaze parameters.
+export const MODEL_FPS = 30;
+export const MAX_PIXEL_RATIO = 2;
+export const LISTEN_EYE_CONTACT_MS = 4000;
+export const THINK_LOOK_AHEAD_MS = 1200;
+export const SPEAK_EYE_CONTACT_MS = 3000;
+// TUNABLE: pucker follows funnel at this ratio.
+export const PUCKER_RATIO = 0.5;
+
 /** Thin wrapper over TalkingHead: we drive the mouth ourselves; TalkingHead handles idle life, eyes, gestures. */
 export class AvatarView {
   private readonly head: TalkingHead;
@@ -197,8 +206,8 @@ export class AvatarView {
       lipsyncModules: [], // we never use TalkingHead's TTS/lipsync; avoids dynamic imports that break when bundled
       cameraView: 'mid', // head to waist, keeps hands in frame on a portrait phone
       cameraRotateEnable: false,
-      modelFPS: 30,
-      modelPixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+      modelFPS: MODEL_FPS,
+      modelPixelRatio: Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO),
       avatarMood: 'neutral',
     });
   }
@@ -221,7 +230,7 @@ export class AvatarView {
     this.mouthActive = true;
     this.set('jawOpen', shape.jawOpen);
     this.set('mouthFunnel', shape.funnel);
-    this.set('mouthPucker', shape.funnel * 0.5);
+    this.set('mouthPucker', shape.funnel * PUCKER_RATIO);
     this.set('mouthStretchLeft', shape.stretch);
     this.set('mouthStretchRight', shape.stretch);
   }
@@ -229,13 +238,13 @@ export class AvatarView {
   enterState(state: AvatarState): void {
     switch (state) {
       case 'listening':
-        this.head.makeEyeContact(4000);
+        this.head.makeEyeContact(LISTEN_EYE_CONTACT_MS);
         break;
       case 'thinking':
-        this.head.lookAhead(1200);
+        this.head.lookAhead(THINK_LOOK_AHEAD_MS);
         break;
       case 'speaking':
-        this.head.makeEyeContact(3000);
+        this.head.makeEyeContact(SPEAK_EYE_CONTACT_MS);
         break;
       case 'idle':
         break;
@@ -276,6 +285,11 @@ const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 
 
 /** TUNABLE (estimates): action parameters tuned on device in Task 18. */
 export const ACTION_TUNING = {
+  wave: { durationSec: 2.4, fadeMs: 400 },
+  heart: { durationSec: 2.5, fadeMs: 400 },
+  stopFadeMs: 300,
+  smile: { value: 0.8, holdMs: 2000 },
+  turn: { durationMs: 1800 },
   nod: {
     subtle: { amplitude: 0.06, cycles: 1, durationMs: 500 }, // amplitude in radians
     full: { amplitude: 0.18, cycles: 2, durationMs: 900 },
@@ -332,7 +346,7 @@ export class ActionPlayer {
   }
 
   stopAll(): void {
-    this.head.stopGesture(300);
+    this.head.stopGesture(ACTION_TUNING.stopFadeMs);
     this.head.stopAnimation();
   }
 
@@ -343,8 +357,8 @@ export class ActionPlayer {
       this.waveFbxOk = res?.ok ?? false;
       void res?.body?.cancel();
     }
-    if (this.assets.waveFbx && this.waveFbxOk) await this.head.playAnimation(this.assets.waveFbx, null, 2.4);
-    else this.head.playGesture('handup', 2.4, true, 400);
+    if (this.assets.waveFbx && this.waveFbxOk) await this.head.playAnimation(this.assets.waveFbx, null, ACTION_TUNING.wave.durationSec);
+    else this.head.playGesture('handup', ACTION_TUNING.wave.durationSec, true, ACTION_TUNING.wave.fadeMs);
   }
 
   /** Procedural nod on TalkingHead's headRotateX channel; subtle = listening backchannel. */
@@ -370,9 +384,9 @@ export class ActionPlayer {
   }
 
   smile(): void {
-    this.head.setFixedValue('mouthSmile', 0.8);
+    this.head.setFixedValue('mouthSmile', ACTION_TUNING.smile.value);
     if (this.smileTimer) clearTimeout(this.smileTimer);
-    this.smileTimer = setTimeout(() => this.head.setFixedValue('mouthSmile', null), 2000);
+    this.smileTimer = setTimeout(() => this.head.setFixedValue('mouthSmile', null), ACTION_TUNING.smile.holdMs);
   }
 
   turn(): void {
@@ -380,7 +394,7 @@ export class ActionPlayer {
     if (!root || this.turning) return;
     this.turning = true;
     const start = root.rotation.y;
-    const duration = 1800;
+    const duration = ACTION_TUNING.turn.durationMs;
     const t0 = performance.now();
     const step = (now: number) => {
       const p = Math.min(1, (now - t0) / duration);
@@ -400,13 +414,13 @@ export class ActionPlayer {
     if (!this.heartRegistered) {
       const base = this.head.gestureTemplates.handup;
       if (!base) {
-        this.head.playGesture('handup', 2.5, true, 400);
+        this.head.playGesture('handup', ACTION_TUNING.heart.durationSec, true, ACTION_TUNING.heart.fadeMs);
         return;
       }
       this.head.gestureTemplates.heart = { ...base, ...ACTION_TUNING.heartFingers };
       this.heartRegistered = true;
     }
-    this.head.playGesture('heart', 2.5, true, 400);
+    this.head.playGesture('heart', ACTION_TUNING.heart.durationSec, true, ACTION_TUNING.heart.fadeMs);
   }
 }
 ```
