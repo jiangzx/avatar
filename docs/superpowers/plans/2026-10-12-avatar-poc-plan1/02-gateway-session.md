@@ -24,6 +24,7 @@
 - 新回复开始时若上一条仍在客户端播放（被顶替）：先发 `response.cancelled(旧)`，按已上报的 `playedMs` 截断写入 Ledger，再发 `response.start(新)`。顺序保证客户端先停旧、再接新。
 - 新回复开始时调用 `director.onAiTurnStarted()`，清掉静默计时。
 - 助手条目在客户端报告"播放结束 / 被打断"时才写入 Ledger；被打断时按 `truncateByPlayback` 截断，并在模型不支持截断时注入上下文说明。
+- `playback.stopped(ended)` 仅在该 seq 仍是 `interrupt.active` 时生效；迟到的旧 seq 结束事件（已取消/被取代）直接忽略，避免误触发 `onAiTurnEnded` 和 slim 重建取消新一轮回复。
 - 用户终稿：写 Ledger → 关键词动作 → 视需要触发摘要。
 - 模型连接 `error(retryable)` / `closed` → 重建模型会话（客户端不断开），并发 `error(model_reconnecting)`；AI 一轮播放自然结束后，若模型侧上下文估算超过 `modelContextTokenLimit × 0.8` 或累计 `rebuildAfterTurns` 轮，静默重建瘦身（这是 spec §6 "下一次用户说完前"的落地点：选在 AI 播放自然结束后的空闲点，避免打断进行中的回复）。
 - 客户端断开：暂停 Director、取消进行中的回复、按 20 ms 节奏给模型补静音帧；重新接入：发 `session.resumed`，Director 说一句续接语。
@@ -217,6 +218,19 @@ describe('Session', () => {
     expect(of(s.sent, 'error')).toEqual([]);
   });
 
+  it('ignores a stale playback end that arrives after a new turn started', async () => {
+    const s = setup({ rebuildAfterTurns: 1 });
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(1000); // greeting streamed, still playing on the client
+    s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(150); // reply seq 2 is active
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(s.mocks).toHaveLength(1);
+    expect(of(s.sent, 'response.cancelled')).toEqual([{ type: 'response.cancelled', responseSeq: 1 }]);
+    expect(assistantText(s.sent, 2)).toBe('我在听');
+  });
+
   it('survives a client disconnect and resumes with a bridging line', async () => {
     const s = setup();
     await s.session.start(s.transport);
@@ -387,6 +401,8 @@ export class Session {
           this.interrupt.onClientInterrupted(msg.responseSeq);
           this.finalize(s, true);
         } else {
+          // Stale end (already cancelled/superseded, a newer turn may be active): ignore.
+          if (this.interrupt.active !== msg.responseSeq) break;
           this.finalize(s, false);
           this.interrupt.onResponseFinished(msg.responseSeq);
           this.director.onAiTurnEnded();

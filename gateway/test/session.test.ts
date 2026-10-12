@@ -182,6 +182,19 @@ describe('Session', () => {
     expect(of(s.sent, 'error')).toEqual([]);
   });
 
+  it('ignores a stale playback end that arrives after a new turn started', async () => {
+    const s = setup({ rebuildAfterTurns: 1 });
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(1000); // greeting streamed, still playing on the client
+    s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(150); // reply seq 2 is active
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(s.mocks).toHaveLength(1);
+    expect(of(s.sent, 'response.cancelled')).toEqual([{ type: 'response.cancelled', responseSeq: 1 }]);
+    expect(assistantText(s.sent, 2)).toBe('我在听');
+  });
+
   it('survives a client disconnect and resumes with a bridging line', async () => {
     const s = setup();
     await s.session.start(s.transport);

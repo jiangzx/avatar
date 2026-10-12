@@ -121,6 +121,8 @@ export class Session {
           this.interrupt.onClientInterrupted(msg.responseSeq);
           this.finalize(s, true);
         } else {
+          // Stale end (already cancelled/superseded, a newer turn may be active): ignore.
+          if (this.interrupt.active !== msg.responseSeq) break;
           this.finalize(s, false);
           this.interrupt.onResponseFinished(msg.responseSeq);
           this.director.onAiTurnEnded();
