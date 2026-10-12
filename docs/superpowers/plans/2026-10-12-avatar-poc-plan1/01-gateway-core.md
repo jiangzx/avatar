@@ -1467,6 +1467,13 @@ describe('config', () => {
     expect(() => loadConfig({ APP_SECRET: 'short' })).toThrow(/APP_SECRET/);
   });
 
+  it('rejects template placeholder secrets without echoing them', () => {
+    for (const v of ['change-me-to-a-random-32-char-string', 'CHANGE-ME-xxxxxxxxxxxxxxxx', 'same-as-gateway-APP_SECRET']) {
+      expect(() => loadConfig({ APP_SECRET: v })).toThrow(/APP_SECRET/);
+      try { loadConfig({ APP_SECRET: v }); } catch (e) { expect((e as Error).message).not.toContain(v); }
+    }
+  });
+
   it('only accepts the mock adapter in Plan 1', () => {
     expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), ADAPTER: 'seeduplex' })).toThrow(/ADAPTER/);
   });
@@ -1654,6 +1661,7 @@ export interface GatewayConfig {
 export function loadConfig(env: Record<string, string | undefined> = process.env): GatewayConfig {
   const appSecret = env.APP_SECRET ?? '';
   if (appSecret.length < 16) throw new Error('APP_SECRET must be set (at least 16 characters)');
+  if (/^(change-me|same-as-)/i.test(appSecret)) throw new Error('APP_SECRET must be replaced (template placeholder)');
   const adapter = env.ADAPTER ?? 'mock';
   if (adapter !== 'mock') throw new Error(`Unsupported ADAPTER "${adapter}" (real adapters arrive in Plan 2)`);
   const port = Number(env.PORT ?? 8787);

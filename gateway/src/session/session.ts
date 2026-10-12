@@ -91,6 +91,9 @@ export class Session {
     this.transport = null;
     this.director.pause();
     this.interrupt.cancelActive('local');
+    // A 'vad silent' sent during the drop is lost: reset the speaking flags.
+    this.interrupt.onLocalVad(false);
+    this.director.onUserSpeech(false);
     this.startKeepalive();
   }
 

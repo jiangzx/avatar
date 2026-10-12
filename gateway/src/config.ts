@@ -15,6 +15,7 @@ export interface GatewayConfig {
 export function loadConfig(env: Record<string, string | undefined> = process.env): GatewayConfig {
   const appSecret = env.APP_SECRET ?? '';
   if (appSecret.length < 16) throw new Error('APP_SECRET must be set (at least 16 characters)');
+  if (/^(change-me|same-as-)/i.test(appSecret)) throw new Error('APP_SECRET must be replaced (template placeholder)');
   const adapter = env.ADAPTER ?? 'mock';
   if (adapter !== 'mock') throw new Error(`Unsupported ADAPTER "${adapter}" (real adapters arrive in Plan 2)`);
   const port = Number(env.PORT ?? 8787);

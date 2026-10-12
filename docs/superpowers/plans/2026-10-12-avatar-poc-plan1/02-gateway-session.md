@@ -247,6 +247,19 @@ describe('Session', () => {
     expect(second.audio.every((a) => a.seq === 2)).toBe(true);
   });
 
+  it('a drop while the user was speaking does not leave the speaking state stuck', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 0 });
+    s.session.detachTransport(); // the 'vad silent' message is lost with the socket
+    const second = collector();
+    s.session.attachTransport(second.transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(of(second.sent, 'response.start')).toEqual([{ type: 'response.start', responseSeq: 2, kind: 'followup' }]);
+    s.mocks[0].emit('userSpeechStarted'); // model-only speech must wait for local confirmation again
+    expect(of(second.sent, 'response.cancelled')).toEqual([]);
+  });
+
   it('drops uplink audio while muted', async () => {
     const s = setup();
     await greetAndFinish(s);
@@ -371,6 +384,9 @@ export class Session {
     this.transport = null;
     this.director.pause();
     this.interrupt.cancelActive('local');
+    // A 'vad silent' sent during the drop is lost: reset the speaking flags.
+    this.interrupt.onLocalVad(false);
+    this.director.onUserSpeech(false);
     this.startKeepalive();
   }
 
@@ -633,7 +649,7 @@ export class Session {
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w gateway -- session`
-Expected: 13 个测试 PASS。
+Expected: 15 个测试 PASS。
 
 如果 "summarizes older turns" 失败：检查 `greetAndFinish` 之后 Ledger 内容应为 `[助手:你好呀]`，第一句后为 `[助手:你好呀, 用户:第一句, 助手:我在听]`，第二句写入后 `keepRecentTurns: 1` 的切点在"用户：第二句"，因此摘要包含前三条。
 

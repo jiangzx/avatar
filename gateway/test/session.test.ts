@@ -211,6 +211,19 @@ describe('Session', () => {
     expect(second.audio.every((a) => a.seq === 2)).toBe(true);
   });
 
+  it('a drop while the user was speaking does not leave the speaking state stuck', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 0 });
+    s.session.detachTransport(); // the 'vad silent' message is lost with the socket
+    const second = collector();
+    s.session.attachTransport(second.transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(of(second.sent, 'response.start')).toEqual([{ type: 'response.start', responseSeq: 2, kind: 'followup' }]);
+    s.mocks[0].emit('userSpeechStarted'); // model-only speech must wait for local confirmation again
+    expect(of(second.sent, 'response.cancelled')).toEqual([]);
+  });
+
   it('drops uplink audio while muted', async () => {
     const s = setup();
     await greetAndFinish(s);
