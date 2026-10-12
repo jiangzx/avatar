@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   base: './',
-  server: { host: '0.0.0.0', port: 5173 },
+  server: { host: '127.0.0.1', port: 5173 }, // loopback only: the dev page is opened on this machine
   optimizeDeps: { exclude: ['onnxruntime-web', '@ricky0123/vad-web'] },
   build: {
     target: 'es2022',

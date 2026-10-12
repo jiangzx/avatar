@@ -73,7 +73,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   base: './',
-  server: { host: '0.0.0.0', port: 5173 },
+  server: { host: '127.0.0.1', port: 5173 }, // loopback only: the dev page is opened on this machine
   optimizeDeps: { exclude: ['onnxruntime-web', '@ricky0123/vad-web'] },
   build: {
     target: 'es2022',
@@ -871,6 +871,7 @@ export class PlaybackController {
     if (!this.node || !this.gate.accepts(seq)) return;
     let samples = int16ToFloat32(pcm24k);
     if (this.resampler) samples = this.resampler.process(samples);
+    if (samples.length === 0) return; // an empty frame would make the worklet read undefined (NaN)
     this.node.port.postMessage({ type: 'push', seq, samples }, [samples.buffer]);
   }
 
@@ -938,6 +939,28 @@ export class PlaybackController {
 }
 ```
 
+`avatar-core/test/player.test.ts`（最终评审修复：零长度帧会让 worklet 读到 undefined 产生 NaN，`push()` 直接丢弃；node 下无 AudioContext，用替身 port 验证）:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { PlaybackController } from '../src/audio/player.ts';
+
+describe('PlaybackController.push', () => {
+  it('drops zero-length frames (the worklet would read undefined samples)', () => {
+    const noop = () => {};
+    const p = new PlaybackController({ onFirstAudio: noop, onEnded: noop, onStopped: noop, onProgress: noop, onLevel: noop });
+    const posted: unknown[] = [];
+    // No AudioContext in node: stand in for the worklet node's port.
+    (p as unknown as { node: unknown }).node = { port: { postMessage: (m: unknown) => posted.push(m) } };
+    p.onResponseStart(1);
+    p.push(1, new Int16Array(0));
+    expect(posted).toEqual([]);
+    p.push(1, new Int16Array(4));
+    expect(posted).toHaveLength(1);
+  });
+});
+```
+
 - [ ] **Step 7: 类型检查与提交**
 
 Run: `npm run typecheck -w avatar-core && npm test -w avatar-core`
@@ -946,7 +969,7 @@ Expected: 无类型错误；测试全部 PASS。若 `?worker&url` 导入报"找�
 worklet 加载方式的说明（基于 Vite 8.3.4 源码的判断，以 Task 14 Step 7 和 Task 17 的实际运行为准）：dev 下 `?worker&url` 以 module 方式提供并注入 `import "/@vite/env"`，生产构建输出 IIFE，两者都能被 `audioWorklet.addModule` 加载。若实测 `addModule` 报错，退路是把两个 worklet 改写成纯 JS 放到 `avatar-core/public/worklets/`，用 `new URL('./worklets/player-worklet.js', document.baseURI).href` 加载，并记入 `docs/blockers.md`。
 
 ```bash
-git add avatar-core/src/audio avatar-core/test/playbackGate.test.ts
+git add avatar-core/src/audio avatar-core/test/playbackGate.test.ts avatar-core/test/player.test.ts
 git commit -m "feat(avatar-core): gated AudioWorklet player with instant barge-in
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"

@@ -62,6 +62,7 @@ export class PlaybackController {
     if (!this.node || !this.gate.accepts(seq)) return;
     let samples = int16ToFloat32(pcm24k);
     if (this.resampler) samples = this.resampler.process(samples);
+    if (samples.length === 0) return; // an empty frame would make the worklet read undefined (NaN)
     this.node.port.postMessage({ type: 'push', seq, samples }, [samples.buffer]);
   }
 

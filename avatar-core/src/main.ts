@@ -6,19 +6,16 @@ const el = document.getElementById('avatar');
 if (!el) throw new Error('#avatar missing');
 let app: AppController | null = null;
 
-function errorCode(e: unknown): string {
-  if (e instanceof DOMException) return e.name; // e.g. NotAllowedError for the microphone
-  if (e instanceof Error) return e.message.slice(0, 64);
-  return 'unknown';
-}
-
 async function boot(cfg: AppConfig): Promise<void> {
   if (app) return;
-  app = new AppController(el!, cfg);
+  const current = new AppController(el!, cfg);
+  app = current;
   try {
-    await app.start();
-  } catch (e) {
-    postToFlutter({ type: 'error', code: errorCode(e) });
+    await current.start(); // posts the bridge error itself and releases mic/VAD on failure
+  } catch {
+    // Allow a later config message to retry with a clean element.
+    if (app === current) app = null;
+    el!.replaceChildren();
   }
 }
 
