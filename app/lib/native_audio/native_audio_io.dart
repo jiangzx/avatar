@@ -78,6 +78,12 @@ class PluginNativeAudioIO implements NativeAudioIO {
   }
 
   @override
+  Future<void> resetResponsesBelow(int responseSeq) async {
+    _queue.resetBelow(responseSeq);
+    if (_activeSeq != null && _activeSeq! <= responseSeq) await stopResponse(reason: StopReason.reset);
+  }
+
+  @override
   Future<PlayedAudio> stopResponse({required StopReason reason}) async {
     if (_activeSeq == null) return const PlayedAudio(responseSeq: 0, playedMs: 0);
     final result = _queue.stop(reason);

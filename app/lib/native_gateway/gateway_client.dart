@@ -13,13 +13,21 @@ abstract interface class GatewayClientEvents {
   void onStatus(GatewayStatus status);
 }
 
+abstract interface class GatewayClientLike {
+  void attachEvents(GatewayClientEvents events);
+  Future<void> start();
+  void send(ClientMessage message);
+  void sendAudio(Int16List pcm16k);
+  Future<void> close();
+}
+
 class GatewayHttpException implements Exception {
   const GatewayHttpException(this.statusCode);
 
   final int statusCode;
 }
 
-class NativeGatewayClient {
+class NativeGatewayClient implements GatewayClientLike {
   NativeGatewayClient({
     required this.baseUri,
     required this.appSecret,
@@ -35,7 +43,7 @@ class NativeGatewayClient {
   final Uri baseUri;
   final String appSecret;
   final GatewayTransport transport;
-  final GatewayClientEvents events;
+  GatewayClientEvents events;
   final String platform;
   final String audioPath;
   final Duration maxResume;
@@ -54,6 +62,10 @@ class NativeGatewayClient {
 
   bool get isOpen => _socket != null;
 
+  @override
+  void attachEvents(GatewayClientEvents next) => events = next;
+
+  @override
   Future<void> start() async {
     _closedByUser = false;
     _closedEmitted = false;
@@ -63,18 +75,21 @@ class NativeGatewayClient {
     await _startFresh();
   }
 
+  @override
   void send(ClientMessage message) {
     final socket = _socket;
     if (socket == null) return;
     socket.send(jsonEncode(message.toJson()));
   }
 
+  @override
   void sendAudio(Int16List pcm16k) {
     final socket = _socket;
     if (socket == null || pcm16k.isEmpty) return;
     socket.send(encodeAudioFrame(frameMic, 0, pcm16k));
   }
 
+  @override
   Future<void> close() async {
     if (_closedByUser) return;
     _closedByUser = true;

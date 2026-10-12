@@ -27,6 +27,7 @@ abstract interface class NativeAudioIO {
   Future<void> startResponse(int responseSeq);
   Future<void> pushResponse(int responseSeq, Int16List pcm24k);
   Future<void> endResponse(int responseSeq);
+  Future<void> resetResponsesBelow(int responseSeq);
   Future<PlayedAudio> stopResponse({required StopReason reason});
   Future<void> setInputEnabled(bool enabled);
   Future<void> stop();
