@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "com.anyidea.avatar_app"
-    compileSdk = flutter.compileSdkVersion
+    // permission_handler_android 14.1.0 requires compileSdk >= 37 (flutter default is 36).
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
