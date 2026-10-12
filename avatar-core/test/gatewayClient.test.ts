@@ -86,6 +86,7 @@ describe('GatewayClient', () => {
     const t = setup([{ status: 200, body: tokens(1) }, { status: 200, body: tokens(2) }]);
     await t.client.start();
     FakeWS.instances[0].open();
+    FakeWS.instances[0].onmessage?.({ data: JSON.stringify({ type: 'session.ready', sessionId: 's1' }) });
     FakeWS.instances[0].drop();
     expect(t.statuses.at(-1)).toBe('reconnecting');
     await vi.advanceTimersByTimeAsync(500);
@@ -132,6 +133,81 @@ describe('GatewayClient', () => {
     ws.open();
     expect(ws.json(0).type).toBe('session.start');
     expect(t.statuses.at(-1)).toBe('open');
+  });
+
+  it('falls back to a fresh session when post-open closes repeat without session.ready', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }, ...Array.from({ length: 30 }, (_, i) => ({ status: 200, body: tokens(i + 2) }))]);
+    await t.client.start();
+    // Upgrade aborts after the connect token was claimed: session.start never reached the gateway.
+    FakeWS.instances[0].drop();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(t.calls[1].url).toBe('http://gw.test/session/resume');
+    const ws2 = FakeWS.instances[1];
+    ws2.open();
+    // The session never started, so the new socket must start it rather than resume.
+    expect(ws2.json(0).type).toBe('session.start');
+    // From here the gateway closes every socket right after open (e.g. 4002 bad_state).
+    for (let i = 0; i < 40 && !t.calls.slice(1).some((c) => c.url === 'http://gw.test/session'); i++) {
+      FakeWS.instances.at(-1)!.open();
+      FakeWS.instances.at(-1)!.drop();
+      await vi.advanceTimersByTimeAsync(4_000);
+    }
+    expect(t.calls.slice(1).some((c) => c.url === 'http://gw.test/session')).toBe(true);
+    expect(FakeWS.instances.length).toBeLessThan(12);
+    expect(t.calls.length).toBeLessThan(12);
+    const fresh = FakeWS.instances.at(-1)!;
+    fresh.open();
+    expect(fresh.json(0).type).toBe('session.start');
+    fresh.onmessage?.({ data: JSON.stringify({ type: 'session.ready', sessionId: 's1' }) });
+    expect(t.statuses.at(-1)).toBe('open');
+  });
+
+  it('resets backoff only after session.resumed, then resumes again on the next drop', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }, { status: 200, body: tokens(2) }, { status: 200, body: tokens(3) }]);
+    await t.client.start();
+    const ws1 = FakeWS.instances[0];
+    ws1.open();
+    ws1.onmessage?.({ data: JSON.stringify({ type: 'session.ready', sessionId: 's1' }) });
+    ws1.drop();
+    await vi.advanceTimersByTimeAsync(500);
+    const ws2 = FakeWS.instances[1];
+    ws2.open();
+    expect(ws2.json(0)).toEqual({ type: 'session.resume', sessionId: 's1' });
+    ws2.onmessage?.({ data: JSON.stringify({ type: 'session.resumed', lastResponseSeq: 0 }) });
+    ws2.drop();
+    // Backoff was reset by session.resumed, so the next retry fires after the base delay.
+    await vi.advanceTimersByTimeAsync(500);
+    expect(t.calls.map((c) => c.url)).toEqual(['http://gw.test/session', 'http://gw.test/session/resume', 'http://gw.test/session/resume']);
+    FakeWS.instances[2].open();
+    expect(FakeWS.instances[2].json(0).type).toBe('session.resume');
+  });
+
+  it('close() during an in-flight reconnect POST opens no new socket', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }, { status: 200, body: tokens(2) }]);
+    await t.client.start();
+    FakeWS.instances[0].open();
+    FakeWS.instances[0].drop();
+    // Fire the retry timer; the resume POST is now pending.
+    vi.advanceTimersByTime(500);
+    expect(t.calls).toHaveLength(2);
+    t.client.close();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(FakeWS.instances).toHaveLength(1);
+    expect(t.client.isOpen).toBe(false);
+    expect(t.statuses.at(-1)).toBe('closed');
+  });
+
+  it('close() while reconnecting emits closed', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }]);
+    await t.client.start();
+    FakeWS.instances[0].open();
+    FakeWS.instances[0].drop();
+    expect(t.statuses.at(-1)).toBe('reconnecting');
+    t.client.close();
+    expect(t.statuses.at(-1)).toBe('closed');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(t.calls).toHaveLength(1);
+    expect(FakeWS.instances).toHaveLength(1);
   });
 
   it('close() ends the session without reconnecting', async () => {

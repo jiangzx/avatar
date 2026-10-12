@@ -1352,7 +1352,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `class GatewayClient(options: { baseUrl; appSecret; clientInfo: { platform: string; audioPath: AudioPath }; fetchFn?; WebSocketCtor?; maxResumeMs? }, events: { onMessage(m: ServerMessage); onAudio(seq, pcm); onStatus(s: ClientStatus) })`：`start(): Promise<void>`、`send(m: ClientMessage)`、`sendAudio(pcm16k)`、`close()`、`isOpen`
   - `class HttpError extends Error { status: number }`
 
-续接逻辑：非用户主动断开 → 退避 500 ms、1 s、2 s、4 s（封顶 4 s）调用 `POST /session/resume` → 新 WS 发 `session.resume`；`404/401` 或累计断开超过 `maxResumeMs`（默认 55 秒，小于网关 60 秒宽限期）→ 改为新建会话并发 `session.start`。
+续接逻辑：非用户主动断开 → 退避 500 ms、1 s、2 s、4 s（封顶 4 s）调用 `POST /session/resume` → 新 WS 发 `session.resume`（若会话从未收到 `session.ready`/`session.resumed`，即 `session.start` 未到达网关，则新 WS 改发 `session.start`）；退避计数与断开时间只在收到 `session.ready`/`session.resumed` 后清零（不在 `onopen` 清零），所以 open 后反复被网关关闭（如 4002）仍会在 `maxResumeMs` 后转为新建会话；`close()` 后在途的 POST 不再开新 WS，重连中调用 `close()` 立即发出 `closed`；`404/401` 或累计断开超过 `maxResumeMs`（默认 55 秒，小于网关 60 秒宽限期）→ 改为新建会话并发 `session.start`。
 
 - [ ] **Step 1: 写失败的测试**
 
@@ -1447,6 +1447,7 @@ describe('GatewayClient', () => {
     const t = setup([{ status: 200, body: tokens(1) }, { status: 200, body: tokens(2) }]);
     await t.client.start();
     FakeWS.instances[0].open();
+    FakeWS.instances[0].onmessage?.({ data: JSON.stringify({ type: 'session.ready', sessionId: 's1' }) });
     FakeWS.instances[0].drop();
     expect(t.statuses.at(-1)).toBe('reconnecting');
     await vi.advanceTimersByTimeAsync(500);
@@ -1493,6 +1494,81 @@ describe('GatewayClient', () => {
     ws.open();
     expect(ws.json(0).type).toBe('session.start');
     expect(t.statuses.at(-1)).toBe('open');
+  });
+
+  it('falls back to a fresh session when post-open closes repeat without session.ready', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }, ...Array.from({ length: 30 }, (_, i) => ({ status: 200, body: tokens(i + 2) }))]);
+    await t.client.start();
+    // Upgrade aborts after the connect token was claimed: session.start never reached the gateway.
+    FakeWS.instances[0].drop();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(t.calls[1].url).toBe('http://gw.test/session/resume');
+    const ws2 = FakeWS.instances[1];
+    ws2.open();
+    // The session never started, so the new socket must start it rather than resume.
+    expect(ws2.json(0).type).toBe('session.start');
+    // From here the gateway closes every socket right after open (e.g. 4002 bad_state).
+    for (let i = 0; i < 40 && !t.calls.slice(1).some((c) => c.url === 'http://gw.test/session'); i++) {
+      FakeWS.instances.at(-1)!.open();
+      FakeWS.instances.at(-1)!.drop();
+      await vi.advanceTimersByTimeAsync(4_000);
+    }
+    expect(t.calls.slice(1).some((c) => c.url === 'http://gw.test/session')).toBe(true);
+    expect(FakeWS.instances.length).toBeLessThan(12);
+    expect(t.calls.length).toBeLessThan(12);
+    const fresh = FakeWS.instances.at(-1)!;
+    fresh.open();
+    expect(fresh.json(0).type).toBe('session.start');
+    fresh.onmessage?.({ data: JSON.stringify({ type: 'session.ready', sessionId: 's1' }) });
+    expect(t.statuses.at(-1)).toBe('open');
+  });
+
+  it('resets backoff only after session.resumed, then resumes again on the next drop', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }, { status: 200, body: tokens(2) }, { status: 200, body: tokens(3) }]);
+    await t.client.start();
+    const ws1 = FakeWS.instances[0];
+    ws1.open();
+    ws1.onmessage?.({ data: JSON.stringify({ type: 'session.ready', sessionId: 's1' }) });
+    ws1.drop();
+    await vi.advanceTimersByTimeAsync(500);
+    const ws2 = FakeWS.instances[1];
+    ws2.open();
+    expect(ws2.json(0)).toEqual({ type: 'session.resume', sessionId: 's1' });
+    ws2.onmessage?.({ data: JSON.stringify({ type: 'session.resumed', lastResponseSeq: 0 }) });
+    ws2.drop();
+    // Backoff was reset by session.resumed, so the next retry fires after the base delay.
+    await vi.advanceTimersByTimeAsync(500);
+    expect(t.calls.map((c) => c.url)).toEqual(['http://gw.test/session', 'http://gw.test/session/resume', 'http://gw.test/session/resume']);
+    FakeWS.instances[2].open();
+    expect(FakeWS.instances[2].json(0).type).toBe('session.resume');
+  });
+
+  it('close() during an in-flight reconnect POST opens no new socket', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }, { status: 200, body: tokens(2) }]);
+    await t.client.start();
+    FakeWS.instances[0].open();
+    FakeWS.instances[0].drop();
+    // Fire the retry timer; the resume POST is now pending.
+    vi.advanceTimersByTime(500);
+    expect(t.calls).toHaveLength(2);
+    t.client.close();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(FakeWS.instances).toHaveLength(1);
+    expect(t.client.isOpen).toBe(false);
+    expect(t.statuses.at(-1)).toBe('closed');
+  });
+
+  it('close() while reconnecting emits closed', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }]);
+    await t.client.start();
+    FakeWS.instances[0].open();
+    FakeWS.instances[0].drop();
+    expect(t.statuses.at(-1)).toBe('reconnecting');
+    t.client.close();
+    expect(t.statuses.at(-1)).toBe('closed');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(t.calls).toHaveLength(1);
+    expect(FakeWS.instances).toHaveLength(1);
   });
 
   it('close() ends the session without reconnecting', async () => {
@@ -1578,6 +1654,8 @@ export class GatewayClient {
   private ws: WebSocketLike | null = null;
   private tokens: SessionTokens | null = null;
   private closedByUser = false;
+  // True once the gateway confirmed the session (session.ready / session.resumed).
+  private sessionStarted = false;
   private disconnectedAt = 0;
   private attempt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1593,7 +1671,9 @@ export class GatewayClient {
 
   async start(): Promise<void> {
     this.closedByUser = false;
+    this.sessionStarted = false;
     this.tokens = await this.post('/session', {});
+    if (this.closedByUser) return;
     this.open('session.start');
   }
 
@@ -1609,7 +1689,8 @@ export class GatewayClient {
     this.closedByUser = true;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.send({ type: 'session.end' });
-    this.ws?.close(1000);
+    if (this.ws) this.ws.close(1000);
+    else this.ev.onStatus('closed');
   }
 
   private open(first: 'session.start' | 'session.resume'): void {
@@ -1622,14 +1703,19 @@ export class GatewayClient {
     this.ws = ws;
     this.ev.onStatus(first === 'session.start' ? 'connecting' : 'reconnecting');
     ws.onopen = () => {
-      this.attempt = 0;
-      this.disconnectedAt = 0;
       this.ev.onStatus('open');
       this.send(first === 'session.start' ? { type: 'session.start', clientInfo: this.o.clientInfo } : { type: 'session.resume', sessionId: t.sessionId });
     };
     ws.onmessage = (e) => {
       if (typeof e.data === 'string') {
-        this.ev.onMessage(JSON.parse(e.data) as ServerMessage);
+        const m = JSON.parse(e.data) as ServerMessage;
+        // Reset backoff only once the gateway accepted the session, not on mere socket open.
+        if (m.type === 'session.ready' || m.type === 'session.resumed') {
+          this.sessionStarted = true;
+          this.attempt = 0;
+          this.disconnectedAt = 0;
+        }
+        this.ev.onMessage(m);
         return;
       }
       if (e.data instanceof ArrayBuffer) {
@@ -1665,8 +1751,11 @@ export class GatewayClient {
     if (this.closedByUser || !this.tokens) return;
     try {
       this.tokens = await this.post('/session/resume', { sessionId: this.tokens.sessionId, resumeToken: this.tokens.resumeToken });
-      this.open('session.resume');
+      if (this.closedByUser) return;
+      // A session that never started must be started, not resumed (gateway would close 4002).
+      this.open(this.sessionStarted ? 'session.resume' : 'session.start');
     } catch (e) {
+      if (this.closedByUser) return;
       if (e instanceof HttpError && (e.status === 404 || e.status === 401)) await this.restartFresh();
       else this.scheduleResume();
     }
@@ -1675,11 +1764,14 @@ export class GatewayClient {
   private async restartFresh(): Promise<void> {
     if (this.closedByUser) return;
     this.attempt = 0;
+    this.sessionStarted = false;
     try {
       this.tokens = await this.post('/session', {});
+      if (this.closedByUser) return;
       this.disconnectedAt = 0;
       this.open('session.start');
     } catch {
+      if (this.closedByUser) return;
       this.disconnectedAt = Date.now();
       this.scheduleResume();
     }
@@ -1701,7 +1793,7 @@ export class GatewayClient {
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w avatar-core -- gatewayClient`
-Expected: 7 个测试 PASS。
+Expected: 11 个测试 PASS。
 
 若 "backs off ... falls back" 失败：退避序列为 500、1000、2000、4000、4000 ms，重试发生在断开后 0.5、1.5、3.5、7.5、11.5 秒；第 5 次重试（11.5 s）失败时累计断开已超过 `maxResumeMs: 10_000`，`scheduleResume` 不再排第 6 次重试，而是立即 `restartFresh()`（新建会话成功 → 新 WS 发 `session.start`）。确认 `scheduleResume` 每次都先检查 `Date.now() - disconnectedAt`，且 vitest 的假定时器同时接管了 `Date.now()`。
 

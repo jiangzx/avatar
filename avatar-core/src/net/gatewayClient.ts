@@ -56,6 +56,8 @@ export class GatewayClient {
   private ws: WebSocketLike | null = null;
   private tokens: SessionTokens | null = null;
   private closedByUser = false;
+  // True once the gateway confirmed the session (session.ready / session.resumed).
+  private sessionStarted = false;
   private disconnectedAt = 0;
   private attempt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -71,7 +73,9 @@ export class GatewayClient {
 
   async start(): Promise<void> {
     this.closedByUser = false;
+    this.sessionStarted = false;
     this.tokens = await this.post('/session', {});
+    if (this.closedByUser) return;
     this.open('session.start');
   }
 
@@ -87,7 +91,8 @@ export class GatewayClient {
     this.closedByUser = true;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.send({ type: 'session.end' });
-    this.ws?.close(1000);
+    if (this.ws) this.ws.close(1000);
+    else this.ev.onStatus('closed');
   }
 
   private open(first: 'session.start' | 'session.resume'): void {
@@ -100,14 +105,19 @@ export class GatewayClient {
     this.ws = ws;
     this.ev.onStatus(first === 'session.start' ? 'connecting' : 'reconnecting');
     ws.onopen = () => {
-      this.attempt = 0;
-      this.disconnectedAt = 0;
       this.ev.onStatus('open');
       this.send(first === 'session.start' ? { type: 'session.start', clientInfo: this.o.clientInfo } : { type: 'session.resume', sessionId: t.sessionId });
     };
     ws.onmessage = (e) => {
       if (typeof e.data === 'string') {
-        this.ev.onMessage(JSON.parse(e.data) as ServerMessage);
+        const m = JSON.parse(e.data) as ServerMessage;
+        // Reset backoff only once the gateway accepted the session, not on mere socket open.
+        if (m.type === 'session.ready' || m.type === 'session.resumed') {
+          this.sessionStarted = true;
+          this.attempt = 0;
+          this.disconnectedAt = 0;
+        }
+        this.ev.onMessage(m);
         return;
       }
       if (e.data instanceof ArrayBuffer) {
@@ -143,8 +153,11 @@ export class GatewayClient {
     if (this.closedByUser || !this.tokens) return;
     try {
       this.tokens = await this.post('/session/resume', { sessionId: this.tokens.sessionId, resumeToken: this.tokens.resumeToken });
-      this.open('session.resume');
+      if (this.closedByUser) return;
+      // A session that never started must be started, not resumed (gateway would close 4002).
+      this.open(this.sessionStarted ? 'session.resume' : 'session.start');
     } catch (e) {
+      if (this.closedByUser) return;
       if (e instanceof HttpError && (e.status === 404 || e.status === 401)) await this.restartFresh();
       else this.scheduleResume();
     }
@@ -153,11 +166,14 @@ export class GatewayClient {
   private async restartFresh(): Promise<void> {
     if (this.closedByUser) return;
     this.attempt = 0;
+    this.sessionStarted = false;
     try {
       this.tokens = await this.post('/session', {});
+      if (this.closedByUser) return;
       this.disconnectedAt = 0;
       this.open('session.start');
     } catch {
+      if (this.closedByUser) return;
       this.disconnectedAt = Date.now();
       this.scheduleResume();
     }
