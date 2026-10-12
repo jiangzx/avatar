@@ -23,7 +23,7 @@
   - `sealed class JsEvent` 及子类 `JsReady`、`JsSubtitle(role, text, isFinal)`、`JsState(state)`、`JsMetric(name, ms)`、`JsStatus(status)`、`JsDiag(key, value)`、`JsError(code)`；`JsEvent.parse(String raw): JsEvent?`；`String jsCall(Map<String, Object?> message)`
   - `class MetricsStore`：`add(name, ms, {at})`、`summary(): Map<String, MetricSummary>`、`toCsv()`；`class MetricSummary(count, p50, p90)`；`double percentile(List<double> sorted, double p)`
 
-- [ ] **Step 1: 创建工程与依赖**
+- [x] **Step 1: 创建工程与依赖**
 
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea
@@ -72,7 +72,7 @@ sed -i '' "s/same-as-gateway-APP_SECRET/$SECRET/" dev.json
 rm -f test/widget_test.dart   # generated counter-app test, replaced below
 ```
 
-- [ ] **Step 1b: Web 资源脚本与 WebView 能力探针页**
+- [x] **Step 1b: Web 资源脚本与 WebView 能力探针页**
 
 `scripts/build-web.sh`:
 
@@ -221,7 +221,7 @@ ls app/assets/web app/assets/web/spike
 
 Expected: 打印 `web bundle (--probe-only): …`；`app/assets/web` 下有 `probe.html`、`probe-worklet.js`、`probe.wasm` 和 5 个子目录。
 
-- [ ] **Step 2: 写失败的测试**
+- [x] **Step 2: 写失败的测试**
 
 `app/test/local_asset_server_test.dart`:
 
@@ -399,12 +399,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `cd app && flutter test`
 Expected: FAIL，找不到 `package:avatar_app/local_asset_server.dart` 等。
 
-- [ ] **Step 4: 实现**
+- [x] **Step 4: 实现**
 
 `app/lib/config.dart`:
 
@@ -646,12 +646,12 @@ class MetricsStore {
 }
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `cd app && flutter test`
 Expected: 全部 PASS（local_asset_server 6 个、bridge 3 个、metrics 2 个、config 3 个）。若报 "unable to find directory entry in pubspec.yaml: …/assets/web/…" 之类的错误，说明还没生成 `app/assets/web`，先执行 `./scripts/build-web.sh --probe-only`。
 
-- [ ] **Step 6: 静态检查与提交**
+- [x] **Step 6: 静态检查与提交**
 
 Run: `cd app && flutter analyze`
 Expected: `No issues found!`
@@ -680,7 +680,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: Task 15 的 `AppConfig`（含 `page`）、`LocalAssetServer`、`JsEvent`、`jsCall`、`MetricsStore`；Task 14 的 Bridge 契约
 - Produces: 可安装的 debug APK；`AvatarOverlay` 组件（字幕、AI 标识、状态、静音、结束、长按 AI 标识打开调试面板）；能力探针结果（模拟器与真机分列，写入 ADR-001 的"其他 Day 1 验证项"；ADR 文件由 Task 17 创建，此前先记在 `docs/blockers.md` 或终端）
 
-- [ ] **Step 1: 写失败的 widget 测试**
+- [x] **Step 1: 写失败的 widget 测试**
 
 `app/test/overlay_test.dart`:
 
@@ -733,12 +733,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd app && flutter test test/overlay_test.dart`
 Expected: FAIL，找不到 `package:avatar_app/overlay.dart`。
 
-- [ ] **Step 3: 实现 AvatarOverlay**
+- [x] **Step 3: 实现 AvatarOverlay**
 
 `app/lib/overlay.dart`:
 
@@ -861,12 +861,12 @@ class _RoundButton extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd app && flutter test test/overlay_test.dart`
 Expected: 2 个测试 PASS。
 
-- [ ] **Step 5: 实现 AvatarPage**
+- [x] **Step 5: 实现 AvatarPage**
 
 `app/lib/avatar_page.dart`:
 
@@ -1130,7 +1130,7 @@ class AvatarApp extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 6: Android 权限与网络安全配置**
+- [x] **Step 6: Android 权限与网络安全配置**
 
 `app/android/app/src/main/res/xml/network_security_config.xml`:
 
@@ -1179,7 +1179,7 @@ grep -n 'uses-permission\|networkSecurityConfig' android/app/src/main/AndroidMan
 
 Expected: 打印 3 行 `uses-permission` 和 1 行 `android:networkSecurityConfig`。
 
-- [ ] **Step 7: 准备 Web 资源**
+- [x] **Step 7: 准备 Web 资源**
 
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea
@@ -1227,7 +1227,7 @@ Expected: release 包的探针结果与 debug 包一致（`adb reverse` 仍需�
 
 Step 8–9 结束后停止网关：同一终端执行 `kill "$GW_PID"`；换过终端则 `lsof -ti tcp:8787 | xargs kill`。确认 `lsof -nP -iTCP:8787 -sTCP:LISTEN` 无输出。
 
-- [ ] **Step 10: 提交**
+- [x] **Step 10: 提交**
 
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea

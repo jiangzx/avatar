@@ -29,7 +29,7 @@
 - 模型连接 `error(retryable)` / `closed` → 重建模型会话（客户端不断开），并发 `error(model_reconnecting)`；AI 一轮播放自然结束后，若模型侧上下文估算超过 `modelContextTokenLimit × 0.8` 或累计 `rebuildAfterTurns` 轮，静默重建瘦身（这是 spec §6 "下一次用户说完前"的落地点：选在 AI 播放自然结束后的空闲点，避免打断进行中的回复）。
 - 客户端断开：暂停 Director、取消进行中的回复、按 20 ms 节奏给模型补静音帧；重新接入：发 `session.resumed`，Director 说一句续接语。
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 `gateway/test/session.test.ts`:
 
@@ -281,12 +281,12 @@ describe('Session', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -w gateway -- session`
 Expected: FAIL，无法解析 `../src/session/session.ts`。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `gateway/src/session/session.ts`:
 
@@ -646,19 +646,19 @@ export class Session {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w gateway -- session`
 Expected: 15 个测试 PASS。
 
 如果 "summarizes older turns" 失败：检查 `greetAndFinish` 之后 Ledger 内容应为 `[助手:你好呀]`，第一句后为 `[助手:你好呀, 用户:第一句, 助手:我在听]`，第二句写入后 `keepRecentTurns: 1` 的切点在"用户：第二句"，因此摘要包含前三条。
 
-- [ ] **Step 5: 全量测试与类型检查**
+- [x] **Step 5: 全量测试与类型检查**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS；typecheck 无输出。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add gateway/src/session/session.ts gateway/test/session.test.ts
@@ -690,7 +690,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `class TokenStore`、`safeEqual(a, b)`；`class SessionManager(makeSession, graceMs = 60000, unclaimedMs = 300000)`（`POST /session` 后 `unclaimedMs` 内没有 WS 认领的会话被回收，与 `connectToken` 5 分钟有效期一致）：`create()`、`resume(sessionId, resumeToken)`、`claim(connectToken): { sessionId; connId } | null`、`attachSocket(sessionId, connId, terminate)`、`begin(sessionId, connId, kind, transport)`、`route(sessionId, connId)`、`disconnected(sessionId, connId)`、`end(sessionId)`、`shutdown()`、`size`
   - `createGatewayServer(opts: GatewayServerOptions): Server`（`GatewayServerOptions.heartbeatMs?`）
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 `gateway/test/server.test.ts`:
 
@@ -980,12 +980,12 @@ describe('TokenStore', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -w gateway -- server`
 Expected: FAIL，无法解析 `../src/session/manager.ts`。
 
-- [ ] **Step 3: 实现 TokenStore**
+- [x] **Step 3: 实现 TokenStore**
 
 `gateway/src/session/tokens.ts`:
 
@@ -1045,7 +1045,7 @@ export class TokenStore {
 }
 ```
 
-- [ ] **Step 4: 实现 SessionManager**
+- [x] **Step 4: 实现 SessionManager**
 
 `gateway/src/session/manager.ts`:
 
@@ -1177,7 +1177,7 @@ export class SessionManager {
 }
 ```
 
-- [ ] **Step 5: 实现校验 schema**
+- [x] **Step 5: 实现校验 schema**
 
 `gateway/src/server/schemas.ts`:
 
@@ -1217,7 +1217,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 }
 ```
 
-- [ ] **Step 6: 实现 HTTP/WS 服务**
+- [x] **Step 6: 实现 HTTP/WS 服务**
 
 `gateway/src/server/server.ts`:
 
@@ -1442,12 +1442,12 @@ function readJson(req: IncomingMessage, limit: number): Promise<unknown> {
 }
 ```
 
-- [ ] **Step 7: 运行测试确认通过**
+- [x] **Step 7: 运行测试确认通过**
 
 Run: `npm test -w gateway -- server`
 Expected: 14 个测试 PASS。
 
-- [ ] **Step 8: 入口文件**
+- [x] **Step 8: 入口文件**
 
 `gateway/src/index.ts`:
 
@@ -1502,7 +1502,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 ```
 
-- [ ] **Step 9: 本地冒烟**
+- [x] **Step 9: 本地冒烟**
 
 ```bash
 [ -f gateway/.env ] || cp gateway/.env.example gateway/.env
@@ -1523,7 +1523,7 @@ lsof -nP -iTCP:8787 -sTCP:LISTEN || echo 'gateway stopped'
 
 Expected: `{"ok":true}`；`401`；一段含 `sessionId`、`connectToken`、`resumeToken` 的 JSON；最后打印 `gateway stopped`（若仍有进程监听 8787，用 `lsof -ti tcp:8787 | xargs kill` 停掉）。终端日志中只出现事件名和数值，没有任何对话文本。
 
-- [ ] **Step 10: 全量测试、类型检查与提交**
+- [x] **Step 10: 全量测试、类型检查与提交**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS。

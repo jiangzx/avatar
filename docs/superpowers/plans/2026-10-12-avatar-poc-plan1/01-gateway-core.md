@@ -23,7 +23,7 @@
   - `class MockAdapter`（额外公开：`instructions`、`notes`、`toolResults`、`simulateDrop()`）；`loadMockScript(path)`、`loadMockSpeech(path)`；`interface MockScript`（可选 `idleNotice`、`resume` 台词）；`MockOptions.instructionReplies?: ReadonlyMap<string, string>`（Director 指令 → 台词；Task 8 入口按 `director.json` 构造）
   - Mock 行为约定（真机验收按此理解）：Mock **不识别语音内容**——检测到一段说话（RMS ≥ `speechThreshold` 后静默 800 ms）就按 `turns` 顺序取下一条作为识别结果；`createResponse(instructions)` 先查 `instructionReplies`，查不到时第一次用 `greeting`、之后用 `followup`
 
-- [ ] **Step 1: 包配置**
+- [x] **Step 1: 包配置**
 
 `gateway/package.json`:
 
@@ -81,7 +81,7 @@ MOCK_SPEECH_THRESHOLD=800
 npm install
 ```
 
-- [ ] **Step 2: 日志与音频工具**
+- [x] **Step 2: 日志与音频工具**
 
 `gateway/src/log.ts`:
 
@@ -108,7 +108,7 @@ export function rmsInt16(pcm: Int16Array): number {
 }
 ```
 
-- [ ] **Step 3: 适配器接口**
+- [x] **Step 3: 适配器接口**
 
 `gateway/src/adapters/types.ts`:
 
@@ -176,7 +176,7 @@ export const PERFORM_ACTION_TOOL: ToolSpec = {
 };
 ```
 
-- [ ] **Step 4: Mock 脚本**
+- [x] **Step 4: Mock 脚本**
 
 `gateway/mock/script.json`:
 
@@ -200,7 +200,7 @@ export const PERFORM_ACTION_TOOL: ToolSpec = {
 }
 ```
 
-- [ ] **Step 5: 写失败的测试**
+- [x] **Step 5: 写失败的测试**
 
 `gateway/test/mock.test.ts`:
 
@@ -324,12 +324,12 @@ describe('MockAdapter', () => {
 });
 ```
 
-- [ ] **Step 6: 运行测试确认失败**
+- [x] **Step 6: 运行测试确认失败**
 
 Run: `npm test -w gateway`
 Expected: FAIL，无法解析 `../src/adapters/mock.ts`。
 
-- [ ] **Step 7: 实现 MockAdapter**
+- [x] **Step 7: 实现 MockAdapter**
 
 `gateway/src/adapters/mock.ts`:
 
@@ -552,12 +552,12 @@ export function loadMockSpeech(path: string): Int16Array | undefined {
 }
 ```
 
-- [ ] **Step 8: 运行测试确认通过**
+- [x] **Step 8: 运行测试确认通过**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 7 个测试 PASS；typecheck 无输出。
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add gateway package-lock.json
@@ -585,7 +585,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `class ConversationLedger`：`summary`、`recent`、`addUser(text, ts)`、`addAssistant(text, ts, interrupted?)`、`userTurns()`、`needsSummary()`、`summarize(summarizer): Promise<boolean>`、`buildInstructions(persona): string`、`clear()`
   - `class MockSummarizer implements Summarizer`
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 `gateway/test/ledger.test.ts`:
 
@@ -680,12 +680,12 @@ describe('MockSummarizer', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -w gateway -- ledger`
 Expected: FAIL，无法解析 `../src/session/ledger.ts`。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `gateway/src/session/ledger.ts`:
 
@@ -808,12 +808,12 @@ export class MockSummarizer implements Summarizer {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w gateway -- ledger`
 Expected: 8 个测试 PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add gateway/src/session/ledger.ts gateway/test/ledger.test.ts
@@ -836,7 +836,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `ActionName`、`ACTION_NAMES`
 - Produces: `matchKeyword(text): ActionName | null`、`parseActionArgs(args: unknown): ActionName | null`、`class ActionRouter(dedupeMs = 3000, now = Date.now)`：`fromKeyword(text): ActionName | null`、`fromTool(args): { action: ActionName | null; result: { ok: boolean; error?: string } }`
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 `gateway/test/actions.test.ts`:
 
@@ -900,12 +900,12 @@ describe('ActionRouter', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -w gateway -- actions`
 Expected: FAIL，无法解析模块。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `gateway/src/session/actions.ts`:
 
@@ -975,12 +975,12 @@ export class ActionRouter {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w gateway -- actions`
 Expected: 全部 PASS（13 个关键词用例 + 7 个其他用例）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add gateway/src/session/actions.ts gateway/test/actions.test.ts
@@ -1004,7 +1004,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 规则（spec §5）：`active` 从 `response.start` 一直到客户端报告播放结束；客户端打断立即取消；只有模型侧检测到说话时，需本地 VAD 在 `confirmWindowMs` 内确认；模型自行取消且本地没有说话 → 计一次误打断。**顶替：** 上一条回复还在客户端播放（未报告结束、未取消）时模型又开始了新回复（例如 Mock/模型把回声或插话识别成新一轮），旧回复记为已取消并由 `onResponseStart` 返回，由 Session 通知客户端并写 Ledger；此时**不**调用 `cancel()`，否则会把模型侧刚开始的新回复取消掉。
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 `gateway/test/interrupt.test.ts`:
 
@@ -1116,12 +1116,12 @@ describe('InterruptCoordinator', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -w gateway -- interrupt`
 Expected: FAIL，无法解析模块。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `gateway/src/session/interrupt.ts`:
 
@@ -1227,12 +1227,12 @@ export class InterruptCoordinator {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w gateway -- interrupt`
 Expected: 10 个测试 PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add gateway/src/session/interrupt.ts gateway/test/interrupt.test.ts
@@ -1260,7 +1260,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 静默计时规则：计时器在"AI 一轮播放结束"或"用户说完（本地 VAD 由 speaking 变 silent）"时启动，在用户开口或新一轮 AI 回复开始时清除。后一种启动点覆盖误打断：用户（或噪声）打断了 AI 却没有产生识别结果、模型也不回复时，8 秒后照常追问一次，而不是从此一直沉默（spec §5.5 的兜底；专门的"你刚刚是想说什么吗"话术留给 Plan 2）。`resume()` 在用户要求安静或静音时不说续接语。
 
-- [ ] **Step 1: 配置文件与人设**
+- [x] **Step 1: 配置文件与人设**
 
 `gateway/config/director.json`（数值均为【预估】，Plan 2 调参）:
 
@@ -1303,7 +1303,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - 永远不要让用户转账，也不索要验证码、密码或身份证号。
 ```
 
-- [ ] **Step 2: 写失败的测试**
+- [x] **Step 2: 写失败的测试**
 
 `gateway/test/director.test.ts`:
 
@@ -1508,12 +1508,12 @@ describe('config', () => {
 });
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `npm test -w gateway -- director config`
 Expected: FAIL，无法解析模块。
 
-- [ ] **Step 4: 实现 Director**
+- [x] **Step 4: 实现 Director**
 
 `gateway/src/session/director.ts`:
 
@@ -1639,7 +1639,7 @@ export class Director {
 }
 ```
 
-- [ ] **Step 5: 实现配置加载**
+- [x] **Step 5: 实现配置加载**
 
 `gateway/src/config.ts`:
 
@@ -1708,12 +1708,12 @@ export function loadPersona(path: string): string {
 }
 ```
 
-- [ ] **Step 6: 运行测试确认通过**
+- [x] **Step 6: 运行测试确认通过**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS；typecheck 无输出。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add gateway/src/session/director.ts gateway/src/config.ts gateway/config gateway/prompts gateway/test/director.test.ts gateway/test/config.test.ts

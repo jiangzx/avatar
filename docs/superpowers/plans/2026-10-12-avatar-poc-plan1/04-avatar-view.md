@@ -21,7 +21,7 @@
 
 素材说明：临时人物用 TalkingHead 仓库的示例 `brunette.glb`（Ready Player Me 制作，**CC BY-NC 4.0，仅限内部演示**——已在 TalkingHead 1.7.0 包内 README 核实；正式人物在 Day 1–2 按 spec §8.1 另行定稿）。下文用到的 TalkingHead API（`showAvatar`、`mtAvatar[*].realtime/needsUpdate`、`headRotateX`、`gestureTemplates.handup`、`playGesture`、`playAnimation`、`setFixedValue`、`start/stop`）已在 1.7.0 源码中核实存在；`lipsyncModules: []` 时构造函数不会动态 import 唇形模块，`showAvatar` 也不会加载（打包后不会因找不到 `lipsync-*.mjs` 报错）。视觉效果（转身、点头、比心）仍需真机确认。挥手动作可选用 Mixamo 的 "Waving" FBX（需 Adobe 账号手动下载）；没有 FBX 时退回 TalkingHead 内置的 `handup` 手势。
 
-- [ ] **Step 1: 下载临时人物**
+- [x] **Step 1: 下载临时人物**
 
 `scripts/fetch-assets.sh`:
 
@@ -51,7 +51,7 @@ chmod +x scripts/fetch-assets.sh && ./scripts/fetch-assets.sh
 
 Expected: 打印 `avatar.glb bytes=…`，大小为数 MB（以实际为准；小于 100 KB 说明下到的是错误页，删除后重试）。下载失败超过 20 分钟按阻塞规则记录，并临时改用同仓库 `avatars/` 下的其他示例 GLB（把脚本中的 `brunette.glb` 换掉后重跑，并在报告中写明许可）。
 
-- [ ] **Step 2: TalkingHead 类型声明（只声明本项目用到的 API，依据 1.7.0 README）**
+- [x] **Step 2: TalkingHead 类型声明（只声明本项目用到的 API，依据 1.7.0 README）**
 
 `avatar-core/src/types/talkinghead.d.ts`:
 
@@ -86,7 +86,7 @@ declare module '@met4citizen/talkinghead' {
 }
 ```
 
-- [ ] **Step 3: 写失败的状态机测试**
+- [x] **Step 3: 写失败的状态机测试**
 
 `avatar-core/test/stateMachine.test.ts`:
 
@@ -130,12 +130,12 @@ describe('avatar state machine', () => {
 });
 ```
 
-- [ ] **Step 4: 运行测试确认失败**
+- [x] **Step 4: 运行测试确认失败**
 
 Run: `npm test -w avatar-core -- stateMachine`
 Expected: FAIL，无法解析模块。
 
-- [ ] **Step 5: 实现状态机**
+- [x] **Step 5: 实现状态机**
 
 `avatar-core/src/avatar/stateMachine.ts`:
 
@@ -169,12 +169,12 @@ export function nextState(state: AvatarState, input: AvatarInput): AvatarState {
 }
 ```
 
-- [ ] **Step 6: 运行测试确认通过**
+- [x] **Step 6: 运行测试确认通过**
 
 Run: `npm test -w avatar-core -- stateMachine`
 Expected: 5 个测试 PASS。
 
-- [ ] **Step 7: 实现 AvatarView**
+- [x] **Step 7: 实现 AvatarView**
 
 `avatar-core/src/avatar/avatarView.ts`:
 
@@ -269,7 +269,7 @@ export class AvatarView {
 }
 ```
 
-- [ ] **Step 8: 实现 ActionPlayer**
+- [x] **Step 8: 实现 ActionPlayer**
 
 `avatar-core/src/avatar/actions.ts`:
 
@@ -479,7 +479,7 @@ describe('looksLikeFbx', () => {
 });
 ```
 
-- [ ] **Step 9: 类型检查与提交**
+- [x] **Step 9: 类型检查与提交**
 
 Run: `npm run typecheck -w avatar-core && npm test -w avatar-core`
 Expected: 无类型错误；测试全部 PASS。

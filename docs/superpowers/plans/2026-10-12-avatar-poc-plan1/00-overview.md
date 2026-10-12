@@ -8,6 +8,8 @@
 
 **Tech Stack:** Node 24、TypeScript 7.0.2、vitest 5、ws 8.22、zod 4.6、Vite 8.3、three 0.180、@met4citizen/talkinghead 1.7.0、@ricky0123/vad-web 0.0.31（onnxruntime-web 1.30.0）、Flutter 3.47.6 / Dart 3.13.5、webview_flutter 4.14.1、permission_handler 13.0.2、wakelock_plus 1.8.1、record 7.1.2、flutter_pcm_sound 3.3.3。
 
+**工具链偏差（Task 16 实测，2026-10-12）：** Android `compileSdk` 需为 37（`permission_handler_android` 14.1.0 要求），并在 `app/android/build.gradle.kts` 用一个根级 hook 把 `flutter_pcm_sound` 等低于 36 的插件库提到 36（其 AndroidX 依赖要求 ≥34）；只影响编译，不改 `targetSdk`。Plan 2 应把该 hook 限定到具体插件。
+
 **Spec:** [`docs/superpowers/specs/2026-10-12-avatar-voice-poc-design.md`](../../specs/2026-10-12-avatar-voice-poc-design.md)
 
 **不在本计划内（Plan 2，Key 到位并核实协议后再写）：** Seeduplex / Qwen 真实适配器、LlmSummarizer、人设与 Director 真实调参、云端部署（WSS + TLS + IP 白名单）、release APK 交付、Day 6 真机测试报告。
@@ -163,7 +165,7 @@ anyidea/
 **Interfaces:**
 - Produces: npm workspaces 根；`docs/blockers.md` 模板（后续所有任务卡住时追加）；`gateway/mock/speech-24k.pcm` 与 `avatar-core/public/spike/speech-24k.pcm`（24 kHz PCM16 LE 中文语音，Task 2/17 使用）。
 
-- [ ] **Step 1: 确认 Android 工具链**
+- [x] **Step 1: 确认 Android 工具链**
 
 本机已有 `~/Library/Android/sdk`（含 platform-tools），但 `adb` 不在 PATH；默认 JDK 是 25，另装有 JDK 17（2026-10-12 核实）。只在当前 shell 里 export；是否写入 `~/.zshrc` 由用户决定，执行者不要自行修改用户的 shell 配置。
 
@@ -202,7 +204,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName | head -
 
 Expected: 列出这台手机（`device` 状态；模拟器同时开着时会列出两台，之后 `adb` 加 `-s <序列号>`、`flutter run` 加 `-d <设备 id>`）；Android 版本 ≥12；WebView `versionName` 主版本号 ≥120（若为空，改查 `adb shell dumpsys webviewupdate | grep -i 'current webview'`）。把型号、Android 版本、WebView 版本记入 `docs/adr/ADR-001-day1-selection.md`（Task 17 创建；此处先记在终端输出里）。
 
-- [ ] **Step 3: 创建 workspaces 根与共享 TS 配置**
+- [x] **Step 3: 创建 workspaces 根与共享 TS 配置**
 
 `package.json`:
 
@@ -239,7 +241,7 @@ Expected: 列出这台手机（`device` 状态；模拟器同时开着时会列�
 }
 ```
 
-- [ ] **Step 4: 阻塞记录模板与 .gitignore**
+- [x] **Step 4: 阻塞记录模板与 .gitignore**
 
 `docs/blockers.md`:
 
@@ -269,7 +271,7 @@ coverage/
 
 验证：`git check-ignore -q gateway/.env.example && echo BAD || echo OK` 打印 `OK`；`git check-ignore -q gateway/.env && echo OK` 打印 `OK`。
 
-- [ ] **Step 5: 生成测试语音**
+- [x] **Step 5: 生成测试语音**
 
 `scripts/make-mock-speech.sh`:
 
@@ -307,7 +309,7 @@ chmod +x scripts/make-mock-speech.sh && ./scripts/make-mock-speech.sh
 
 Expected: 打印 `voice=Eddy bytes=…`（或其他 zh_CN 音色），字节数大于 500000（约 10 秒以上）。
 
-- [ ] **Step 6: README 与提交**
+- [x] **Step 6: README 与提交**
 
 `README.md`（外层用 ~~~ 包裹，避免与内部代码块冲突）:
 
@@ -356,7 +358,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `decodeAudioFrame(buf: Uint8Array): AudioFrame | null`
   - `truncateByPlayback(text: string, playedMs: number, receivedAudioMs: number): string`
 
-- [ ] **Step 1: 包配置**
+- [x] **Step 1: 包配置**
 
 `protocol/package.json`:
 
@@ -383,7 +385,7 @@ npm install
 
 Expected: 安装成功，生成 `node_modules/@anyidea/protocol` 软链。若 TypeScript 7 的 `tsc` 在后续 typecheck 中报"未知编译选项"，把所有 `package.json` 中的 `"typescript": "7.0.2"` 改成 `"5.9.3"` 后重新 `npm install`，并记入 `docs/blockers.md`。
 
-- [ ] **Step 2: 写失败的测试**
+- [x] **Step 2: 写失败的测试**
 
 `protocol/test/protocol.test.ts`:
 
@@ -435,12 +437,12 @@ describe('truncateByPlayback', () => {
 });
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `npm test -w protocol`
 Expected: FAIL，提示无法解析 `../src/index.ts`。
 
-- [ ] **Step 4: 实现**
+- [x] **Step 4: 实现**
 
 `protocol/src/index.ts`:
 
@@ -526,12 +528,12 @@ export function truncateByPlayback(text: string, playedMs: number, receivedAudio
 }
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `npm test -w protocol && npm run typecheck -w protocol`
 Expected: 6 个测试 PASS；typecheck 无输出。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add protocol package-lock.json

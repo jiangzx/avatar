@@ -21,7 +21,7 @@
   - `interface MouthShape { jawOpen: number; funnel: number; stretch: number }`、`class MouthAnalyzer(opts?)`：`update(features, dtMs): MouthShape`、`reset()`
   - `class EnergyTrigger(thresholdRms = 1200, minMs = 150, frameMs = 20)`：`push(frame: Int16Array): boolean`、`count`
 
-- [ ] **Step 1: 包与构建配置**
+- [x] **Step 1: 包与构建配置**
 
 `avatar-core/package.json`（`three` 必须固定 0.180.x，与 TalkingHead 依赖 `^0.180.0` 去重，避免打包两份 three）:
 
@@ -172,7 +172,7 @@ ls avatar-core/public/vad
 
 Expected: 打印 `copied N VAD assets`；目录里有 `vad.worklet.bundle.min.js`、`silero_vad_v5.onnx` 和若干 `ort-wasm*.wasm/.mjs`。`npm ls three` 只出现一个 `three@0.180.0`（deduped）。
 
-- [ ] **Step 2: 写失败的测试**
+- [x] **Step 2: 写失败的测试**
 
 `avatar-core/test/pcm.test.ts`:
 
@@ -311,12 +311,12 @@ describe('EnergyTrigger', () => {
 });
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `npm test -w avatar-core`
 Expected: FAIL，无法解析 `../src/audio/pcm.ts` 等模块。
 
-- [ ] **Step 4: 实现**
+- [x] **Step 4: 实现**
 
 `avatar-core/src/audio/pcm.ts`:
 
@@ -513,14 +513,14 @@ export class EnergyTrigger {
 }
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `npm test -w avatar-core`
 Expected: 全部 PASS（pcm 8 个、mouth 4 个、energy 2 个）。
 
 若 `opens faster than it closes` 失败：attack 一步 = `1-exp(-16/30)` ≈ 0.41，release 一步 = `1-exp(-16/80)` ≈ 0.18，前者乘以 target 0.7 后仍大于后者乘以 full 值，检查 `tau` 的分支是否写反。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add avatar-core package-lock.json
@@ -552,7 +552,7 @@ Worklet 消息协议（主线程 → worklet）：`{type:'push', seq, samples: F
 - 一条回复的"播放结束"只由 worklet 的 `drained` 触发；**没有任何音频的回复**（例如只有工具调用）收到 `end` 时，worklet 立即回 `drained(seq, 0)`，否则网关永远等不到 `playback.stopped(ended)`，Director 会被卡住。
 - 门控状态按会话划分：`responseSeq` 只在一个会话内递增，新会话从 1 重新开始，所以新会话开始时必须 `resetForNewSession()`（清空已取消集合和下限），否则旧会话取消过的序号会把新会话的回复静音。续接同一会话时用 `resetAfterResume(lastSeq)`。
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 `avatar-core/test/playbackGate.test.ts`:
 
@@ -613,12 +613,12 @@ describe('PlaybackGate', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -w avatar-core -- playbackGate`
 Expected: FAIL，无法解析模块。
 
-- [ ] **Step 3: 实现 PlaybackGate**
+- [x] **Step 3: 实现 PlaybackGate**
 
 `avatar-core/src/audio/playbackGate.ts`:
 
@@ -665,12 +665,12 @@ export class PlaybackGate {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w avatar-core -- playbackGate`
 Expected: 5 个测试 PASS。
 
-- [ ] **Step 5: 实现播放 worklet（自包含，不 import 其他模块）**
+- [x] **Step 5: 实现播放 worklet（自包含，不 import 其他模块）**
 
 `avatar-core/src/audio/player-worklet.ts`:
 
@@ -802,7 +802,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
 registerProcessor('player', PlayerProcessor);
 ```
 
-- [ ] **Step 6: 实现 PlaybackController**
+- [x] **Step 6: 实现 PlaybackController**
 
 `avatar-core/src/audio/player.ts`:
 
@@ -961,7 +961,7 @@ describe('PlaybackController.push', () => {
 });
 ```
 
-- [ ] **Step 7: 类型检查与提交**
+- [x] **Step 7: 类型检查与提交**
 
 Run: `npm run typecheck -w avatar-core && npm test -w avatar-core`
 Expected: 无类型错误；测试全部 PASS。若 `?worker&url` 导入报"找不到模块"，确认 `tsconfig.json` 的 `types` 含 `vite/client`。
@@ -993,7 +993,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `class SpeechDetector(opts?)`：`aiPlaying`、`speaking`、`onsetAt: number | null`、`push(probability, nowMs): 'start' | 'end' | null`、`reset()`
   - `class LocalVad`：`detector`、`start(stream, { onStart(onsetAt: number): void; onEnd(): void; onProbability?(p: number): void }): Promise<void>`、`set aiPlaying(v)`、`callbacks`、`destroy()`（说话中销毁会补发一次 `onEnd`；`start()` 先 `destroy()`）
 
-- [ ] **Step 1: 写失败的测试（SpeechDetector 纯逻辑）**
+- [x] **Step 1: 写失败的测试（SpeechDetector 纯逻辑）**
 
 `avatar-core/test/vad.test.ts`:
 
@@ -1096,12 +1096,12 @@ describe('vadAssetBase', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -w avatar-core -- vad`
 Expected: FAIL，无法解析模块。
 
-- [ ] **Step 3: 实现 VAD**
+- [x] **Step 3: 实现 VAD**
 
 `avatar-core/src/audio/vad.ts`:
 
@@ -1253,12 +1253,12 @@ export class LocalVad {
 
 注（Task 17 冒烟后修正）：`baseAssetPath`/`onnxWASMBasePath` 必须是基于 `document.baseURI` 的绝对 URL（`vadAssetBase`）。相对的 `./vad/` 在打包后被 ORT 的动态 `import()` 按 `assets/*.js` 解析成不存在的 `assets/vad/`，APK 内报 `no available backend found`（见 `docs/blockers.md` #5）。`document` 只在 `start()` 里访问，node 测试不受影响。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w avatar-core -- vad`
 Expected: 7 个测试 PASS。
 
-- [ ] **Step 5: 实现采集 worklet 与 MicCapture**
+- [x] **Step 5: 实现采集 worklet 与 MicCapture**
 
 `avatar-core/src/audio/capture-worklet.ts`:
 
@@ -1367,7 +1367,7 @@ export class MicCapture {
 }
 ```
 
-- [ ] **Step 6: 类型检查与提交**
+- [x] **Step 6: 类型检查与提交**
 
 Run: `npm run typecheck -w avatar-core && npm test -w avatar-core`
 Expected: 无类型错误；测试全部 PASS。
@@ -1399,7 +1399,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 续接逻辑：非用户主动断开 → 退避 500 ms、1 s、2 s、4 s（封顶 4 s）调用 `POST /session/resume` → 新 WS 发 `session.resume`（若会话从未收到 `session.ready`/`session.resumed`，即 `session.start` 未到达网关，则新 WS 改发 `session.start`）；退避计数与断开时间只在收到 `session.ready`/`session.resumed` 后清零（不在 `onopen` 清零），所以 open 后反复被网关关闭（如 4002）仍会在 `maxResumeMs` 后转为新建会话；`close()` 后在途的 POST 不再开新 WS，重连中调用 `close()` 立即发出 `closed`；`404/401` 或累计断开超过 `maxResumeMs`（默认 55 秒，小于网关 60 秒宽限期）→ 改为新建会话并发 `session.start`。
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 `avatar-core/test/gatewayClient.test.ts`:
 
@@ -1631,12 +1631,12 @@ describe('GatewayClient', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -w avatar-core -- gatewayClient`
 Expected: FAIL，无法解析模块。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `avatar-core/src/net/gatewayClient.ts`:
 
@@ -1835,14 +1835,14 @@ export class GatewayClient {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -w avatar-core -- gatewayClient`
 Expected: 11 个测试 PASS。
 
 若 "backs off ... falls back" 失败：退避序列为 500、1000、2000、4000、4000 ms，重试发生在断开后 0.5、1.5、3.5、7.5、11.5 秒；第 5 次重试（11.5 s）失败时累计断开已超过 `maxResumeMs: 10_000`，`scheduleResume` 不再排第 6 次重试，而是立即 `restartFresh()`（新建会话成功 → 新 WS 发 `session.start`）。确认 `scheduleResume` 每次都先检查 `Date.now() - disconnectedAt`，且 vitest 的假定时器同时接管了 `Date.now()`。
 
-- [ ] **Step 5: 全量测试、类型检查与提交**
+- [x] **Step 5: 全量测试、类型检查与提交**
 
 Run: `npm test -w avatar-core && npm run typecheck -w avatar-core`
 Expected: 全部 PASS。
