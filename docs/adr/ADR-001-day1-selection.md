@@ -33,3 +33,5 @@
 | release 构建加载 127.0.0.1 页面 | 【模拟器】API 31 release 包可加载 | 【真机】release APK 加载本地页面和头像 | 本次为 Plan 1.1 冒烟，不替代 Task 16 8 项探针 |
 | WebGL 帧率（idle / speaking） | 不代表手机 | 待真机 | Task 18 |
 | 主模型选择（Seeduplex vs Qwen） | — | 未测：等待 Key | Plan 2 |
+
+Spike A 真机冒烟记录：点击 `EC=true` 后出现麦克风占用指示，但统计未显示。WebView renderer 收到 SIGABRT，随后 Flutter 主进程因关联 WebView 未处理 renderer crash 而 native crash；退出记录 PSS 433 MB，设备崩溃后可用内存约 4.5 GB。没有证据表明本次由 lowmemorykiller 引起，renderer 底层 abort 原因未知；VAD 完成初始化、计数刷新及所有 A/B 数值均待复测（见 `docs/blockers.md` #6）。

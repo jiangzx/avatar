@@ -420,6 +420,8 @@ class _NativeAudioSpikePageState extends State<NativeAudioSpikePage> {
 
 在模拟器上分别用 `--dart-define=PAGE=spike-aec.html` 和 `--dart-define=SPIKE=native_audio` 启动（命令同 Step 5），确认页面能打开、按钮能点、计数在刷新、没有报错即可；数字不记录。然后提交：
 
+【真机检查点 ① 尝试，2026-10-12】在 Xiaomi 22101317C 上打开 `spike-aec.html` 并点击 `EC=true` 后，麦克风占用指示出现，但统计未显示；WebView renderer SIGABRT，Flutter 主进程随后 native crash。VAD 完成初始化和计数刷新均未确认，见 `docs/blockers.md` #5/#6；此尝试不满足冒烟验收，需排查后重跑。
+
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea
 git add avatar-core/spike-aec.html avatar-core/src/spike avatar-core/vite.config.ts app/lib/config.dart app/lib/main.dart app/lib/spike app/test/energy_trigger_test.dart

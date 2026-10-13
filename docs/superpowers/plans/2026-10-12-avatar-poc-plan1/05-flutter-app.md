@@ -1186,7 +1186,9 @@ cd /Users/JedJiang/SourceCode/anyidea
 ./scripts/build-web.sh --probe-only   # avatar-core 已能构建时也可以不带参数；两种模式都包含 probe.html
 ```
 
-- [ ] **Step 8: 能力探针（debug 包；先模拟器，真机检查点 ① 再跑一遍）**
+- [x] **Step 8: 能力探针（debug 包；先模拟器，真机检查点 ① 再跑一遍）**
+
+【真机 2026-10-12】Xiaomi 22101317C / Android 13 / WebView 104.0.5112.97。debug 探针 8 项均有输出：`secure_context`、`autoplay`（AudioContext 无手势为 running）、`audio_worklet`、`wasm`、`webgl2`（Adreno 619）、`microphone`（`echoCancellation=true`、16 kHz）、`gateway` 报 OK；`webview` 实际版本低于 Chrome ≥120 的通过门槛。0.3 秒提示音是否可听、实际说话拾音电平未确认。结果见 ADR-001 和 blockers #3。
 
 先启动模拟器（Task 0 Step 2a），依次在 `Medium_Phone_API_36.1` 和 `API31_Phone` 上跑；到真机检查点 ① 时接上小米手机，用同样的命令再跑（多台设备在线时 `adb -s`、`flutter run -d` 指定设备）。
 
@@ -1214,7 +1216,7 @@ cd app && flutter run --dart-define-from-file=dev.json --dart-define=PAGE=probe.
 
 另外确认 `chrome://inspect` 控制台没有 `ERR_CLEARTEXT_NOT_PERMITTED`、`NotAllowedError` 之外的未预期报错。
 
-- [ ] **Step 9: release 构建加载验证（spec §9 Day 1 ① 要求）**
+- [x] **Step 9: release 构建加载验证（spec §9 Day 1 ① 要求）**
 
 ```bash
 cd /Users/JedJiang/SourceCode/anyidea/app
@@ -1224,6 +1226,8 @@ adb shell am start -n com.anyidea.avatar_app/.MainActivity
 ```
 
 Expected: release 包的探针结果与 debug 包一致（`adb reverse` 仍需保持）。模拟器上先验证一次，真机检查点 ① 必须再验证。若页面空白且 `adb logcat | grep -i cleartext` 出现 `CLEARTEXT_NOT_PERMITTED`：说明 WebView 没有按 `domain-config` 放行 127.0.0.1，按 spec 的退路改用 `WebViewAssetLoader`（`https://appassets.androidplatform.net`），把这件事记入 `docs/blockers.md` 并作为 Plan 2 的第一项；Plan 1 其余验收先用 debug 包继续。
+
+【真机 2026-10-12】release APK build/install/launch 均成功，探针结果与 debug 一致；`gateway` health 经 `http://127.0.0.1:8787` 返回 OK，未见 cleartext 拦截。WebView 版本仍为 104，低于 ≥120 门槛；声音听感及真实说话拾音未确认。
 
 Step 8–9 结束后停止网关：同一终端执行 `kill "$GW_PID"`；换过终端则 `lsof -ti tcp:8787 | xargs kill`。确认 `lsof -nP -iTCP:8787 -sTCP:LISTEN` 无输出。
 

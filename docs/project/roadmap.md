@@ -23,7 +23,7 @@ Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-p
 
 ## Plan 1 acceptance (from the plan overview) — status
 
-Greets on open (gateway side ✓ headless; device ✗); scripted multi-turn with subtitles (✗ device); local-VAD barge-in leaves no stale audio/subtitle (logic covered by unit tests incl. AppController fakes; device ✗); 5 actions tool+keyword deduped (gateway ✓; visual ✗); short reconnect resumes / long reconnect starts new session (unit + client tests ✓; device ✗); Ledger/summary/session rebuild covered by automated tests ✓; Day 1 device probe and audio A/B spike with ADR-001 ✗ (draft only).
+Greets on open (gateway side ✓ headless; product page ✗); scripted multi-turn with subtitles (✗ device); local-VAD barge-in leaves no stale audio/subtitle (logic covered by unit tests incl. AppController fakes; device ✗); 5 actions tool+keyword deduped (gateway ✓; visual ✗); short reconnect resumes / long reconnect starts new session (unit + client tests ✓; device ✗); Ledger/summary/session rebuild covered by automated tests ✓; Task 16 probe ran on-device with version/audio caveats; Spike A smoke failed before counters; audio A/B and ADR-001 decision remain open.
 
 ## Cross-phase dependencies
 
