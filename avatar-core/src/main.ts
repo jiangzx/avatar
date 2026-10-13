@@ -1,13 +1,26 @@
 import { AppController, type AppConfig } from './app.ts';
 import { hasFlutter, onFlutterMessage, postToFlutter, setDevSink, type ToFlutter } from './bridge.ts';
 import { parseFromFlutter } from './bridgeValidate.ts';
+import { NativeAvatarController, browserNativeDeps } from './nativeAvatar.ts';
 
 const el = document.getElementById('avatar');
 if (!el) throw new Error('#avatar missing');
 let app: AppController | null = null;
+let nativeApp: NativeAvatarController | null = null;
 
-async function boot(cfg: AppConfig): Promise<void> {
-  if (app) return;
+async function boot(cfg: AppConfig, audioMode?: 'native'): Promise<void> {
+  if (app || nativeApp) return;
+  if (audioMode === 'native') {
+    const current = new NativeAvatarController(el!, browserNativeDeps(), cfg.avatarUrl);
+    nativeApp = current;
+    try {
+      await current.start();
+    } catch {
+      if (nativeApp === current) nativeApp = null;
+      el!.replaceChildren();
+    }
+    return;
+  }
   const current = new AppController(el!, cfg);
   app = current;
   try {
@@ -28,7 +41,12 @@ onFlutterMessage((raw: unknown) => {
     return;
   }
   if (m.type === 'config') {
-    void boot({ gatewayUrl: m.gatewayUrl, appSecret: m.appSecret, audioPath: m.audioPath, avatarUrl: './avatars/avatar.glb', echo: m.echo ?? 'true' });
+    void boot(
+      { gatewayUrl: m.gatewayUrl, appSecret: m.appSecret, audioPath: m.audioPath, avatarUrl: './avatars/avatar.glb', echo: m.echo ?? 'true' },
+      m.audioMode,
+    );
+  } else if (nativeApp) {
+    nativeApp.handleNativeEvent(m);
   } else {
     app?.handleFlutter(m);
   }

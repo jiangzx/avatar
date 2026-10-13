@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +12,12 @@ import 'bridge.dart';
 import 'config.dart';
 import 'local_asset_server.dart';
 import 'metrics.dart';
+import 'native_audio/native_audio_io.dart';
+import 'native_audio/speech_detector.dart';
+import 'native_gateway/gateway_client.dart';
+import 'native_gateway/transports.dart';
+import 'native_session/events.dart';
+import 'native_session/session_controller.dart';
 import 'overlay.dart';
 
 const _statusLabels = {
@@ -44,6 +52,8 @@ class _AvatarPageState extends State<AvatarPage> {
   final _diag = <String, String>{};
   final _debugText = TextEditingController();
   WebViewController? _controller;
+  NativeSessionController? _session;
+  bool _startingSession = false;
   String _userLine = '';
   String _aiLine = '';
   String _status = '准备中…';
@@ -67,12 +77,7 @@ class _AvatarPageState extends State<AvatarPage> {
     }
     await _server.start();
     final base = _server.baseUri;
-    final controller = WebViewController(
-      onPermissionRequest: (request) {
-        final onlyMic = request.types.isNotEmpty && request.types.every((t) => t == WebViewPermissionResourceType.microphone);
-        onlyMic ? request.grant() : request.deny();
-      },
-    );
+    final controller = WebViewController();
     await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
     await controller.setBackgroundColor(const Color(0xFF10131A));
     await controller.addJavaScriptChannel('FlutterBridge', onMessageReceived: (m) => _onJs(m.message));
@@ -82,7 +87,6 @@ class _AvatarPageState extends State<AvatarPage> {
     ));
     final platform = controller.platform;
     if (platform is AndroidWebViewController) {
-      await platform.setMediaPlaybackRequiresUserGesture(false);
       await platform.setAllowFileAccess(false);
       await AndroidWebViewController.enableDebugging(kDebugMode);
     }
@@ -97,13 +101,8 @@ class _AvatarPageState extends State<AvatarPage> {
     if (event == null || !mounted) return;
     switch (event) {
       case JsReady():
-        _send({
-          'type': 'config',
-          'gatewayUrl': AppConfig.gatewayUrl,
-          'appSecret': AppConfig.appSecret,
-          'audioPath': AppConfig.audioPath,
-          'echo': AppConfig.echo,
-        });
+        _sendConfig();
+        if (AppConfig.audioMode == 'native') unawaited(_startNativeSession());
       case JsSubtitle(:final role, :final text):
         setState(() => role == 'user' ? _userLine = text : _aiLine = text);
       case JsState(:final state):
@@ -122,15 +121,85 @@ class _AvatarPageState extends State<AvatarPage> {
     }
   }
 
-  void _send(Map<String, Object?> message) => _controller?.runJavaScript(jsCall(message));
+  void _sendConfig() {
+    _send({
+      'type': 'config',
+      'gatewayUrl': AppConfig.gatewayUrl,
+      'appSecret': AppConfig.appSecret,
+      'audioPath': AppConfig.audioPath,
+      'echo': AppConfig.echo,
+      if (AppConfig.audioMode == 'native') 'audioMode': 'native',
+    });
+  }
+
+  Future<void> _send(Map<String, Object?> message) async {
+    final controller = _controller;
+    if (controller == null) return;
+    await controller.runJavaScript(jsCall(message));
+  }
+
+  Future<void> _startNativeSession() async {
+    if (_session != null || _startingSession) return;
+    _startingSession = true;
+    final session = NativeSessionController(
+      audio: PluginNativeAudioIO(),
+      detector: EnergySpeechDetector(),
+      client: NativeGatewayClient(
+        baseUri: Uri.parse(AppConfig.gatewayUrl),
+        appSecret: AppConfig.appSecret,
+        transport: const IoGatewayTransport(),
+        events: _UnwiredGatewayEvents(),
+        audioPath: AppConfig.audioPath,
+      ),
+      emit: _onNativeEvent,
+    );
+    _session = session;
+    try {
+      await session.start();
+    } catch (_) {
+      if (identical(_session, session)) _session = null;
+    } finally {
+      _startingSession = false;
+    }
+  }
+
+  void _onNativeEvent(NativeUiEvent event) {
+    if (!mounted) return;
+    unawaited(_send(event.toJson()));
+    switch (event) {
+      case UiStatus(:final status):
+        setState(() {
+          _status = _statusLabels[status] ?? status;
+          _error = errorAfterStatus(_error, status);
+        });
+      case UiState(:final state):
+        setState(() => _state = state);
+      case UiSubtitle(:final role, :final text):
+        setState(() => role == 'user' ? _userLine = text : _aiLine = text);
+      case UiMetric(:final name, :final ms):
+        setState(() => _metrics.add(name, ms.toDouble()));
+      case UiError(:final code):
+        setState(() => _error = _errorLabel(code));
+      case UiResponseStart() || UiResponseEnd() || UiResponseCancelled() || UiAvatarAction() || UiAvatarEmotion() || UiAudioLevel():
+        break;
+    }
+  }
 
   void _toggleMute() {
     setState(() => _muted = !_muted);
-    _send({'type': 'mute', 'muted': _muted});
+    if (AppConfig.audioMode == 'native') {
+      _session?.setMuted(_muted);
+    } else {
+      unawaited(_send({'type': 'mute', 'muted': _muted}));
+    }
   }
 
   void _end() {
-    _send({'type': 'end'});
+    if (AppConfig.audioMode == 'native') {
+      unawaited(_session?.stop() ?? Future<void>.value());
+    } else {
+      unawaited(_send({'type': 'end'}));
+    }
     setState(() => _status = _statusLabels['closed']!);
   }
 
@@ -154,7 +223,11 @@ class _AvatarPageState extends State<AvatarPage> {
                 decoration: const InputDecoration(hintText: '输入文字代替语音', hintStyle: TextStyle(color: Colors.white38)),
                 onSubmitted: (v) {
                   if (v.trim().isEmpty) return;
-                  _send({'type': 'debugText', 'text': v.trim()});
+                  if (AppConfig.audioMode == 'native') {
+                    _session?.debugText(v.trim());
+                  } else {
+                    unawaited(_send({'type': 'debugText', 'text': v.trim()}));
+                  }
                   _debugText.clear();
                 },
               ),
@@ -171,6 +244,7 @@ class _AvatarPageState extends State<AvatarPage> {
 
   @override
   void dispose() {
+    unawaited(_session?.stop() ?? Future<void>.value());
     _server.stop();
     _debugText.dispose();
     WakelockPlus.disable();
@@ -200,4 +274,15 @@ class _AvatarPageState extends State<AvatarPage> {
       ),
     );
   }
+}
+
+class _UnwiredGatewayEvents implements GatewayClientEvents {
+  @override
+  void onAudio(_) {}
+
+  @override
+  void onMessage(_) {}
+
+  @override
+  void onStatus(_) {}
 }

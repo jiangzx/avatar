@@ -15,6 +15,7 @@ describe('parseFromFlutter', () => {
     expect(parseFromFlutter({ ...cfg(), extra: 1 })).toEqual(cfg());
     expect(parseFromFlutter(cfg({ echo: undefined }))).toEqual({ ...cfg(), echo: undefined });
     expect(parseFromFlutter(cfg({ audioPath: 'B', echo: 'all' }))).toEqual(cfg({ audioPath: 'B', echo: 'all' }));
+    expect(parseFromFlutter(cfg({ audioMode: 'native' }))).toEqual(cfg({ audioMode: 'native' }));
   });
 
   it('accepts loopback, emulator and RFC1918 gateway hosts', () => {
@@ -58,6 +59,18 @@ describe('parseFromFlutter', () => {
     expect(parseFromFlutter(cfg({ appSecret: '' }))).toBeNull();
     expect(parseFromFlutter(cfg({ appSecret: 7 }))).toBeNull();
     expect(parseFromFlutter(cfg({ appSecret: 'x'.repeat(MAX_APP_SECRET_LEN + 1) }))).toBeNull();
+    expect(parseFromFlutter(cfg({ audioMode: 'web' }))).toBeNull();
+  });
+
+  it('accepts native view events and rejects invalid numeric or action values', () => {
+    expect(parseFromFlutter({ type: 'audio.level', rms: 1200, zcr: 0.12, dtMs: 20 })).toEqual({
+      type: 'audio.level', rms: 1200, zcr: 0.12, dtMs: 20,
+    });
+    expect(parseFromFlutter({ type: 'response.end', responseSeq: 2, playedMs: 100 })).not.toBeNull();
+    expect(parseFromFlutter({ type: 'avatar.action', action: 'wave', source: 'tool' })).not.toBeNull();
+    expect(parseFromFlutter({ type: 'audio.level', rms: Number.NaN, zcr: 0.12, dtMs: 20 })).toBeNull();
+    expect(parseFromFlutter({ type: 'audio.level', rms: 1200, zcr: 0.12, dtMs: 0 })).toBeNull();
+    expect(parseFromFlutter({ type: 'avatar.action', action: 'dance', source: 'tool' })).toBeNull();
   });
 
   it('validates mute, end and debugText', () => {

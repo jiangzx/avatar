@@ -58,7 +58,7 @@
 - Produces `abstract interface class NativeSpeechDetector { bool get aiPlaying; set aiPlaying(bool); SpeechEdge push(Int16List frame, {required int timestampMs}); void reset(); }`，其中 `SpeechEdge` 为 `none`、`speaking`、`silent`。
 - Produces `PcmFrameAccumulator(int frameSamples)`，其 `List<Int16List> push(Uint8List bytes)` 每次只返回完整帧，`Uint8List takeRemainder()` 返回未完成尾部。
 
-- [ ] **Step 1: Write the failing PCM and VAD tests**
+- [x] **Step 1: Write the failing PCM and VAD tests**
 
 ```dart
 test('reframes arbitrary recorder chunks into 320-sample PCM frames', () {
@@ -88,25 +88,25 @@ test('energy VAD emits silent only after release duration', () {
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and verify they fail**
+- [x] **Step 2: Run the focused tests and verify they fail**
 
 Run: `cd app && flutter test test/native_audio_pcm_test.dart test/native_speech_detector_test.dart`
 
 Expected: FAIL because the new types and implementations do not exist.
 
-- [ ] **Step 3: Implement the minimal pure Dart types and algorithms**
+- [x] **Step 3: Implement the minimal pure Dart types and algorithms**
 
 `PcmFrameAccumulator` must preserve odd-byte and partial-frame tails without dropping bytes. `rmsInt16` and `zeroCrossingRate` must return zero for an empty frame. `EnergySpeechDetector` must count 20 ms frames, emit only one `speaking` edge per voiced segment, use `startMs`/`releaseMs` thresholds, and expose `aiPlaying` without changing the input frame.
 
 Put all defaults at the top of `speech_detector.dart` and mark them `TUNABLE`; do not put numeric thresholds inside `push`.
 
-- [ ] **Step 4: Run the focused tests and the existing energy test**
+- [x] **Step 4: Run the focused tests and the existing energy test**
 
 Run: `cd app && flutter test test/native_audio_pcm_test.dart test/native_speech_detector_test.dart test/energy_trigger_test.dart`
 
 Expected: all tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/lib/native_audio/audio_types.dart app/lib/native_audio/pcm.dart app/lib/native_audio/speech_detector.dart app/test/native_audio_pcm_test.dart app/test/native_speech_detector_test.dart
@@ -125,7 +125,7 @@ git commit -m "feat(app): add native audio types and energy vad"
 - Produces `abstract interface class NativeAudioIO` with:
 
 ```dart
-Future<void> start({required FrameCallback onFrame, required LevelCallback onLevel});
+Future<void> start({required FrameCallback onFrame, required LevelCallback onLevel, required void Function(PlayedAudio) onPlaybackEnded});
 Future<void> startResponse(int responseSeq);
 Future<void> pushResponse(int responseSeq, Int16List pcm24k);
 Future<void> endResponse(int responseSeq);
@@ -137,7 +137,7 @@ Future<void> stop();
 - Produces `NativeAudioIO.create()` using `record` with `VOICE_COMMUNICATION`, `MODE_IN_COMMUNICATION`, `speakerphone: true`, `echoCancel: true`, `noiseSuppress: true`, `autoGain: true`, and `flutter_pcm_sound` at 24 kHz mono.
 - Produces `PlaybackQueue` that accepts only the current response sequence and exposes `activeResponseSeq`, `playedMs`, and `resetBelow(int seq)`.
 
-- [ ] **Step 1: Write failing playback-gate tests**
+- [x] **Step 1: Write failing playback-gate tests**
 
 ```dart
 test('drops stale PCM after a newer response starts', () {
@@ -152,6 +152,8 @@ test('stop returns played time once and rejects later chunks', () async {
   final q = PlaybackQueue(sampleRate: 24000);
   q.start(7);
   q.accept(7, Int16List(2400));
+  q.markFed(7, 2400);
+  q.updateRemaining(7, 0);
   final first = q.stop(StopReason.interrupted);
   expect(first.playedMs, 100);
   expect(q.accept(7, Int16List(2400)), isFalse);
@@ -159,28 +161,28 @@ test('stop returns played time once and rejects later chunks', () async {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify failure**
+- [x] **Step 2: Run the focused test and verify failure**
 
 Run: `cd app && flutter test test/native_playback_queue_test.dart`
 
 Expected: FAIL because `PlaybackQueue` is absent.
 
-- [ ] **Step 3: Implement the queue and plugin adapter**
+- [x] **Step 3: Implement the queue and plugin adapter**
 
 `PlaybackQueue` must count accepted 24 kHz samples, reset on a fresh session, ignore sequences at or below `resetBelow`, and make `stop` idempotent. `NativeAudioIO.start` must subscribe to `AudioRecorder.startStream`, feed arbitrary byte chunks through `PcmFrameAccumulator`, invoke `onFrame` for complete 20 ms frames, and invoke `onLevel` with numeric RMS/ZCR only. `stop` must cancel the stream, stop the recorder, clear the PCM tail, stop/release `FlutterPcmSound`, and tolerate repeated calls.
 
 Use `FlutterPcmSound.setLogLevel(LogLevel.none)` before setup. Never log feed bytes. Do not move plugin-specific objects into the session controller.
 
-- [ ] **Step 4: Run tests, analyze, and build the Android debug app**
+- [x] **Step 4: Run tests, analyze, and build the Android debug app**
 
 Run: `cd app && flutter test test/native_playback_queue_test.dart && flutter analyze && flutter build apk --debug --dart-define-from-file=dev.json`
 
 Expected: focused test PASS, analyzer reports no issues, debug APK builds. A plugin runtime smoke is deferred to Task 7 on the phone.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add app/lib/native_audio/native_audio_io.dart app/lib/native_audio/playback_queue.dart app/test/native_playback_queue_test.dart
+git add app/lib/native_audio/audio_types.dart app/lib/native_audio/native_audio_io.dart app/lib/native_audio/playback_queue.dart app/test/native_playback_queue_test.dart
 git commit -m "feat(app): add native audio io and playback gate"
 ```
 
@@ -199,7 +201,7 @@ git commit -m "feat(app): add native audio io and playback gate"
 - Produces `NativeGatewayClient({required Uri baseUri, required String appSecret, required GatewayTransport transport, required GatewayClientEvents events, Duration maxResume = const Duration(seconds: 55)})` with `Future<void> start()`, `void send(ClientMessage)`, `void sendAudio(Int16List)`, and `Future<void> close()`.
 - Produces `GatewayTransport.postSession(Uri, String, Map<String,Object?>)` and `GatewayTransport.openWebSocket(Uri)` so tests can use fakes; the production transport wraps `dart:io HttpClient` and `WebSocket.connect`.
 
-- [ ] **Step 1: Write failing codec tests**
+- [x] **Step 1: Write failing codec tests**
 
 ```dart
 test('encodes and decodes the frozen PCM frame layout', () {
@@ -218,7 +220,7 @@ test('rejects odd payloads and unknown frame kinds', () {
 });
 ```
 
-- [ ] **Step 2: Write failing client tests**
+- [x] **Step 2: Write failing client tests**
 
 ```dart
 test('starts a session and sends the existing session.start message', () async {
@@ -244,23 +246,23 @@ test('routes only AI binary frames and resumes with the rotated token', () async
 });
 ```
 
-- [ ] **Step 3: Run the new tests and verify failure**
+- [x] **Step 3: Run the new tests and verify failure**
 
 Run: `cd app && flutter test test/native_gateway_protocol_test.dart test/native_gateway_client_test.dart`
 
 Expected: FAIL because the Dart protocol, transport fakes, and client do not exist.
 
-- [ ] **Step 4: Implement protocol and client behavior**
+- [x] **Step 4: Implement protocol and client behavior**
 
 Use big-endian sequence numbers and little-endian PCM samples exactly as the TypeScript codec. `NativeGatewayClient` must ignore messages from a stale socket, guard JSON parsing, rotate resume tokens from each successful resume response, retry below 55 seconds, and fall back to `POST /session` after the resume window or 404/401. `close()` must send `session.end` once, close the socket, cancel timers, and emit `closed` once.
 
-- [ ] **Step 5: Run focused tests and type checks**
+- [x] **Step 5: Run focused tests and type checks**
 
 Run: `cd app && flutter test test/native_gateway_protocol_test.dart test/native_gateway_client_test.dart && flutter analyze`
 
 Expected: all focused tests PASS and analyzer reports no issues.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/lib/native_gateway app/test/native_gateway_protocol_test.dart app/test/native_gateway_client_test.dart
@@ -280,7 +282,7 @@ git commit -m "feat(app): port gateway client to dart"
 - Produces `NativeSessionController({required NativeAudioIO audio, required NativeSpeechDetector detector, required NativeGatewayClient client, required void Function(NativeUiEvent) emit})` with `Future<void> start()`, `void debugText(String)`, `void setMuted(bool)`, and `Future<void> stop()`。
 - Produces sealed `NativeUiEvent` variants: `UiStatus`, `UiState`, `UiSubtitle`, `UiResponseStart`, `UiResponseEnd`, `UiResponseCancelled`, `UiAvatarAction`, `UiAvatarEmotion`, `UiAudioLevel`, `UiMetric`, and `UiError`. Their JSON keys must be stable and contain no PCM.
 
-- [ ] **Step 1: Write failing event serialization tests**
+- [x] **Step 1: Write failing event serialization tests**
 
 ```dart
 test('serializes numeric audio levels without audio bytes', () {
@@ -290,7 +292,7 @@ test('serializes numeric audio levels without audio bytes', () {
 });
 ```
 
-- [ ] **Step 2: Write failing session behavior tests**
+- [x] **Step 2: Write failing session behavior tests**
 
 The test file defines `SessionFakes` with fake `NativeAudioIO`, `NativeSpeechDetector`, and `NativeGatewayClient` collaborators. The fake client exposes `emit(ServerMessage)` and `emitAudio(int, Int16List)`; the fake audio records `startResponse`, accepted sequences, and `stopResponse` calls; the fake detector returns `SpeechEdge.speaking` on the fourth loud frame. These helpers stay in the test file and are not production interfaces.
 
@@ -319,28 +321,28 @@ test('drops old response audio after session.resumed', () async {
 });
 ```
 
-- [ ] **Step 3: Run focused tests and verify failure**
+- [x] **Step 3: Run focused tests and verify failure**
 
 Run: `cd app && flutter test test/native_session_events_test.dart test/native_session_controller_test.dart`
 
 Expected: FAIL because event classes and controller do not exist.
 
-- [ ] **Step 4: Implement the event model and controller**
+- [x] **Step 4: Implement the event model and controller**
 
 On start, request microphone permission in the App layer, then call `audio.start`, `client.start`, and emit `UiStatus(connecting/open)` from client callbacks. Forward every complete mic frame to both `detector.push` and `client.sendAudio` unless muted. On `SpeechEdge.speaking`, send `vad.speaking`, stop active playback, emit `UiResponseCancelled`/final subtitle state, and send existing `playback.stopped` with `reason=interrupted`. On `SpeechEdge.silent`, send `vad.silent`. On response audio, call `audio.startResponse`/`pushResponse`; on response end, call `endResponse`; on playback completion, send `playback.stopped(ended)`.
 
 The controller must track `seqFloor`, active response sequence, received audio milliseconds, played milliseconds, and live assistant subtitle text so interrupted subtitles are truncated with the existing ratio rule. All cleanup paths must be safe when start fails halfway through.
 
-- [ ] **Step 5: Run focused tests and full Flutter tests**
+- [x] **Step 5: Run focused tests and full Flutter tests**
 
 Run: `cd app && flutter test test/native_session_events_test.dart test/native_session_controller_test.dart && flutter test`
 
 Expected: new tests and all existing Flutter tests PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
-git add app/lib/native_session app/test/native_session_events_test.dart app/test/native_session_controller_test.dart
+git add app/lib/native_session app/test/native_session_events_test.dart app/test/native_session_controller_test.dart app/lib/native_audio/audio_types.dart app/lib/native_audio/native_audio_io.dart app/lib/native_gateway/gateway_client.dart
 git commit -m "feat(app): add native session controller"
 ```
 
@@ -359,7 +361,7 @@ git commit -m "feat(app): add native session controller"
 - Produces `NativeAvatarController` with `start()`, `handleNativeEvent(raw: unknown)`, and `stop()`; it never opens HTTP/WS or requests microphone access.
 - Produces a validated inbound bridge type containing `ready`, `mute`, `end`, and `debugText`; invalid messages return `bad_message` without echoing values.
 
-- [ ] **Step 1: Write failing TypeScript event tests**
+- [x] **Step 1: Write failing TypeScript event tests**
 
 The test file defines `nativeAvatarFakes()` with an in-memory `AvatarLike`, `ActionsLike`, `DocLike`, and `post` sink matching the existing `AppDeps` test shapes. The fake avatar records `setMouth`, `enterState`, and `setEmotion`; the post sink stores the last fourteen emitted UI events.
 
@@ -380,21 +382,21 @@ it('finalizes the active subtitle when a response is interrupted', () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and verify failure**
+- [x] **Step 2: Run the focused tests and verify failure**
 
 Run: `npm test -w avatar-core -- nativeAvatar.test.ts`
 
 Expected: FAIL because `NativeAvatarController` and the native event types do not exist.
 
-- [ ] **Step 3: Implement the no-audio WebView controller**
+- [x] **Step 3: Implement the no-audio WebView controller**
 
 Move only UI responsibilities from the current `AppController`: avatar loading, state transitions, action deduplication, subtitle tracking, mouth mapping from `audio.level`, metrics, and cleanup. Do not instantiate `MicCapture`, `LocalVad`, `PlaybackController`, or `GatewayClient`. Preserve `AvatarView`, `ActionPlayer`, and `SubtitleTracker` behavior. On `session.ready`/`session.resumed`, reset subtitle and response state; on `response.start` enter speaking only after `audio.level`/first-playback event; on `response.cancelled` finalize the active subtitle and stop actions.
 
-- [ ] **Step 4: Update Bridge types and entry point**
+- [x] **Step 4: Update Bridge types and entry point**
 
 Change the Flutter config path so `main.ts` boots the native controller when the config contains `audioMode: 'native'`. Keep the existing desktop debug button as the A path. The native controller must post only `{type:'ready'}` to Flutter and handle incoming JSON after validation. `audio.level` and response events flow Flutter → WebView through a single validated dispatch function.
 
-- [ ] **Step 5: Run TypeScript tests and type checks**
+- [x] **Step 5: Run TypeScript tests and type checks**
 
 Run: `npm test -w avatar-core && npm run typecheck -w avatar-core`
 
@@ -422,7 +424,7 @@ git commit -m "feat(web): render native audio bridge events"
 - Produces an `AvatarPage` that requests `RECORD_AUDIO` once in Flutter, creates the native session after WebView sends `ready`, and forwards `NativeUiEvent.toJson()` through `runJavaScript(jsCall(...))`.
 - Produces `AppConfig.audioPath == 'B'` and `AppConfig.audioMode == 'native'` defaults for Plan 1.1; `SPIKE=native_audio` remains an independent spike page.
 
-- [ ] **Step 1: Write failing widget/config tests**
+- [x] **Step 1: Write failing widget/config tests**
 
 ```dart
 test('native product config defaults to B', () {
@@ -436,19 +438,19 @@ testWidgets('AvatarPage does not grant WebView microphone permission', (tester) 
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and verify failure**
+- [x] **Step 2: Run the focused tests and verify failure**
 
 Run: `cd app && flutter test test/config_test.dart test/avatar_page_test.dart`
 
 Expected: FAIL because the new defaults and native page wiring are not present.
 
-- [ ] **Step 3: Implement App wiring**
+- [x] **Step 3: Implement App wiring**
 
 `AvatarPage` must keep the local asset server and WebView navigation allowlist, but remove `onPermissionRequest` microphone grants and `setMediaPlaybackRequiresUserGesture(false)`. On `JsReady`, construct `NativeSessionController` with production dependencies and start it; route each emitted event to JS. The overlay continues to display subtitles, state, status, metrics, diagnostics and mute/end controls. `dispose` must await or safely trigger controller shutdown before stopping the local asset server.
 
 Keep a test constructor or dependency factory for `AvatarPage` so widget tests can inject a fake controller and never open a real microphone or socket.
 
-- [ ] **Step 4: Run Flutter tests, analyzer, web build, and APK build**
+- [x] **Step 4: Run Flutter tests, analyzer, web build, and APK build**
 
 Run: `cd app && flutter test && flutter analyze && flutter build apk --debug --dart-define-from-file=dev.json`
 
@@ -477,13 +479,13 @@ git commit -m "feat(app): wire native audio product path"
 - Produces a report with separate sections for Plan 1, Plan 1.1, emulator, desktop Chrome, and Xiaomi WebView 104. It must include exact commands and results, but no conversation content.
 - Produces an ADR note that B migration is approved and measured independently; it must leave A/B numeric cells as `待真机` until actual measurements exist.
 
-- [ ] **Step 1: Run the full automated suite before device work**
+- [x] **Step 1: Run the full automated suite before device work**
 
 Run: `npm test && npm run typecheck && cd app && flutter test && flutter analyze`
 
 Expected: protocol, gateway, avatar-core, and Flutter tests pass; analyzer reports no issues. If any command fails, fix it in the owning task or record a blocker before proceeding.
 
-- [ ] **Step 2: Start the Mock gateway and install the debug APK**
+- [x] **Step 2: Start the Mock gateway and install the debug APK**
 
 Run from the repository root:
 
@@ -498,6 +500,8 @@ Expected: the app launches with `AUDIO_PATH=B`, the local page loads, and the ga
 
 - [ ] **Step 3: Execute the Plan 1.1 real-device checklist**
 
+  2026-10-13 续验：设备在线、`adb reverse`、Mock 网关和同 secret debug APK 启动完成；16 kHz 单声道采集初始化确认；30 分钟稳定性采样完成（31 点、renderer 31/31 存活）。真实语音/VAD、人工听感、活动回复续接、五个动作逐项验证、10 次真实打断和可靠的 10 分钟自打断计数仍未完成，故本步骤保持未勾选。详见 [native audio report](../../testing/2026-10-13-native-audio-plan1-1-report.md)。
+
 Record timestamps and counts only:
 
 1. Open app: avatar loads, greeting subtitle appears, greeting PCM is audible.
@@ -510,7 +514,7 @@ Record timestamps and counts only:
 
 Use the existing debug panel's CSV only for numeric metrics. Do not copy subtitles, ASR text, or audio data into the report.
 
-- [ ] **Step 4: Build and smoke-test release without changing the local gateway contract**
+- [x] **Step 4: Build and smoke-test release without changing the local gateway contract**
 
 Run:
 
@@ -521,15 +525,15 @@ adb -s 88a198720422 install -r build/app/outputs/flutter-apk/app-release.apk
 
 Expected: release APK loads the local `127.0.0.1` page and native audio path; no WebView microphone permission request appears. If release fails, record the exact error in `docs/blockers.md` and do not weaken network security settings.
 
-- [ ] **Step 5: Write the report and update project memory**
+- [x] **Step 5: Write the report and update project memory**
 
 The report must include device identity, WebView version, commands actually run, numeric results, failed/skipped items, and the sentence: “Plan 1 WebView ≥120 兼容性门槛仍未改变；本报告仅证明 Plan 1.1 方案 B 在本设备上的实测状态。” Update `roadmap.md` next task/status, `blockers.md` with any unresolved device issue, and ADR-001 without fabricating A/B values. Tick only the completed checkboxes in this plan.
 
-- [ ] **Step 6: Run final verification before claiming completion**
+- [x] **Step 6: Run final verification before claiming completion**
 
 Run: `git diff --check`, `npm test`, `npm run typecheck`, `cd app && flutter test && flutter analyze`, and inspect `git status --short`. Verify that no `.env`/secret file is staged and that only explicit paths changed.
 
-- [ ] **Step 7: Commit the report and documentation**
+- [x] **Step 7: Commit the report and documentation**
 
 ```bash
 git add docs/testing/2026-10-13-native-audio-plan1-1-report.md docs/project/roadmap.md docs/blockers.md docs/adr/ADR-001-day1-selection.md docs/superpowers/plans/2026-10-13-native-audio-path-plan.md

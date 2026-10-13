@@ -1,10 +1,12 @@
 # ADR-001：Day 1 选型结论
 
-> **状态：DRAFT – not decided; awaiting real-device measurements（草稿，未决定，等待真机实测）。**
-> 本文件只是占位骨架，便于后续任务引用。截至 2026-10-12 没有小米真机（见 `docs/blockers.md` #1、#3、#4、#5、#6），下表所有【实测】格均为"待真机"。模拟器的回声路径（Mac 扬声器 → Mac 麦克风）与手机完全不同，任何模拟器数字都不得填入 A/B 表。
+> **状态：DRAFT – A/B not decided; Plan 1.1 migration approved（A/B 仍未决定；Plan 1.1 迁移已批准）。**
+> Plan 1.1 已在小米设备上完成启动冒烟；A/B 数字仍必须来自独立的真机测量，模拟器的回声路径（Mac 扬声器 → Mac 麦克风）与手机完全不同，任何模拟器数字都不得填入 A/B 表。
 
-- 日期：待真机（草稿创建于 2026-10-12）
-- 设备：小米 待真机（型号），Android 待真机，WebView 版本 待真机（A/B 数据只来自真机；模拟器结果只填在下方"模拟器"列）
+- 日期：2026-10-13（Plan 1.1 冒烟）
+- 设备：小米 22101317C，Android 13，WebView 104.0.5112.97（A/B 数据只来自真机；本次未进行 A/B 数值测量）
+
+本次续验补充：方案 B 在同一设备完成 30 分钟稳定性采样（31 个 60 秒点）；WebView renderer 存活 31/31，电池温度 34.0°C，应用 PSS/RSS 与系统级音频错误摘要见 [Plan 1.1 验证报告](../testing/2026-10-13-native-audio-plan1-1-report.md)。这不是 A/B 测量，不改变下表的“待真机”占位，也不改变本 ADR 的 DRAFT 状态。
 
 ## 音频方案 A/B（外放、无人说话、10 分钟）
 
@@ -16,7 +18,7 @@
 
 判定规则（spec §9 Day 1）：选 10 分钟自打断更少的方案；持平时选 A。目标【预估】：自打断 ≤1 次/10 分钟，真打断检出 ≥9/10。
 
-**结论：** 未决定（UNDECIDED）。等待 Task 17 Step 5–6 真机测量后填写。Plan 1 在此之前默认按方案 A 继续 Mock 验收。
+**结论：** Plan 1.1 方案 B 迁移获批准并完成了设备启动冒烟；A/B 选型仍未决定，等待 Task 17 Step 5–6 的真机测量。Plan 1 的历史默认方案 A 不变。
 若 A、B 都 >1 次/10 分钟：按 spec §2.1 Plan B，在 Plan 2 中评估 `flutter_webrtc` 直连 Qwen WebRTC。
 
 已知风险（来自源码核对，非测量）：`flutter_pcm_sound` 3.3.3 在 Android 上以 `USAGE_MEDIA` / `CONTENT_TYPE_MUSIC` 播放，方案 B 的采集处于通话模式（`MODE_IN_COMMUNICATION` + `VOICE_COMMUNICATION`），两者可能不在同一条回声消除路由里。
@@ -25,9 +27,9 @@
 
 | 项 | 模拟器（API 36 / API 31） | 真机【实测】 | 备注 |
 |---|---|---|---|
-| WebView 版本 / 安全上下文 | 【模拟器】API 36：WebView 134；API 31：WebView 91.0.4472.114（低于 Chrome ≥120 标准）；两台安全上下文 OK | 待真机 | Task 16 Step 8 探针 `webview`、`secure_context`；见 blockers #3 |
-| 免手势播放（AudioContext 无手势 running） | 【模拟器】两台无手势 `running`；无头模拟器听不到提示音 | 待真机 | 探针 `autoplay`；完整页面再在 Task 18 Step 0 确认打开即问候 |
-| AudioWorklet / wasm / WebGL2 / 麦克风 | 【模拟器】探针各项 OK；麦克风只验证到 getUserMedia 成功 | 待真机 | 探针对应各项 |
-| release 构建加载 127.0.0.1 页面 | 【模拟器】API 31 release 包可加载 | 待真机 | Task 16 Step 9 |
+| WebView 版本 / 安全上下文 | 【模拟器】API 36：WebView 134；API 31：WebView 91.0.4472.114（低于 Chrome ≥120 标准）；两台安全上下文 OK | 【真机】WebView 104.0.5112.97；Plan 1.1 本地页面可加载 | Task 16 Step 8 探针完整 8 项仍未重跑 |
+| 免手势播放（AudioContext 无手势 running） | 【模拟器】两台无手势 `running`；无头模拟器听不到提示音 | n/a（方案 B 不依赖 WebView 音频） | Plan 1 A 路径的 autoplay 结论保持原状 |
+| AudioWorklet / wasm / WebGL2 / 麦克风 | 【模拟器】探针各项 OK；麦克风只验证到 getUserMedia 成功 | n/a（方案 B 产品路径不依赖 WebView 麦克风/AudioWorklet） | Plan 1 A 路径的探针仍需单独执行 |
+| release 构建加载 127.0.0.1 页面 | 【模拟器】API 31 release 包可加载 | 【真机】release APK 加载本地页面和头像 | 本次为 Plan 1.1 冒烟，不替代 Task 16 8 项探针 |
 | WebGL 帧率（idle / speaking） | 不代表手机 | 待真机 | Task 18 |
 | 主模型选择（Seeduplex vs Qwen） | — | 未测：等待 Key | Plan 2 |
