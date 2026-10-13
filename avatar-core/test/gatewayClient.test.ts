@@ -23,7 +23,10 @@ class FakeWS implements WebSocketLike {
 
 const tokens = (n: number) => ({ sessionId: 's1', connectToken: `c${n}`, resumeToken: `r${n}` });
 
-function setup(responses: Array<{ status: number; body: unknown }>) {
+function setup(
+  responses: Array<{ status: number; body: unknown }>,
+  options: { requestTimeoutMs?: number; socketTimeoutMs?: number } = {},
+) {
   FakeWS.instances = [];
   const calls: Array<{ url: string; body: unknown; secret: string | null }> = [];
   const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
@@ -36,7 +39,15 @@ function setup(responses: Array<{ status: number; body: unknown }>) {
   const audio: Array<[number, number[]]> = [];
   const statuses: ClientStatus[] = [];
   const client = new GatewayClient(
-    { baseUrl: 'http://gw.test', appSecret: 'sekret', clientInfo: { platform: 'android', audioPath: 'A' }, fetchFn, WebSocketCtor: FakeWS, maxResumeMs: 10_000 },
+    {
+      baseUrl: 'http://gw.test',
+      appSecret: 'sekret',
+      clientInfo: { platform: 'android', audioPath: 'A' },
+      fetchFn,
+      WebSocketCtor: FakeWS,
+      maxResumeMs: 10_000,
+      ...options,
+    },
     { onMessage: (m) => messages.push(m), onAudio: (s, p) => audio.push([s, Array.from(p)]), onStatus: (s) => statuses.push(s) },
   );
   return { client, calls, messages, audio, statuses };
@@ -68,6 +79,34 @@ describe('GatewayClient', () => {
     ws.onmessage?.({ data: frame.buffer.slice(frame.byteOffset, frame.byteOffset + frame.byteLength) });
     expect(t.messages).toEqual([{ type: 'response.start', responseSeq: 1, kind: 'greeting' }]);
     expect(t.audio).toEqual([[1, [5, -5]]]);
+  });
+
+  it('ignores malformed text frames without throwing', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }]);
+    await t.client.start();
+    const ws = FakeWS.instances[0];
+    ws.open();
+
+    expect(() => ws.onmessage?.({ data: '{not-json' })).not.toThrow();
+    expect(t.messages).toEqual([]);
+  });
+
+  it('ignores messages from a superseded socket', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }, { status: 200, body: tokens(2) }]);
+    await t.client.start();
+    const first = FakeWS.instances[0];
+    first.open();
+    first.onmessage?.({ data: JSON.stringify({ type: 'session.ready', sessionId: 's1' }) });
+    first.drop();
+    await vi.advanceTimersByTimeAsync(500);
+    const second = FakeWS.instances[1];
+
+    first.onmessage?.({ data: JSON.stringify({ type: 'session.ready', sessionId: 'stale' }) });
+    expect(t.messages).toHaveLength(1);
+    second.open();
+    second.onmessage?.({ data: JSON.stringify({ type: 'session.resumed', lastResponseSeq: 0 }) });
+    expect(t.messages).toHaveLength(2);
+    expect(t.messages.at(-1)).toEqual({ type: 'session.resumed', lastResponseSeq: 0 });
   });
 
   it('only sends when open', async () => {
@@ -221,5 +260,57 @@ describe('GatewayClient', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(FakeWS.instances).toHaveLength(1);
     expect(t.statuses.at(-1)).toBe('closed');
+  });
+
+  it('close() is idempotent', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }]);
+    await t.client.start();
+    const ws = FakeWS.instances[0];
+    ws.open();
+    t.client.close();
+    t.client.close();
+
+    expect(ws.sent.filter((data) => typeof data === 'string' && JSON.parse(data).type === 'session.end')).toHaveLength(1);
+    expect(t.statuses.filter((status) => status === 'closed')).toHaveLength(1);
+  });
+
+  it('aborts a session request that exceeds the request timeout', async () => {
+    FakeWS.instances = [];
+    let aborted = false;
+    const fetchFn = vi.fn((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          aborted = true;
+          reject(new Error('aborted'));
+        });
+      }),
+    ) as unknown as typeof fetch;
+    const client = new GatewayClient(
+      {
+        baseUrl: 'http://gw.test',
+        appSecret: 'sekret',
+        clientInfo: { platform: 'android', audioPath: 'A' },
+        fetchFn,
+        WebSocketCtor: FakeWS,
+        requestTimeoutMs: 1000,
+      },
+      { onMessage: () => {}, onAudio: () => {}, onStatus: () => {} },
+    );
+
+    const result = expect(client.start()).rejects.toThrow('gateway_request_timeout');
+    await vi.advanceTimersByTimeAsync(1000);
+    await result;
+    expect(aborted).toBe(true);
+  });
+
+  it('closes a socket that never opens and schedules reconnect', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }], { socketTimeoutMs: 1000 });
+    await t.client.start();
+    const ws = FakeWS.instances[0];
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(ws.readyState).toBe(3);
+    expect(t.statuses.at(-1)).toBe('reconnecting');
   });
 });
