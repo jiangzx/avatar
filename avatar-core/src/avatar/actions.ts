@@ -47,8 +47,11 @@ export const ACTION_TUNING = {
  * Tunable values live in ACTION_TUNING above.
  */
 export class ActionPlayer {
+  private generation = 0;
   private turning = false;
   private nodding = false;
+  private turnFrame: number | null = null;
+  private nodFrame: number | null = null;
   private smileTimer: ReturnType<typeof setTimeout> | null = null;
   private heartRegistered = false;
   private waveFbxOk: boolean | null = null;
@@ -79,21 +82,42 @@ export class ActionPlayer {
   }
 
   stopAll(): void {
+    this.generation += 1;
+    if (this.turnFrame !== null) cancelAnimationFrame(this.turnFrame);
+    if (this.nodFrame !== null) cancelAnimationFrame(this.nodFrame);
+    this.turnFrame = null;
+    this.nodFrame = null;
+    this.turning = false;
+    this.nodding = false;
+    if (this.smileTimer !== null) {
+      clearTimeout(this.smileTimer);
+      this.smileTimer = null;
+      this.head.setFixedValue('mouthSmile', null);
+    }
     this.head.stopGesture(ACTION_TUNING.stopFadeMs);
     this.head.stopAnimation();
   }
 
   /** Never rejects: a missing/invalid FBX falls back to the built-in "handup" gesture. */
   async wave(): Promise<void> {
-    if (this.assets.waveFbx && this.waveFbxOk === null) this.waveFbxOk = await this.probeWaveFbx(this.assets.waveFbx);
+    const generation = this.generation;
+    if (this.assets.waveFbx && this.waveFbxOk === null) {
+      const fbxOk = await this.probeWaveFbx(this.assets.waveFbx);
+      if (!this.isCurrent(generation)) return;
+      this.waveFbxOk = fbxOk;
+    }
+    if (!this.isCurrent(generation)) return;
     if (this.assets.waveFbx && this.waveFbxOk) {
       try {
         await this.head.playAnimation(this.assets.waveFbx, null, ACTION_TUNING.wave.durationSec);
+        if (!this.isCurrent(generation)) return;
         return;
       } catch {
+        if (!this.isCurrent(generation)) return;
         this.waveFbxOk = false;
       }
     }
+    if (!this.isCurrent(generation)) return;
     this.head.playGesture('handup', ACTION_TUNING.wave.durationSec, true, ACTION_TUNING.wave.fadeMs);
   }
 
@@ -118,25 +142,32 @@ export class ActionPlayer {
     this.nodding = true;
     const { amplitude, cycles, durationMs: duration } = subtle ? ACTION_TUNING.nod.subtle : ACTION_TUNING.nod.full;
     const t0 = performance.now();
+    const generation = this.generation;
     const step = (now: number) => {
+      if (!this.isCurrent(generation)) return;
+      this.nodFrame = null;
       const p = Math.min(1, (now - t0) / duration);
       target.realtime = amplitude * Math.sin(p * Math.PI * cycles) ** 2;
       target.needsUpdate = true;
       if (p < 1) {
-        requestAnimationFrame(step);
+        this.nodFrame = requestAnimationFrame(step);
       } else {
         target.realtime = null;
         target.needsUpdate = true;
         this.nodding = false;
       }
     };
-    requestAnimationFrame(step);
+    this.nodFrame = requestAnimationFrame(step);
   }
 
   smile(): void {
     this.head.setFixedValue('mouthSmile', ACTION_TUNING.smile.value);
-    if (this.smileTimer) clearTimeout(this.smileTimer);
-    this.smileTimer = setTimeout(() => this.head.setFixedValue('mouthSmile', null), ACTION_TUNING.smile.holdMs);
+    if (this.smileTimer !== null) clearTimeout(this.smileTimer);
+    const generation = this.generation;
+    this.smileTimer = setTimeout(() => {
+      this.smileTimer = null;
+      if (this.isCurrent(generation)) this.head.setFixedValue('mouthSmile', null);
+    }, ACTION_TUNING.smile.holdMs);
   }
 
   turn(): void {
@@ -146,17 +177,20 @@ export class ActionPlayer {
     const start = root.rotation.y;
     const duration = ACTION_TUNING.turn.durationMs;
     const t0 = performance.now();
+    const generation = this.generation;
     const step = (now: number) => {
+      if (!this.isCurrent(generation)) return;
+      this.turnFrame = null;
       const p = Math.min(1, (now - t0) / duration);
       root.rotation.y = start + 2 * Math.PI * easeInOut(p);
       if (p < 1) {
-        requestAnimationFrame(step);
+        this.turnFrame = requestAnimationFrame(step);
       } else {
         root.rotation.y = start;
         this.turning = false;
       }
     };
-    requestAnimationFrame(step);
+    this.turnFrame = requestAnimationFrame(step);
   }
 
   /** One-hand finger heart built from the "handup" arm pose with custom fingers (ACTION_TUNING.heartFingers). */
@@ -171,5 +205,9 @@ export class ActionPlayer {
       this.heartRegistered = true;
     }
     this.head.playGesture('heart', ACTION_TUNING.heart.durationSec, true, ACTION_TUNING.heart.fadeMs);
+  }
+
+  private isCurrent(generation: number): boolean {
+    return generation === this.generation;
   }
 }
