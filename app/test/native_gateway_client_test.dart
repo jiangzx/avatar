@@ -8,50 +8,93 @@ import 'package:avatar_app/native_gateway/protocol.dart';
 import 'package:avatar_app/native_gateway/transports.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const firstTokens = SessionTokens(sessionId: 'first', connectToken: 'connect-1', resumeToken: 'resume-1');
-const secondTokens = SessionTokens(sessionId: 'first', connectToken: 'connect-2', resumeToken: 'resume-2');
+const firstTokens = SessionTokens(
+  sessionId: 'first',
+  connectToken: 'connect-1',
+  resumeToken: 'resume-1',
+);
+const secondTokens = SessionTokens(
+  sessionId: 'first',
+  connectToken: 'connect-2',
+  resumeToken: 'resume-2',
+);
 
 void main() {
-  test('starts a session and sends the existing session.start message', () async {
-    final transport = FakeGatewayTransport(tokens: firstTokens);
-    final events = RecordingGatewayEvents();
-    final c = NativeGatewayClient(
-      baseUri: Uri.parse('http://gw.test'),
-      appSecret: 'secret-123456789',
-      transport: transport,
-      events: events,
-      reconnectBase: Duration.zero,
-    );
+  test(
+    'starts a session and sends the existing session.start message',
+    () async {
+      final transport = FakeGatewayTransport(tokens: firstTokens);
+      final events = RecordingGatewayEvents();
+      final c = NativeGatewayClient(
+        baseUri: Uri.parse('http://gw.test'),
+        appSecret: 'secret-123456789',
+        transport: transport,
+        events: events,
+        reconnectBase: Duration.zero,
+      );
 
-    await c.start();
+      await c.start();
 
-    expect(transport.lastSocket.jsonMessages.single['type'], 'session.start');
-    expect(events.statuses, [GatewayStatus.connecting]);
-  });
+      expect(transport.lastSocket.jsonMessages.single['type'], 'session.start');
+      expect(events.statuses, [GatewayStatus.connecting]);
+    },
+  );
 
-  test('routes only AI binary frames and resumes with the rotated token', () async {
-    final transport = FakeGatewayTransport(tokens: firstTokens, resumeTokens: [secondTokens]);
-    final events = RecordingGatewayEvents();
-    final c = NativeGatewayClient(
-      baseUri: Uri.parse('http://gw.test'),
-      appSecret: 'secret-123456789',
-      transport: transport,
-      events: events,
-      reconnectBase: Duration.zero,
-    );
+  test(
+    'routes only AI binary frames and resumes with the rotated token',
+    () async {
+      final transport = FakeGatewayTransport(
+        tokens: firstTokens,
+        resumeTokens: [secondTokens],
+      );
+      final events = RecordingGatewayEvents();
+      final c = NativeGatewayClient(
+        baseUri: Uri.parse('http://gw.test'),
+        appSecret: 'secret-123456789',
+        transport: transport,
+        events: events,
+        reconnectBase: Duration.zero,
+      );
 
-    await c.start();
-    transport.lastSocket.emitText('{"type":"session.ready","sessionId":"first"}');
-    transport.lastSocket.closeUnexpectedly();
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+      await c.start();
+      transport.lastSocket.emitText(
+        '{"type":"session.ready","sessionId":"first"}',
+      );
+      transport.lastSocket.closeUnexpectedly();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
-    expect(transport.postedPaths, contains('/session/resume'));
-    transport.lastSocket.emitText('{"type":"session.resumed","lastResponseSeq":4}');
-    transport.lastSocket.emitBinary(encodeAudioFrame(frameAi, 4, Int16List(3)));
-    transport.lastSocket.emitBinary(encodeAudioFrame(frameMic, 0, Int16List(3)));
-    await Future<void>.delayed(Duration.zero);
-    expect(events.audio.single.responseSeq, 4);
-  });
+      expect(transport.postedPaths, contains('/session/resume'));
+      transport.lastSocket.emitText(
+        '{"type":"session.resumed","lastResponseSeq":4}',
+      );
+      transport.lastSocket.emitBinary(
+        encodeAudioFrame(frameAi, 4, Int16List(3)),
+      );
+      transport.lastSocket.emitBinary(
+        encodeAudioFrame(frameMic, 0, Int16List(3)),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(events.audio.single.responseSeq, 4);
+    },
+  );
+
+  test(
+    'fails fast when session creation exceeds the request timeout',
+    () async {
+      final transport = FakeGatewayTransport(tokens: firstTokens)
+        ..hangPosts = true;
+      final events = RecordingGatewayEvents();
+      final c = NativeGatewayClient(
+        baseUri: Uri.parse('http://gw.test'),
+        appSecret: 'secret-123456789',
+        transport: transport,
+        events: events,
+        requestTimeout: const Duration(milliseconds: 1),
+      );
+
+      await expectLater(c.start(), throwsA(isA<TimeoutException>()));
+    },
+  );
 }
 
 class RecordingGatewayEvents implements GatewayClientEvents {
@@ -70,19 +113,30 @@ class RecordingGatewayEvents implements GatewayClientEvents {
 }
 
 class FakeGatewayTransport implements GatewayTransport {
-  FakeGatewayTransport({required this.tokens, List<SessionTokens>? resumeTokens}) : _resumeTokens = Queue<SessionTokens>.from(resumeTokens ?? const []);
+  FakeGatewayTransport({
+    required this.tokens,
+    List<SessionTokens>? resumeTokens,
+  }) : _resumeTokens = Queue<SessionTokens>.from(resumeTokens ?? const []);
 
   final SessionTokens tokens;
   final Queue<SessionTokens> _resumeTokens;
   final postedPaths = <String>[];
   final sockets = <FakeSocket>[];
+  bool hangPosts = false;
 
   FakeSocket get lastSocket => sockets.last;
 
   @override
-  Future<GatewayHttpResponse> post(Uri uri, {required String appSecret, required Map<String, Object?> body}) async {
+  Future<GatewayHttpResponse> post(
+    Uri uri, {
+    required String appSecret,
+    required Map<String, Object?> body,
+  }) async {
+    if (hangPosts) return Completer<GatewayHttpResponse>().future;
     postedPaths.add(uri.path);
-    final SessionTokens next = uri.path == '/session/resume' ? _resumeTokens.removeFirst() : tokens;
+    final SessionTokens next = uri.path == '/session/resume'
+        ? _resumeTokens.removeFirst()
+        : tokens;
     return GatewayHttpResponse(statusCode: 200, body: next.toJson());
   }
 
@@ -98,7 +152,10 @@ class FakeSocket implements NativeSocket {
   final _messages = StreamController<Object>();
   final sent = <Object>[];
 
-  List<Map<String, Object?>> get jsonMessages => sent.whereType<String>().map((value) => jsonDecode(value) as Map<String, Object?>).toList();
+  List<Map<String, Object?>> get jsonMessages => sent
+      .whereType<String>()
+      .map((value) => jsonDecode(value) as Map<String, Object?>)
+      .toList();
 
   @override
   Stream<Object> get messages => _messages.stream;

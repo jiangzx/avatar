@@ -7,6 +7,7 @@ import { TokenStore } from './tokens.ts';
 interface Entry {
   session: Session;
   started: boolean;
+  starting: boolean;
   /** Id of the newest WS connection; 0 = none. Events from older connections are ignored. */
   connId: number;
   /** Drops the current socket when a newer connection supersedes it. */
@@ -24,6 +25,7 @@ export class SessionManager {
     private readonly graceMs = 60_000,
     /** Matches the connect token TTL: a session nobody connects to is dropped. */
     private readonly unclaimedMs = 5 * 60_000,
+    private readonly startTimeoutMs = 10_000,
   ) {}
 
   get size(): number {
@@ -34,7 +36,7 @@ export class SessionManager {
     const sessionId = randomUUID();
     // claim() clears this timer, like the disconnect grace timer.
     const grace = setTimeout(() => this.destroy(sessionId, 'unclaimed'), this.unclaimedMs);
-    this.sessions.set(sessionId, { session: this.makeSession(), started: false, connId: 0, terminate: null, grace });
+    this.sessions.set(sessionId, { session: this.makeSession(), started: false, starting: false, connId: 0, terminate: null, grace });
     log('session_created', { sessions: this.sessions.size });
     return this.tokens.issue(sessionId);
   }
@@ -77,11 +79,25 @@ export class SessionManager {
     const entry = this.sessions.get(sessionId);
     if (!entry || entry.connId !== connId) return false;
     if (kind === 'start') {
-      if (entry.started) return false;
-      entry.started = true;
-      transport.send({ type: 'session.ready', sessionId });
-      await entry.session.start(transport);
-      return true;
+      if (entry.started || entry.starting) return false;
+      entry.starting = true;
+      try {
+        await this.startWithTimeout(entry.session, transport);
+        const current = this.sessions.get(sessionId);
+        if (!current) return false;
+        current.started = true;
+        if (current.connId !== connId) {
+          current.session.detachTransport();
+          return false;
+        }
+        transport.send({ type: 'session.ready', sessionId });
+        return true;
+      } catch (error) {
+        this.destroy(sessionId, 'start_failed');
+        throw error;
+      } finally {
+        entry.starting = false;
+      }
     }
     if (!entry.started) return false;
     entry.session.attachTransport(transport);
@@ -121,5 +137,19 @@ export class SessionManager {
     this.tokens.revoke(sessionId);
     this.sessions.delete(sessionId);
     log('session_destroyed', { reason, sessions: this.sessions.size });
+  }
+
+  private async startWithTimeout(session: Session, transport: Transport): Promise<void> {
+    let timer: NodeJS.Timeout | null = null;
+    try {
+      await Promise.race([
+        session.start(transport),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('session_start_timeout')), this.startTimeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 }

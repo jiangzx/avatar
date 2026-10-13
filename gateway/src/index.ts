@@ -29,7 +29,10 @@ const manager = new SessionManager(
       summarizer: new MockSummarizer(),
       persona,
       director,
-    }),
+  }),
+  undefined,
+  undefined,
+  config.sessionStartTimeoutMs,
 );
 const server = createGatewayServer({
   manager,

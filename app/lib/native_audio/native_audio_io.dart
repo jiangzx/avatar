@@ -14,41 +14,53 @@ const int nativePlaybackChannels = 1;
 const int nativePlaybackFeedThreshold = 12000; // TUNABLE: 500 ms at 24 kHz
 
 class PluginNativeAudioIO implements NativeAudioIO {
-  PluginNativeAudioIO({AudioRecorder? recorder}) : _recorder = recorder ?? AudioRecorder();
+  PluginNativeAudioIO({AudioRecorder? recorder})
+    : _recorder = recorder ?? AudioRecorder();
 
   final AudioRecorder _recorder;
-  final PlaybackQueue _queue = PlaybackQueue(sampleRate: nativePlaybackSampleRate);
+  final PlaybackQueue _queue = PlaybackQueue(
+    sampleRate: nativePlaybackSampleRate,
+  );
   final PcmFrameAccumulator _frames = PcmFrameAccumulator(320);
   final Queue<_PendingChunk> _pending = Queue<_PendingChunk>();
   StreamSubscription<Uint8List>? _subscription;
   AudioFrameCallback? _onFrame;
   AudioLevelCallback? _onLevel;
   void Function(PlayedAudio)? _onPlaybackEnded;
+  AudioPlaybackErrorCallback? _onPlaybackError;
   int? _activeSeq;
   bool _playerReady = false;
   bool _feedInFlight = false;
   bool _inputEnabled = true;
 
   @override
-  Future<void> start({required AudioFrameCallback onFrame, required AudioLevelCallback onLevel, required void Function(PlayedAudio) onPlaybackEnded}) async {
+  Future<void> start({
+    required AudioFrameCallback onFrame,
+    required AudioLevelCallback onLevel,
+    required void Function(PlayedAudio) onPlaybackEnded,
+    required AudioPlaybackErrorCallback onPlaybackError,
+  }) async {
     await stop();
     _onFrame = onFrame;
     _onLevel = onLevel;
     _onPlaybackEnded = onPlaybackEnded;
+    _onPlaybackError = onPlaybackError;
     await _setupPlayback();
-    final stream = await _recorder.startStream(const RecordConfig(
-      encoder: AudioEncoder.pcm16bits,
-      sampleRate: 16000,
-      numChannels: 1,
-      echoCancel: true,
-      noiseSuppress: true,
-      autoGain: true,
-      androidConfig: AndroidRecordConfig(
-        audioSource: AndroidAudioSource.voiceCommunication,
-        audioManagerMode: AudioManagerMode.modeInCommunication,
-        speakerphone: true,
+    final stream = await _recorder.startStream(
+      const RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: 16000,
+        numChannels: 1,
+        echoCancel: true,
+        noiseSuppress: true,
+        autoGain: true,
+        androidConfig: AndroidRecordConfig(
+          audioSource: AndroidAudioSource.voiceCommunication,
+          audioManagerMode: AudioManagerMode.modeInCommunication,
+          speakerphone: true,
+        ),
       ),
-    ));
+    );
     _subscription = stream.listen(_onRecorderBytes);
   }
 
@@ -63,7 +75,9 @@ class PluginNativeAudioIO implements NativeAudioIO {
 
   @override
   Future<void> pushResponse(int responseSeq, Int16List pcm24k) async {
-    if (_activeSeq != responseSeq || !_queue.accept(responseSeq, pcm24k)) return;
+    if (_activeSeq != responseSeq || !_queue.accept(responseSeq, pcm24k)) {
+      return;
+    }
     _pending.add(_PendingChunk(responseSeq, Int16List.fromList(pcm24k)));
     await _drainPending();
     FlutterPcmSound.start();
@@ -80,12 +94,16 @@ class PluginNativeAudioIO implements NativeAudioIO {
   @override
   Future<void> resetResponsesBelow(int responseSeq) async {
     _queue.resetBelow(responseSeq);
-    if (_activeSeq != null && _activeSeq! <= responseSeq) await stopResponse(reason: StopReason.reset);
+    if (_activeSeq != null && _activeSeq! <= responseSeq) {
+      await stopResponse(reason: StopReason.reset);
+    }
   }
 
   @override
   Future<PlayedAudio> stopResponse({required StopReason reason}) async {
-    if (_activeSeq == null) return const PlayedAudio(responseSeq: 0, playedMs: 0);
+    if (_activeSeq == null) {
+      return const PlayedAudio(responseSeq: 0, playedMs: 0);
+    }
     final result = _queue.stop(reason);
     _activeSeq = null;
     _pending.clear();
@@ -108,6 +126,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
     _onFrame = null;
     _onLevel = null;
     _onPlaybackEnded = null;
+    _onPlaybackError = null;
     _activeSeq = null;
     _pending.clear();
     _feedInFlight = false;
@@ -119,7 +138,10 @@ class PluginNativeAudioIO implements NativeAudioIO {
 
   Future<void> _setupPlayback() async {
     await FlutterPcmSound.setLogLevel(LogLevel.none);
-    await FlutterPcmSound.setup(sampleRate: nativePlaybackSampleRate, channelCount: nativePlaybackChannels);
+    await FlutterPcmSound.setup(
+      sampleRate: nativePlaybackSampleRate,
+      channelCount: nativePlaybackChannels,
+    );
     await FlutterPcmSound.setFeedThreshold(nativePlaybackFeedThreshold);
     FlutterPcmSound.setFeedCallback(_onFeed);
     _playerReady = true;
@@ -140,7 +162,13 @@ class PluginNativeAudioIO implements NativeAudioIO {
     if (!_inputEnabled) return;
     for (final frame in _frames.push(bytes)) {
       _onFrame?.call(frame);
-      _onLevel?.call(AudioLevel(rms: rmsInt16(frame), zcr: zeroCrossingRate(frame), sampleCount: frame.length));
+      _onLevel?.call(
+        AudioLevel(
+          rms: rmsInt16(frame),
+          zcr: zeroCrossingRate(frame),
+          sampleCount: frame.length,
+        ),
+      );
     }
   }
 
@@ -149,7 +177,9 @@ class PluginNativeAudioIO implements NativeAudioIO {
     if (seq == null) return;
     _queue.updateRemaining(seq, remainingFrames);
     await _drainPending();
-    if (_queue.isEnded && remainingFrames == 0 && _pending.isEmpty) _finishPlaybackIfReady();
+    if (_queue.isEnded && remainingFrames == 0 && _pending.isEmpty) {
+      _finishPlaybackIfReady();
+    }
   }
 
   Future<void> _drainPending() async {
@@ -159,7 +189,20 @@ class PluginNativeAudioIO implements NativeAudioIO {
     _feedInFlight = true;
     _queue.markFed(next.responseSeq, next.pcm.length);
     try {
-      await FlutterPcmSound.feed(PcmArrayInt16(bytes: ByteData.sublistView(next.pcm)));
+      await FlutterPcmSound.feed(
+        PcmArrayInt16(bytes: ByteData.sublistView(next.pcm)),
+      );
+    } catch (error) {
+      final failed = _queue.stop(StopReason.reset);
+      _activeSeq = null;
+      _pending.clear();
+      try {
+        await _resetPlayback();
+      } catch (_) {
+        _playerReady = false;
+      }
+      _onPlaybackError?.call(failed, error);
+      return;
     } finally {
       _feedInFlight = false;
     }

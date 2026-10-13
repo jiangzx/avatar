@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../config.dart';
+
 class GatewayHttpResponse {
   const GatewayHttpResponse({required this.statusCode, required this.body});
 
@@ -16,7 +18,11 @@ abstract interface class NativeSocket {
 }
 
 abstract interface class GatewayTransport {
-  Future<GatewayHttpResponse> post(Uri uri, {required String appSecret, required Map<String, Object?> body});
+  Future<GatewayHttpResponse> post(
+    Uri uri, {
+    required String appSecret,
+    required Map<String, Object?> body,
+  });
   Future<NativeSocket> openWebSocket(Uri uri);
 }
 
@@ -24,29 +30,46 @@ class IoGatewayTransport implements GatewayTransport {
   const IoGatewayTransport();
 
   @override
-  Future<GatewayHttpResponse> post(Uri uri, {required String appSecret, required Map<String, Object?> body}) async {
+  Future<GatewayHttpResponse> post(
+    Uri uri, {
+    required String appSecret,
+    required Map<String, Object?> body,
+  }) async {
     final client = HttpClient();
     try {
-      final request = await client.postUrl(uri);
+      final request = await client
+          .postUrl(uri)
+          .timeout(AppConfig.gatewayRequestTimeout);
       request.headers.contentType = ContentType.json;
       request.headers.set('x-app-secret', appSecret);
       request.add(utf8.encode(jsonEncode(body)));
-      final response = await request.close();
-      final text = await utf8.decoder.bind(response).join();
+      final response = await request.close().timeout(
+        AppConfig.gatewayRequestTimeout,
+      );
+      final text = await utf8.decoder
+          .bind(response)
+          .join()
+          .timeout(AppConfig.gatewayRequestTimeout);
       Object? decoded;
       try {
         decoded = jsonDecode(text);
       } on FormatException {
         decoded = null;
       }
-      return GatewayHttpResponse(statusCode: response.statusCode, body: decoded);
+      return GatewayHttpResponse(
+        statusCode: response.statusCode,
+        body: decoded,
+      );
     } finally {
       client.close(force: true);
     }
   }
 
   @override
-  Future<NativeSocket> openWebSocket(Uri uri) async => _IoNativeSocket(await WebSocket.connect(uri.toString()));
+  Future<NativeSocket> openWebSocket(Uri uri) async => _IoNativeSocket(
+    await WebSocket.connect(uri.toString())
+        .timeout(AppConfig.gatewaySocketTimeout),
+  );
 }
 
 class _IoNativeSocket implements NativeSocket {

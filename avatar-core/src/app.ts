@@ -43,6 +43,7 @@ export type ClientLike = Pick<GatewayClient, 'start' | 'send' | 'sendAudio' | 'c
 export interface DocLike {
   readonly hidden: boolean;
   addEventListener(type: string, fn: () => void, opts?: AddEventListenerOptions): void;
+  removeEventListener(type: string, fn: () => void): void;
 }
 
 export interface AppDeps {

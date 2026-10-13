@@ -77,6 +77,10 @@ export class Session {
   async start(transport: Transport): Promise<void> {
     this.transport = transport;
     await this.adapter.connect(this.sessionConfig());
+    if (this.ended) {
+      this.adapter.close();
+      return;
+    }
     this.director.onSessionStart();
   }
 

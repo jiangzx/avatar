@@ -10,7 +10,12 @@ import 'events.dart';
 const int nativeBridgeLevelIntervalMs = 30; // TUNABLE
 
 class NativeSessionController implements GatewayClientEvents {
-  NativeSessionController({required this.audio, required this.detector, required this.client, required this.emit}) {
+  NativeSessionController({
+    required this.audio,
+    required this.detector,
+    required this.client,
+    required this.emit,
+  }) {
     client.attachEvents(this);
   }
 
@@ -28,16 +33,24 @@ class NativeSessionController implements GatewayClientEvents {
   int? _activeSeq;
   int _seqFloor = 0;
   int _lastLevelAt = 0;
+  Future<void> _eventQueue = Future<void>.value();
 
   Future<void> start() async {
     if (_started) return;
     _ended = false;
     try {
-      await audio.start(onFrame: _onFrame, onLevel: _onLevel, onPlaybackEnded: _onPlaybackEnded);
-      _started = true;
+      await audio.start(
+        onFrame: _onFrame,
+        onLevel: _onLevel,
+        onPlaybackEnded: _onPlaybackEnded,
+        onPlaybackError: _onPlaybackError,
+      );
       await client.start();
+      _started = true;
     } catch (error) {
+      _started = false;
       await audio.stop().catchError((_) {});
+      await client.close().catchError((_) {});
       emit(UiError(_errorCode(error)));
       rethrow;
     }
@@ -68,24 +81,44 @@ class NativeSessionController implements GatewayClientEvents {
 
   @override
   void onStatus(GatewayStatus status) {
-    emit(UiStatus(switch (status) {
-      GatewayStatus.connecting => 'connecting',
-      GatewayStatus.open => 'open',
-      GatewayStatus.reconnecting => 'reconnecting',
-      GatewayStatus.closed => 'closed',
-    }));
+    emit(
+      UiStatus(switch (status) {
+        GatewayStatus.connecting => 'connecting',
+        GatewayStatus.open => 'open',
+        GatewayStatus.reconnecting => 'reconnecting',
+        GatewayStatus.closed => 'closed',
+      }),
+    );
   }
 
   @override
   void onAudio(DecodedAudioFrame frame) {
-    if (_ended || frame.kind != frameAi || frame.responseSeq <= _seqFloor || frame.responseSeq != _activeSeq) return;
-    _audioReceivedMs[frame.responseSeq] = (_audioReceivedMs[frame.responseSeq] ?? 0) + ((frame.pcm.length * 1000) ~/ aiSampleRate);
-    unawaited(audio.pushResponse(frame.responseSeq, frame.pcm));
+    if (_ended || frame.kind != frameAi) return;
+    _enqueue(() async {
+      if (_ended ||
+          frame.responseSeq <= _seqFloor ||
+          frame.responseSeq != _activeSeq) {
+        return;
+      }
+      _audioReceivedMs[frame.responseSeq] =
+          (_audioReceivedMs[frame.responseSeq] ?? 0) +
+          ((frame.pcm.length * 1000) ~/ aiSampleRate);
+      await audio.pushResponse(frame.responseSeq, frame.pcm);
+    });
   }
 
   @override
   void onMessage(ServerMessage message) {
-    unawaited(_handleMessage(message));
+    _enqueue(() => _handleMessage(message));
+  }
+
+  void _enqueue(Future<void> Function() task) {
+    _eventQueue = _eventQueue.then<void>((_) => task()).catchError((
+      Object error,
+      StackTrace stack,
+    ) {
+      if (!_ended) emit(UiError(_errorCode(error)));
+    });
   }
 
   Future<void> _handleMessage(ServerMessage message) async {
@@ -114,7 +147,15 @@ class NativeSessionController implements GatewayClientEvents {
         _activeSeq = responseSeq;
         _assistantText[responseSeq] = '';
         _audioReceivedMs[responseSeq] = 0;
-        await audio.startResponse(responseSeq);
+        try {
+          await audio.startResponse(responseSeq);
+        } catch (error) {
+          _onPlaybackError(
+            const PlayedAudio(responseSeq: 0, playedMs: 0),
+            error,
+          );
+          return;
+        }
         detector.aiPlaying = true;
         emit(UiResponseStart(responseSeq: responseSeq, kind: kind));
       case ResponseEnd(:final responseSeq):
@@ -124,7 +165,12 @@ class NativeSessionController implements GatewayClientEvents {
         final played = await audio.stopResponse(reason: StopReason.reset);
         _activeSeq = null;
         detector.aiPlaying = false;
-        emit(UiResponseCancelled(responseSeq: responseSeq, playedMs: played.playedMs));
+        emit(
+          UiResponseCancelled(
+            responseSeq: responseSeq,
+            playedMs: played.playedMs,
+          ),
+        );
       case TranscriptUser(:final text, :final isFinal):
         emit(UiSubtitle(role: 'user', text: text, isFinal: isFinal));
       case TranscriptAssistant(:final responseSeq, :final text):
@@ -149,14 +195,18 @@ class NativeSessionController implements GatewayClientEvents {
 
   void _onFrame(Int16List frame) {
     if (_ended) return;
-    final edge = detector.push(frame, timestampMs: DateTime.now().millisecondsSinceEpoch);
+    final edge = detector.push(
+      frame,
+      timestampMs: DateTime.now().millisecondsSinceEpoch,
+    );
     if (!_muted) client.sendAudio(frame);
     switch (edge) {
       case SpeechEdge.speaking:
-        client.send(VadMessage('speaking', DateTime.now().millisecondsSinceEpoch));
-        unawaited(_interruptActive());
+        unawaited(_interruptThenReportSpeech());
       case SpeechEdge.silent:
-        client.send(VadMessage('silent', DateTime.now().millisecondsSinceEpoch));
+        client.send(
+          VadMessage('silent', DateTime.now().millisecondsSinceEpoch),
+        );
       case SpeechEdge.none:
         break;
     }
@@ -165,19 +215,59 @@ class NativeSessionController implements GatewayClientEvents {
   void _onLevel(AudioLevel level) {
     if (_ended) return;
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (_lastLevelAt != 0 && now - _lastLevelAt < nativeBridgeLevelIntervalMs) return;
+    if (_lastLevelAt != 0 && now - _lastLevelAt < nativeBridgeLevelIntervalMs) {
+      return;
+    }
     final dtMs = _lastLevelAt == 0 ? 20 : now - _lastLevelAt;
     _lastLevelAt = now;
     emit(UiAudioLevel(rms: level.rms, zcr: level.zcr, dtMs: dtMs));
   }
 
   void _onPlaybackEnded(PlayedAudio played) {
+    _enqueue(() async => _handlePlaybackEnded(played));
+  }
+
+  Future<void> _handlePlaybackEnded(PlayedAudio played) async {
     if (_ended || played.responseSeq != _activeSeq) return;
     _activeSeq = null;
     detector.aiPlaying = false;
     client.send(PlaybackStopped(played.responseSeq, played.playedMs, 'ended'));
-    emit(UiResponseEnd(responseSeq: played.responseSeq, playedMs: played.playedMs));
+    emit(
+      UiResponseEnd(responseSeq: played.responseSeq, playedMs: played.playedMs),
+    );
     emit(const UiState('idle'));
+  }
+
+  void _onPlaybackError(PlayedAudio played, Object error) {
+    _enqueue(() async => _handlePlaybackError(played, error));
+  }
+
+  Future<void> _handlePlaybackError(PlayedAudio played, Object _) async {
+    final seq = _activeSeq;
+    if (_ended || seq == null) return;
+    _activeSeq = null;
+    detector.aiPlaying = false;
+    client.send(
+      PlaybackStopped(
+        seq,
+        played.responseSeq == seq ? played.playedMs : 0,
+        'interrupted',
+      ),
+    );
+    emit(
+      UiResponseCancelled(
+        responseSeq: seq,
+        playedMs: played.responseSeq == seq ? played.playedMs : 0,
+      ),
+    );
+    emit(const UiState('idle'));
+    emit(const UiError('audio_playback_failed'));
+  }
+
+  Future<void> _interruptThenReportSpeech() async {
+    await _interruptActive();
+    if (_ended) return;
+    client.send(VadMessage('speaking', DateTime.now().millisecondsSinceEpoch));
   }
 
   Future<void> _interruptActive({bool sendStopped = true}) async {
@@ -189,13 +279,19 @@ class NativeSessionController implements GatewayClientEvents {
       if (seq != _activeSeq) return;
       _activeSeq = null;
       detector.aiPlaying = false;
-      if (sendStopped) client.send(PlaybackStopped(seq, played.playedMs, 'interrupted'));
-      if (sendStopped) emit(UiResponseCancelled(responseSeq: seq, playedMs: played.playedMs));
+      if (sendStopped) {
+        client.send(PlaybackStopped(seq, played.playedMs, 'interrupted'));
+      }
+      if (sendStopped) {
+        emit(UiResponseCancelled(responseSeq: seq, playedMs: played.playedMs));
+      }
       emit(const UiState('listening'));
     } finally {
       _interrupting = false;
     }
   }
 
-  String _errorCode(Object error) => error is GatewayHttpException ? 'gateway_http_${error.statusCode}' : 'audio_start_failed';
+  String _errorCode(Object error) => error is GatewayHttpException
+      ? 'gateway_http_${error.statusCode}'
+      : 'audio_start_failed';
 }

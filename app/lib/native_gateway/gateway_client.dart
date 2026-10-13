@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../config.dart';
 import 'protocol.dart';
 import 'transports.dart';
 
@@ -38,6 +39,8 @@ class NativeGatewayClient implements GatewayClientLike {
     this.maxResume = const Duration(seconds: 55),
     this.reconnectBase = const Duration(milliseconds: 500),
     this.reconnectMax = const Duration(seconds: 4),
+    this.requestTimeout = AppConfig.gatewayRequestTimeout,
+    this.socketTimeout = AppConfig.gatewaySocketTimeout,
   });
 
   final Uri baseUri;
@@ -49,6 +52,8 @@ class NativeGatewayClient implements GatewayClientLike {
   final Duration maxResume;
   final Duration reconnectBase;
   final Duration reconnectMax;
+  final Duration requestTimeout;
+  final Duration socketTimeout;
 
   NativeSocket? _socket;
   StreamSubscription<Object>? _subscription;
@@ -106,7 +111,7 @@ class NativeGatewayClient implements GatewayClientLike {
   }
 
   Future<void> _startFresh() async {
-    _tokens = await _post('/session', const {});
+    _tokens = await _post('/session', const {}).timeout(requestTimeout);
     if (_closedByUser) return;
     await _open(resume: false);
   }
@@ -114,8 +119,12 @@ class NativeGatewayClient implements GatewayClientLike {
   Future<void> _open({required bool resume}) async {
     final tokens = _tokens;
     if (tokens == null || _closedByUser) return;
-    events.onStatus(resume ? GatewayStatus.reconnecting : GatewayStatus.connecting);
-    final socket = await transport.openWebSocket(_webSocketUri(tokens.connectToken));
+    events.onStatus(
+      resume ? GatewayStatus.reconnecting : GatewayStatus.connecting,
+    );
+    final socket = await transport
+        .openWebSocket(_webSocketUri(tokens.connectToken))
+        .timeout(socketTimeout);
     if (_closedByUser) {
       await socket.close(1000);
       return;
@@ -124,10 +133,15 @@ class NativeGatewayClient implements GatewayClientLike {
     _subscription = socket.messages.listen(
       (data) => _onSocketData(socket, data),
       onDone: () => unawaited(_onSocketClosed(socket)),
-      onError: (Object error, StackTrace stack) => unawaited(_onSocketClosed(socket)),
+      onError: (Object error, StackTrace stack) =>
+          unawaited(_onSocketClosed(socket)),
       cancelOnError: false,
     );
-    send(resume ? SessionResume(tokens.sessionId) : SessionStart(platform: platform, audioPath: audioPath));
+    send(
+      resume
+          ? SessionResume(tokens.sessionId)
+          : SessionStart(platform: platform, audioPath: audioPath),
+    );
   }
 
   void _onSocketData(NativeSocket socket, Object data) {
@@ -181,7 +195,9 @@ class NativeGatewayClient implements GatewayClientLike {
       return;
     }
     final multiplier = 1 << _attempt.clamp(0, 20);
-    final candidate = Duration(microseconds: reconnectBase.inMicroseconds * multiplier);
+    final candidate = Duration(
+      microseconds: reconnectBase.inMicroseconds * multiplier,
+    );
     final delay = candidate > reconnectMax ? reconnectMax : candidate;
     _attempt++;
     events.onStatus(GatewayStatus.reconnecting);
@@ -193,7 +209,10 @@ class NativeGatewayClient implements GatewayClientLike {
     final tokens = _tokens;
     if (_closedByUser || tokens == null) return;
     try {
-      _tokens = await _post('/session/resume', {'sessionId': tokens.sessionId, 'resumeToken': tokens.resumeToken});
+      _tokens = await _post('/session/resume', {
+        'sessionId': tokens.sessionId,
+        'resumeToken': tokens.resumeToken,
+      }).timeout(requestTimeout);
       if (_closedByUser) return;
       await _open(resume: _sessionStarted);
     } on GatewayHttpException catch (error) {
@@ -221,18 +240,29 @@ class NativeGatewayClient implements GatewayClientLike {
   }
 
   Future<SessionTokens> _post(String path, Map<String, Object?> body) async {
-    final response = await transport.post(_httpUri(path), appSecret: appSecret, body: body);
-    if (response.statusCode < 200 || response.statusCode >= 300) throw GatewayHttpException(response.statusCode);
+    final response = await transport.post(
+      _httpUri(path),
+      appSecret: appSecret,
+      body: body,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw GatewayHttpException(response.statusCode);
+    }
     final tokens = SessionTokens.fromJson(response.body);
     if (tokens == null) throw const GatewayHttpException(502);
     return tokens;
   }
 
-  Uri _httpUri(String path) => baseUri.replace(path: path, query: null, queryParameters: null);
+  Uri _httpUri(String path) =>
+      baseUri.replace(path: path, query: null, queryParameters: null);
 
   Uri _webSocketUri(String token) {
     final scheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
-    return baseUri.replace(scheme: scheme, path: '/ws', queryParameters: {'token': token});
+    return baseUri.replace(
+      scheme: scheme,
+      path: '/ws',
+      queryParameters: {'token': token},
+    );
   }
 
   void _emitClosed() {

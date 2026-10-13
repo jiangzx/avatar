@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import { request, type Server } from 'node:http';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { FRAME_AI, decodeAudioFrame, type ServerMessage, type SessionTokens } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
@@ -23,16 +23,22 @@ let server: Server | null = null;
 let manager: SessionManager | null = null;
 const sockets: WebSocket[] = [];
 
-async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugText?: boolean; heartbeatMs?: number } = {}) {
+async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugText?: boolean; heartbeatMs?: number; startTimeoutMs?: number; adapterConnect?: 'fail' | 'hang' } = {}) {
   manager = new SessionManager(
     () => new Session({
-      adapterFactory: () => new MockAdapter({ script, replyDelayMs: 10, charMs: 20, chunkMs: 20, paceFactor: 1 }),
+      adapterFactory: () => {
+        const adapter = new MockAdapter({ script, replyDelayMs: 10, charMs: 20, chunkMs: 20, paceFactor: 1 });
+        if (opts.adapterConnect === 'fail') vi.spyOn(adapter, 'connect').mockRejectedValue(new Error('connect failed'));
+        if (opts.adapterConnect === 'hang') vi.spyOn(adapter, 'connect').mockImplementation(() => new Promise<void>(() => {}));
+        return adapter;
+      },
       summarizer: new MockSummarizer(),
       persona: 'P',
       director,
     }),
     opts.graceMs ?? 60_000,
     opts.unclaimedMs,
+    opts.startTimeoutMs,
   );
   server = createGatewayServer({
     manager,
@@ -141,6 +147,30 @@ describe('gateway server', () => {
     await c.waitFor((m) => m.type === 'response.start' && m.kind === 'greeting');
     await c.waitFor((m) => m.type === 'response.end');
     expect(c.audioFrames).toBeGreaterThan(0);
+  });
+
+  it('removes a session when adapter startup fails', async () => {
+    const base = await boot({ adapterConnect: 'fail' });
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    const c = await connect(base, t.connectToken);
+    const closed = new Promise<void>((resolve) => c.ws.once('close', () => resolve()));
+    start(c);
+    await closed;
+
+    expect(manager!.size).toBe(0);
+    expect(c.messages.some((message) => message.type === 'session.ready')).toBe(false);
+    expect((await post(base, '/session/resume', { sessionId: t.sessionId, resumeToken: t.resumeToken })).status).toBe(404);
+  });
+
+  it('removes a session when adapter startup times out', async () => {
+    const base = await boot({ adapterConnect: 'hang', startTimeoutMs: 20 });
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    const c = await connect(base, t.connectToken);
+    const closed = new Promise<void>((resolve) => c.ws.once('close', () => resolve()));
+    start(c);
+    await Promise.race([closed, new Promise<void>((resolve) => setTimeout(resolve, 200))]);
+
+    expect(manager!.size).toBe(0);
   });
 
   it('reports malformed client messages', async () => {

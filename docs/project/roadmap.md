@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-13 (Plan 1.1 device acceptance continuation). Update at the end of every session.
+Last updated: 2026-10-13 (hardening pass validation). Update at the end of every session.
 
 ## Phases
 
@@ -19,6 +19,8 @@ Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-p
 - 【模拟器】 only: Task 16 capability probe on Medium_Phone_API_36.1 (WebView 134, 8/8) and API31_Phone (WebView 91, below the ≥120 bar); release APK cleartext to 127.0.0.1 OK; autoplay `running` without gesture (no audible check). Emulator results are NOT phone results.
 - NOT verified for the original Plan 1 A path: full desktop Chrome E2E (Task 14 Step 7), Task 18 checklist, WebView mic/VAD capture, AudioWorklet playback, lip-sync, barge-in latency, frame rate, and 30-minute stability. No constants were tuned. ADR-001 (audio path A vs B) is a **DRAFT, undecided**; no A/B measurements exist.
 - Plan 1.1 Xiaomi 22101317C: WebView 104 loaded the avatar and Mock greeting, native `AudioRecord` was confirmed at 16 kHz mono with foreground microphone permission, and one `wave` debug action was visually observed. A 30-minute stability sample completed (31 points, renderer alive 31/31; PSS/RSS and 34.0°C recorded). Real speech/VAD, audible confirmation, full action matrix, active-response resume, reliable 10-minute false-trigger count, and 10 true interruptions remain unverified. See [native audio report](../testing/2026-10-13-native-audio-plan1-1-report.md).
+- 2026-10-13 hardening pass: native session startup can retry after partial failure; native response setup/audio delivery is serialized; playback feed failures terminate the active response with an error event; HTTP/WS operations have bounded timeouts; gateway adapter startup is bounded by configurable `SESSION_START_TIMEOUT_MS` and does not announce `session.ready` before success; native avatar visibility listeners are released on stop. Regression coverage is included in the gateway, avatar-core, and Flutter suites.
+- Hardening validation: `npm test` passed (protocol 6, gateway 95, avatar-core 75); `npm run typecheck`, `cd app && flutter test` (40), `flutter analyze`, `./scripts/build-web.sh`, and `flutter build apk --debug --dart-define-from-file=dev.json` all passed. The generated Web bundle is intentionally ignored under `app/assets/web/`.
 - Known environment limits: Plan 1's 2 GB AVD renderer kill during Silero VAD load remains unresolved for path A; Plan 1.1 does not load Silero in the product path.
 
 ## Plan 1 acceptance (from the plan overview) — status

@@ -65,7 +65,7 @@ function setup(opts: { startFails?: boolean } = {}) {
     createActions: () => ({ play: () => {}, stopAll: () => {}, nod: () => {} }),
     createClient: (_o, ev) => { clientEv = ev; return client; },
     post: (m) => posted.push(m),
-    doc: { hidden: false, addEventListener: () => {} },
+    doc: { hidden: false, addEventListener: () => {}, removeEventListener: () => {} },
   };
   const app = new AppController({} as HTMLElement, cfg, deps);
   const server = (m: ServerMessage) => clientEv.onMessage(m);

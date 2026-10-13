@@ -31,6 +31,10 @@ export class NativeAvatarController {
   private activeSeq: number | null = null;
   private liveAssistantText = '';
   private ended = false;
+  private readonly onVisibilityChange = () => {
+    if (!this.ended) this.avatar?.setRendering(!this.deps.doc.hidden);
+  };
+  private visibilityListenerAttached = false;
 
   constructor(
     private readonly el: HTMLElement,
@@ -47,9 +51,8 @@ export class NativeAvatarController {
     this.avatar = avatar;
     this.actions = this.deps.createActions(avatar);
     avatar.setRendering(true);
-    this.deps.doc.addEventListener('visibilitychange', () => {
-      if (!this.ended) this.avatar?.setRendering(!this.deps.doc.hidden);
-    });
+    this.deps.doc.addEventListener('visibilitychange', this.onVisibilityChange);
+    this.visibilityListenerAttached = true;
     this.transition('idle');
   }
 
@@ -109,6 +112,10 @@ export class NativeAvatarController {
   stop(): void {
     if (this.ended) return;
     this.ended = true;
+    if (this.visibilityListenerAttached) {
+      this.deps.doc.removeEventListener('visibilitychange', this.onVisibilityChange);
+      this.visibilityListenerAttached = false;
+    }
     this.actions?.stopAll();
     this.avatar?.setMouth(null);
     this.avatar?.setRendering(false);

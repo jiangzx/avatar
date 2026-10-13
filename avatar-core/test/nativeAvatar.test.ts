@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { NativeAvatarController, type NativeAvatarDeps } from '../src/nativeAvatar.ts';
 
-function nativeAvatarFakes(): { deps: NativeAvatarDeps; avatar: { mouthCalls: unknown[] }; posts: unknown[] } {
+function nativeAvatarFakes(): { deps: NativeAvatarDeps; avatar: { mouthCalls: unknown[] }; posts: unknown[]; removedListeners: number } {
   const avatar = {
     mouthCalls: [] as unknown[],
     talkingHead: {} as never,
@@ -13,13 +13,14 @@ function nativeAvatarFakes(): { deps: NativeAvatarDeps; avatar: { mouthCalls: un
   };
   const actions = { play() {}, stopAll() {}, nod() {} };
   const posts: unknown[] = [];
+  let removedListeners = 0;
   const deps: NativeAvatarDeps = {
     createAvatar: () => avatar,
     createActions: () => actions,
     post: (event) => posts.push(event),
-    doc: { hidden: false, addEventListener() {} },
+    doc: { hidden: false, addEventListener() {}, removeEventListener() { removedListeners++; } },
   };
-  return { deps, avatar, posts };
+  return { deps, avatar, posts, get removedListeners() { return removedListeners; } };
 }
 
 describe('NativeAvatarController', () => {
@@ -38,5 +39,15 @@ describe('NativeAvatarController', () => {
     c.handleNativeEvent({ type: 'subtitle', role: 'assistant', text: '你好', final: false });
     c.handleNativeEvent({ type: 'response.cancelled', responseSeq: 2, playedMs: 0 });
     expect(f.posts.at(-1)).toMatchObject({ type: 'subtitle', role: 'assistant', final: true });
+  });
+
+  it('removes the visibility listener when stopped', async () => {
+    const f = nativeAvatarFakes();
+    const c = new NativeAvatarController({} as HTMLElement, f.deps);
+    await c.start();
+
+    c.stop();
+
+    expect(f.removedListeners).toBe(1);
   });
 });
