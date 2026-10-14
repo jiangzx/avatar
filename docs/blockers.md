@@ -70,6 +70,12 @@
 - Official DashScope OpenAI-compatible text endpoint and Bearer authentication were verified; `QwenSummarizer` and sanitized HTTP fixtures are implemented with `MockSummarizer` still default.
 - Live summarizer smoke is pending a workspace-specific text endpoint and DASHSCOPE Key. No request was sent to a real text model.
 
+## 2026-10-14 Plan 2 external acceptance prerequisites
+
+- Qwen realtime and text live smoke require a workspace-specific endpoint and corresponding DASHSCOPE Key; fixture tests cannot establish account authorization, quota, latency, or model availability.
+- Public WSS acceptance requires a target cloud host, DNS name, TLS certificate, and IP allowlist. The runbook is complete, but no deployment target or certificate was supplied, so no public deployment was attempted.
+- Xiaomi release acceptance still requires the device-side install confirmation/permission. The earlier release install was rejected with `INSTALL_FAILED_USER_RESTRICTED`; real voice/VAD, audible playback, reconnect, and ADR-001 measurements remain deferred as previously requested.
+
 ## 2026-10-14 Plan 2 release APK device install
 
 - Xiaomi 22101317C was visible to `adb`; `adb reverse tcp:8787 tcp:8787` succeeded and the local gateway Mock process started.
