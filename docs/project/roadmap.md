@@ -8,7 +8,7 @@ Last updated: 2026-10-14 (device acceptance deferred; local hardening continued)
 |---|---|---|---|
 | Plan 1 | Mock-driven end-to-end on a Xiaomi phone: greeting, multi-turn, barge-in with zero residue, 5 actions, reconnect, Day 1 audio A/B spike | **Complete with blockers.** Code Tasks 0–17 implemented, reviewed and merged on `master`; Task 18 checklist/report written but every device/browser item is "not run". Not demonstrated on a device. | [plan1](../superpowers/plans/2026-10-12-avatar-poc-plan1/00-overview.md) |
 | Plan 1.1 | Flutter 原生采集/播放/VAD/网关会话，WebView 头像和界面 | **代码已合并至 `master`；小米启动冒烟和 30 分钟稳定性采样完成，完整真机验收延期，待本地后续任务完成后统一执行。** | [native-audio-path](../superpowers/plans/2026-10-13-native-audio-path-plan.md) |
-| Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | **In progress: Seeduplex protocol validation and adapter fixture core implemented; Director proactive speech now uses explicit fixed-text mapping; summarizer, deployment, release and device acceptance remain; Qwen fallback adapter core is implemented.** | [seeduplex-plan2](../superpowers/plans/2026-10-14-seeduplex-plan2.md) |
+| Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | **In progress: Seeduplex protocol validation and adapter fixture core implemented; Director proactive speech now uses explicit fixed-text mapping; summarizer, deployment, and device acceptance remain; release build is ready to re-run with Plan 2 config; Qwen fallback adapter core is implemented.** | [seeduplex-plan2](../superpowers/plans/2026-10-14-seeduplex-plan2.md) |
 
 Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-poc-design.md).
 
@@ -70,3 +70,5 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - 2026-10-14 Qwen fallback: official WebSocket protocol was checked and a frozen-contract adapter with Bearer auth, workspace endpoint, `response.create`, audio/transcript/tool mapping and fixture tests was added. No Qwen Key or workspace endpoint was available for live smoke.
 
 - 2026-10-14 Plan 2 validation after Qwen addition: `npm test` passed (protocol 6, gateway 100, avatar-core 84); `npm run typecheck` passed; `git diff --check` passed.
+
+- 2026-10-14 deployment runbook: documented WSS/TLS/IP-allowlist acceptance and environment-only model/App secrets in `docs/deployment/plan2-wss.md`; cloud target credentials and certificate remain external prerequisites.
