@@ -22,7 +22,15 @@ describe('config', () => {
 
   it('parses defaults and dev origins', () => {
     const c = loadConfig({ APP_SECRET: 'x'.repeat(16), DEV_ORIGINS: 'http://localhost:5173, http://a.test' });
-    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, sessionStartTimeoutMs: 10000 });
+    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, sessionStartTimeoutMs: 10000 });
+  });
+
+  it('requires a key only when Seeduplex is explicitly selected', () => {
+    expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), ADAPTER: 'seeduplex' })).toThrow(/SEEDUPLEX_API_KEY/);
+    const c = loadConfig({ APP_SECRET: 'x'.repeat(16), ADAPTER: 'seeduplex', SEEDUPLEX_API_KEY: 'test-key', SEEDUPLEX_VOICE: 'test-voice' });
+    expect(c.adapter).toBe('seeduplex');
+    expect(c.seeduplexApiKey).toBe('test-key');
+    expect(c.seeduplexVoice).toBe('test-voice');
   });
 
   it('validates the mock speech threshold', () => {

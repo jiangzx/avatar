@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
 import { loadConfig, loadDirectorConfig, loadPersona, makeOriginCheck } from './config.ts';
 import { log } from './log.ts';
@@ -25,7 +26,9 @@ const instructionReplies = new Map([
 const manager = new SessionManager(
   () =>
     new Session({
-      adapterFactory: () => new MockAdapter({ script, speech, instructionReplies, speechThreshold: config.mockSpeechThreshold }),
+      adapterFactory: () => config.adapter === 'seeduplex'
+        ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
+        : new MockAdapter({ script, speech, instructionReplies, speechThreshold: config.mockSpeechThreshold }),
       summarizer: new MockSummarizer(),
       persona,
       director,

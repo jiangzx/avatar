@@ -8,7 +8,7 @@ Last updated: 2026-10-14 (device acceptance deferred; local hardening continued)
 |---|---|---|---|
 | Plan 1 | Mock-driven end-to-end on a Xiaomi phone: greeting, multi-turn, barge-in with zero residue, 5 actions, reconnect, Day 1 audio A/B spike | **Complete with blockers.** Code Tasks 0–17 implemented, reviewed and merged on `master`; Task 18 checklist/report written but every device/browser item is "not run". Not demonstrated on a device. | [plan1](../superpowers/plans/2026-10-12-avatar-poc-plan1/00-overview.md) |
 | Plan 1.1 | Flutter 原生采集/播放/VAD/网关会话，WebView 头像和界面 | **代码已合并至 `master`；小米启动冒烟和 30 分钟稳定性采样完成，完整真机验收延期，待本地后续任务完成后统一执行。** | [native-audio-path](../superpowers/plans/2026-10-13-native-audio-path-plan.md) |
-| Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | **Ready to start by user decision; empirical ADR-001 A/B measurement deferred.** | — |
+| Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | **In progress: Seeduplex protocol validation and adapter core implemented; Qwen, summarizer, deployment, release and device acceptance remain.** | [seeduplex-plan2](../superpowers/plans/2026-10-14-seeduplex-plan2.md) |
 
 Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-poc-design.md).
 
@@ -44,9 +44,9 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 ## Next steps
 
-1. Resolve the Seeduplex API Key/authorization blocker, then rerun the minimal protocol probe before creating the Plan 2 adapter implementation plan.
+1. Continue Plan 2 from `docs/superpowers/plans/2026-10-14-seeduplex-plan2.md`: finish adapter integration review, then add the remaining real-model, deployment and device tasks.
 2. Return to the deferred Xiaomi/desktop acceptance: real voice/VAD interruption, audible playback, active-response resume, network recovery, five actions, false-trigger sampling, true interruptions, and remaining Task 18 checks.
-3. Seeduplex protocol docs are recorded in `docs/research/seeduplex-protocol-validation.md`; the 2026-10-14 probe is blocked by HTTP 401/403 authentication responses. Keep `ADAPTER=mock` until a valid Key is verified; complete ADR-001 A/B measurement as a tracked follow-up.
+3. Seeduplex protocol docs and successful key validation are recorded in `docs/research/seeduplex-protocol-validation.md`; `ADAPTER=mock` remains the default, while `ADAPTER=seeduplex` requires an explicit environment key. Complete ADR-001 A/B measurement as a tracked follow-up.
 
 ## Handed to Plan 2 (accepted minors / hardening, from the final review)
 
@@ -60,3 +60,5 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - 2026-10-12: host Flutter was upgraded 3.41.2 → 3.47.7 (latest stable, via `flutter upgrade`; Dart 3.13.5, DevTools 2.60.0, revision abaf9c523), Android licenses accepted; `flutter doctor` all green. Re-ran `cd app && flutter pub get && flutter analyze && flutter test` → 19 passed, no issues. Version pins updated in the migration guide and plan overview.
 
 - 2026-10-14 Plan 2 protocol verification: official Seeduplex docs/demo were cross-checked. The local-key WebSocket probe returned HTTP 403 with `X-Api-Key` and HTTP 401 with Bearer auth before any event or audio was sent; validation and blocker are recorded in `docs/research/seeduplex-protocol-validation.md` and `docs/blockers.md`.
+
+- 2026-10-14 Plan 2 adapter core: added explicit `ADAPTER=seeduplex` configuration, environment-only key injection, Seeduplex WebSocket event/audio mapping, cancellation/tool-result translation, and sanitized local fixture tests. Full `npm test` (protocol 6, gateway 98, avatar-core 84) and `npm run typecheck` passed.
