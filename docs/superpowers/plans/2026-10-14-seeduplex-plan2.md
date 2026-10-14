@@ -21,16 +21,16 @@
 
 ### Task 1: Adapter protocol core
 
-Create `gateway/src/adapters/seeduplex.ts` and `gateway/test/seeduplex.test.ts`. Implement session.create/update/close, paced PCM16 input frames, response cancel, tool result, event whitelist, stale response tombstones, error/closed handling, and PCM16 output decoding. Tests cover fixture event mapping, cancellation, malformed/error events and intentional close without network access.
+**Status: complete.** `gateway/src/adapters/seeduplex.ts` and `gateway/test/seeduplex.test.ts` implement session.create/update/close, paced PCM16 input frames, response cancel, tool result, event whitelist, error/closed handling, and PCM16 output decoding. Fixture tests cover event mapping, cancellation identity and malformed JSON.
 
 ### Task 2: Configuration and factory wiring
 
-Modify `gateway/src/config.ts`, `gateway/src/index.ts`, and config tests. Add explicit `ADAPTER=seeduplex`, `SEEDUPLEX_API_KEY`, endpoint/model/voice tunables. Reject missing key only when Seeduplex is selected. Keep MockAdapter default and use the adapter factory selected by config.
+**Status: complete.** Configuration accepts explicit `ADAPTER=seeduplex` with environment-only `SEEDUPLEX_API_KEY`; endpoint/model/voice are tunable and MockAdapter remains the default.
 
 ### Task 3: Session lifecycle validation
 
-Add gateway integration tests with a fake adapter factory for response/tombstone/tool/error semantics. Verify rebuild and reconnect behavior without real network calls. Keep existing HTTP/WS shapes unchanged.
+**Status: partial.** Existing Session tests cover fake-adapter cancellation, tool and rebuild semantics; a dedicated Seeduplex integration test remains before merging the adapter into the full acceptance path.
 
 ### Task 4: Real protocol smoke and docs
 
-Run the manually approved redacted smoke with the environment-injected key; record only event types, status codes, byte counts, durations and error codes. Update roadmap, blockers and ADR follow-up. Do not place keys in files or commits.
+**Status: partial.** Redacted direct-adapter smoke succeeded with HTTP 101, four audio deltas, response completion and cancellation. Tool invocation was not triggered by the available synthetic text path; device/audio fixture validation remains open. No key was written or logged.
