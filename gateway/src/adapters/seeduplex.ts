@@ -88,7 +88,7 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
       case 'response.output_audio.started': { const id = this.responseIdFrom(event); this.responseId = id; this.responseStarted.add(id); this.emit('responseStarted', id); break; }
       case 'response.output_audio.delta': { const id = this.responseId ?? this.responseIdFrom(event); const pcm = decodePcm16(event.delta); if (pcm) this.emit('audioDelta', id, pcm); break; }
       case 'response.output_text.delta': { const id = this.responseId ?? this.responseIdFrom(event); if (typeof event.delta === 'string') this.emit('textDelta', id, event.delta); break; }
-      case 'response.output_audio.done': { const id = this.responseIdFrom(event); this.emit('responseDone', id); if (this.responseId === id) this.responseId = null; break; }
+      case 'response.output_audio.done': { const id = this.responseIdFrom(event); this.emit('responseDone', id); break; }
       case 'response.canceled': { const id = this.responseIdFrom(event); this.emit('responseCancelled', id); if (this.responseId === id) this.responseId = null; break; }
       case 'response.function_call_arguments.done': { const id = this.responseIdFrom(event); const items = Array.isArray(event.items) ? event.items : []; for (const item of items) { const x = item as Json; let args: unknown = {}; try { args = JSON.parse(typeof x.arguments === 'string' ? x.arguments : '{}'); } catch {} this.emit('toolCall', id, String(x.call_id ?? ''), String(x.name ?? ''), args); } break; }
       case 'error': this.emit('error', String((event.error as Json | undefined)?.code ?? event.code ?? 'upstream_error'), true); break;

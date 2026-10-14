@@ -32,10 +32,12 @@ describe('SeeduplexAdapter', () => {
     adapter.on('audioDelta', (_id, pcm) => { samples += pcm.length; });
     adapter.on('toolCall', (_id, callId, name) => events.push(`tool:${callId}:${name}`));
     adapter.on('responseDone', (id) => events.push(`done:${id}`));
+    adapter.on('responseCancelled', (id) => events.push(`cancel:${id}`));
     await adapter.connect(config); await wait(); adapter.sendUserText('fixture'); await wait();
     expect(events).toEqual(['start:r1', 'text:fixture text', 'tool:c1:perform_action', 'done:r1']);
     expect(samples).toBe(2);
     adapter.cancelResponse(); await wait();
+    expect(events).toContain('cancel:r1');
     adapter.close();
   });
 
