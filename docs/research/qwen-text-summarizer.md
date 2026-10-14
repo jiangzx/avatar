@@ -15,6 +15,7 @@
 
 - 已用本地 HTTP fixture 验证请求方法、Bearer 头、模型字段、消息角色、响应解析、非 2xx 错误和脱敏错误码。
 - 未使用真实 DASHSCOPE Key 或 workspace endpoint；因此真实摘要延迟、配额、模型可用性和返回长度限制仍未验证。
+- 2026-10-14 真实最小请求已返回 HTTP 200；仅记录响应体 346 字节和 `choices[0].message.content` 字段存在，未记录摘要文本。
 - 测试和日志不输出对话文本或 Key。
 
 ## 参考

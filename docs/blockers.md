@@ -63,18 +63,25 @@
 
 ## 2026-10-14 Qwen fallback adapter
 
-- Official Qwen Realtime WebSocket docs verified: Bearer auth, workspace-specific WSS endpoint, `response.create`, `response.audio.delta`, and `response.audio_transcript.*`. Adapter core and sanitized fixtures are implemented. Live Qwen smoke remains pending a workspace endpoint and Key.
+- Official Qwen Realtime WebSocket docs verified: Bearer auth, workspace-specific WSS endpoint, `response.create`, `response.audio.delta`, and `response.audio_transcript.*`. Live WSS smoke succeeds with HTTP 101, session events and output audio; real tool-call fields and one successful tool-result continuation were observed. A separate cancel retry hit a transient socket error and remains unverified live.
 
 ## 2026-10-14 Qwen text summarizer
 
 - Official DashScope OpenAI-compatible text endpoint and Bearer authentication were verified; `QwenSummarizer` and sanitized HTTP fixtures are implemented with `MockSummarizer` still default.
-- Live summarizer smoke is pending a workspace-specific text endpoint and DASHSCOPE Key. No request was sent to a real text model.
+- Live summarizer smoke now returns HTTP 200 and a response containing `choices[0].message.content`; only status/size/field presence were recorded. Text content was not logged.
 
 ## 2026-10-14 Plan 2 external acceptance prerequisites
 
-- Qwen realtime and text live smoke require a workspace-specific endpoint and corresponding DASHSCOPE Key; fixture tests cannot establish account authorization, quota, latency, or model availability.
+- Qwen realtime and text credentials are now available and live smoke has been run. Live response cancellation still needs a stable repeat; fixture coverage remains authoritative for the frozen gateway contract.
 - Public WSS acceptance requires a target cloud host, DNS name, TLS certificate, and IP allowlist. The runbook is complete, but no deployment target or certificate was supplied, so no public deployment was attempted.
 - Xiaomi release acceptance still requires the device-side install confirmation/permission. The earlier release install was rejected with `INSTALL_FAILED_USER_RESTRICTED`; real voice/VAD, audible playback, reconnect, and ADR-001 measurements remain deferred as previously requested.
+
+## 2026-10-14 Cloud deployment access
+
+- The supplied host `14.22.89.31` was reachable over SSH on port `9722` before deployment. Docker 27.3.1 and Docker Compose v2.29.7 were already installed.
+- Nginx and Certbot installation was started, but the management channel became unavailable immediately afterward: ports checked through the public address returned the Nginx default page instead of an SSH handshake, including the supplied SSH port. No gateway container, reverse-proxy configuration, or certificate issuance was verified afterward.
+- No user-owned domain or DNS record was present in the supplied server information. The attempted temporary `sslip.io` name resolved to `198.18.0.84` from this network rather than `14.22.89.31`, so it is not a valid certificate target here.
+- Recovery requires the cloud provider console or a confirmed SSH port/port mapping. Do not claim public WSS, TLS, DNS, or IP allowlist acceptance until the management channel is restored and `GET /health`, HTTPS, and WSS are independently verified.
 
 ## 2026-10-14 Plan 2 release APK device install
 

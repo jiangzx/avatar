@@ -29,7 +29,7 @@
 
 ### Task 3: Session lifecycle validation
 
-**Status: complete for local contract coverage.** Existing Session tests cover fake-adapter cancellation, tool and rebuild semantics; adapter fixture tests cover protocol translation; `gateway/test/seeduplex.integration.test.ts` now exercises HTTP session creation, client WebSocket startup, upstream `session.created`, proactive greeting audio, and client `response.end` through the frozen gateway protocol. Real-device and public deployment acceptance remain separate.
+**Status: complete for local contract coverage.** Existing Session tests cover fake-adapter cancellation, tool and rebuild semantics; adapter fixture tests cover protocol translation and Seeduplex mute/unmute keepalive; `gateway/test/seeduplex.integration.test.ts` exercises HTTP session creation, client WebSocket startup, upstream `session.created`, proactive greeting audio, and client `response.end` through the frozen gateway protocol. Real-device and public deployment acceptance remain separate.
 
 ### Task 4: Real protocol smoke and docs
 
@@ -38,7 +38,7 @@
 
 ### Task 5: Qwen fallback adapter
 
-**Status: complete.** Added `gateway/src/adapters/qwen.ts`, explicit `ADAPTER=qwen` configuration, environment-only `DASHSCOPE_API_KEY`, workspace endpoint/model/voice settings, and sanitized fixture coverage. Official Qwen documentation was cross-checked for Bearer auth, workspace WSS endpoint, `response.create`, and audio event names.
+**Status: partial live validation.** Added `gateway/src/adapters/qwen.ts`, explicit `ADAPTER=qwen` configuration, environment-only `DASHSCOPE_API_KEY`, workspace endpoint/model/voice settings, and sanitized fixture coverage. Live WSS and audio smoke succeeds; real `response.created`/audio mapping is covered. Function-call arguments are observed, but tool-result continuation currently returns `invalid_request_error` and needs an official payload example or follow-up experiment.
 
 ### Task 6: Rolling summarizer
 

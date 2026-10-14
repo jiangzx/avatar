@@ -140,6 +140,7 @@ export class Session {
       case 'client.mute':
         this.muted = msg.muted;
         this.director.setMuted(msg.muted);
+        this.syncInputMute();
         break;
       case 'debug.userText':
         this.interrupt.cancelActive('local');
@@ -331,6 +332,7 @@ export class Session {
     old.close();
     try {
       await this.adapter.connect(this.sessionConfig());
+      this.syncInputMute();
       this.turnsSinceRebuild = 0;
       this.charsSinceRebuild = 0;
     } catch {
@@ -347,6 +349,11 @@ export class Session {
     this.keepalive = setInterval(() => {
       if (!this.rebuilding && !this.ended) this.adapter.sendAudio(silence);
     }, 20);
+  }
+
+  private syncInputMute(): void {
+    const adapter = this.adapter as RealtimeAdapter & { setInputMuted?: (muted: boolean) => void };
+    adapter.setInputMuted?.(this.muted);
   }
 
   private stopKeepalive(): void {

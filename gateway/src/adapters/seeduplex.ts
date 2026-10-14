@@ -80,6 +80,11 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
     this.inputRemainder = merged.slice(offset);
   }
 
+  /** Keep the upstream session alive when the client stops microphone capture. */
+  setInputMuted(muted: boolean): void {
+    if (this.connected) this.send({ type: muted ? 'input_audio_mute.commit' : 'input_audio_unmute.commit', event_id: this.eventId() });
+  }
+
   sendUserText(text: string): void { if (this.connected) this.send({ type: 'speech_text_buffer.commit', event_id: this.eventId(), text }); }
   updateInstructions(text: string): void { this.instructions = text; if (this.connected) this.send({ type: 'session.update', event_id: this.eventId(), session: this.sessionPayload() }); }
   createResponse(instructions?: string): void {

@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-14 (device acceptance deferred; local hardening continued). Update at the end of every session.
+Last updated: 2026-10-14 (device acceptance deferred; cloud deployment access blocked). Update at the end of every session.
 
 ## Phases
 
@@ -8,7 +8,7 @@ Last updated: 2026-10-14 (device acceptance deferred; local hardening continued)
 |---|---|---|---|
 | Plan 1 | Mock-driven end-to-end on a Xiaomi phone: greeting, multi-turn, barge-in with zero residue, 5 actions, reconnect, Day 1 audio A/B spike | **Complete with blockers.** Code Tasks 0–17 implemented, reviewed and merged on `master`; Task 18 checklist/report written but every device/browser item is "not run". Not demonstrated on a device. | [plan1](../superpowers/plans/2026-10-12-avatar-poc-plan1/00-overview.md) |
 | Plan 1.1 | Flutter 原生采集/播放/VAD/网关会话，WebView 头像和界面 | **代码已合并至 `master`；小米启动冒烟和 30 分钟稳定性采样完成，完整真机验收延期，待本地后续任务完成后统一执行。** | [native-audio-path](../superpowers/plans/2026-10-13-native-audio-path-plan.md) |
-| Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | **In progress: Seeduplex/Qwen adapters, Qwen-compatible summarizer, and local gateway integration coverage are implemented; Seeduplex live validation succeeds; Qwen/summarizer live smoke, public deployment, and device acceptance remain.** | [seeduplex-plan2](../superpowers/plans/2026-10-14-seeduplex-plan2.md) |
+| Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | **In progress: Seeduplex/Qwen adapters, Qwen-compatible summarizer, local integration, and live Seeduplex/Qwen/text smoke are implemented; live Qwen cancellation, public deployment, and device acceptance remain.** | [seeduplex-plan2](../superpowers/plans/2026-10-14-seeduplex-plan2.md) |
 
 Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-poc-design.md).
 
@@ -63,9 +63,13 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 
 - 2026-10-14 Seeduplex user-Key recheck: using `docs/seeduplex/Seeduplex_APIKey.txt` produced WebSocket HTTP 101, `session.created`, 47,906 output-audio bytes, `response.cancel` -> `response.canceled`, and `session.closed` with zero upstream errors. The intervening timeout was a local probe bug that misclassified binary WebSocket frames carrying UTF-8 JSON; the probe was corrected and the result is recorded in `docs/research/seeduplex-protocol-validation.md`. Function calling remains unverified.
 
-- 2026-10-14 Plan 2 local integration: `gateway/test/seeduplex.integration.test.ts` now covers HTTP session creation through client WS startup and Seeduplex greeting audio; Qwen session readiness now waits for `session.created`, deduplicates completion events, and has initialization failure coverage. Full `npm test` passed (protocol 6, gateway 114, avatar-core 84); `npm run typecheck` passed.
+- 2026-10-14 Plan 2 local integration: `gateway/test/seeduplex.integration.test.ts` now covers HTTP session creation through client WS startup and Seeduplex greeting audio; Qwen session readiness now waits for `session.updated`, maps real `response.created`, deduplicates completion events, and has initialization failure coverage. Seeduplex mute/unmute keepalive and mute-state restoration across rebuild are covered. Full `npm test` passed (protocol 6, gateway 117, avatar-core 84); `npm run typecheck` passed.
 
 - 2026-10-14 summarizer provider: verified the official DashScope OpenAI-compatible text protocol and added explicit `QwenSummarizer` with fixture tests. `MockSummarizer` remains the default; live summarization is pending a workspace-specific endpoint and Key. Evidence: `docs/research/qwen-text-summarizer.md`.
+
+- 2026-10-14 Qwen live smoke: local credentials produced WSS HTTP 101, `session.created`/`session.updated`, real response/audio events with 179,040 output bytes, and text API HTTP 200. Real tool-call event fields were observed; tool-result continuation returned `invalid_request_error` and remains tracked.
+
+- 2026-10-14 Qwen tool continuation: one controlled run successfully returned `conversation.item.created` after a `function_call_output` result and completed the follow-up response (148,320 audio bytes). The earlier error was caused by duplicate probe `response.create`; live cancel retry remains open.
 
 - 2026-10-14 Plan 2 adapter core: added explicit `ADAPTER=seeduplex` configuration, environment-only key injection, Seeduplex WebSocket event/audio mapping, cancellation/tool-result translation, and sanitized local fixture tests. Full `npm test` (protocol 6, gateway 98, avatar-core 84) and `npm run typecheck` passed.
 
@@ -78,6 +82,8 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - 2026-10-14 Plan 2 validation after Qwen addition: `npm test` passed (protocol 6, gateway 100, avatar-core 84); `npm run typecheck` passed; `git diff --check` passed.
 
 - 2026-10-14 deployment runbook: documented WSS/TLS/IP-allowlist acceptance and environment-only model/App secrets in `docs/deployment/plan2-wss.md`; cloud target credentials and certificate remain external prerequisites.
+
+- 2026-10-14 cloud deployment attempt: Docker 27.3.1 was already installed; source and a root-only Qwen environment file were staged under `/opt/anyidea`, then Nginx/Certbot installation was started. The supplied SSH port began returning the Nginx default page, so the management channel is blocked. No container start, proxy config, DNS, TLS certificate, or public WSS acceptance is claimed; see `docs/blockers.md`.
 
 - 2026-10-14 Plan 2 release build validation: `cd app && flutter build apk --release --dart-define-from-file=dev.json` succeeded; APK size 77,762,308 bytes (hash recorded only as a local prefix), and `flutter analyze` reported no issues. This does not validate cloud WSS or real-device acceptance.
 

@@ -57,6 +57,25 @@ describe('SeeduplexAdapter', () => {
     expect(errors).toEqual([['upstream_invalid_json', false]]);
     adapter.close();
   });
+
+  it('maps input mute transitions to the documented keepalive events', async () => {
+    const server = new WebSocketServer({ port: 0 }); servers.push(server);
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const port = (server.address() as { port: number }).port;
+    const types: string[] = [];
+    server.on('connection', (socket) => socket.on('message', (raw) => {
+      const event = JSON.parse(raw.toString()) as { type: string };
+      types.push(event.type);
+      if (event.type === 'session.create') socket.send(JSON.stringify({ type: 'session.created' }));
+    }));
+    const adapter = new SeeduplexAdapter({ apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture-voice' });
+    await adapter.connect(config);
+    adapter.setInputMuted(true);
+    adapter.setInputMuted(false);
+    await wait();
+    expect(types).toEqual(['session.create', 'input_audio_mute.commit', 'input_audio_unmute.commit']);
+    adapter.close();
+  });
   it('does not become ready or send audio until session.created arrives', async () => {
     const server = new WebSocketServer({ port: 0 }); servers.push(server);
     await new Promise<void>((resolve) => server.once('listening', resolve));

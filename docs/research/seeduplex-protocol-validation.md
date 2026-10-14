@@ -87,4 +87,8 @@ node /tmp/seeduplex_probe.mjs
 
 ## Qwen 备用适配器资料核对
 
-已核对阿里云百炼官方 `Qwen-Omni-Realtime` 文档：WebSocket 使用绑定业务空间的 WSS 地址，查询参数 `model`，请求头 `Authorization: Bearer DASHSCOPE_API_KEY`；手动模式发送 `input_audio_buffer.append`、`input_audio_buffer.commit`、`response.create`，输出使用 `response.audio.delta` 和 `response.audio_transcript.delta/done`。仓库中的 Qwen 适配器只使用脱敏 fixture 测试；没有 Qwen Key 或业务空间地址，未进行真实连接。
+已核对阿里云百炼官方 `Qwen-Omni-Realtime` 文档：WebSocket 使用绑定业务空间的 WSS 地址，查询参数 `model`，请求头 `Authorization: Bearer DASHSCOPE_API_KEY`；手动模式发送 `input_audio_buffer.append`、`input_audio_buffer.commit`、`response.create`，输出使用 `response.audio.delta` 和 `response.audio_transcript.delta/done`。
+
+2026-10-14 使用本地 Qwen Key/WorkspaceID（只在进程内读取）完成真实最小验证：实时 WSS HTTP 101；收到 `session.created`、`session.updated`；发送 640 字节 PCM 和 `response.create` 后收到 `response.created`、`response.audio.delta`、`response.audio.done`、`response.audio_transcript.delta/done`、`response.done`，累计输出音频字节数 179,040。工具声明触发了 `response.function_call_arguments.delta/done`，事件字段键为 `call_id`、`name`、`arguments`、`response_id`；使用一次 `conversation.item.create`（`function_call_output`、相同 `call_id`）回传后收到 `conversation.item.created`，并完成后续响应（另一次 148,320 字节音频实验）。此前 `invalid_request_error` 由探针在 `response.done` 后重复发送 `response.create` 造成，已修正。适配器已补充真实 `response.created`、嵌套 response id、`response.done(status=cancelled)` 和顶层工具字段映射。
+
+同一 Key 调用官方 OpenAI-compatible 文本 endpoint 返回 HTTP 200，响应体 346 字节且存在 `choices[0].message.content` 字段；没有保存或输出文本内容。

@@ -171,6 +171,25 @@ describe('Session', () => {
     expect(s.mocks[1].instructions).toContain('用户：我叫老王');
   });
 
+  it('restores the upstream input mute state after rebuilding', async () => {
+    const transitions: boolean[][] = [];
+    const adapters: MockAdapter[] = [];
+    const s = setup({ adapterFactory: () => {
+      const adapter = new MockAdapter({ script });
+      const states: boolean[] = [];
+      Object.assign(adapter, { setInputMuted: (muted: boolean) => states.push(muted) });
+      adapters.push(adapter);
+      transitions.push(states);
+      return adapter;
+    } });
+    await s.session.start(s.transport);
+    s.session.handleClientMessage({ type: 'client.mute', muted: true });
+    adapters[0].simulateDrop();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(transitions[1]).toEqual([true]);
+    s.session.end();
+  });
+
   it('silently slims the model context after enough turns', async () => {
     const s = setup({ rebuildAfterTurns: 1 });
     await greetAndFinish(s);
@@ -227,10 +246,14 @@ describe('Session', () => {
   it('drops uplink audio while muted', async () => {
     const s = setup();
     await greetAndFinish(s);
+    const muteTransitions: boolean[] = [];
+    (s.mocks[0] as MockAdapter & { setInputMuted: (muted: boolean) => void }).setInputMuted = (muted) => muteTransitions.push(muted);
     s.session.handleClientMessage({ type: 'client.mute', muted: true });
     for (let i = 0; i < 10; i++) s.session.handleMicAudio(loud());
     for (let i = 0; i < 40; i++) s.session.handleMicAudio(quiet());
+    s.session.handleClientMessage({ type: 'client.mute', muted: false });
     expect(of(s.sent, 'transcript.user')).toEqual([]);
+    expect(muteTransitions).toEqual([true, false]);
   });
 
   it('end() closes the model and clears memory', async () => {

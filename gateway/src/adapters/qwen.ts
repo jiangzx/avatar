@@ -65,7 +65,8 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   private onMessage(data: WebSocket.RawData): void {
     let e: Json; try { e = JSON.parse(Buffer.isBuffer(data) ? data.toString('utf8') : String(data)) as Json; } catch { this.emit('error', 'qwen_invalid_json', false); return; }
     const type = typeof e.type === 'string' ? e.type : '';
-    if (type === 'session.created') {
+    if (type === 'session.created') return;
+    if (type === 'session.updated') {
       if (this.initialization) {
         const initialization = this.initialization;
         this.initialization = null;
@@ -75,15 +76,29 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
       }
       return;
     }
-    if (type === 'session.updated' || type === 'input_audio_buffer.committed') return;
+    if (type === 'input_audio_buffer.committed') return;
     if (type === 'input_audio_buffer.speech_started') { this.emit('userSpeechStarted'); return; }
     if (type === 'conversation.item.input_audio_transcription.delta') { this.emit('userTranscript', String(e.delta ?? e.text ?? ''), false); return; }
     if (type === 'conversation.item.input_audio_transcription.completed') { this.emit('userTranscript', String(e.transcript ?? e.text ?? ''), true); return; }
     if (type === 'response.audio.started') { this.responseId = this.responseIdFrom(e); this.completedResponses.delete(this.responseId); this.emit('responseStarted', this.responseId); return; }
+    if (type === 'response.created') {
+      const nested = e.response as Json | undefined;
+      const id = typeof nested?.id === 'string' ? nested.id : this.responseIdFrom(e);
+      this.responseId = id;
+      this.completedResponses.delete(id);
+      this.emit('responseStarted', id);
+      return;
+    }
     if (type === 'response.audio.delta') { const pcm = decode(e.delta); if (pcm) this.emit('audioDelta', this.responseIdFrom(e), pcm); return; }
     if (type === 'response.audio_transcript.delta' || type === 'response.text.delta') { this.emit('textDelta', this.responseIdFrom(e), String(e.delta ?? '')); return; }
     if (type === 'response.audio.done' || type === 'response.done') {
       const id = this.responseIdFrom(e);
+      const nested = e.response as Json | undefined;
+      if (type === 'response.done' && nested?.status === 'cancelled') {
+        this.completedResponses.delete(id);
+        this.emit('responseCancelled', id);
+        return;
+      }
       if (!this.completedResponses.has(id)) { this.completedResponses.add(id); this.emit('responseDone', id); }
       return;
     }
