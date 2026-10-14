@@ -66,3 +66,7 @@ node /tmp/seeduplex_probe.mjs
 - 发送 640 字节静音 PCM、`input_audio_buffer.commit` 和文本合成触发后，收到 `input_audio_buffer.committed`、`response.output_audio.started`、多个 `response.output_audio.delta`、`response.output_audio.done`、`response.done`、`response.canceled`、`session.closed`；累计输出音频字节数为 49,798（仅记录字节数）。
 - 第二次测试收到 98,588 个输出音频字节，并验证了 `response.cancel` → `response.canceled`。
 - `conversation.item.create` 文本测试未触发响应；工具调用事件尚未出现，因此 Function Calling 和工具结果续答仍未验证。不能把文本合成事件当作模型工具调用测试。
+
+## 适配器契约缺口
+
+官方资料把 `speech_text_buffer.commit` 定义为直接文本合成（打招呼或替换播报），没有发现通用 `response.create` 事件。现有 `RealtimeAdapter.createResponse(instructions?)` 参数是 Director 提示词；因此不能直接把该参数填入 `speech_text_buffer.commit.text`。真实适配器目前只可用于已收到用户音频后的服务端响应流和取消映射，Director 主动响应路径需先完成契约决策。
