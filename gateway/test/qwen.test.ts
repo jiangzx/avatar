@@ -52,6 +52,21 @@ describe('QwenAdapter', () => {
     expect(seen).toEqual(['start:r', 'text:fixture', 'tool:c:perform_action', 'done:r']); expect(bytes).toBe(2); expect(done).toBe(1); a.close();
   });
 
+  it('creates a response after sending debug user text', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
+    const types: string[] = [];
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString()); types.push(e.type);
+      if (e.type === 'session.update') { ws.send(JSON.stringify({ type: 'session.created' })); ws.send(JSON.stringify({ type: 'session.updated' })); }
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture' });
+    await a.connect({ instructions: 'fixture', tools: [] });
+    a.sendUserText('fixture user');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(types).toEqual(['session.update', 'conversation.item.create', 'response.create']);
+    a.close();
+  });
+
   it('waits for session.created before resolving or sending audio', async () => {
     const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
     let release!: () => void;

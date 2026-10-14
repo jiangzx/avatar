@@ -63,7 +63,7 @@
 
 ## 2026-10-14 Qwen fallback adapter
 
-- Official Qwen Realtime WebSocket docs verified: Bearer auth, workspace-specific WSS endpoint, `response.create`, `response.audio.delta`, and `response.audio_transcript.*`. Live WSS smoke succeeds with HTTP 101, session events and output audio; real tool-call fields and one successful tool-result continuation were observed. A separate cancel retry hit a transient socket error and remains unverified live.
+- Official Qwen Realtime WebSocket docs verified: Bearer auth, workspace-specific WSS endpoint, `response.create`, `response.audio.delta`, and `response.audio_transcript.*`. Live WSS smoke succeeds with HTTP 101, session events and output audio; real tool-call fields and tool-result acknowledgement were observed, but a second response after the tool result was not proven. A separate cancel retry hit a transient socket error and remains unverified live.
 
 ## 2026-10-14 Qwen text summarizer
 

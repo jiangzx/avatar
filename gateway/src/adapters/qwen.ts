@@ -53,7 +53,11 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     this.close();
   }
   sendAudio(pcm16k: Int16Array): void { if (!this.connected) return; const b = Buffer.from(pcm16k.buffer, pcm16k.byteOffset, pcm16k.byteLength); this.send({ type: 'input_audio_buffer.append', audio: b.toString('base64') }); }
-  sendUserText(text: string): void { if (this.connected) this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } }); }
+  sendUserText(text: string): void {
+    if (!this.connected) return;
+    this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } });
+    this.createResponse();
+  }
   updateInstructions(text: string): void { if (this.connected) this.send({ type: 'session.update', session: { instructions: text } }); }
   createResponse(): void { if (this.connected) this.send({ type: 'response.create' }); }
   cancelResponse(): void { if (this.connected) this.send({ type: 'response.cancel' }); }
