@@ -58,3 +58,8 @@
 ## 2026-10-14 Qwen fallback adapter
 
 - Official Qwen Realtime WebSocket docs verified: Bearer auth, workspace-specific WSS endpoint, `response.create`, `response.audio.delta`, and `response.audio_transcript.*`. Adapter core and sanitized fixtures are implemented. Live Qwen smoke remains pending a workspace endpoint and Key.
+
+## 2026-10-14 Plan 2 release APK device install
+
+- Xiaomi 22101317C was visible to `adb`; `adb reverse tcp:8787 tcp:8787` succeeded and the local gateway Mock process started.
+- Installing the freshly built release APK failed with `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`. No app launch or real-device Plan 2 acceptance was claimed. Device install permission/confirmation must be enabled before repeating.
