@@ -40,6 +40,9 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
     this.tools = config.tools;
     const ws = new WebSocket(this.opts.endpoint, { headers: { 'X-Api-Key': this.opts.apiKey }, perMessageDeflate: false });
     this.ws = ws;
+    ws.on('message', (data) => this.onMessage(data));
+    ws.on('error', () => { if (!this.closed) this.emit('error', 'upstream_socket_error', true); });
+    ws.on('close', () => { this.connected = false; if (!this.closed) this.emit('closed'); });
     await new Promise<void>((resolve, reject) => {
       let settled = false;
       const fail = (error: Error) => { if (settled) return; settled = true; this.clearConnectTimer(); reject(error); };
@@ -47,9 +50,6 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
       ws.once('open', () => { if (settled) return; settled = true; this.clearConnectTimer(); this.connected = true; this.sendSessionCreate(); resolve(); });
       ws.once('error', (error) => fail(error instanceof Error ? error : new Error('seeduplex_connect_error')));
     });
-    ws.on('message', (data) => this.onMessage(data));
-    ws.on('error', () => { if (!this.closed) this.emit('error', 'upstream_socket_error', true); });
-    ws.on('close', () => { this.connected = false; if (!this.closed) this.emit('closed'); });
   }
 
   sendAudio(pcm16k: Int16Array): void {
