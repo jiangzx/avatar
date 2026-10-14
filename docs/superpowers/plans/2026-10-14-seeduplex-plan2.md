@@ -29,11 +29,11 @@
 
 ### Task 3: Session lifecycle validation
 
-**Status: partial.** Existing Session tests cover fake-adapter cancellation, tool and rebuild semantics; adapter fixture tests cover protocol translation. A dedicated full gateway integration smoke remains before product acceptance.
+**Status: complete for local contract coverage.** Existing Session tests cover fake-adapter cancellation, tool and rebuild semantics; adapter fixture tests cover protocol translation; `gateway/test/seeduplex.integration.test.ts` now exercises HTTP session creation, client WebSocket startup, upstream `session.created`, proactive greeting audio, and client `response.end` through the frozen gateway protocol. Real-device and public deployment acceptance remain separate.
 
 ### Task 4: Real protocol smoke and docs
 
-**Status: partial.** Redacted direct-adapter smoke succeeded with HTTP 101, four audio deltas, response completion and cancellation. Tool invocation was not triggered by the available synthetic text path; device/audio fixture validation remains open. No key was written or logged.
+**Status: partial.** Redacted direct-adapter smoke succeeded with HTTP 101, session initialization, output audio, response completion and cancellation; the corrected probe also handles UTF-8 JSON carried in binary WebSocket frames. Tool invocation was not triggered by the available synthetic text path; device/audio fixture validation remains open. No key was written or logged.
 
 
 ### Task 5: Qwen fallback adapter
