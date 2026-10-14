@@ -33,3 +33,8 @@
 - 官方资料与官方 Python demo 已核对，脱敏验证记录见 `docs/research/seeduplex-protocol-validation.md`。
 - 最小 WebSocket 探针未通过鉴权：`X-Api-Key` 握手 HTTP 403；`Authorization: Bearer` 握手 HTTP 401；均未建立连接、未发送音频、未收到事件。
 - 当前本地 Key 不可用于官方端点，需更新/确认 Key 或账号权限后重跑。未伪造输出音频、取消、工具调用或工具结果验证；真实适配器与 Plan 2 实施计划暂缓。
+
+## 2026-10-14 Seeduplex 权限复测
+
+- 用户反馈权限已开通，但本地 Key 复测仍失败：WebSocket `X-Api-Key` 返回 403；HTTPS 预检使用 `X-Api-Key`、Bearer、双头均返回 401。
+- 未建立会话、未发送音频或对话事件。需确认本地 Key 已更新且绑定 Seeduplex 实时语音服务/项目后再复测。
