@@ -1,6 +1,6 @@
 # ADR-001：Day 1 选型结论
 
-> **状态：DRAFT – A/B not decided; Plan 1.1 migration approved（A/B 仍未决定；Plan 1.1 迁移已批准）。**
+> **状态：DRAFT – A/B not decided; Plan 2 entry approved by user（A/B 仍未决定；用户已批准先进入 Plan 2）。**
 > Plan 1.1 已在小米设备上完成启动冒烟；A/B 数字仍必须来自独立的真机测量，模拟器的回声路径（Mac 扬声器 → Mac 麦克风）与手机完全不同，任何模拟器数字都不得填入 A/B 表。
 
 - 日期：2026-10-13（Plan 1.1 冒烟）
@@ -18,7 +18,7 @@
 
 判定规则（spec §9 Day 1）：选 10 分钟自打断更少的方案；持平时选 A。目标【预估】：自打断 ≤1 次/10 分钟，真打断检出 ≥9/10。
 
-**结论：** Plan 1.1 方案 B 迁移获批准并完成了设备启动冒烟；A/B 选型仍未决定，等待 Task 17 Step 5–6 的真机测量。Plan 1 的历史默认方案 A 不变。
+**结论：** 用户已批准阶段 1 完成并先进入 Plan 2；Plan 1.1 方案 B 迁移已完成设备启动冒烟。A/B 选型仍未决定，Task 17 Step 5–6 的真机测量作为 Plan 2 跟进项执行。该状态变更是项目排期决定，不代表 A/B 测量已完成。Plan 1 的历史默认方案 A 不变。
 若 A、B 都 >1 次/10 分钟：按 spec §2.1 Plan B，在 Plan 2 中评估 `flutter_webrtc` 直连 Qwen WebRTC。
 
 已知风险（来自源码核对，非测量）：`flutter_pcm_sound` 3.3.3 在 Android 上以 `USAGE_MEDIA` / `CONTENT_TYPE_MUSIC` 播放，方案 B 的采集处于通话模式（`MODE_IN_COMMUNICATION` + `VOICE_COMMUNICATION`），两者可能不在同一条回声消除路由里。

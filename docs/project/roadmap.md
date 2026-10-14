@@ -8,7 +8,7 @@ Last updated: 2026-10-14 (device acceptance deferred; local hardening continued)
 |---|---|---|---|
 | Plan 1 | Mock-driven end-to-end on a Xiaomi phone: greeting, multi-turn, barge-in with zero residue, 5 actions, reconnect, Day 1 audio A/B spike | **Complete with blockers.** Code Tasks 0–17 implemented, reviewed and merged on `master`; Task 18 checklist/report written but every device/browser item is "not run". Not demonstrated on a device. | [plan1](../superpowers/plans/2026-10-12-avatar-poc-plan1/00-overview.md) |
 | Plan 1.1 | Flutter 原生采集/播放/VAD/网关会话，WebView 头像和界面 | **代码已合并至 `master`；小米启动冒烟和 30 分钟稳定性采样完成，完整真机验收延期，待本地后续任务完成后统一执行。** | [native-audio-path](../superpowers/plans/2026-10-13-native-audio-path-plan.md) |
-| Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | Not started; plan not written | — |
+| Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | **Ready to start by user decision; empirical ADR-001 A/B measurement deferred.** | — |
 
 Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-poc-design.md).
 
@@ -24,6 +24,7 @@ Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-p
 - 2026-10-14 local hardening: WebView `GatewayClient` now guards malformed/stale socket messages, makes `close()` idempotent, bounds HTTP and WebSocket setup, and aborts timed-out requests. Focused `avatar-core` GatewayClient tests passed (16).
 - 2026-10-14 local hardening continued: `ActionPlayer.stopAll()` now invalidates in-flight wave probes, cancels nod/turn RAF callbacks, and clears smile timers before stopping TalkingHead playback. Regression coverage passed in `avatar-core` actions tests; full `npm test` passed (protocol 6, gateway 95, avatar-core 84) and `npm run typecheck` passed.
 - 2026-10-14 device acceptance decision: real voice/VAD interruption, audible playback, active-response resume, network recovery, and stability sampling are explicitly deferred; they remain open in `docs/blockers.md` and will be run together after local follow-up work.
+- 2026-10-14 phase transition: by user decision, Phase 1 is marked complete and Plan 2 may begin before the empirical ADR-001 A/B measurement. This is a scheduling decision, not an A/B result; the measurement remains an explicit Plan 2 follow-up.
 - Known environment limits: Plan 1's 2 GB AVD renderer kill during Silero VAD load remains unresolved for path A; Plan 1.1 does not load Silero in the product path.
 
 ## Plan 1 acceptance (from the plan overview) — status
@@ -32,9 +33,9 @@ Greets on open (gateway side ✓ headless; product page ✗); scripted multi-tur
 
 ## Cross-phase dependencies
 
-Plan 2 cannot start until:
-- A model Key is available and the real protocol is verified against official docs.
-- ADR-001 (audio path A or B) is decided from real-device data (Task 17 Steps 5–7).
+Plan 2 entry conditions:
+- **Satisfied / provided by user decision:** Phase 1 is closed for scheduling purposes; the empirical ADR-001 A/B measurement is deferred.
+- A model Key must be verified against the official protocol before enabling a real adapter in runtime.
 - Plan 1 contracts stay frozen: `protocol`, `RealtimeAdapter`/`MockScript`, HTTP/WS, Bridge. (Post-review fixes only re-send existing messages; no shape changed. New values: Bridge error codes `bad_config`/`bad_message`, status `audio_suspended`.)
 
 ## Blockers
@@ -45,7 +46,7 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 1. Continue local-only client/app and gateway hardening without starting real adapters or changing frozen protocol contracts.
 2. Return to the deferred Xiaomi/desktop acceptance: real voice/VAD interruption, audible playback, active-response resume, network recovery, five actions, false-trigger sampling, true interruptions, and remaining Task 18 checks.
-3. Write Plan 2 only after a model Key is available and ADR-001 has real A/B data.
+3. Start Plan 2 with model Key/protocol verification; complete ADR-001 A/B measurement as a tracked follow-up before final audio-path and release decisions.
 
 ## Handed to Plan 2 (accepted minors / hardening, from the final review)
 
