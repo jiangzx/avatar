@@ -58,3 +58,11 @@ node /tmp/seeduplex_probe.mjs
 - 事件数 0，音频字节数 0；未发送 `session.create`、PCM、取消或工具结果事件。
 
 因此当前本地 Key/账号授权仍未被官方端点接受，真实适配器和实施计划继续阻塞。
+
+## 2026-10-14 Key 核对与成功复测
+
+- 对比发现：本地 `docs/seeduplex/developer_keys` 不是用户提供的 API Key，文件包含前缀文字且 UUID 不同；此前 401/403 的直接原因是使用了错误的 Key。
+- 使用用户提供的 Key（仅在进程内构造，未写入文件、日志或提交）和官方 Android 文档要求的 `X-Api-Key` 重新测试：WebSocket HTTP 101，收到 `session.created`。
+- 发送 640 字节静音 PCM、`input_audio_buffer.commit` 和文本合成触发后，收到 `input_audio_buffer.committed`、`response.output_audio.started`、多个 `response.output_audio.delta`、`response.output_audio.done`、`response.done`、`response.canceled`、`session.closed`；累计输出音频字节数为 49,798（仅记录字节数）。
+- 第二次测试收到 98,588 个输出音频字节，并验证了 `response.cancel` → `response.canceled`。
+- `conversation.item.create` 文本测试未触发响应；工具调用事件尚未出现，因此 Function Calling 和工具结果续答仍未验证。不能把文本合成事件当作模型工具调用测试。

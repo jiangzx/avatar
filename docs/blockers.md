@@ -38,3 +38,8 @@
 
 - 用户反馈权限已开通，但本地 Key 复测仍失败：WebSocket `X-Api-Key` 返回 403；HTTPS 预检使用 `X-Api-Key`、Bearer、双头均返回 401。
 - 未建立会话、未发送音频或对话事件。需确认本地 Key 已更新且绑定 Seeduplex 实时语音服务/项目后再复测。
+
+## 2026-10-14 Seeduplex Key 根因确认
+
+- 已确认此前失败是因为本地 `docs/seeduplex/developer_keys` 使用了不同的 Key。使用用户提供的 Key 后，WebSocket HTTP 101，收到会话、音频输出和取消确认事件。
+- 输出音频与 `response.cancel` 已验证；工具调用/工具结果续答尚未由模型触发，仍需使用可控的真实用户音频或官方工具调用样例完成验证。
