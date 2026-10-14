@@ -14,6 +14,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   private closed = false;
   private responseId: string | null = null;
   private eventCounter = 0;
+  private completedResponses = new Set<string>();
   private initialization: { resolve: () => void; reject: (error: Error) => void } | null = null;
   private connectTimer: NodeJS.Timeout | null = null;
   private readonly opts: Required<QwenOptions>;
@@ -78,11 +79,15 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     if (type === 'input_audio_buffer.speech_started') { this.emit('userSpeechStarted'); return; }
     if (type === 'conversation.item.input_audio_transcription.delta') { this.emit('userTranscript', String(e.delta ?? e.text ?? ''), false); return; }
     if (type === 'conversation.item.input_audio_transcription.completed') { this.emit('userTranscript', String(e.transcript ?? e.text ?? ''), true); return; }
-    if (type === 'response.audio.started') { this.responseId = this.responseIdFrom(e); this.emit('responseStarted', this.responseId); return; }
+    if (type === 'response.audio.started') { this.responseId = this.responseIdFrom(e); this.completedResponses.delete(this.responseId); this.emit('responseStarted', this.responseId); return; }
     if (type === 'response.audio.delta') { const pcm = decode(e.delta); if (pcm) this.emit('audioDelta', this.responseIdFrom(e), pcm); return; }
     if (type === 'response.audio_transcript.delta' || type === 'response.text.delta') { this.emit('textDelta', this.responseIdFrom(e), String(e.delta ?? '')); return; }
-    if (type === 'response.audio.done' || type === 'response.done') { this.emit('responseDone', this.responseIdFrom(e)); return; }
-    if (type === 'response.canceled') { this.emit('responseCancelled', this.responseIdFrom(e)); return; }
+    if (type === 'response.audio.done' || type === 'response.done') {
+      const id = this.responseIdFrom(e);
+      if (!this.completedResponses.has(id)) { this.completedResponses.add(id); this.emit('responseDone', id); }
+      return;
+    }
+    if (type === 'response.canceled') { const id = this.responseIdFrom(e); this.completedResponses.delete(id); this.emit('responseCancelled', id); return; }
     if (type === 'response.function_call_arguments.done') { const item = (e.item ?? e) as Json; let args: unknown = {}; try { args = JSON.parse(String(item.arguments ?? '{}')); } catch {} this.emit('toolCall', this.responseIdFrom(e), String(item.call_id ?? ''), String(item.name ?? ''), args); return; }
     if (type === 'error') {
       const err = e.error as Json | undefined;
