@@ -72,3 +72,5 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - 2026-10-14 Plan 2 validation after Qwen addition: `npm test` passed (protocol 6, gateway 100, avatar-core 84); `npm run typecheck` passed; `git diff --check` passed.
 
 - 2026-10-14 deployment runbook: documented WSS/TLS/IP-allowlist acceptance and environment-only model/App secrets in `docs/deployment/plan2-wss.md`; cloud target credentials and certificate remain external prerequisites.
+
+- 2026-10-14 Plan 2 release build validation: `cd app && flutter build apk --release --dart-define-from-file=dev.json` succeeded; APK size 77,762,308 bytes (hash recorded only as a local prefix), and `flutter analyze` reported no issues. This does not validate cloud WSS or real-device acceptance.
