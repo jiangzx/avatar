@@ -44,9 +44,9 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 ## Next steps
 
-1. Continue local-only client/app and gateway hardening without starting real adapters or changing frozen protocol contracts.
+1. Resolve the Seeduplex API Key/authorization blocker, then rerun the minimal protocol probe before creating the Plan 2 adapter implementation plan.
 2. Return to the deferred Xiaomi/desktop acceptance: real voice/VAD interruption, audible playback, active-response resume, network recovery, five actions, false-trigger sampling, true interruptions, and remaining Task 18 checks.
-3. Start Plan 2 with model Key/protocol verification; complete ADR-001 A/B measurement as a tracked follow-up before final audio-path and release decisions.
+3. Seeduplex protocol docs are recorded in `docs/research/seeduplex-protocol-validation.md`; the 2026-10-14 probe is blocked by HTTP 401/403 authentication responses. Keep `ADAPTER=mock` until a valid Key is verified; complete ADR-001 A/B measurement as a tracked follow-up.
 
 ## Handed to Plan 2 (accepted minors / hardening, from the final review)
 
@@ -58,3 +58,5 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - Untracked `.codegraph/` is the user's CodeGraph index; not ignored or committed by this work (user's call).
 - Progress ledger for this session lives in the git-ignored `.superpowers/sdd/` (per-task briefs, reports, diffs).
 - 2026-10-12: host Flutter was upgraded 3.41.2 → 3.47.7 (latest stable, via `flutter upgrade`; Dart 3.13.5, DevTools 2.60.0, revision abaf9c523), Android licenses accepted; `flutter doctor` all green. Re-ran `cd app && flutter pub get && flutter analyze && flutter test` → 19 passed, no issues. Version pins updated in the migration guide and plan overview.
+
+- 2026-10-14 Plan 2 protocol verification: official Seeduplex docs/demo were cross-checked. The local-key WebSocket probe returned HTTP 403 with `X-Api-Key` and HTTP 401 with Bearer auth before any event or audio was sent; validation and blocker are recorded in `docs/research/seeduplex-protocol-validation.md` and `docs/blockers.md`.
