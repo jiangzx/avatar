@@ -65,6 +65,11 @@
 
 - Official Qwen Realtime WebSocket docs verified: Bearer auth, workspace-specific WSS endpoint, `response.create`, `response.audio.delta`, and `response.audio_transcript.*`. Adapter core and sanitized fixtures are implemented. Live Qwen smoke remains pending a workspace endpoint and Key.
 
+## 2026-10-14 Qwen text summarizer
+
+- Official DashScope OpenAI-compatible text endpoint and Bearer authentication were verified; `QwenSummarizer` and sanitized HTTP fixtures are implemented with `MockSummarizer` still default.
+- Live summarizer smoke is pending a workspace-specific text endpoint and DASHSCOPE Key. No request was sent to a real text model.
+
 ## 2026-10-14 Plan 2 release APK device install
 
 - Xiaomi 22101317C was visible to `adb`; `adb reverse tcp:8787 tcp:8787` succeeded and the local gateway Mock process started.

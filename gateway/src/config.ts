@@ -14,6 +14,9 @@ export interface GatewayConfig {
   qwenEndpoint: string;
   qwenModel: string;
   qwenVoice: string;
+  summarizer: 'mock' | 'qwen';
+  summarizerEndpoint: string;
+  summarizerModel: string;
   allowDebugText: boolean;
   devOrigins: string[];
   /** MockAdapter speech threshold (RMS, 16-bit). TUNABLE (estimate, env MOCK_SPEECH_THRESHOLD); raise if speaker echo triggers fake turns. */
@@ -33,6 +36,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const qwenApiKey = env.DASHSCOPE_API_KEY;
   if (adapter === 'qwen' && !qwenApiKey) throw new Error('DASHSCOPE_API_KEY must be set when ADAPTER=qwen');
   if (adapter === 'qwen' && !env.QWEN_ENDPOINT) throw new Error('QWEN_ENDPOINT must be set when ADAPTER=qwen');
+  const summarizer = env.SUMMARIZER ?? 'mock';
+  if (summarizer !== 'mock' && summarizer !== 'qwen') throw new Error(`Unsupported SUMMARIZER \"${summarizer}\"`);
+  if (summarizer === 'qwen' && !qwenApiKey) throw new Error('DASHSCOPE_API_KEY must be set when SUMMARIZER=qwen');
+  if (summarizer === 'qwen' && !env.QWEN_SUMMARIZER_ENDPOINT) throw new Error('QWEN_SUMMARIZER_ENDPOINT must be set when SUMMARIZER=qwen');
   const port = Number(env.PORT ?? 8787);
   if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('PORT must be a valid port number');
   const mockSpeechThreshold = Number(env.MOCK_SPEECH_THRESHOLD ?? 800);
@@ -55,6 +62,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     qwenEndpoint: env.QWEN_ENDPOINT ?? '',
     qwenModel: env.QWEN_MODEL ?? 'qwen3.8-omni-flash-realtime',
     qwenVoice: env.QWEN_VOICE ?? 'longanlingxin',
+    summarizer,
+    summarizerEndpoint: env.QWEN_SUMMARIZER_ENDPOINT ?? '',
+    summarizerModel: env.QWEN_SUMMARIZER_MODEL ?? 'qwen-flash',
     allowDebugText: env.ALLOW_DEBUG_TEXT === '1',
     devOrigins: (env.DEV_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     mockSpeechThreshold,

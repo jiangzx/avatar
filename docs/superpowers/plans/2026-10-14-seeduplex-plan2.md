@@ -39,3 +39,7 @@
 ### Task 5: Qwen fallback adapter
 
 **Status: complete.** Added `gateway/src/adapters/qwen.ts`, explicit `ADAPTER=qwen` configuration, environment-only `DASHSCOPE_API_KEY`, workspace endpoint/model/voice settings, and sanitized fixture coverage. Official Qwen documentation was cross-checked for Bearer auth, workspace WSS endpoint, `response.create`, and audio event names.
+
+### Task 6: Rolling summarizer
+
+**Status: local implementation complete; live smoke pending.** Added `QwenSummarizer` using the verified OpenAI-compatible DashScope endpoint, explicit `SUMMARIZER=qwen` configuration, timeout/error handling, and sanitized HTTP fixtures. `MockSummarizer` remains the default. A real call requires a workspace-specific text endpoint and `DASHSCOPE_API_KEY`; no such live credentials are available in this workspace.

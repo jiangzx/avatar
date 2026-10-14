@@ -5,6 +5,7 @@ import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts'
 import { loadConfig, loadDirectorConfig, loadPersona, makeOriginCheck } from './config.ts';
 import { log } from './log.ts';
 import { MockSummarizer } from './session/ledger.ts';
+import { QwenSummarizer } from './session/qwenSummarizer.ts';
 import { SessionManager } from './session/manager.ts';
 import { Session } from './session/session.ts';
 import { createGatewayServer } from './server/server.ts';
@@ -38,7 +39,9 @@ const manager = new SessionManager(
         : config.adapter === 'qwen'
           ? new QwenAdapter({ apiKey: config.qwenApiKey!, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice })
           : new MockAdapter({ script, speech, instructionReplies, speechThreshold: config.mockSpeechThreshold }),
-      summarizer: new MockSummarizer(),
+      summarizer: config.summarizer === 'qwen'
+        ? new QwenSummarizer({ apiKey: config.qwenApiKey!, endpoint: config.summarizerEndpoint, model: config.summarizerModel })
+        : new MockSummarizer(),
       persona,
       director,
   }),
