@@ -29,7 +29,7 @@
 
 ### Task 3: Session lifecycle validation
 
-**Status: partial.** Existing Session tests cover fake-adapter cancellation, tool and rebuild semantics; a dedicated Seeduplex integration test remains before merging the adapter into the full acceptance path.
+**Status: partial.** Existing Session tests cover fake-adapter cancellation, tool and rebuild semantics; adapter fixture tests cover protocol translation. A dedicated full gateway integration smoke remains before product acceptance.
 
 ### Task 4: Real protocol smoke and docs
 

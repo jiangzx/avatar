@@ -75,3 +75,7 @@ node /tmp/seeduplex_probe.mjs
 ## 主动回复决策
 
 已采用固定、可配置的主动播报文本映射：Director 提示词只用于 Mock/上下文，Seeduplex 仅把 `greetingText`、`followupText`、`idleNoticeText`、`resumeText` 作为直接 TTS 文本发送。
+
+## Qwen 备用适配器资料核对
+
+已核对阿里云百炼官方 `Qwen-Omni-Realtime` 文档：WebSocket 使用绑定业务空间的 WSS 地址，查询参数 `model`，请求头 `Authorization: Bearer DASHSCOPE_API_KEY`；手动模式发送 `input_audio_buffer.append`、`input_audio_buffer.commit`、`response.create`，输出使用 `response.audio.delta` 和 `response.audio_transcript.delta/done`。仓库中的 Qwen 适配器只使用脱敏 fixture 测试；没有 Qwen Key 或业务空间地址，未进行真实连接。
