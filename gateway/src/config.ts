@@ -65,9 +65,13 @@ const DirectorSchema = z.object({
   windowMs: z.number().int().positive(),
   quietPhrases: z.array(z.string().min(1)),
   greetingInstruction: z.string().min(1),
+  greetingText: z.string().min(1),
   followupInstruction: z.string().min(1),
+  followupText: z.string().min(1),
   idleNoticeInstruction: z.string().min(1),
+  idleNoticeText: z.string().min(1),
   resumeInstruction: z.string().min(1),
+  resumeText: z.string().min(1),
 });
 
 export function loadDirectorConfig(path: string): DirectorConfig {

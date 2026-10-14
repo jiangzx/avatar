@@ -70,3 +70,8 @@ node /tmp/seeduplex_probe.mjs
 ## 适配器契约缺口
 
 官方资料把 `speech_text_buffer.commit` 定义为直接文本合成（打招呼或替换播报），没有发现通用 `response.create` 事件。现有 `RealtimeAdapter.createResponse(instructions?)` 参数是 Director 提示词；因此不能直接把该参数填入 `speech_text_buffer.commit.text`。真实适配器目前只可用于已收到用户音频后的服务端响应流和取消映射，Director 主动响应路径需先完成契约决策。
+
+
+## 主动回复决策
+
+已采用固定、可配置的主动播报文本映射：Director 提示词只用于 Mock/上下文，Seeduplex 仅把 `greetingText`、`followupText`、`idleNoticeText`、`resumeText` 作为直接 TTS 文本发送。

@@ -10,9 +10,13 @@ const cfg: DirectorConfig = {
   windowMs: 300000,
   quietPhrases: ['别说了'],
   greetingInstruction: 'G',
+  greetingText: 'greeting',
   followupInstruction: 'F',
+  followupText: 'followup',
   idleNoticeInstruction: 'I',
+  idleNoticeText: 'idle',
   resumeInstruction: 'R',
+  resumeText: 'resume',
 };
 
 function make(c: DirectorConfig = cfg) {

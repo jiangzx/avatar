@@ -10,6 +10,7 @@ export interface SeeduplexOptions {
   voice: string;
   connectTimeoutMs?: number;
   inputFrameMs?: number;
+  proactiveTexts?: ReadonlyMap<string, string>;
 }
 
 type Json = Record<string, unknown>;
@@ -27,11 +28,13 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
   private instructions = '';
   private tools: ToolSpec[] = [];
   private readonly opts: Required<Pick<SeeduplexOptions, 'endpoint' | 'model' | 'voice' | 'connectTimeoutMs' | 'inputFrameMs'>> & Pick<SeeduplexOptions, 'apiKey'>;
+  private readonly proactiveTexts: ReadonlyMap<string, string>;
 
   constructor(options: SeeduplexOptions) {
     super();
     if (!options.apiKey) throw new Error('SEEDUPLEX_API_KEY is required');
     this.opts = { endpoint: options.endpoint ?? 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', model: options.model ?? '1.2.6.1', voice: options.voice, connectTimeoutMs: options.connectTimeoutMs ?? 10000, inputFrameMs: options.inputFrameMs ?? 20, apiKey: options.apiKey };
+    this.proactiveTexts = options.proactiveTexts ?? new Map();
   }
 
   async connect(config: SessionConfig): Promise<void> {
@@ -64,7 +67,10 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
 
   sendUserText(text: string): void { if (this.connected) this.send({ type: 'speech_text_buffer.commit', event_id: this.eventId(), text }); }
   updateInstructions(text: string): void { this.instructions = text; if (this.connected) this.send({ type: 'session.update', event_id: this.eventId(), session: this.sessionPayload() }); }
-  createResponse(instructions?: string): void { if (this.connected) this.send({ type: 'speech_text_buffer.commit', event_id: this.eventId(), text: instructions ?? '' }); }
+  createResponse(instructions?: string): void {
+    const text = instructions === undefined ? '' : this.proactiveTexts.get(instructions);
+    if (this.connected && text) this.send({ type: 'speech_text_buffer.commit', event_id: this.eventId(), text });
+  }
   cancelResponse(): void { if (this.connected) this.send({ type: 'response.cancel', event_id: this.eventId() }); }
   sendToolResult(callId: string, result: unknown): void { if (this.connected) this.send({ type: 'conversation.item.create', event_id: this.eventId(), items: [{ type: 'message', role: 'tool', call_id: callId, content: [{ type: 'input_text', text: JSON.stringify(result) }] }] }); }
   injectContextNote(text: string): void { if (this.connected) this.send({ type: 'conversation.item.create', event_id: this.eventId(), items: [{ type: 'message', role: 'assistant', content: [{ type: 'input_text', text }] }] }); }

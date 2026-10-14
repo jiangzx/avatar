@@ -17,7 +17,7 @@ const script: MockScript = {
 
 const director: DirectorConfig = {
   followupAfterMs: 8000, idleNoticeAfterMs: 25000, maxConsecutive: 2, maxPerWindow: 3, windowMs: 300000,
-  quietPhrases: [], greetingInstruction: 'G', followupInstruction: 'F', idleNoticeInstruction: 'I', resumeInstruction: 'R',
+  quietPhrases: [], greetingInstruction: 'G', greetingText: 'greeting', followupInstruction: 'F', followupText: 'followup', idleNoticeInstruction: 'I', idleNoticeText: 'idle', resumeInstruction: 'R', resumeText: 'resume',
 };
 
 function collector() {

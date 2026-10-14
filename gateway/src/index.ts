@@ -22,12 +22,18 @@ const instructionReplies = new Map([
   [director.idleNoticeInstruction, script.idleNotice ?? script.followup],
   [director.resumeInstruction, script.resume ?? script.followup],
 ]);
+const proactiveTexts = new Map([
+  [director.greetingInstruction, director.greetingText],
+  [director.followupInstruction, director.followupText],
+  [director.idleNoticeInstruction, director.idleNoticeText],
+  [director.resumeInstruction, director.resumeText],
+]);
 
 const manager = new SessionManager(
   () =>
     new Session({
       adapterFactory: () => config.adapter === 'seeduplex'
-        ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
+        ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice, proactiveTexts })
         : new MockAdapter({ script, speech, instructionReplies, speechThreshold: config.mockSpeechThreshold }),
       summarizer: new MockSummarizer(),
       persona,

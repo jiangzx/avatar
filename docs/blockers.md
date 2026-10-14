@@ -49,3 +49,8 @@
 - 官方 Seeduplex 文档只定义 `speech_text_buffer.commit` 为“直接指定文本合成音频”，没有发现通用的 `response.create` 事件。
 - 现有冻结的 `RealtimeAdapter.createResponse(instructions?)` 接收 Director 提示词；若把该参数直接作为 `speech_text_buffer.commit.text`，模型会播报内部提示词，不能作为产品行为。
 - 当前 SeeduplexAdapter 已验证连接、用户音频触发、音频事件、取消和 fixture 映射，但 Director 迎宾/追问/恢复路径在该缺口解决前不得启用。需要明确：新增上游模型响应触发方式，或把 Director 产出的内容改为可直接播报文本并更新设计/契约。
+
+## 2026-10-14 Seeduplex proactive response decision
+
+- Adopted fixed, configurable proactive utterances for greeting/follow-up/idle/resume. Director keeps prompt instructions for Mock/model context, while Seeduplex maps exact instructions to `greetingText`/`followupText`/`idleNoticeText`/`resumeText` and sends only those texts through direct TTS.
+- This avoids speaking internal prompts. It is a POC behavior decision; model-generated proactive responses remain outside the verified Seeduplex protocol.

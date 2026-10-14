@@ -8,9 +8,13 @@ export interface DirectorConfig {
   windowMs: number;
   quietPhrases: string[];
   greetingInstruction: string;
+  greetingText: string;
   followupInstruction: string;
+  followupText: string;
   idleNoticeInstruction: string;
+  idleNoticeText: string;
   resumeInstruction: string;
+  resumeText: string;
 }
 
 export interface DirectorDeps {

@@ -25,7 +25,7 @@ describe('SeeduplexAdapter', () => {
       }
       if (event.type === 'response.cancel') socket.send(JSON.stringify({ type: 'response.canceled', response_id: 'r1' }));
     }));
-    const adapter = new SeeduplexAdapter({ apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture-voice' });
+    const adapter = new SeeduplexAdapter({ apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture-voice', proactiveTexts: new Map([['G', 'safe greeting']]) });
     const events: string[] = []; let samples = 0;
     adapter.on('responseStarted', (id) => events.push(`start:${id}`));
     adapter.on('textDelta', (_id, text) => events.push(`text:${text}`));
@@ -33,7 +33,7 @@ describe('SeeduplexAdapter', () => {
     adapter.on('toolCall', (_id, callId, name) => events.push(`tool:${callId}:${name}`));
     adapter.on('responseDone', (id) => events.push(`done:${id}`));
     adapter.on('responseCancelled', (id) => events.push(`cancel:${id}`));
-    await adapter.connect(config); await wait(); adapter.sendUserText('fixture'); await wait();
+    await adapter.connect(config); await wait(); adapter.createResponse('G'); await wait();
     expect(events).toEqual(['start:r1', 'text:fixture text', 'tool:c1:perform_action', 'done:r1']);
     expect(samples).toBe(2);
     adapter.cancelResponse(); await wait();
