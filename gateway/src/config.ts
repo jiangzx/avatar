@@ -5,11 +5,15 @@ import type { DirectorConfig } from './session/director.ts';
 export interface GatewayConfig {
   port: number;
   appSecret: string;
-  adapter: 'mock' | 'seeduplex';
+  adapter: 'mock' | 'seeduplex' | 'qwen';
   seeduplexApiKey?: string;
   seeduplexEndpoint: string;
   seeduplexModel: string;
   seeduplexVoice: string;
+  qwenApiKey?: string;
+  qwenEndpoint: string;
+  qwenModel: string;
+  qwenVoice: string;
   allowDebugText: boolean;
   devOrigins: string[];
   /** MockAdapter speech threshold (RMS, 16-bit). TUNABLE (estimate, env MOCK_SPEECH_THRESHOLD); raise if speaker echo triggers fake turns. */
@@ -23,9 +27,12 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (appSecret.length < 16) throw new Error('APP_SECRET must be set (at least 16 characters)');
   if (/^(change-me|same-as-)/i.test(appSecret)) throw new Error('APP_SECRET must be replaced (template placeholder)');
   const adapter = env.ADAPTER ?? 'mock';
-  if (adapter !== 'mock' && adapter !== 'seeduplex') throw new Error(`Unsupported ADAPTER \"${adapter}\"`);
+  if (adapter !== 'mock' && adapter !== 'seeduplex' && adapter !== 'qwen') throw new Error(`Unsupported ADAPTER \"${adapter}\"`);
   const seeduplexApiKey = env.SEEDUPLEX_API_KEY;
   if (adapter === 'seeduplex' && !seeduplexApiKey) throw new Error('SEEDUPLEX_API_KEY must be set when ADAPTER=seeduplex');
+  const qwenApiKey = env.DASHSCOPE_API_KEY;
+  if (adapter === 'qwen' && !qwenApiKey) throw new Error('DASHSCOPE_API_KEY must be set when ADAPTER=qwen');
+  if (adapter === 'qwen' && !env.QWEN_ENDPOINT) throw new Error('QWEN_ENDPOINT must be set when ADAPTER=qwen');
   const port = Number(env.PORT ?? 8787);
   if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('PORT must be a valid port number');
   const mockSpeechThreshold = Number(env.MOCK_SPEECH_THRESHOLD ?? 800);
@@ -44,6 +51,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     seeduplexEndpoint: env.SEEDUPLEX_ENDPOINT ?? 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue',
     seeduplexModel: env.SEEDUPLEX_MODEL ?? '1.2.6.1',
     seeduplexVoice: env.SEEDUPLEX_VOICE ?? 'zh_male_xiaotian_jupiter_bigtts',
+    ...(qwenApiKey ? { qwenApiKey } : {}),
+    qwenEndpoint: env.QWEN_ENDPOINT ?? '',
+    qwenModel: env.QWEN_MODEL ?? 'qwen3.8-omni-flash-realtime',
+    qwenVoice: env.QWEN_VOICE ?? 'longanlingxin',
     allowDebugText: env.ALLOW_DEBUG_TEXT === '1',
     devOrigins: (env.DEV_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     mockSpeechThreshold,

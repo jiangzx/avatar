@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
+import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
 import { loadConfig, loadDirectorConfig, loadPersona, makeOriginCheck } from './config.ts';
 import { log } from './log.ts';
@@ -34,7 +35,9 @@ const manager = new SessionManager(
     new Session({
       adapterFactory: () => config.adapter === 'seeduplex'
         ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice, proactiveTexts })
-        : new MockAdapter({ script, speech, instructionReplies, speechThreshold: config.mockSpeechThreshold }),
+        : config.adapter === 'qwen'
+          ? new QwenAdapter({ apiKey: config.qwenApiKey!, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice })
+          : new MockAdapter({ script, speech, instructionReplies, speechThreshold: config.mockSpeechThreshold }),
       summarizer: new MockSummarizer(),
       persona,
       director,

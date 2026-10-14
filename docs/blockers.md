@@ -54,3 +54,7 @@
 
 - Adopted fixed, configurable proactive utterances for greeting/follow-up/idle/resume. Director keeps prompt instructions for Mock/model context, while Seeduplex maps exact instructions to `greetingText`/`followupText`/`idleNoticeText`/`resumeText` and sends only those texts through direct TTS.
 - This avoids speaking internal prompts. It is a POC behavior decision; model-generated proactive responses remain outside the verified Seeduplex protocol.
+
+## 2026-10-14 Qwen fallback adapter
+
+- Official Qwen Realtime WebSocket docs verified: Bearer auth, workspace-specific WSS endpoint, `response.create`, `response.audio.delta`, and `response.audio_transcript.*`. Adapter core and sanitized fixtures are implemented. Live Qwen smoke remains pending a workspace endpoint and Key.

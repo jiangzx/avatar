@@ -34,3 +34,8 @@
 ### Task 4: Real protocol smoke and docs
 
 **Status: partial.** Redacted direct-adapter smoke succeeded with HTTP 101, four audio deltas, response completion and cancellation. Tool invocation was not triggered by the available synthetic text path; device/audio fixture validation remains open. No key was written or logged.
+
+
+### Task 5: Qwen fallback adapter
+
+**Status: complete.** Added `gateway/src/adapters/qwen.ts`, explicit `ADAPTER=qwen` configuration, environment-only `DASHSCOPE_API_KEY`, workspace endpoint/model/voice settings, and sanitized fixture coverage. Official Qwen documentation was cross-checked for Bearer auth, workspace WSS endpoint, `response.create`, and audio event names.

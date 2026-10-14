@@ -22,7 +22,7 @@ describe('config', () => {
 
   it('parses defaults and dev origins', () => {
     const c = loadConfig({ APP_SECRET: 'x'.repeat(16), DEV_ORIGINS: 'http://localhost:5173, http://a.test' });
-    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, sessionStartTimeoutMs: 10000 });
+    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', qwenEndpoint: '', qwenModel: 'qwen3.8-omni-flash-realtime', qwenVoice: 'longanlingxin', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, sessionStartTimeoutMs: 10000 });
   });
 
   it('requires a key only when Seeduplex is explicitly selected', () => {
@@ -31,6 +31,13 @@ describe('config', () => {
     expect(c.adapter).toBe('seeduplex');
     expect(c.seeduplexApiKey).toBe('test-key');
     expect(c.seeduplexVoice).toBe('test-voice');
+  });
+
+  it('requires Qwen endpoint and key only when Qwen is explicitly selected', () => {
+    expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), ADAPTER: 'qwen' })).toThrow(/DASHSCOPE_API_KEY/);
+    const c = loadConfig({ APP_SECRET: 'x'.repeat(16), ADAPTER: 'qwen', DASHSCOPE_API_KEY: 'test-key', QWEN_ENDPOINT: 'wss://workspace.example/realtime' });
+    expect(c.adapter).toBe('qwen');
+    expect(c.qwenEndpoint).toContain('workspace.example');
   });
 
   it('validates the mock speech threshold', () => {
