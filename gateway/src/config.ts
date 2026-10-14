@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import type { DirectorConfig } from './session/director.ts';
+import type { LedgerOptions } from './session/ledger.ts';
 
 export interface GatewayConfig {
   port: number;
@@ -23,6 +24,12 @@ export interface GatewayConfig {
   mockSpeechThreshold: number;
   /** Maximum time to initialize an upstream model session after a WS claim. */
   sessionStartTimeoutMs: number;
+  confirmWindowMs: number;
+  ledger: LedgerOptions;
+  sessionGraceMs: number;
+  sessionUnclaimedMs: number;
+  wsHeartbeatMs: number;
+  wsMaxFramesPerSecond: number;
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): GatewayConfig {
@@ -50,6 +57,16 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (!Number.isInteger(sessionStartTimeoutMs) || sessionStartTimeoutMs < 100 || sessionStartTimeoutMs > 120_000) {
     throw new Error('SESSION_START_TIMEOUT_MS must be an integer between 100 and 120000');
   }
+  const confirmWindowMs = integerEnv(env, 'CONFIRM_WINDOW_MS', 300, 50, 5_000);
+  const ledger = {
+    keepRecentTurns: integerEnv(env, 'LEDGER_KEEP_RECENT_TURNS', 8, 1, 100),
+    summarizeAfterTurns: integerEnv(env, 'LEDGER_SUMMARIZE_AFTER_TURNS', 16, 1, 200),
+    summarizeAfterTokens: integerEnv(env, 'LEDGER_SUMMARIZE_AFTER_TOKENS', 6_000, 100, 100_000),
+  };
+  const sessionGraceMs = integerEnv(env, 'SESSION_GRACE_MS', 60_000, 100, 10 * 60_000);
+  const sessionUnclaimedMs = integerEnv(env, 'SESSION_UNCLAIMED_MS', 5 * 60_000, 100, 30 * 60_000);
+  const wsHeartbeatMs = integerEnv(env, 'WS_HEARTBEAT_MS', 10_000, 100, 5 * 60_000);
+  const wsMaxFramesPerSecond = integerEnv(env, 'WS_MAX_FRAMES_PER_SECOND', 100, 1, 500);
   return {
     port,
     appSecret,
@@ -69,7 +86,19 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     devOrigins: (env.DEV_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     mockSpeechThreshold,
     sessionStartTimeoutMs,
+    confirmWindowMs,
+    ledger,
+    sessionGraceMs,
+    sessionUnclaimedMs,
+    wsHeartbeatMs,
+    wsMaxFramesPerSecond,
   };
+}
+
+function integerEnv(env: Record<string, string | undefined>, key: string, fallback: number, min: number, max: number): number {
+  const value = Number(env[key] ?? fallback);
+  if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${key} must be an integer between ${min} and ${max}`);
+  return value;
 }
 
 const LOOPBACK_ORIGIN = /^http:\/\/127\.0\.0\.1:\d{1,5}$/;

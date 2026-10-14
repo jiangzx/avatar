@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-14 (device acceptance deferred; cloud deployment access blocked). Update at the end of every session.
+Last updated: 2026-10-15 (device acceptance deferred; cloud deployment access blocked). Update at the end of every session.
 
 ## Phases
 
@@ -64,6 +64,7 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - 2026-10-14 Seeduplex user-Key recheck: using `docs/seeduplex/Seeduplex_APIKey.txt` produced WebSocket HTTP 101, `session.created`, 47,906 output-audio bytes, `response.cancel` -> `response.canceled`, and `session.closed` with zero upstream errors. The intervening timeout was a local probe bug that misclassified binary WebSocket frames carrying UTF-8 JSON; the probe was corrected and the result is recorded in `docs/research/seeduplex-protocol-validation.md`. Function calling remains unverified.
 
 - 2026-10-15 Plan 2 local integration: `gateway/test/seeduplex.integration.test.ts` covers HTTP session creation through client WS startup and Seeduplex greeting audio; Qwen waits for `session.updated`, maps real `response.created`, sends `response.create` after debug text, deduplicates completion events, and has initialization failure coverage. Seeduplex mute/unmute keepalive and mute-state restoration across rebuild are covered. Full `npm test` passed (protocol 6, gateway 118, avatar-core 84); `npm run typecheck` passed.
+- 2026-10-15 gateway hardening configuration: confirmation window, ledger limits, session grace/unclaimed timeouts, WS heartbeat, and uplink frame rate are now validated environment settings and are passed through the production startup chain. Focused gateway tests passed (120); remaining hardening items and external acceptance stay open.
 
 - 2026-10-14 summarizer provider: verified the official DashScope OpenAI-compatible text protocol and added explicit `QwenSummarizer` with fixture tests. `MockSummarizer` remains the default; live summarization is pending a workspace-specific endpoint and Key. Evidence: `docs/research/qwen-text-summarizer.md`.
 

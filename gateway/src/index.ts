@@ -44,9 +44,11 @@ const manager = new SessionManager(
         : new MockSummarizer(),
       persona,
       director,
-  }),
-  undefined,
-  undefined,
+      ledger: config.ledger,
+      confirmWindowMs: config.confirmWindowMs,
+    }),
+  config.sessionGraceMs,
+  config.sessionUnclaimedMs,
   config.sessionStartTimeoutMs,
 );
 const server = createGatewayServer({
@@ -54,6 +56,8 @@ const server = createGatewayServer({
   appSecret: config.appSecret,
   allowedOrigin: makeOriginCheck(config.devOrigins),
   allowDebugText: config.allowDebugText,
+  heartbeatMs: config.wsHeartbeatMs,
+  maxFramesPerSecond: config.wsMaxFramesPerSecond,
 });
 
 server.listen(config.port, '0.0.0.0', () => log('gateway_listening', { port: config.port, adapter: config.adapter }));

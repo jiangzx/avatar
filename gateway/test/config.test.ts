@@ -22,7 +22,7 @@ describe('config', () => {
 
   it('parses defaults and dev origins', () => {
     const c = loadConfig({ APP_SECRET: 'x'.repeat(16), DEV_ORIGINS: 'http://localhost:5173, http://a.test' });
-    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', qwenEndpoint: '', qwenModel: 'qwen3.8-omni-flash-realtime', qwenVoice: 'longanlingxin', summarizer: 'mock', summarizerEndpoint: '', summarizerModel: 'qwen-flash', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, sessionStartTimeoutMs: 10000 });
+    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', qwenEndpoint: '', qwenModel: 'qwen3.8-omni-flash-realtime', qwenVoice: 'longanlingxin', summarizer: 'mock', summarizerEndpoint: '', summarizerModel: 'qwen-flash', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, sessionStartTimeoutMs: 10000, confirmWindowMs: 300, ledger: { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6000 }, sessionGraceMs: 60000, sessionUnclaimedMs: 300000, wsHeartbeatMs: 10000, wsMaxFramesPerSecond: 100 });
   });
 
   it('requires a key only when Seeduplex is explicitly selected', () => {
@@ -51,6 +51,22 @@ describe('config', () => {
   it('validates the mock speech threshold', () => {
     expect(loadConfig({ APP_SECRET: 'x'.repeat(16), MOCK_SPEECH_THRESHOLD: '1500' }).mockSpeechThreshold).toBe(1500);
     expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), MOCK_SPEECH_THRESHOLD: 'loud' })).toThrow(/MOCK_SPEECH_THRESHOLD/);
+  });
+
+  it('parses session and websocket hardening tunables', () => {
+    const c = loadConfig({ APP_SECRET: 'x'.repeat(16), CONFIRM_WINDOW_MS: '450', LEDGER_KEEP_RECENT_TURNS: '6', LEDGER_SUMMARIZE_AFTER_TURNS: '12', LEDGER_SUMMARIZE_AFTER_TOKENS: '5000', SESSION_GRACE_MS: '30000', SESSION_UNCLAIMED_MS: '120000', WS_HEARTBEAT_MS: '5000', WS_MAX_FRAMES_PER_SECOND: '80' });
+    expect(c.confirmWindowMs).toBe(450);
+    expect(c.ledger).toEqual({ keepRecentTurns: 6, summarizeAfterTurns: 12, summarizeAfterTokens: 5000 });
+    expect(c.sessionGraceMs).toBe(30000);
+    expect(c.sessionUnclaimedMs).toBe(120000);
+    expect(c.wsHeartbeatMs).toBe(5000);
+    expect(c.wsMaxFramesPerSecond).toBe(80);
+  });
+
+  it('rejects invalid hardening tunables', () => {
+    for (const [key, value] of [['CONFIRM_WINDOW_MS', '0'], ['LEDGER_KEEP_RECENT_TURNS', '0'], ['LEDGER_SUMMARIZE_AFTER_TURNS', '-1'], ['LEDGER_SUMMARIZE_AFTER_TOKENS', 'nope'], ['SESSION_GRACE_MS', '99'], ['SESSION_UNCLAIMED_MS', '99'], ['WS_HEARTBEAT_MS', '99'], ['WS_MAX_FRAMES_PER_SECOND', '0']] as const) {
+      expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), [key]: value })).toThrow(key);
+    }
   });
 
   it('allows loopback app origins and listed dev origins only', () => {
