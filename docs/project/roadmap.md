@@ -63,7 +63,7 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 
 - 2026-10-14 Seeduplex user-Key recheck: using `docs/seeduplex/Seeduplex_APIKey.txt` produced WebSocket HTTP 101, `session.created`, 47,906 output-audio bytes, `response.cancel` -> `response.canceled`, and `session.closed` with zero upstream errors. The intervening timeout was a local probe bug that misclassified binary WebSocket frames carrying UTF-8 JSON; the probe was corrected and the result is recorded in `docs/research/seeduplex-protocol-validation.md`. Function calling remains unverified.
 
-- 2026-10-14 Plan 2 local integration: `gateway/test/seeduplex.integration.test.ts` now covers HTTP session creation through client WS startup and Seeduplex greeting audio; Qwen session readiness now waits for `session.created` and has initialization failure coverage. Full `npm test` passed (protocol 6, gateway 110, avatar-core 84); `npm run typecheck` passed.
+- 2026-10-14 Plan 2 local integration: `gateway/test/seeduplex.integration.test.ts` now covers HTTP session creation through client WS startup and Seeduplex greeting audio; Qwen session readiness now waits for `session.created`, deduplicates completion events, and has initialization failure coverage. Full `npm test` passed (protocol 6, gateway 114, avatar-core 84); `npm run typecheck` passed.
 
 - 2026-10-14 summarizer provider: verified the official DashScope OpenAI-compatible text protocol and added explicit `QwenSummarizer` with fixture tests. `MockSummarizer` remains the default; live summarization is pending a workspace-specific endpoint and Key. Evidence: `docs/research/qwen-text-summarizer.md`.
 
