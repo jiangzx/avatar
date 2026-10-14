@@ -61,6 +61,8 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 
 - 2026-10-14 Plan 2 protocol verification: official Seeduplex docs/demo were cross-checked. The local-key WebSocket probe returned HTTP 403 with `X-Api-Key` and HTTP 401 with Bearer auth before any event or audio was sent; validation and blocker are recorded in `docs/research/seeduplex-protocol-validation.md` and `docs/blockers.md`.
 
+- 2026-10-14 Seeduplex user-Key recheck: using `docs/seeduplex/Seeduplex_APIKey.txt` produced WebSocket HTTP 101, `session.created`, 47,906 output-audio bytes, `response.cancel` -> `response.canceled`, and `session.closed` with zero upstream errors. The intervening timeout was a local probe bug that misclassified binary WebSocket frames carrying UTF-8 JSON; the probe was corrected and the result is recorded in `docs/research/seeduplex-protocol-validation.md`. Function calling remains unverified.
+
 - 2026-10-14 Plan 2 adapter core: added explicit `ADAPTER=seeduplex` configuration, environment-only key injection, Seeduplex WebSocket event/audio mapping, cancellation/tool-result translation, and sanitized local fixture tests. Full `npm test` (protocol 6, gateway 98, avatar-core 84) and `npm run typecheck` passed.
 
 - 2026-10-14 protocol contract audit: Seeduplex `speech_text_buffer.commit` is direct TTS, not a generic model response trigger. The existing Director instruction path therefore needs an explicit design decision before real adapter runtime enablement.

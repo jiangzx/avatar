@@ -23,6 +23,7 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
   private responseId: string | null = null;
   private responseStarted = new Set<string>();
   private connectTimer: NodeJS.Timeout | null = null;
+  private initialization: { resolve: () => void; reject: (error: Error) => void } | null = null;
   private inputRemainder = new Int16Array(0);
   private eventCounter = 0;
   private instructions = '';
@@ -41,18 +42,32 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
     if (this.ws || this.closed) throw new Error('adapter_not_connectable');
     this.instructions = config.instructions;
     this.tools = config.tools;
-    const ws = new WebSocket(this.opts.endpoint, { headers: { 'X-Api-Key': this.opts.apiKey }, perMessageDeflate: false });
-    this.ws = ws;
-    ws.on('message', (data) => this.onMessage(data));
-    ws.on('error', () => { if (!this.closed) this.emit('error', 'upstream_socket_error', true); });
-    ws.on('close', () => { this.connected = false; if (!this.closed) this.emit('closed'); });
     await new Promise<void>((resolve, reject) => {
-      let settled = false;
-      const fail = (error: Error) => { if (settled) return; settled = true; this.clearConnectTimer(); reject(error); };
-      this.connectTimer = setTimeout(() => { ws.terminate(); fail(new Error('seeduplex_connect_timeout')); }, this.opts.connectTimeoutMs);
-      ws.once('open', () => { if (settled) return; settled = true; this.clearConnectTimer(); this.connected = true; this.sendSessionCreate(); resolve(); });
-      ws.once('error', (error) => fail(error instanceof Error ? error : new Error('seeduplex_connect_error')));
+      this.initialization = { resolve, reject };
+      const ws = new WebSocket(this.opts.endpoint, { headers: { 'X-Api-Key': this.opts.apiKey }, perMessageDeflate: false });
+      this.ws = ws;
+      ws.on('message', (data) => { if (!this.closed) this.onMessage(data); });
+      ws.on('error', () => {
+        if (this.initialization) this.failInitialization('seeduplex_connect_error');
+        else if (!this.closed) this.emit('error', 'upstream_socket_error', true);
+      });
+      ws.on('close', () => {
+        this.connected = false;
+        if (this.initialization) this.failInitialization('seeduplex_connect_closed');
+        else if (!this.closed) this.emit('closed');
+      });
+      this.connectTimer = setTimeout(() => this.failInitialization('seeduplex_connect_timeout'), this.opts.connectTimeoutMs);
+      ws.once('open', () => { if (!this.closed) this.sendSessionCreate(); });
     });
+  }
+
+  private failInitialization(code: string): void {
+    const initialization = this.initialization;
+    if (!initialization) return;
+    this.initialization = null;
+    this.clearConnectTimer();
+    initialization.reject(new Error(code));
+    this.close();
   }
 
   sendAudio(pcm16k: Int16Array): void {
@@ -74,7 +89,7 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
   cancelResponse(): void { if (this.connected) this.send({ type: 'response.cancel', event_id: this.eventId() }); }
   sendToolResult(callId: string, result: unknown): void { if (this.connected) this.send({ type: 'conversation.item.create', event_id: this.eventId(), items: [{ type: 'message', role: 'tool', call_id: callId, content: [{ type: 'input_text', text: JSON.stringify(result) }] }] }); }
   injectContextNote(text: string): void { if (this.connected) this.send({ type: 'conversation.item.create', event_id: this.eventId(), items: [{ type: 'message', role: 'assistant', content: [{ type: 'input_text', text }] }] }); }
-  close(): void { if (this.closed) return; this.closed = true; this.clearConnectTimer(); const ws = this.ws; this.ws = null; if (ws && ws.readyState === WebSocket.OPEN) { try { ws.send(JSON.stringify({ type: 'session.close', event_id: this.eventId() })); } catch {} ws.close(); } else ws?.terminate(); }
+  close(): void { if (this.closed) return; this.closed = true; this.connected = false; this.failInitialization('seeduplex_connect_closed'); this.clearConnectTimer(); const ws = this.ws; this.ws = null; if (ws && ws.readyState === WebSocket.OPEN) { try { ws.send(JSON.stringify({ type: 'session.close', event_id: this.eventId() })); } catch {} ws.close(); } else ws?.terminate(); }
 
   private sessionPayload(): Json { return { id: 'anyidea', model: this.opts.model, instructions: this.instructions, audio: { input: { format: { type: 'pcm', rate: MIC_SAMPLE_RATE } }, output: { format: { type: 'pcm_s16le', rate: AI_SAMPLE_RATE }, voice: this.opts.voice } }, tools: this.tools.map((tool) => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.parameters })) }; }
   private sendSessionCreate(): void { this.send({ type: 'session.create', event_id: this.eventId(), session: this.sessionPayload() }); }
@@ -86,7 +101,16 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
     try { event = JSON.parse(Buffer.isBuffer(data) ? data.toString('utf8') : String(data)) as Json; } catch { this.emit('error', 'upstream_invalid_json', false); return; }
     const type = typeof event.type === 'string' ? event.type : '';
     switch (type) {
-      case 'session.created': break;
+      case 'session.created': {
+        if (this.initialization) {
+          const initialization = this.initialization;
+          this.initialization = null;
+          this.clearConnectTimer();
+          this.connected = true;
+          initialization.resolve();
+        }
+        break;
+      }
       case 'session.updated': break;
       case 'conversation.item.input_audio_transcription.started': this.emit('userSpeechStarted'); break;
       case 'conversation.item.input_audio_transcription.delta': this.emit('userTranscript', typeof event.delta === 'string' ? event.delta : '', false); break;
@@ -97,7 +121,7 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
       case 'response.output_audio.done': { const id = this.responseIdFrom(event); this.emit('responseDone', id); break; }
       case 'response.canceled': { const id = this.responseIdFrom(event); this.emit('responseCancelled', id); if (this.responseId === id) this.responseId = null; break; }
       case 'response.function_call_arguments.done': { const id = this.responseIdFrom(event); const items = Array.isArray(event.items) ? event.items : []; for (const item of items) { const x = item as Json; let args: unknown = {}; try { args = JSON.parse(typeof x.arguments === 'string' ? x.arguments : '{}'); } catch {} this.emit('toolCall', id, String(x.call_id ?? ''), String(x.name ?? ''), args); } break; }
-      case 'error': this.emit('error', String((event.error as Json | undefined)?.code ?? event.code ?? 'upstream_error'), true); break;
+      case 'error': if (this.initialization) { this.failInitialization('seeduplex_session_rejected'); break; } this.emit('error', String((event.error as Json | undefined)?.code ?? event.code ?? 'upstream_error'), true); break;
       case 'session.closed': break;
       default: break;
     }

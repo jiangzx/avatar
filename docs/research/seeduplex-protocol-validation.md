@@ -67,6 +67,15 @@ node /tmp/seeduplex_probe.mjs
 - 第二次测试收到 98,588 个输出音频字节，并验证了 `response.cancel` → `response.canceled`。
 - `conversation.item.create` 文本测试未触发响应；工具调用事件尚未出现，因此 Function Calling 和工具结果续答仍未验证。不能把文本合成事件当作模型工具调用测试。
 
+## 2026-10-14 用户提供 Key 重跑与探针修正
+
+- 使用仓库内 `docs/seeduplex/Seeduplex_APIKey.txt` 的 Key（仅在进程内读取，不打印、不写入日志）再次连接官方端点。
+- WebSocket 握手 HTTP 101，耗时约 1.9 秒；收到 `session.created`，确认鉴权、endpoint 和模型会话初始化均可用。
+- 发送 640 字节静音 PCM、`input_audio_buffer.commit` 和 `speech_text_buffer.commit` 后，收到 `input_audio_buffer.committed`、`response.output_audio.started`、3 个 `response.output_audio.delta`（累计 47,906 字节）、`response.output_audio.done`、`response.done`。
+- 在输出开始后发送 `response.cancel`，收到 `response.canceled`；随后发送 `session.close`，收到 `session.closed`。本次错误事件数为 0。
+- 重跑前出现一次本地探针假失败：服务端把 JSON 事件作为 WebSocket binary frame 携带，探针原先直接标为 `binary`，没有解析 `session.created`，最终超时。修正为按 UTF-8 JSON 解析 binary frame 后复测成功；这不是服务端鉴权或模型错误。
+- 本次最小输入仍未触发 `response.function_call_arguments.done`，因此真实工具调用和工具结果续答保持未验证；不能把它们标记为成功。
+
 ## 适配器契约缺口
 
 官方资料把 `speech_text_buffer.commit` 定义为直接文本合成（打招呼或替换播报），没有发现通用 `response.create` 事件。现有 `RealtimeAdapter.createResponse(instructions?)` 参数是 Director 提示词；因此不能直接把该参数填入 `speech_text_buffer.commit.text`。真实适配器目前只可用于已收到用户音频后的服务端响应流和取消映射，Director 主动响应路径需先完成契约决策。

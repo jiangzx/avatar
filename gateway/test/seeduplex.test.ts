@@ -7,7 +7,7 @@ const wait = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('SeeduplexAdapter', () => {
   const servers: WebSocketServer[] = [];
-  afterEach(async () => { for (const server of servers) await new Promise<void>((resolve) => server.close(() => resolve())); });
+  afterEach(async () => { for (const server of servers) { for (const socket of server.clients) socket.terminate(); await new Promise<void>((resolve) => server.close(() => resolve())); } });
 
   it('maps documented session, audio, text, tool and cancel events without logging payloads', async () => {
     const server = new WebSocketServer({ port: 0 }); servers.push(server);
@@ -45,11 +45,70 @@ describe('SeeduplexAdapter', () => {
     const server = new WebSocketServer({ port: 0 }); servers.push(server);
     await new Promise<void>((resolve) => server.once('listening', resolve));
     const port = (server.address() as { port: number }).port;
-    server.on('connection', (socket) => socket.on('message', () => socket.send('{bad')));
+    server.on('connection', (socket) => socket.on('message', (raw) => {
+      if (JSON.parse(raw.toString()).type === 'session.create') {
+        socket.send(JSON.stringify({ type: 'session.created', session: { id: 'fixture' } }));
+        socket.send('{bad');
+      }
+    }));
     const adapter = new SeeduplexAdapter({ apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture-voice' });
     const errors: Array<[string, boolean]> = []; adapter.on('error', (code, retryable) => errors.push([code, retryable]));
     await adapter.connect(config); await wait();
     expect(errors).toEqual([['upstream_invalid_json', false]]);
     adapter.close();
   });
+  it('does not become ready or send audio until session.created arrives', async () => {
+    const server = new WebSocketServer({ port: 0 }); servers.push(server);
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const port = (server.address() as { port: number }).port;
+    let acknowledge: () => void = () => {};
+    let receivedCreate!: () => void;
+    const created = new Promise<void>((resolve) => { receivedCreate = resolve; });
+    const audio: string[] = [];
+    server.on('connection', (socket) => socket.on('message', (raw) => {
+      const event = JSON.parse(raw.toString());
+      if (event.type === 'session.create') {
+        acknowledge = () => socket.send(JSON.stringify({ type: 'session.created', session: { id: 'fixture' } }));
+        receivedCreate();
+      }
+      if (event.type === 'input_audio_buffer.append') audio.push(event.type);
+    }));
+    const adapter = new SeeduplexAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture' });
+    try {
+      let ready = false;
+      const connecting = adapter.connect(config).then(() => { ready = true; });
+      await created;
+      adapter.sendAudio(new Int16Array(320));
+      await wait();
+      expect(ready).toBe(false);
+      expect(audio).toEqual([]);
+      acknowledge();
+      await connecting;
+      expect(ready).toBe(true);
+    } finally { adapter.close(); }
+  });
+
+  it.each(['timeout', 'upstream_error', 'socket_close', 'intentional_close'] as const)(
+    'rejects initialization on %s without a ready session', async (failure) => {
+      const server = new WebSocketServer({ port: 0 }); servers.push(server);
+      await new Promise<void>((resolve) => server.once('listening', resolve));
+      const port = (server.address() as { port: number }).port;
+      const adapter = new SeeduplexAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture', connectTimeoutMs: 100 });
+      server.on('connection', (socket) => socket.on('message', (raw) => {
+        if (JSON.parse(raw.toString()).type !== 'session.create') return;
+        if (failure === 'upstream_error') socket.send(JSON.stringify({ type: 'error', error: { code: 'fixture_denied', message: 'must not propagate upstream content' } }));
+        if (failure === 'socket_close') socket.close();
+        if (failure === 'intentional_close') adapter.close();
+      }));
+      const closed: string[] = [];
+      adapter.on('closed', () => closed.push('closed'));
+      try {
+        const expected = { timeout: 'seeduplex_connect_timeout', upstream_error: 'seeduplex_session_rejected', socket_close: 'seeduplex_connect_closed', intentional_close: 'seeduplex_connect_closed' }[failure];
+        await expect(adapter.connect(config)).rejects.toThrow(expected);
+        await wait();
+        if (failure === 'intentional_close') expect(closed).toEqual([]);
+      } finally { adapter.close(); }
+    },
+  );
+
 });

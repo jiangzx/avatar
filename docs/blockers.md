@@ -44,6 +44,12 @@
 - 已确认此前失败是因为本地 `docs/seeduplex/developer_keys` 使用了不同的 Key。使用用户提供的 Key 后，WebSocket HTTP 101，收到会话、音频输出和取消确认事件。
 - 输出音频与 `response.cancel` 已验证；工具调用/工具结果续答尚未由模型触发，仍需使用可控的真实用户音频或官方工具调用样例完成验证。
 
+## 2026-10-14 Seeduplex 用户 Key 重跑
+
+- 使用 `docs/seeduplex/Seeduplex_APIKey.txt` 中的用户 Key 重跑，WebSocket HTTP 101，收到 `session.created`、输出音频和 `response.canceled`，错误事件数为 0。
+- 另一次本地探针超时是探针把 binary frame 中承载的 JSON 误判为非 JSON，已修正探针解析后复测通过；不属于服务端失败。
+- Function Calling 仍未被最小输入触发，工具结果续答继续保留为未决项。
+
 ## 2026-10-14 Seeduplex response.create 契约缺口
 
 - 官方 Seeduplex 文档只定义 `speech_text_buffer.commit` 为“直接指定文本合成音频”，没有发现通用的 `response.create` 事件。
