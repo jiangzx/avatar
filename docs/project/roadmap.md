@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-15 (local gateway-first debugging; cloud deployment deferred by user). Update at the end of every session.
+Last updated: 2026-10-16 (local gateway-first debugging; cloud deployment deferred by user). Update at the end of every session.
 
 ## Phases
 
@@ -44,7 +44,7 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 ## Next steps
 
-1. Keep the local Mock gateway running for phone debugging; debug APK installation is complete. Execute the deferred Plan 1/1.1/2 device acceptance checks against the ADB-reversed local service.
+1. Keep the local Mock gateway running for phone debugging; debug APK installation is complete. Add anonymous VAD edge/level observability, then execute the deferred Plan 1/1.1/2 device acceptance checks against the ADB-reversed local service.
 2. Return to the deferred Xiaomi/desktop acceptance: real voice/VAD interruption, audible playback, active-response resume, network recovery, five actions, false-trigger sampling, true interruptions, and remaining Task 18 checks.
 3. Seeduplex protocol docs and successful key validation are recorded in `docs/research/seeduplex-protocol-validation.md`; `ADAPTER=mock` remains the default, while `ADAPTER=seeduplex` requires an explicit environment key. Complete ADR-001 A/B measurement as a tracked follow-up.
 4. Only after phone debugging and its evidence are complete, resume the cloud WSS deployment plan.
@@ -102,3 +102,4 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - 2026-10-15 real interruption sample: user confirmed 3/3 real interruptions stopped promptly with no audible stale audio; gateway emitted 3 local cancellation events (seq 58–60). This is qualitative evidence only; latency P50/P90, subtitle finalization and the full interruption sample remain unverified. See the native audio report.
 
 - 2026-10-15 interruption follow-up: user completed 7 more interruptions and reported normal behavior, bringing the qualitative manual sample to 10/10 with no reported stale audio. The gateway window contains additional local cancellations, but no per-attempt timestamp correlation; latency percentiles, subtitle finalization, false-trigger rate and Plan 1’s 20-attempt requirement remain unverified.
+- 2026-10-16 controlled interruption follow-up: gateway 129 tests, full JS tests/typecheck, Flutter 40 tests, analyzer, and diff check passed. A temporary MOCK_PACE_FACTOR=0.5 run reproduced choppy playback because 100 ms chunks were sent every 200 ms; clean runs at factors 2 and 1 removed that configured underrun, but the user still heard the same response continue after saying “停”. During the controlled window no matching active response_cancel(source=local) was observed, so the remaining blocker is local VAD detection/timing on the Xiaomi device, not proven stale PCM. Add anonymous VAD event/level observability before tuning.
