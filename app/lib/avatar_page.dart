@@ -165,6 +165,10 @@ class _AvatarPageState extends State<AvatarPage> {
 
   void _onNativeEvent(NativeUiEvent event) {
     if (!mounted) return;
+    if (event is UiDiag) {
+      setState(() => _diag[event.key] = event.value);
+      return;
+    }
     unawaited(_send(event.toJson()));
     switch (event) {
       case UiStatus(:final status):
@@ -180,7 +184,7 @@ class _AvatarPageState extends State<AvatarPage> {
         setState(() => _metrics.add(name, ms.toDouble()));
       case UiError(:final code):
         setState(() => _error = _errorLabel(code));
-      case UiResponseStart() || UiResponseEnd() || UiResponseCancelled() || UiAvatarAction() || UiAvatarEmotion() || UiAudioLevel():
+      case UiResponseStart() || UiResponseEnd() || UiResponseCancelled() || UiAvatarAction() || UiAvatarEmotion() || UiAudioLevel() || UiDiag():
         break;
     }
   }

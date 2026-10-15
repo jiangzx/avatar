@@ -75,6 +75,16 @@ class UiAudioLevel extends NativeUiEvent {
   Map<String, Object> toJson() => {'type': 'audio.level', 'rms': rms, 'zcr': zcr, 'dtMs': dtMs};
 }
 
+class UiDiag extends NativeUiEvent {
+  const UiDiag(this.key, this.value);
+
+  final String key;
+  final String value;
+
+  @override
+  Map<String, Object> toJson() => {'type': 'diag', 'key': key, 'value': value};
+}
+
 class UiMetric extends NativeUiEvent {
   const UiMetric({required this.name, required this.ms});
   final String name;

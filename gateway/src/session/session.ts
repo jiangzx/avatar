@@ -64,6 +64,8 @@ export class Session {
   private readonly rebuildMicBuffer: Int16Array[] = [];
   private summarizeRetryAt = 0;
   private summarizeBackoffMs = 1_000;
+  private vadSpeakingCount = 0;
+  private vadSilentCount = 0;
 
   constructor(private readonly deps: SessionDeps) {
     this.ledger = new ConversationLedger(deps.ledger ?? DEFAULT_LEDGER_OPTIONS);
@@ -124,6 +126,13 @@ export class Session {
     switch (msg.type) {
       case 'vad': {
         const speaking = msg.state === 'speaking';
+        if (speaking) this.vadSpeakingCount++;
+        else this.vadSilentCount++;
+        log('vad_edge', {
+          state: msg.state,
+          count: speaking ? this.vadSpeakingCount : this.vadSilentCount,
+          activeSeq: this.interrupt.active ?? 0,
+        });
         this.interrupt.onLocalVad(speaking);
         this.director.onUserSpeech(speaking);
         break;

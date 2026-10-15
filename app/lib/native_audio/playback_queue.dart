@@ -17,6 +17,7 @@ class PlaybackQueue {
   bool get isEnded => _ended;
   bool get isStopped => _stopped;
   bool get hasFedSamples => _fedSamples > 0;
+  int get fedSamples => _fedSamples;
   int get playedMs => (_playedSamples * 1000 / sampleRate).round();
 
   void start(int responseSeq) {

@@ -28,6 +28,88 @@ void main() {
     );
   });
 
+  test('drops same response audio after local VAD cancellation', () async {
+    final f = SessionFakes();
+    final c = f.controller();
+    await c.start();
+    f.client.emit(const ResponseStart(3, 'reply'));
+    await Future<void>.delayed(Duration.zero);
+    for (var i = 0; i < 4; i++) {
+      f.audio.emitFrame(Int16List(320)..fillRange(0, 320, 2000));
+    }
+    await Future<void>.delayed(Duration.zero);
+    f.client.emitAudio(3, Int16List(2400));
+    await Future<void>.delayed(Duration.zero);
+    expect(f.audio.acceptedSequences, isEmpty);
+  });
+
+  test('accepts a fresh response sequence after local cancellation', () async {
+    final f = SessionFakes();
+    final c = f.controller();
+    await c.start();
+    f.client.emit(const ResponseStart(3, 'reply'));
+    await Future<void>.delayed(Duration.zero);
+    for (var i = 0; i < 4; i++) {
+      f.audio.emitFrame(Int16List(320)..fillRange(0, 320, 2000));
+    }
+    await Future<void>.delayed(Duration.zero);
+    f.client.emit(const ResponseStart(4, 'reply'));
+    await Future<void>.delayed(Duration.zero);
+    f.client.emitAudio(4, Int16List(2400));
+    await Future<void>.delayed(Duration.zero);
+    expect(f.audio.acceptedSequences, [4]);
+  });
+
+  test('reports playback completion, cancellation, and error only once', () async {
+    final f = SessionFakes();
+    final c = f.controller();
+    await c.start();
+
+    f.client.emit(const ResponseStart(1, 'reply'));
+    await Future<void>.delayed(Duration.zero);
+    f.audio.emitPlaybackEnded(1);
+    await Future<void>.delayed(Duration.zero);
+    f.audio.emitPlaybackEnded(1);
+    f.client.emit(const ResponseCancelled(1));
+    await Future<void>.delayed(Duration.zero);
+
+    f.client.emit(const ResponseStart(2, 'reply'));
+    await Future<void>.delayed(Duration.zero);
+    f.audio.emitPlaybackError(2);
+    await Future<void>.delayed(Duration.zero);
+    f.audio.emitPlaybackError(2);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      f.client.sent.whereType<PlaybackStopped>().map((m) => m.responseSeq),
+      [1, 2],
+    );
+    expect(f.events.whereType<UiResponseEnd>(), hasLength(1));
+    expect(f.events.whereType<UiResponseCancelled>(), hasLength(1));
+    expect(f.events.whereType<UiError>(), hasLength(1));
+  });
+
+  test('emits anonymous RMS range and playback sequence diagnostics', () async {
+    final f = SessionFakes();
+    final c = f.controller();
+    await c.start();
+    f.client.emit(const ResponseStart(3, 'reply'));
+    await Future<void>.delayed(Duration.zero);
+    for (var i = 0; i < 10; i++) {
+      f.audio.emitLevel(i.isEven ? 2000 : 400);
+    }
+
+    final diagnostic = f.events.whereType<UiDiag>().last;
+    expect(diagnostic.key, 'audio');
+    expect(diagnostic.value, contains('responseSeq=3'));
+    expect(diagnostic.value, contains('recentCount=10'));
+    expect(diagnostic.value, contains('recentAbove=5'));
+    expect(diagnostic.value, contains('acceptedChunks=0'));
+    expect(diagnostic.value, contains('droppedChunks=0'));
+    expect(diagnostic.value, isNot(contains('pcm')));
+    expect(diagnostic.value, isNot(contains('text')));
+  });
+
   test('drops old response audio after session.resumed', () async {
     final f = SessionFakes();
     final c = f.controller();
@@ -105,6 +187,7 @@ class SessionFakes {
 
 class FakeAudio implements NativeAudioIO {
   AudioFrameCallback? onFrame;
+  AudioLevelCallback? onLevel;
   void Function(PlayedAudio)? onPlaybackEnded;
   AudioPlaybackErrorCallback? onPlaybackError;
   Completer<void>? startResponseGate;
@@ -112,6 +195,19 @@ class FakeAudio implements NativeAudioIO {
   final acceptedSequences = <int>[];
   final stopCalls = <PlayedAudio>[];
   int startCalls = 0;
+  int? activeSeq;
+
+  @override
+  AudioPlaybackSnapshot get playbackSnapshot => AudioPlaybackSnapshot(
+    responseSeq: activeSeq,
+    state: activeSeq == null ? 'idle' : 'playing',
+    pendingChunks: 0,
+    feedInFlight: false,
+    fedSamples: 0,
+    playedMs: 0,
+    acceptedChunks: 0,
+    droppedChunks: 0,
+  );
 
   @override
   Future<void> start({
@@ -121,6 +217,7 @@ class FakeAudio implements NativeAudioIO {
     required AudioPlaybackErrorCallback onPlaybackError,
   }) async {
     this.onFrame = onFrame;
+    this.onLevel = onLevel;
     this.onPlaybackEnded = onPlaybackEnded;
     this.onPlaybackError = onPlaybackError;
     startCalls++;
@@ -128,6 +225,7 @@ class FakeAudio implements NativeAudioIO {
 
   @override
   Future<void> startResponse(int responseSeq) async {
+    activeSeq = responseSeq;
     operationOrder.add('start-begin');
     await startResponseGate?.future;
     operationOrder.add('start-end');
@@ -149,6 +247,7 @@ class FakeAudio implements NativeAudioIO {
   Future<PlayedAudio> stopResponse({required StopReason reason}) async {
     final result = const PlayedAudio(responseSeq: 3, playedMs: 42);
     stopCalls.add(result);
+    activeSeq = null;
     return result;
   }
 
@@ -160,8 +259,16 @@ class FakeAudio implements NativeAudioIO {
 
   void emitFrame(Int16List frame) => onFrame?.call(frame);
 
+  void emitLevel(double rms) => onLevel?.call(
+    AudioLevel(rms: rms, zcr: 0.1, sampleCount: 320),
+  );
+
+  void emitPlaybackEnded(int responseSeq) => onPlaybackEnded?.call(
+    PlayedAudio(responseSeq: responseSeq, playedMs: 42),
+  );
+
   void emitPlaybackError(int responseSeq) => onPlaybackError?.call(
-    const PlayedAudio(responseSeq: 3, playedMs: 42),
+    PlayedAudio(responseSeq: responseSeq, playedMs: 42),
     StateError('feed failed'),
   );
 }

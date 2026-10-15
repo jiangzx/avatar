@@ -33,6 +33,20 @@ class NativeSessionController implements GatewayClientEvents {
   int? _activeSeq;
   int _seqFloor = 0;
   int _lastLevelAt = 0;
+  int _levelCount = 0;
+  int _vadSpeakingCount = 0;
+  int _vadSilentCount = 0;
+  int _localCancelCount = 0;
+  int _rmsCount = 0;
+  double _rmsMin = double.infinity;
+  double _rmsMax = 0;
+  double _rmsLast = 0;
+  int _rmsRecentCount = 0;
+  int _rmsRecentAbove = 0;
+  double _rmsRecentMin = double.infinity;
+  double _rmsRecentMax = 0;
+  int _rmsAboveRunMs = 0;
+  int _rmsMaxAboveRunMs = 0;
   Future<void> _eventQueue = Future<void>.value();
 
   Future<void> start() async {
@@ -158,6 +172,7 @@ class NativeSessionController implements GatewayClientEvents {
         }
         detector.aiPlaying = true;
         emit(UiResponseStart(responseSeq: responseSeq, kind: kind));
+        _emitAudioDiag('response.start');
       case ResponseEnd(:final responseSeq):
         if (responseSeq > _seqFloor) await audio.endResponse(responseSeq);
       case ResponseCancelled(:final responseSeq):
@@ -171,6 +186,7 @@ class NativeSessionController implements GatewayClientEvents {
             playedMs: played.playedMs,
           ),
         );
+        _emitAudioDiag('response.cancelled');
       case TranscriptUser(:final text, :final isFinal):
         emit(UiSubtitle(role: 'user', text: text, isFinal: isFinal));
       case TranscriptAssistant(:final responseSeq, :final text):
@@ -202,11 +218,15 @@ class NativeSessionController implements GatewayClientEvents {
     if (!_muted) client.sendAudio(frame);
     switch (edge) {
       case SpeechEdge.speaking:
+        _vadSpeakingCount++;
+        _emitAudioDiag('vad.speaking');
         unawaited(_interruptThenReportSpeech());
       case SpeechEdge.silent:
+        _vadSilentCount++;
         client.send(
           VadMessage('silent', DateTime.now().millisecondsSinceEpoch),
         );
+        _emitAudioDiag('vad.silent');
       case SpeechEdge.none:
         break;
     }
@@ -214,6 +234,30 @@ class NativeSessionController implements GatewayClientEvents {
 
   void _onLevel(AudioLevel level) {
     if (_ended) return;
+    _levelCount++;
+    _rmsCount++;
+    _rmsLast = level.rms;
+    if (level.rms < _rmsMin) _rmsMin = level.rms;
+    if (level.rms > _rmsMax) _rmsMax = level.rms;
+    _rmsRecentCount++;
+    if (level.rms < _rmsRecentMin) _rmsRecentMin = level.rms;
+    if (level.rms > _rmsRecentMax) _rmsRecentMax = level.rms;
+    final frameMs = (level.sampleCount * 1000) ~/ micSampleRate;
+    if (level.rms >= defaultVadThresholdRms) {
+      _rmsRecentAbove++;
+      _rmsAboveRunMs += frameMs;
+      if (_rmsAboveRunMs > _rmsMaxAboveRunMs) _rmsMaxAboveRunMs = _rmsAboveRunMs;
+    } else {
+      _rmsAboveRunMs = 0;
+    }
+    final report = _levelCount % 10 == 0;
+    if (report) {
+      _emitAudioDiag('audio.level');
+      _rmsRecentCount = 0;
+      _rmsRecentAbove = 0;
+      _rmsRecentMin = double.infinity;
+      _rmsRecentMax = 0;
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     if (_lastLevelAt != 0 && now - _lastLevelAt < nativeBridgeLevelIntervalMs) {
       return;
@@ -236,6 +280,7 @@ class NativeSessionController implements GatewayClientEvents {
       UiResponseEnd(responseSeq: played.responseSeq, playedMs: played.playedMs),
     );
     emit(const UiState('idle'));
+    _emitAudioDiag('playback.ended');
   }
 
   void _onPlaybackError(PlayedAudio played, Object error) {
@@ -262,6 +307,7 @@ class NativeSessionController implements GatewayClientEvents {
     );
     emit(const UiState('idle'));
     emit(const UiError('audio_playback_failed'));
+    _emitAudioDiag('playback.error');
   }
 
   Future<void> _interruptThenReportSpeech() async {
@@ -279,6 +325,7 @@ class NativeSessionController implements GatewayClientEvents {
       if (seq != _activeSeq) return;
       _activeSeq = null;
       detector.aiPlaying = false;
+      if (sendStopped) _localCancelCount++;
       if (sendStopped) {
         client.send(PlaybackStopped(seq, played.playedMs, 'interrupted'));
       }
@@ -286,6 +333,7 @@ class NativeSessionController implements GatewayClientEvents {
         emit(UiResponseCancelled(responseSeq: seq, playedMs: played.playedMs));
       }
       emit(const UiState('listening'));
+      _emitAudioDiag(sendStopped ? 'local.cancel' : 'session.stop');
     } finally {
       _interrupting = false;
     }
@@ -294,4 +342,26 @@ class NativeSessionController implements GatewayClientEvents {
   String _errorCode(Object error) => error is GatewayHttpException
       ? 'gateway_http_${error.statusCode}'
       : 'audio_start_failed';
+
+  void _emitAudioDiag(String edge) {
+    final snapshot = audio.playbackSnapshot;
+    final min = _rmsCount == 0 ? 0 : _rmsMin.round();
+    final recentMin = _rmsRecentCount == 0 ? 0 : _rmsRecentMin.round();
+    emit(
+      UiDiag(
+        'audio',
+        'edge=$edge;rmsLast=${_rmsLast.round()};rmsMin=$min;'
+        'rmsMax=${_rmsMax.round()};rmsCount=$_rmsCount;'
+        'recentRmsMin=$recentMin;recentRmsMax=${_rmsRecentMax.round()};'
+        'recentCount=$_rmsRecentCount;recentAbove=$_rmsRecentAbove;'
+        'aboveRunMs=$_rmsAboveRunMs;maxAboveRunMs=$_rmsMaxAboveRunMs;'
+        'vadSpeaking=$_vadSpeakingCount;vadSilent=$_vadSilentCount;'
+        'responseSeq=${snapshot.responseSeq ?? 0};queue=${snapshot.state};'
+        'pending=${snapshot.pendingChunks};feed=${snapshot.feedInFlight ? 1 : 0};'
+        'fedSamples=${snapshot.fedSamples};playedMs=${snapshot.playedMs};'
+        'acceptedChunks=${snapshot.acceptedChunks};droppedChunks=${snapshot.droppedChunks};'
+        'localCancel=$_localCancelCount',
+      ),
+    );
+  }
 }

@@ -32,9 +32,33 @@ class PlayedAudio {
   final int playedMs;
 }
 
+class AudioPlaybackSnapshot {
+  const AudioPlaybackSnapshot({
+    required this.responseSeq,
+    required this.state,
+    required this.pendingChunks,
+    required this.feedInFlight,
+    required this.fedSamples,
+    required this.playedMs,
+    required this.acceptedChunks,
+    required this.droppedChunks,
+  });
+
+  final int? responseSeq;
+  final String state;
+  final int pendingChunks;
+  final bool feedInFlight;
+  final int fedSamples;
+  final int playedMs;
+  final int acceptedChunks;
+  final int droppedChunks;
+}
+
 enum StopReason { interrupted, ended, reset }
 
 abstract interface class NativeAudioIO {
+  AudioPlaybackSnapshot get playbackSnapshot;
+
   Future<void> start({
     required AudioFrameCallback onFrame,
     required AudioLevelCallback onLevel,

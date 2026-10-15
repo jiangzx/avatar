@@ -33,6 +33,26 @@ class PluginNativeAudioIO implements NativeAudioIO {
   bool _feedInFlight = false;
   Future<void>? _feedFuture;
   bool _inputEnabled = true;
+  int _acceptedChunks = 0;
+  int _droppedChunks = 0;
+
+  @override
+  AudioPlaybackSnapshot get playbackSnapshot => AudioPlaybackSnapshot(
+    responseSeq: _activeSeq,
+    state: _activeSeq == null
+        ? 'idle'
+        : _queue.isEnded
+            ? 'ended'
+            : _queue.isStopped
+                ? 'stopped'
+                : 'playing',
+    pendingChunks: _pending.length,
+    feedInFlight: _feedInFlight,
+    fedSamples: _queue.fedSamples,
+    playedMs: _queue.playedMs,
+    acceptedChunks: _acceptedChunks,
+    droppedChunks: _droppedChunks,
+  );
 
   @override
   Future<void> start({
@@ -77,8 +97,10 @@ class PluginNativeAudioIO implements NativeAudioIO {
   @override
   Future<void> pushResponse(int responseSeq, Int16List pcm24k) async {
     if (_activeSeq != responseSeq || !_queue.accept(responseSeq, pcm24k)) {
+      _droppedChunks++;
       return;
     }
+    _acceptedChunks++;
     _pending.add(_PendingChunk(responseSeq, Int16List.fromList(pcm24k)));
     await _drainPending();
     FlutterPcmSound.start();

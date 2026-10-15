@@ -145,3 +145,12 @@ Plan 1 原有桌面 Chrome 完整 E2E、方案 A/B 10 分钟对比和完整 Task
 - 随后以 MOCK_PACE_FACTOR=2 和 1 重启干净 Mock 网关并重建会话。2 倍速时用户仍反馈喊停后继续；1 倍速下使用较长中文脚本回复，用户再次反馈“同一句继续”。
 - 网关日志显示会话和响应序号正常递增，但受控操作期间没有与用户说“停”对应的活动响应 response_cancel(source=local)；出现的 response_cancel 要么发生在响应已 response_end 之后，要么来源为 model。因此当前证据更支持本地 VAD 漏检/时序问题，尚不能归因于 AudioTrack 仍播放同一序号的迟到 PCM。
 - 结论：Mock 连续播放节奏问题已定位并规避；真机语音打断仍未通过。下一步需要增加不含对话内容的 VAD 事件/音量可观测性，再针对小米设备调节能量阈值或确认录音链路是否在外放期间漏检。
+
+### 2026-10-16 匿名 VAD/播放队列观测与受控复测
+
+- 代码改动：Flutter 原生控制器新增匿名诊断事件，包含 speaking/silent 计数、累计与最近 RMS 区间/计数、超过阈值的连续毫秒数、当前 `responseSeq`、local cancel 次数，以及播放队列的状态、pending 数、feed in-flight、已送样本数和已播放毫秒。网关新增 `vad_edge` 日志，只记录 state/count/activeSeq；不记录音频、PCM、ASR 或回复文本。
+- 自动化验证：新增并通过同一序号取消后丢弃迟到 PCM、新序号重新入队、播放结束/取消/错误单次事件和匿名诊断字段测试。随后运行 `flutter test`、`flutter analyze`、`npm test`、`npm run typecheck` 与 `git diff --check`，结果见本次会话最终报告。
+- 构建/安装：`flutter build apk --debug --dart-define-from-file=dev.json` 成功；通过 `adb push` 与设备端 `pm install -r -d` 安装成功；`adb reverse tcp:8787 tcp:8787` 成功。网关使用本地 `app/dev.json` 中的 APP_SECRET 注入进程环境，`ADAPTER=mock`；`GET /healthz=200`、认证 `POST /session=200`，密钥未输出。
+- 首次新观测截图：`rmsMax=6217` 但 `vadSpeaking=0`、`vadSilent=0`、`localCancel=0`；当时网关的 `response_cancel(source=local)` 不能与语音边沿对应，更像提交调试文字时的本地取消，未据此调阈值。
+- 第二次受控样本（北京时间 2026-10-16 07:46:57 起）：面板显示 `vadSpeaking=5`、`vadSilent=5`、`rmsMax=9600`、`maxAboveRunMs=300`、`localCancel=1`。网关匿名事件序列为：`response.start seq=4` → `vad_edge silent count=1 activeSeq=4` → `response_cancel seq=4 source=local` → `vad_edge speaking count=1 activeSeq=0` → `response.start seq=5` → `response_end seq=5`。这证明一次真实 VAD 检出、同序号本地取消和新序号启动；`maxAboveRunMs=300` 已超过当前 `startMs=150`，没有调低阈值或缩短 startMs 的证据。
+- 听感与验收结论：用户反馈本次说“停”后仍继续或像同一句重复。该反馈与网关的 local cancel 同时存在，但没有同一时刻的 accepted/dropped chunk 快照，不能区分旧序号残留与新序号音频听感相似。随后已把 `acceptedChunks/droppedChunks` 加入播放快照并重装 APK；下一次窗口未出现活动响应期间的 local cancel，因此仍不能证明同序号 PCM 残留。可听停止、旧 PCM 残留、字幕终结和定量样本继续记为“未验证”，blocker #10 保持未解除。
