@@ -22,6 +22,8 @@ export interface GatewayConfig {
   devOrigins: string[];
   /** MockAdapter speech threshold (RMS, 16-bit). TUNABLE (estimate, env MOCK_SPEECH_THRESHOLD); raise if speaker echo triggers fake turns. */
   mockSpeechThreshold: number;
+  /** MockAdapter playback speed multiplier. TUNABLE (env MOCK_PACE_FACTOR). */
+  mockPaceFactor: number;
   /** Maximum time to initialize an upstream model session after a WS claim. */
   sessionStartTimeoutMs: number;
   confirmWindowMs: number;
@@ -57,6 +59,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const mockSpeechThreshold = Number(env.MOCK_SPEECH_THRESHOLD ?? 800);
   if (!Number.isInteger(mockSpeechThreshold) || mockSpeechThreshold < 100 || mockSpeechThreshold > 20000) {
     throw new Error('MOCK_SPEECH_THRESHOLD must be an integer between 100 and 20000');
+  }
+  const mockPaceFactor = Number(env.MOCK_PACE_FACTOR ?? 2);
+  if (!Number.isFinite(mockPaceFactor) || mockPaceFactor <= 0 || mockPaceFactor > 4) {
+    throw new Error('MOCK_PACE_FACTOR must be a number greater than 0 and at most 4');
   }
   const sessionStartTimeoutMs = Number(env.SESSION_START_TIMEOUT_MS ?? 10_000);
   if (!Number.isInteger(sessionStartTimeoutMs) || sessionStartTimeoutMs < 100 || sessionStartTimeoutMs > 120_000) {
@@ -96,6 +102,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     allowDebugText: env.ALLOW_DEBUG_TEXT === '1',
     devOrigins: (env.DEV_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     mockSpeechThreshold,
+    mockPaceFactor,
     sessionStartTimeoutMs,
     confirmWindowMs,
     ledger,
