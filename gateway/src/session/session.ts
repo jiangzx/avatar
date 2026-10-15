@@ -221,6 +221,7 @@ export class Session {
       this.pendingKind = null;
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
+      log('response_start', { seq: s.seq, kind: s.kind });
       this.director.onAiTurnStarted();
       const superseded = this.interrupt.onResponseStart(s.seq);
       if (superseded !== null) {
@@ -259,7 +260,10 @@ export class Session {
     });
     a.on('responseDone', (id) => {
       const s = this.live(a, id);
-      if (s) this.send({ type: 'response.end', responseSeq: s.seq });
+      if (s) {
+        log('response_end', { seq: s.seq });
+        this.send({ type: 'response.end', responseSeq: s.seq });
+      }
     });
     a.on('responseCancelled', (id) => {
       if (!current()) return;

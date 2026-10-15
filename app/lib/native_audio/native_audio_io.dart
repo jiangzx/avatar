@@ -31,6 +31,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
   int? _activeSeq;
   bool _playerReady = false;
   bool _feedInFlight = false;
+  Future<void>? _feedFuture;
   bool _inputEnabled = true;
 
   @override
@@ -107,7 +108,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
     final result = _queue.stop(reason);
     _activeSeq = null;
     _pending.clear();
-    _feedInFlight = false;
+    await _feedFuture;
     await _resetPlayback();
     return result;
   }
@@ -129,7 +130,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
     _onPlaybackError = null;
     _activeSeq = null;
     _pending.clear();
-    _feedInFlight = false;
+    await _feedFuture;
     if (_playerReady) {
       await FlutterPcmSound.release().catchError((_) => null);
       _playerReady = false;
@@ -183,15 +184,16 @@ class PluginNativeAudioIO implements NativeAudioIO {
   }
 
   Future<void> _drainPending() async {
-    if (_feedInFlight || _pending.isEmpty) return;
+    if (_feedInFlight) return;
+    if (_pending.isEmpty) return;
     final next = _pending.removeFirst();
     if (next.responseSeq != _activeSeq) return _drainPending();
     _feedInFlight = true;
     _queue.markFed(next.responseSeq, next.pcm.length);
+    final feed = _feedChunk(next);
+    _feedFuture = feed;
     try {
-      await FlutterPcmSound.feed(
-        PcmArrayInt16(bytes: ByteData.sublistView(next.pcm)),
-      );
+      await feed;
     } catch (error) {
       final failed = _queue.stop(StopReason.reset);
       _activeSeq = null;
@@ -205,8 +207,15 @@ class PluginNativeAudioIO implements NativeAudioIO {
       return;
     } finally {
       _feedInFlight = false;
+      _feedFuture = null;
     }
     await _drainPending();
+  }
+
+  Future<void> _feedChunk(_PendingChunk chunk) {
+    return FlutterPcmSound.feed(
+      PcmArrayInt16(bytes: ByteData.sublistView(chunk.pcm)),
+    );
   }
 
   void _finishPlaybackIfReady() {
