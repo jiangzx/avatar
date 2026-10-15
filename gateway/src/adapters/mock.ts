@@ -205,7 +205,29 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
 }
 
 export function loadMockScript(path: string): MockScript {
-  return JSON.parse(readFileSync(path, 'utf8')) as MockScript;
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    throw new Error('MOCK_SCRIPT_INVALID');
+  }
+  if (!isMockScript(value)) throw new Error('MOCK_SCRIPT_INVALID');
+  return value;
+}
+
+function isMockScript(value: unknown): value is MockScript {
+  if (!value || typeof value !== 'object') return false;
+  const script = value as Partial<MockScript>;
+  if (![script.greeting, script.followup, script.fallbackReply].every((v) => typeof v === 'string' && v.length > 0)) return false;
+  if (!Array.isArray(script.turns)) return false;
+  return script.turns.every((turn) => {
+    if (!turn || typeof turn !== 'object') return false;
+    const t = turn as Partial<MockTurn>;
+    if (typeof t.user !== 'string' || t.user.length === 0 || typeof t.reply !== 'string' || t.reply.length === 0) return false;
+    if (t.match !== undefined && typeof t.match !== 'string') return false;
+    if (t.tool === undefined) return true;
+    return !!t.tool && typeof t.tool === 'object' && typeof t.tool.name === 'string' && t.tool.name.length > 0 && 'args' in t.tool;
+  });
 }
 
 export function loadMockSpeech(path: string): Int16Array | undefined {

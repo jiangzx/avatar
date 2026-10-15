@@ -137,6 +137,15 @@ describe('Director', () => {
     expect(calls).toEqual([]);
   });
 
+  it('applies the per-window limit to resume announcements', () => {
+    const { d, calls } = make({ ...cfg, maxPerWindow: 1 });
+    d.pause();
+    d.resume();
+    d.pause();
+    d.resume();
+    expect(calls).toEqual([['followup', 'R']]);
+  });
+
   it('does nothing after stop', () => {
     const { d, calls } = make();
     d.onAiTurnEnded();

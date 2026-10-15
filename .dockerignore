@@ -1,0 +1,11 @@
+.git
+.codegraph
+.idea
+node_modules
+app
+avatar-core/node_modules
+docs/Qwen
+docs/seeduplex
+gateway/.env
+gateway/.env.production
+*.log

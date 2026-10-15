@@ -30,6 +30,11 @@ export interface GatewayConfig {
   sessionUnclaimedMs: number;
   wsHeartbeatMs: number;
   wsMaxFramesPerSecond: number;
+  maxSessions: number;
+  sessionRateLimitMax: number;
+  sessionRateLimitWindowMs: number;
+  rebuildBackoffBaseMs: number;
+  rebuildBackoffMaxMs: number;
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): GatewayConfig {
@@ -67,6 +72,12 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const sessionUnclaimedMs = integerEnv(env, 'SESSION_UNCLAIMED_MS', 5 * 60_000, 100, 30 * 60_000);
   const wsHeartbeatMs = integerEnv(env, 'WS_HEARTBEAT_MS', 10_000, 100, 5 * 60_000);
   const wsMaxFramesPerSecond = integerEnv(env, 'WS_MAX_FRAMES_PER_SECOND', 100, 1, 500);
+  const maxSessions = integerEnv(env, 'MAX_SESSIONS', 100, 1, 10_000);
+  const sessionRateLimitMax = integerEnv(env, 'SESSION_RATE_LIMIT_MAX', 10, 1, 1_000);
+  const sessionRateLimitWindowMs = integerEnv(env, 'SESSION_RATE_LIMIT_WINDOW_MS', 60_000, 100, 60 * 60_000);
+  const rebuildBackoffBaseMs = integerEnv(env, 'REBUILD_BACKOFF_BASE_MS', 1_000, 100, 60_000);
+  const rebuildBackoffMaxMs = integerEnv(env, 'REBUILD_BACKOFF_MAX_MS', 8_000, 100, 10 * 60_000);
+  if (rebuildBackoffMaxMs < rebuildBackoffBaseMs) throw new Error('REBUILD_BACKOFF_MAX_MS must be at least REBUILD_BACKOFF_BASE_MS');
   return {
     port,
     appSecret,
@@ -92,6 +103,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     sessionUnclaimedMs,
     wsHeartbeatMs,
     wsMaxFramesPerSecond,
+    maxSessions,
+    sessionRateLimitMax,
+    sessionRateLimitWindowMs,
+    rebuildBackoffBaseMs,
+    rebuildBackoffMaxMs,
   };
 }
 

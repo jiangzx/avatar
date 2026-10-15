@@ -16,11 +16,14 @@ export interface GatewayServerOptions {
   maxFramesPerSecond?: number;
   /** WS ping interval; a socket silent for a whole interval (no pong, no message) is dropped. */
   heartbeatMs?: number;
+  maxSessions?: number;
+  sessionRateLimit?: { max: number; windowMs: number };
 }
 
 export function createGatewayServer(opts: GatewayServerOptions): Server {
+  const rateLimiter = opts.sessionRateLimit ? new SessionRateLimiter(opts.sessionRateLimit) : null;
   const server = createServer((req, res) => {
-    handleHttp(req, res, opts).catch(() => {
+    handleHttp(req, res, opts, rateLimiter).catch(() => {
       if (!res.headersSent) json(res, 500, { error: 'internal' });
     });
   });
@@ -28,6 +31,12 @@ export function createGatewayServer(opts: GatewayServerOptions): Server {
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname !== '/ws') {
+      socket.destroy();
+      return;
+    }
+    const origin = req.headers.origin;
+    if (typeof origin === 'string' && !opts.allowedOrigin(origin)) {
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
       socket.destroy();
       return;
     }
@@ -50,7 +59,7 @@ export function createGatewayServer(opts: GatewayServerOptions): Server {
   return server;
 }
 
-async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions): Promise<void> {
+async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions, rateLimiter: SessionRateLimiter | null): Promise<void> {
   const origin = req.headers.origin;
   if (typeof origin === 'string' && opts.allowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
@@ -78,6 +87,15 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
     return;
   }
   if (path === '/session') {
+    if (opts.maxSessions !== undefined && opts.manager.size >= opts.maxSessions) {
+      json(res, 503, { error: 'session_capacity' });
+      return;
+    }
+    const source = req.socket.remoteAddress ?? 'unknown';
+    if (rateLimiter && !rateLimiter.allow(source)) {
+      json(res, 429, { error: 'rate_limited' });
+      return;
+    }
     json(res, 200, opts.manager.create());
     return;
   }
@@ -96,6 +114,24 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
     return;
   }
   json(res, 404, { error: 'not_found' });
+}
+
+class SessionRateLimiter {
+  private readonly attempts = new Map<string, number[]>();
+
+  constructor(private readonly opts: { max: number; windowMs: number }, private readonly now = Date.now) {}
+
+  allow(source: string): boolean {
+    const cutoff = this.now() - this.opts.windowMs;
+    const recent = (this.attempts.get(source) ?? []).filter((t) => t > cutoff);
+    if (recent.length >= this.opts.max) {
+      this.attempts.set(source, recent);
+      return false;
+    }
+    recent.push(this.now());
+    this.attempts.set(source, recent);
+    return true;
+  }
 }
 
 function bindConnection(ws: WebSocket, sessionId: string, connId: number, opts: GatewayServerOptions): void {

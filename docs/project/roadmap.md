@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-15 (device acceptance deferred; cloud deployment access blocked). Update at the end of every session.
+Last updated: 2026-10-15 (local gateway-first debugging; cloud deployment deferred by user). Update at the end of every session.
 
 ## Phases
 
@@ -8,7 +8,7 @@ Last updated: 2026-10-15 (device acceptance deferred; cloud deployment access bl
 |---|---|---|---|
 | Plan 1 | Mock-driven end-to-end on a Xiaomi phone: greeting, multi-turn, barge-in with zero residue, 5 actions, reconnect, Day 1 audio A/B spike | **Complete with blockers.** Code Tasks 0–17 implemented, reviewed and merged on `master`; Task 18 checklist/report written but every device/browser item is "not run". Not demonstrated on a device. | [plan1](../superpowers/plans/2026-10-12-avatar-poc-plan1/00-overview.md) |
 | Plan 1.1 | Flutter 原生采集/播放/VAD/网关会话，WebView 头像和界面 | **代码已合并至 `master`；小米启动冒烟和 30 分钟稳定性采样完成，完整真机验收延期，待本地后续任务完成后统一执行。** | [native-audio-path](../superpowers/plans/2026-10-13-native-audio-path-plan.md) |
-| Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | **In progress: Seeduplex/Qwen adapters, Qwen-compatible summarizer, local integration, and live Seeduplex/Qwen/text smoke are implemented; live Qwen cancellation, public deployment, and device acceptance remain.** | [seeduplex-plan2](../superpowers/plans/2026-10-14-seeduplex-plan2.md) |
+| Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | **In progress: local gateway-first debugging is now the active path. Seeduplex/Qwen adapters, Qwen-compatible summarizer, local integration, and live Seeduplex/Qwen/text smoke are implemented; debug APK installation and local phone connection are verified; full phone acceptance remains open. Cloud deployment is explicitly deferred until phone debugging is complete.** | [seeduplex-plan2](../superpowers/plans/2026-10-14-seeduplex-plan2.md) |
 
 Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-poc-design.md).
 
@@ -44,9 +44,10 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 ## Next steps
 
-1. Continue Plan 2 from `docs/superpowers/plans/2026-10-14-seeduplex-plan2.md`: finish adapter integration review, then add the remaining real-model, deployment and device tasks.
+1. Keep the local Mock gateway running for phone debugging; debug APK installation is complete. Execute the deferred Plan 1/1.1/2 device acceptance checks against the ADB-reversed local service.
 2. Return to the deferred Xiaomi/desktop acceptance: real voice/VAD interruption, audible playback, active-response resume, network recovery, five actions, false-trigger sampling, true interruptions, and remaining Task 18 checks.
 3. Seeduplex protocol docs and successful key validation are recorded in `docs/research/seeduplex-protocol-validation.md`; `ADAPTER=mock` remains the default, while `ADAPTER=seeduplex` requires an explicit environment key. Complete ADR-001 A/B measurement as a tracked follow-up.
+4. Only after phone debugging and its evidence are complete, resume the cloud WSS deployment plan.
 
 ## Handed to Plan 2 (accepted minors / hardening, from the final review)
 
@@ -86,6 +87,18 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 
 - 2026-10-14 cloud deployment attempt: Docker 27.3.1 was already installed; source and a root-only Qwen environment file were staged under `/opt/anyidea`, then Nginx/Certbot installation was started. The supplied SSH port began returning the Nginx default page, so the management channel is blocked. No container start, proxy config, DNS, TLS certificate, or public WSS acceptance is claimed; see `docs/blockers.md`.
 
+- 2026-10-15 cloud access recheck: SSH is restored and `sshd` is confirmed on port `9722`; port `22` is closed. Docker and the staged root-only environment file remain, but the gateway container, Nginx, Certbot, DNS, TLS, and public WSS are still not verified.
+
+- 2026-10-15 domain deployment: `aihero.com.cn` resolves correctly; systemd gateway and Nginx local proxy checks passed. Existing MySQL/Redis ports `3306/6379` were not changed. Let’s Encrypt HTTP-01 timed out because cloud security-group TCP 80/443 are not reachable; Docker image pull is also blocked by Docker Hub, so Compose remains staged while the same source runs under Node 24 systemd.
+
 - 2026-10-14 Plan 2 release build validation: `cd app && flutter build apk --release --dart-define-from-file=dev.json` succeeded; APK size 77,762,308 bytes (hash recorded only as a local prefix), and `flutter analyze` reported no issues. This does not validate cloud WSS or real-device acceptance.
 
 - 2026-10-14 device release smoke: Xiaomi 22101317C was connected and adb reverse succeeded, but release APK installation was rejected by Android (`INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`). No device acceptance result.
+- 2026-10-15 local-first debugging: gateway started locally with `ADAPTER=mock`, `GET /healthz` returned 200, authenticated `POST /session` returned session tokens, and `adb reverse tcp:8787 tcp:8787` succeeded. Debug web bundle and APK build succeeded, but APK installation was rejected by Android with `INSTALL_FAILED_USER_RESTRICTED`; phone debugging cannot proceed until device install confirmation is enabled. Cloud deployment is deferred until all phone debugging is complete.
+- 2026-10-15 local phone connection: the debug APK was installed with device-side `pm install -r -d` after the client-side install restriction; `MainActivity` is resumed, the local gateway emitted `session_created`, and device logs show native 16 kHz capture plus 24 kHz playback activity through the ADB-reversed gateway. Full voice, interruption, reconnect, and action acceptance remain open. Cloud deployment remains deferred.
+
+- 2026-10-15 local phone acceptance continuation: user confirmed audible playback and mouth movement. `adb reconnect` interrupted the USB channel; after restoring `adb reverse tcp:8787 tcp:8787`, the gateway TCP peer changed and emitted `session_resumed`, while app PID 6963 remained alive. Active-playback stale-audio checks, long disconnection, action matrix and interruption measurements remain open.
+
+- 2026-10-15 real interruption sample: user confirmed 3/3 real interruptions stopped promptly with no audible stale audio; gateway emitted 3 local cancellation events (seq 58–60). This is qualitative evidence only; latency P50/P90, subtitle finalization and the full interruption sample remain unverified. See the native audio report.
+
+- 2026-10-15 interruption follow-up: user completed 7 more interruptions and reported normal behavior, bringing the qualitative manual sample to 10/10 with no reported stale audio. The gateway window contains additional local cancellations, but no per-attempt timestamp correlation; latency percentiles, subtitle finalization, false-trigger rate and Plan 1’s 20-attempt requirement remain unverified.

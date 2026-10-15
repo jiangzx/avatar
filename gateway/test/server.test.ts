@@ -23,7 +23,7 @@ let server: Server | null = null;
 let manager: SessionManager | null = null;
 const sockets: WebSocket[] = [];
 
-async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugText?: boolean; heartbeatMs?: number; startTimeoutMs?: number; adapterConnect?: 'fail' | 'hang' } = {}) {
+async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugText?: boolean; heartbeatMs?: number; startTimeoutMs?: number; adapterConnect?: 'fail' | 'hang'; maxSessions?: number; sessionRateLimit?: { max: number; windowMs: number } } = {}) {
   manager = new SessionManager(
     () => new Session({
       adapterFactory: () => {
@@ -46,6 +46,8 @@ async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugTe
     allowedOrigin: makeOriginCheck([]),
     allowDebugText: opts.allowDebugText ?? true,
     heartbeatMs: opts.heartbeatMs,
+    maxSessions: opts.maxSessions,
+    sessionRateLimit: opts.sessionRateLimit,
   });
   await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
   const { port } = server.address() as AddressInfo;
@@ -128,6 +130,29 @@ describe('gateway server', () => {
     expect(good.headers.get('access-control-allow-origin')).toBe('http://127.0.0.1:39123');
     const bad = await fetch(`${base}/session`, { method: 'OPTIONS', headers: { origin: 'https://evil.example' } });
     expect(bad.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('rejects websocket upgrades from disallowed origins', async () => {
+    const base = await boot();
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    await expect(connect(base, t.connectToken, { origin: 'https://evil.example' })).rejects.toThrow('http_403');
+    expect(manager!.size).toBe(1);
+  });
+
+  it('rejects session creation when the session cap is reached', async () => {
+    const base = await boot({ maxSessions: 1 });
+    expect((await post(base, '/session')).status).toBe(200);
+    const limited = await post(base, '/session');
+    expect(limited.status).toBe(503);
+    expect(limited.json).toEqual({ error: 'session_capacity' });
+  });
+
+  it('rate limits session creation per source address', async () => {
+    const base = await boot({ sessionRateLimit: { max: 1, windowMs: 1000 } });
+    expect((await post(base, '/session')).status).toBe(200);
+    const limited = await post(base, '/session');
+    expect(limited.status).toBe(429);
+    expect(limited.json).toEqual({ error: 'rate_limited' });
   });
 
   it('rejects unknown and reused connect tokens', async () => {

@@ -159,6 +159,20 @@ describe('Session', () => {
     expect(s.mocks[0].instructions).toContain('用户：第二句');
   });
 
+  it('backs off repeated summarizer failures', async () => {
+    let calls = 0;
+    const s = setup({
+      ledger: { keepRecentTurns: 1, summarizeAfterTurns: 1, summarizeAfterTokens: 10_000 },
+      summarizer: { summarize: async () => { calls++; throw new Error('upstream'); } },
+    });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第一句' });
+    await Promise.resolve();
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第二句' });
+    await Promise.resolve();
+    expect(calls).toBe(1);
+  });
+
   it('rebuilds the model session after a drop, carrying the ledger', async () => {
     const s = setup();
     await greetAndFinish(s);
@@ -169,6 +183,47 @@ describe('Session', () => {
     expect(s.mocks).toHaveLength(2);
     expect(of(s.sent, 'error')).toContainEqual({ type: 'error', code: 'model_reconnecting', retryable: true });
     expect(s.mocks[1].instructions).toContain('用户：我叫老王');
+  });
+
+  it('retries a failed model rebuild with backoff', async () => {
+    let created = 0;
+    let first: MockAdapter;
+    const s = setup({ adapterFactory: () => {
+      const adapter = new MockAdapter({ script });
+      created++;
+      if (created === 1) first = adapter;
+      if (created === 2) vi.spyOn(adapter, 'connect').mockRejectedValue(new Error('temporary'));
+      return adapter;
+    } });
+    await s.session.start(s.transport);
+    first!.simulateDrop();
+    await Promise.resolve();
+    expect(created).toBe(2);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(created).toBe(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(created).toBe(3);
+  });
+
+  it('buffers a short mic tail while rebuilding and sends it after reconnect', async () => {
+    let created = 0;
+    let first: MockAdapter;
+    const sends: number[] = [];
+    const s = setup({ adapterFactory: () => {
+      const adapter = new MockAdapter({ script });
+      created++;
+      if (created === 1) first = adapter;
+      vi.spyOn(adapter, 'sendAudio').mockImplementation((pcm) => sends.push(pcm.length));
+      if (created === 2) vi.spyOn(adapter, 'connect').mockRejectedValue(new Error('temporary'));
+      return adapter;
+    } });
+    await s.session.start(s.transport);
+    first!.simulateDrop();
+    s.session.handleMicAudio(loud());
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(created).toBe(3);
+    expect(sends).toContain(320);
   });
 
   it('restores the upstream input mute state after rebuilding', async () => {

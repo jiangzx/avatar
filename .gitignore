@@ -17,3 +17,11 @@ avatar-core/public/animations/*.fbx
 app/assets/web/
 coverage/
 app/dev.json
+
+# local developer metadata and credential notes
+.codegraph/
+.idea/
+docs/Qwen/*
+docs/seeduplex/*
+!docs/Qwen/.gitkeep
+!docs/seeduplex/.gitkeep

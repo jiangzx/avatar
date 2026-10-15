@@ -12,6 +12,7 @@
 | 6 | 2026-10-12 | Task 17 Step 4b 复测 | 2 GB AVD 曾在 Silero 加载后被 lowmemorykiller 杀 renderer；真机另有独立 SIGABRT | AVD 的 OOM 与真机 renderer abort 是两件事；真机退出记录 PSS 433 MB，底层 abort 原因仍不明 | 产品页和 Spike A 的真实 VAD 运行未验证 | 更新 WebView/复现并定位 renderer SIGABRT；在稳定初始化后关闭此项 | 未解除 |
 | 7 | 2026-10-12 | Task 18 Step 0、2、3、4 | 完整 Mock E2E 尚未执行，桌面 Chrome 手动 E2E 仍未做 | 已有自动化回归和网关级无头证据；未新增产品页全链路、性能或人工语音指标 | Plan 1 不能宣称“真机可演示” | 先处理 #3/#6，再按清单记录 CSV，并完成桌面 Chrome E2E | 未解除 |
 | 8 | 2026-10-14 | Plan 1.1 真机语音验收 | 用户决定暂缓真实语音/VAD 打断、可听播放、活动响应续接、断线恢复和稳定性验收，待后续本地任务完成后统一执行 | 已保留 2026-10-13 的启动冒烟和 30 分钟采样；本次不把延期项标记为通过 | 暂不取得真实拾音、听感、打断延迟、断线续接和长稳数据 | 本地后续任务完成后，按 Plan 1.1/Task 18 清单回到小米真机统一验收 | 用户延期 |
+| 9 | 2026-10-15 | 本地优先手机调试：debug APK 安装 | 初次 `adb install -r` 被 Android 拒绝（`INSTALL_FAILED_USER_RESTRICTED`） | 改用 `adb push` 后由设备端 `pm install -r -d` 安装成功；应用 `MainActivity` 已 resumed，网关日志出现新的 `session_created`，设备侧观察到 16 kHz `AudioRecord` 与 24 kHz `AudioTrack`。本地连接已建立；真实语音、打断、重连和完整验收仍未宣称通过 | 按 Plan 1/1.1/2 清单完成手机人工验收 | 已解除（本地安装与连接） |
 
 ## 2026-10-13 Plan 1.1 更新
 
@@ -82,6 +83,18 @@
 - Nginx and Certbot installation was started, but the management channel became unavailable immediately afterward: ports checked through the public address returned the Nginx default page instead of an SSH handshake, including the supplied SSH port. No gateway container, reverse-proxy configuration, or certificate issuance was verified afterward.
 - No user-owned domain or DNS record was present in the supplied server information. The attempted temporary `sslip.io` name resolved to `198.18.0.84` from this network rather than `14.22.89.31`, so it is not a valid certificate target here.
 - Recovery requires the cloud provider console or a confirmed SSH port/port mapping. Do not claim public WSS, TLS, DNS, or IP allowlist acceptance until the management channel is restored and `GET /health`, HTTPS, and WSS are independently verified.
+
+## 2026-10-15 Cloud access recheck
+
+- SSH access is restored. Remote `ss` and `sshd -T` checks show `sshd` listening on `0.0.0.0:9722` and `[::]:9722`; port `22` refuses connections. Therefore `9722` is the SSH management port, not an application or Nginx port.
+- Docker 27.3.1 and Compose v2.29.7 remain installed; `/opt/anyidea/gateway/.env.production` remains root-owned with mode `600`. The gateway container is not running.
+- Nginx, Certbot, and the Nginx reverse proxy are not installed/active. Public WSS and TLS remain unverified.
+
+## 2026-10-15 Domain deployment
+
+- `aihero.com.cn` resolves to `14.22.89.31`. Gateway systemd service and Nginx are active; local health and App Secret status checks passed (200/401/200).
+- Existing MySQL and Redis public interfaces were preserved: containers remain running and listeners `3306`/`6379` were not changed. The only new firewall rule targets gateway port `8787`, allowing loopback and rejecting direct external access.
+- Let’s Encrypt HTTP-01 failed with a CA connection timeout because public TCP 80 is not reachable. Cloud security group access for TCP 80 and 443 is still required before public HTTPS/WSS acceptance.
 
 ## 2026-10-14 Plan 2 release APK device install
 

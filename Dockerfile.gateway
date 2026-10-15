@@ -1,0 +1,14 @@
+FROM node:24-bookworm-slim
+
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY protocol/package.json protocol/package.json
+COPY gateway/package.json gateway/package.json
+RUN npm ci --omit=optional
+
+COPY protocol protocol
+COPY gateway gateway
+
+WORKDIR /app/gateway
+ENV NODE_ENV=production
+CMD ["npm", "run", "start"]

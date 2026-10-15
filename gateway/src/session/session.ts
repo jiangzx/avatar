@@ -27,6 +27,8 @@ export interface SessionDeps {
   confirmWindowMs?: number;
   modelContextTokenLimit?: number;
   rebuildAfterTurns?: number;
+  rebuildBackoffBaseMs?: number;
+  rebuildBackoffMaxMs?: number;
 }
 
 interface ResponseState {
@@ -37,6 +39,8 @@ interface ResponseState {
   playedMs: number;
   finalized: boolean;
 }
+
+const MAX_REBUILD_MIC_FRAMES = 25;
 
 export class Session {
   readonly ledger: ConversationLedger;
@@ -55,6 +59,11 @@ export class Session {
   private charsSinceRebuild = 0;
   private rebuilding = false;
   private ended = false;
+  private rebuildTimer: NodeJS.Timeout | null = null;
+  private rebuildAttempt = 0;
+  private readonly rebuildMicBuffer: Int16Array[] = [];
+  private summarizeRetryAt = 0;
+  private summarizeBackoffMs = 1_000;
 
   constructor(private readonly deps: SessionDeps) {
     this.ledger = new ConversationLedger(deps.ledger ?? DEFAULT_LEDGER_OPTIONS);
@@ -102,7 +111,11 @@ export class Session {
   }
 
   handleMicAudio(pcm: Int16Array): void {
-    if (this.muted || this.rebuilding || this.ended) return;
+    if (this.muted || this.ended) return;
+    if (this.rebuilding || this.rebuildTimer) {
+      if (this.rebuildMicBuffer.length < MAX_REBUILD_MIC_FRAMES) this.rebuildMicBuffer.push(pcm.slice());
+      return;
+    }
     this.adapter.sendAudio(pcm);
   }
 
@@ -157,6 +170,9 @@ export class Session {
   end(): void {
     if (this.ended) return;
     this.ended = true;
+    if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
+    this.rebuildTimer = null;
+    this.rebuildMicBuffer.length = 0;
     this.stopKeepalive();
     this.director.stop();
     this.interrupt.dispose();
@@ -306,12 +322,19 @@ export class Session {
 
   private maybeSummarize(): void {
     if (!this.ledger.needsSummary()) return;
+    if (Date.now() < this.summarizeRetryAt) return;
     this.ledger
       .summarize(this.deps.summarizer)
       .then((applied) => {
+        this.summarizeRetryAt = 0;
+        this.summarizeBackoffMs = 1_000;
         if (applied && !this.ended) this.adapter.updateInstructions(this.instructions());
       })
-      .catch(() => log('summarize_failed'));
+      .catch(() => {
+        this.summarizeRetryAt = Date.now() + this.summarizeBackoffMs;
+        this.summarizeBackoffMs = Math.min(this.summarizeBackoffMs * 2, 30_000);
+        log('summarize_failed');
+      });
   }
 
   private maybeSlimContext(): void {
@@ -321,7 +344,7 @@ export class Session {
   }
 
   private async rebuild(reason: 'error' | 'closed' | 'slim'): Promise<void> {
-    if (this.rebuilding || this.ended) return;
+    if (this.rebuilding || this.rebuildTimer || this.ended) return;
     this.rebuilding = true;
     log('model_rebuild', { reason });
     if (reason !== 'slim') this.send({ type: 'error', code: 'model_reconnecting', retryable: true });
@@ -333,14 +356,30 @@ export class Session {
     try {
       await this.adapter.connect(this.sessionConfig());
       this.syncInputMute();
+      const buffered = this.rebuildMicBuffer.splice(0);
+      if (!this.muted) for (const pcm of buffered) this.adapter.sendAudio(pcm);
+      this.rebuildAttempt = 0;
       this.turnsSinceRebuild = 0;
       this.charsSinceRebuild = 0;
     } catch {
       log('model_rebuild_failed', { reason });
       this.send({ type: 'error', code: 'model_unavailable', retryable: true });
+      this.scheduleRebuild(reason);
     } finally {
       this.rebuilding = false;
     }
+  }
+
+  private scheduleRebuild(reason: 'error' | 'closed' | 'slim'): void {
+    if (this.ended || this.rebuildTimer) return;
+    const base = this.deps.rebuildBackoffBaseMs ?? 1_000;
+    const max = this.deps.rebuildBackoffMaxMs ?? 8_000;
+    const delay = Math.min(base * 2 ** this.rebuildAttempt, max);
+    this.rebuildAttempt++;
+    this.rebuildTimer = setTimeout(() => {
+      this.rebuildTimer = null;
+      void this.rebuild(reason);
+    }, delay);
   }
 
   private startKeepalive(): void {

@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { MockAdapter, loadMockScript, type MockScript } from '../src/adapters/mock.ts';
 
 const script: MockScript = {
   greeting: '你好',
@@ -113,5 +116,16 @@ describe('MockAdapter', () => {
     m.on('closed', () => seen.push('closed'));
     m.simulateDrop();
     expect(seen).toEqual(['mock_drop:true', 'closed']);
+  });
+
+  it('rejects malformed mock scripts before runtime', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'anyidea-mock-'));
+    const path = join(dir, 'script.json');
+    try {
+      writeFileSync(path, JSON.stringify({ greeting: 'hi', followup: '', fallbackReply: 'x', turns: [] }));
+      expect(() => loadMockScript(path)).toThrow(/MOCK_SCRIPT_INVALID/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

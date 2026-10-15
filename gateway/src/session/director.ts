@@ -82,7 +82,7 @@ export class Director {
   resume(): void {
     this.paused = false;
     this.consecutive = 0;
-    if (!this.blocked()) this.deps.requestResponse('followup', this.cfg.resumeInstruction);
+    if (!this.blocked() && this.takeSpeechSlot()) this.deps.requestResponse('followup', this.cfg.resumeInstruction);
   }
 
   stop(): void {
@@ -107,12 +107,17 @@ export class Director {
   private fire(instruction: string): void {
     this.timer = null;
     if (this.blocked()) return;
-    const now = Date.now();
-    this.history = this.history.filter((t) => now - t < this.cfg.windowMs);
-    if (this.history.length >= this.cfg.maxPerWindow) return;
-    this.history.push(now);
+    if (!this.takeSpeechSlot()) return;
     this.consecutive++;
     this.deps.requestResponse('followup', instruction);
+  }
+
+  private takeSpeechSlot(): boolean {
+    const now = Date.now();
+    this.history = this.history.filter((t) => now - t < this.cfg.windowMs);
+    if (this.history.length >= this.cfg.maxPerWindow) return false;
+    this.history.push(now);
+    return true;
   }
 
   private clear(): void {

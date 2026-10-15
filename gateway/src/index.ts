@@ -46,6 +46,8 @@ const manager = new SessionManager(
       director,
       ledger: config.ledger,
       confirmWindowMs: config.confirmWindowMs,
+      rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,
+      rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
     }),
   config.sessionGraceMs,
   config.sessionUnclaimedMs,
@@ -58,6 +60,8 @@ const server = createGatewayServer({
   allowDebugText: config.allowDebugText,
   heartbeatMs: config.wsHeartbeatMs,
   maxFramesPerSecond: config.wsMaxFramesPerSecond,
+  maxSessions: config.maxSessions,
+  sessionRateLimit: { max: config.sessionRateLimitMax, windowMs: config.sessionRateLimitWindowMs },
 });
 
 server.listen(config.port, '0.0.0.0', () => log('gateway_listening', { port: config.port, adapter: config.adapter }));
