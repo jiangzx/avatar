@@ -108,6 +108,31 @@ describe('QwenAdapter', () => {
     a.close();
   });
 
+  it('configures server-side speech detection and speaks a proactive instruction', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
+    let session: Record<string, unknown> | undefined;
+    const sent: Array<Record<string, unknown>> = [];
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString()) as Record<string, unknown>;
+      sent.push(e);
+      if (e.type === 'session.update') {
+        session = e.session as Record<string, unknown>;
+        ws.send(JSON.stringify({ type: 'session.created' }));
+        ws.send(JSON.stringify({ type: 'session.updated' }));
+      }
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture-voice' });
+    await a.connect({ instructions: 'fixture', tools: [] });
+    a.createResponse('fixture instruction');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(session?.turn_detection).toEqual({ type: 'semantic_vad', silence_duration_ms: 800 });
+    expect(session?.input_audio_transcription).toEqual({ model: 'qwen3-asr-flash-realtime' });
+    const tail = sent.slice(1);
+    expect(tail.map((e) => e.type)).toEqual(['conversation.item.create', 'response.create']);
+    expect(tail[0]?.item).toMatchObject({ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'fixture instruction' }] });
+    a.close();
+  });
+
   it.each(['timeout', 'upstream_error', 'socket_close', 'intentional_close'] as const)('rejects initialization on %s', async (failure) => {
     const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
     const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture', connectTimeoutMs: 100 });

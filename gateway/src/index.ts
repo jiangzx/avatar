@@ -48,6 +48,7 @@ const manager = new SessionManager(
       confirmWindowMs: config.confirmWindowMs,
       rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,
       rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
+      modelOwnsTurns: config.adapter === 'qwen',
     }),
   config.sessionGraceMs,
   config.sessionUnclaimedMs,

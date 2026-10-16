@@ -79,15 +79,10 @@ export class NativeAvatarController {
         this.transition('thinking');
         break;
       case 'response.end':
+        this.finishResponse(event.responseSeq, false);
+        break;
       case 'response.cancelled':
-        if (this.liveAssistantText) {
-          this.deps.post({ type: 'subtitle', role: 'assistant', text: this.liveAssistantText, final: true });
-          this.liveAssistantText = '';
-        }
-        if (this.activeSeq === event.responseSeq) this.activeSeq = null;
-        this.actions?.stopAll();
-        this.avatar?.setMouth(null);
-        this.transition('idle');
+        this.finishResponse(event.responseSeq, true);
         break;
       case 'avatar.action':
         this.actions?.play(event.action);
@@ -121,6 +116,17 @@ export class NativeAvatarController {
     this.avatar?.setRendering(false);
     this.avatar = null;
     this.actions = null;
+  }
+
+  private finishResponse(responseSeq: number, cancelled: boolean): void {
+    if (this.liveAssistantText) {
+      this.deps.post({ type: 'subtitle', role: 'assistant', text: this.liveAssistantText, final: true });
+      this.liveAssistantText = '';
+    }
+    if (this.activeSeq === responseSeq) this.activeSeq = null;
+    if (cancelled) this.actions?.stopAll();
+    this.avatar?.setMouth(null);
+    this.transition('idle');
   }
 
   private transition(next: AvatarState): void {

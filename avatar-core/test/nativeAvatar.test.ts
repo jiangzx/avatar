@@ -41,6 +41,25 @@ describe('NativeAvatarController', () => {
     expect(f.posts.at(-1)).toMatchObject({ type: 'subtitle', role: 'assistant', final: true });
   });
 
+  it('plays an action through the end of a reply and stops it only when cancelled', async () => {
+    const f = nativeAvatarFakes();
+    const plays: string[] = [];
+    const stops: string[] = [];
+    f.deps.createActions = () => ({
+      play(action: string) { plays.push(action); },
+      stopAll() { stops.push('stop'); },
+      nod() {},
+    });
+    const c = new NativeAvatarController({} as HTMLElement, f.deps);
+    await c.start();
+    c.handleNativeEvent({ type: 'avatar.action', action: 'heart', source: 'tool' });
+    c.handleNativeEvent({ type: 'response.end', responseSeq: 1, playedMs: 0 });
+    expect(plays).toEqual(['heart']);
+    expect(stops).toEqual([]);
+    c.handleNativeEvent({ type: 'response.cancelled', responseSeq: 1, playedMs: 0 });
+    expect(stops).toEqual(['stop']);
+  });
+
   it('removes the visibility listener when stopped', async () => {
     const f = nativeAvatarFakes();
     const c = new NativeAvatarController({} as HTMLElement, f.deps);

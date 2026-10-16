@@ -311,6 +311,22 @@ describe('Session', () => {
     expect(muteTransitions).toEqual([true, false]);
   });
 
+  it('keeps playback audio off the model and skips silence follow-ups when the model owns turns', async () => {
+    const s = setup({ modelOwnsTurns: true });
+    let uplink = 0;
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(200);
+    s.mocks[0].sendAudio = () => { uplink++; };
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(1);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(of(s.sent, 'response.start').map((m) => m.kind)).toEqual(['greeting']);
+  });
+
   it('end() closes the model and clears memory', async () => {
     const s = setup();
     await greetAndFinish(s);

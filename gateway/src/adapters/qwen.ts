@@ -40,7 +40,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
         else if (!this.closed) this.emit('closed');
       });
       this.connectTimer = setTimeout(() => this.failInitialization('qwen_connect_timeout'), this.opts.connectTimeoutMs);
-      ws.once('open', () => { if (!this.closed) this.send({ type: 'session.update', session: { modalities: ['text', 'audio'], instructions: config.instructions, turn_detection: null, audio: { input: { format: { type: 'pcm', sample_rate: MIC_SAMPLE_RATE, sample_format: 's16le', channels: 1, packing: 'interleaved', channel_layout: 'mono' } }, output: { voice: this.opts.voice, format: { type: 'pcm', sample_rate: AI_SAMPLE_RATE } } }, tools: config.tools.map(toQwenTool) } }); });
+      ws.once('open', () => { if (!this.closed) this.send({ type: 'session.update', session: { modalities: ['text', 'audio'], instructions: config.instructions, turn_detection: { type: 'semantic_vad', silence_duration_ms: 800 }, input_audio_transcription: { model: 'qwen3-asr-flash-realtime' }, audio: { input: { format: { type: 'pcm', sample_rate: MIC_SAMPLE_RATE, sample_format: 's16le', channels: 1, packing: 'interleaved', channel_layout: 'mono' } }, output: { voice: this.opts.voice, format: { type: 'pcm', sample_rate: AI_SAMPLE_RATE } } }, tools: config.tools.map(toQwenTool) } }); });
     });
   }
 
@@ -59,7 +59,11 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     this.createResponse();
   }
   updateInstructions(text: string): void { if (this.connected) this.send({ type: 'session.update', session: { instructions: text } }); }
-  createResponse(): void { if (this.connected) this.send({ type: 'response.create' }); }
+  createResponse(instructions?: string): void {
+    if (!this.connected) return;
+    if (instructions) this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: instructions }] } });
+    this.send({ type: 'response.create' });
+  }
   cancelResponse(): void { if (this.connected) this.send({ type: 'response.cancel' }); }
   sendToolResult(callId: string, result: unknown): void {
     if (!this.connected) return;
@@ -115,7 +119,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     if (type === 'error') {
       const err = e.error as Json | undefined;
       if (this.initialization) this.failInitialization('qwen_session_rejected');
-      else this.emit('error', String(err?.code ?? 'qwen_error'), true);
+      else this.emit('error', String(err?.code ?? err?.type ?? 'qwen_error'), true);
     }
   }
   private responseIdFrom(e: Json): string { return typeof e.response_id === 'string' ? e.response_id : (this.responseId ?? 'unknown'); }

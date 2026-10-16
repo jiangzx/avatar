@@ -29,6 +29,8 @@ export interface SessionDeps {
   rebuildAfterTurns?: number;
   rebuildBackoffBaseMs?: number;
   rebuildBackoffMaxMs?: number;
+  /** The upstream model detects turns itself. Do not upload speaker audio or add silence follow-ups. */
+  modelOwnsTurns?: boolean;
 }
 
 interface ResponseState {
@@ -66,6 +68,7 @@ export class Session {
   private summarizeBackoffMs = 1_000;
   private vadSpeakingCount = 0;
   private vadSilentCount = 0;
+  private modelGenerating = false;
 
   constructor(private readonly deps: SessionDeps) {
     this.ledger = new ConversationLedger(deps.ledger ?? DEFAULT_LEDGER_OPTIONS);
@@ -93,13 +96,14 @@ export class Session {
       return;
     }
     this.director.onSessionStart();
+    if (this.deps.modelOwnsTurns) this.director.pause();
   }
 
   attachTransport(transport: Transport): void {
     this.transport = transport;
     this.stopKeepalive();
     transport.send({ type: 'session.resumed', lastResponseSeq: this.seqCounter });
-    this.director.resume();
+    if (!this.deps.modelOwnsTurns) this.director.resume();
   }
 
   detachTransport(): void {
@@ -118,6 +122,7 @@ export class Session {
       if (this.rebuildMicBuffer.length < MAX_REBUILD_MIC_FRAMES) this.rebuildMicBuffer.push(pcm.slice());
       return;
     }
+    if (this.deps.modelOwnsTurns && this.modelGenerating) return;
     this.adapter.sendAudio(pcm);
   }
 
@@ -231,6 +236,7 @@ export class Session {
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
       log('response_start', { seq: s.seq, kind: s.kind });
+      this.modelGenerating = true;
       this.director.onAiTurnStarted();
       const superseded = this.interrupt.onResponseStart(s.seq);
       if (superseded !== null) {
@@ -272,12 +278,14 @@ export class Session {
       if (s) {
         log('response_end', { seq: s.seq });
         this.send({ type: 'response.end', responseSeq: s.seq });
+        this.modelGenerating = false;
       }
     });
     a.on('responseCancelled', (id) => {
       if (!current()) return;
       const s = this.byId.get(id);
       if (!s || !this.interrupt.onModelAutoCancelled(s.seq)) return;
+      this.modelGenerating = false;
       log('model_auto_cancel', { seq: s.seq });
       this.send({ type: 'response.cancelled', responseSeq: s.seq });
       this.finalize(s, true);
@@ -304,6 +312,7 @@ export class Session {
 
   private cancel(seq: number, source: string): void {
     log('response_cancel', { seq, source });
+    this.modelGenerating = false;
     this.adapter.cancelResponse();
     this.send({ type: 'response.cancelled', responseSeq: seq });
     const s = this.bySeq.get(seq);

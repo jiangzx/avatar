@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-16 (local gateway-first debugging; cloud deployment deferred by user). Update at the end of every session.
+Last updated: 2026-10-16 (local Qwen gateway started for phone debugging; cloud deployment deferred by user). Update at the end of every session.
 
 ## Phases
 
@@ -44,7 +44,7 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 ## Next steps
 
-1. Keep the local Mock gateway running for phone debugging. Do not resume interruption latency percentiles or multi-attempt interruption counts: the user skipped both on 2026-10-16, and that skip is not a pass. The 10-minute silence sample stays skipped as well.
+1. Keep the local Qwen gateway running for phone debugging (`ADAPTER=qwen` on port 8787, phone `APP_SECRET` from `app/dev.json`, `adb reverse tcp:8787`). Fluency fix at 19:49 Beijing time: while a Qwen reply is generating, the gateway does not upload mic audio, and silence follow-ups stay paused. At 20:04 the user confirmed the conversation was fluent. At 20:08 avatar actions worked after gestures were no longer cancelled on `response.end`. Do not restart it as Mock. Do not resume interruption latency percentiles or multi-attempt interruption counts: the user skipped both on 2026-10-16, and that skip is not a pass. The 10-minute silence sample stays skipped as well.
 2. Continue the remaining Xiaomi/desktop checks that were not skipped: active-response stale-audio listening, network cases beyond the 2026-10-16 short resume and grace expiry, subtitle finalization once, remaining Task 18 checks, ADR-001, and desktop Chrome E2E. Five actions were already observed with Chinese keywords. Cloud WSS stays deferred.
 3. Seeduplex protocol docs and successful key validation are recorded in `docs/research/seeduplex-protocol-validation.md`; `ADAPTER=mock` remains the default, while `ADAPTER=seeduplex` requires an explicit environment key. Complete ADR-001 A/B measurement as a tracked follow-up.
 4. Only after phone debugging and its evidence are complete, resume the cloud WSS deployment plan.
