@@ -161,3 +161,59 @@ Plan 1 原有桌面 Chrome 完整 E2E、方案 A/B 10 分钟对比和完整 Task
 - 第三次受控窗口只观察到空闲期 `vad_edge speaking activeSeq=0`、`vad_edge silent activeSeq=0`，随后 `response.start seq=5` 和 `response_end seq=5`；没有活动 response 期间对应的 `response_cancel(source=local)`，因此 `acceptedChunks/droppedChunks` 仍未取得可归因的取消窗口快照。
 - 用户对受控听感的反馈仍为“播放继续或像同一句重复”。现有证据不能区分本地 VAD 漏检、取消后新序号声音相似或同序号迟到 PCM；#10 保持未解除。
 - 本轮实际复验：`npm test` 通过（protocol 6、gateway 129、avatar-core 84），`npm run typecheck` 通过，`cd app && flutter test` 通过（45），`cd app && flutter analyze` 无问题，`git diff --check` 通过。
+
+### 2026-10-16 第四次诊断 APK 复测与取消边界补强
+
+- 代码：`NativeSessionController` 在 `local.cancel`/`session.stop` 诊断中同时记录停止前和停止后的匿名播放快照，字段为 `responseSeq`、队列状态、pending/feed、已送样本/已播放毫秒和 accepted/dropped 计数；未增加音频、PCM、ASR 或回复文本。新增 Flutter 测试先验证旧行为缺少 `before*` 字段，再实现并通过。
+- 构建/安装：`flutter build apk --debug --dart-define-from-file=dev.json` 成功；`adb push`、设备端 `pm install -r -d`、`adb reverse tcp:8787 tcp:8787` 均成功。设备 `MainActivity` resumed，`RECORD_AUDIO` 为 granted。
+- 网关：一次后台 shell 启动因会话退出而停止，设备因此短暂显示 `audio_start_failed`；该错误来自通用启动错误映射，不能作为 AudioTrack 失败证据。改用持续终端会话后，`ADAPTER=mock` 网关保持运行，`GET /healthz=200`、认证 `POST /session=200`，设备 greeting/reply/followup 序号连续结束。
+- 受控操作：按请求尝试在回复播放约 1 秒时说“停”。匿名面板显示 `vadSpeaking=1`、`vadSilent=1`、`localCancel=0`、`acceptedChunks=842`、`droppedChunks=0`，最后 after 快照为 `afterResponseSeq=0;afterQueue=idle;afterPending=0;afterFeed=0;afterFedSamples=79200;afterPlayedMs=3300`。网关对应 `vad_edge speaking activeSeq=0`、`vad_edge silent activeSeq=0`，随后才有 `response.start seq=25`；没有活动 response 期间 `response_cancel(source=local)`，因此没有取得 before 快照或可归因的取消窗口。该段此前把操作误写为“用户完成”，现更正为“按请求尝试”。
+- 结论：本次证明空闲期 VAD 边沿可到达网关，但仍无法区分 VAD 漏检、取消后新响应听感相似和同序号迟到 PCM。该次操作没有可归因的停止听感结果；可听停止、旧 PCM 残留、字幕单次终结和定量真实打断仍未验证，blocker #10 保持未解除。
+
+### 2026-10-16 取消竞态修复与最新人工反馈
+
+- 代码：取消操作现在与 `response.start`/音频事件共用 `NativeSessionController` 的事件队列；新增门控回归测试证明新序号必须等待旧 `stopResponse` 完成。取消诊断改用持久键 `audio.cancel`，不会被 200 ms 的 `audio.level` 覆盖；同时记录控制器 accepted/dropped 计数、最近序号和取消序号的迟到丢弃计数。启动错误按阶段区分 `audio_start_failed` 与 `gateway_start_failed`，界面分别提示音频初始化或网关不可用。
+- 自动验证：`cd app && flutter test` 通过（49），`cd app && flutter analyze` 无问题；针对控制器的失败测试先失败后通过。新的 debug APK 由 `flutter build apk --debug --dart-define-from-file=dev.json` 构建，设备端 `pm install -r -d` 返回 `Success`，`MainActivity` resumed，`AudioRecord` 日志持续存在；持久 `ADAPTER=mock` 网关 `/healthz=200`。
+- 最新人工反馈：用户回复“已停止”。同一时间读取到的网关窗口只有 `response.start/end`（seq 5–9），没有 `vad_edge ... activeSeq` 或 `response_cancel(source=local)`；因此只能记录为“用户主观听感为停止”，不能归因于本地取消或证明旧 PCM 已丢弃。`audio.cancel` 的真机字段仍未取得，blocker #10 保持未解除。
+
+### 2026-10-16 取消后静音与播放期音量诊断
+
+- 代码：已开始的 Mock 回复被取消后，下一段音频先输出 `MOCK_CANCEL_GAP_MS=400` 的静音，并把语音读取位置向后跳过这段静音，避免下一段从同一波形无缝续上。控制器新增持久诊断键 `audio.playback`，只在活动回复期间累计 `responseSeq`、`activeRmsMax`、`activeAboveRunMs`；回复结束后空闲音量不再改写该快照。不记录音频、PCM、ASR 或回复文本。
+- 自动验证：新的 gateway 测试和 Flutter 测试都先失败后通过。随后 `npm test -w gateway` 通过（130），`npm run typecheck -w gateway` 通过，`cd app && flutter test` 通过（50），`flutter analyze` 无问题。
+- 设备准备：debug APK 已重新构建，设备端 `pm install -r -d` 返回 `Success`；`adb reverse tcp:8787 tcp:8787` 成功。持久 `ADAPTER=mock`、`MOCK_PACE_FACTOR=1` 网关记录 `gateway_listening`，手机会话记录 `response_start seq=1 kind=greeting`。`GET /healthz=200`，认证 `POST /session=200`。
+- 听感复测尚未进行，不把安装或问候启动记为打断通过。blocker #10 保持未解除。
+
+### 2026-10-16 单次听感结果
+
+- 用户在北京时间 17:29 选择结果 1：声音停住，并且中间有一段明显静音。这是一次主观听感，不是延迟测量。
+- 同一分钟的网关窗口没有新的 `vad_edge`。seq 7 正常 `response_end`；seq 8 为 `model_auto_cancel`；seq 9 为 `response_cancel source=model`；seq 10 正常 `response_end`。窗口内没有 `response_cancel(source=local)`。
+- 上一条 `vad_edge speaking` 停在 17:27:42，其后直到该窗口没有 `vad_edge silent`。因此这次模型侧取消不能归因于一次新的本地说话边沿。
+- 截图时调试面板关闭，`audio.playback` 的 `activeRmsMax/activeAboveRunMs` 未取得。不把本次听感记为定量打断通过，blocker #10 保持未解除。
+
+### 2026-10-16 本地取消队列快照与说话段复位
+
+- 调试面板中的 `audio.cancel`：`cancelledSeq=4`，`localCancel=1`，`cancelledDroppedChunks=4`。停止前 `beforeQueue=playing`、`beforePending=0`、`beforeFeed=0`、`beforeFedSamples=9600`、`beforePlayedMs=304`、`beforeAcceptedChunks=119`、`beforeDroppedChunks=0`。停止后 `afterQueue=idle`、`afterPending=0`、`afterFeed=0`、`afterFedSamples=9600`、`afterPlayedMs=304`、`afterAcceptedChunks=119`、`afterDroppedChunks=0`。已送样本和已播放毫秒没有增加，取消序号之后有 4 块被丢弃。
+- 网关对应北京时间 17:27:42 的 `response_cancel seq=4 source=local`。这是一次队列边界证据，不是延迟百分位或多次样本。
+- 代码：新回复开始时，如果上一段说话还开着，先复位检测器并发送一次 `vad silent`，让下一次持续大声能够再次产生 `speaking` 和本地取消。新测试在修改前失败、修改后通过。`cd app && flutter test` 通过（51），`flutter analyze` 无问题。
+- 新 debug APK 已 `pm install -r -d` 成功并重新启动；网关仍是 `ADAPTER=mock`，新手机会话已 `response_start seq=1 kind=greeting`。这段复位逻辑的真机听感尚未复测，blocker #10 保持未解除。
+
+### 2026-10-16 复位后的本地取消听感
+
+- 用户在北京时间 17:47 再次选择结果 1：声音停住，并且中间有一段明显静音。
+- 紧邻窗口内有两次 `response_cancel(source=local)`：seq 12 于 17:46:47，seq 13 于 17:46:50。seq 13 开始后先出现 `vad_edge silent activeSeq=13`，随后才是本地取消和 `vad_edge speaking activeSeq=0`。这与“新回复先关闭上一段说话，再接受一次新的本地打断”一致。
+- 面板 `audio.cancel`：`cancelledSeq=13`，`localCancel=2`，`cancelledDroppedChunks=1`。停止前 `beforeQueue=playing`、`beforeFedSamples=48000`、`beforePlayedMs=2000`、`beforePending=0`、`beforeFeed=0`。停止后 `afterQueue=idle`，已送样本和已播放毫秒仍是 48000 与 2000。同序号有 1 块在取消后被丢弃。
+- 随后正常结束的 seq 15 上，`audio.playback` 为 `responseSeq=15;activeRmsMax=53;activeAboveRunMs=0`。该回复播放期间麦克风能量远低于阈值，不能当成一次漏检。
+- 本次证明一次可归因的本地取消、队列停止和主观静音同时出现。尚未取得打断延迟 P50/P90、字幕只终结一次，也未完成计划要求的多次定量样本。
+
+### 2026-10-16 定量打断样本跳过
+
+- 用户明确决定不再做打断延迟分布和多次计数。这两项记为用户跳过，不记为通过，也不再采样。
+- 字幕只终结一次没有被这次决定单独豁免，仍未测量，不记为通过。
+- blocker #10 状态改为「定量样本用户跳过」。
+
+### 2026-10-16 活动回复期间的短断连
+
+- 调试文字触发 `response_start seq=8 kind=reply`（10:21:03.309Z）。回复开始后 113 ms，USB 通道被断开，网关记录 `response_cancel seq=8 source=local`（10:21:03.422Z）。seq 8 没有 `response_end`。
+- 约 3.7 s 后记录 `session_resumed`（10:21:07.134Z），下一段音频是新的 seq 9。这落在 60 s 宽限内。
+- 同一小时更早的一次断开没有在宽限内恢复：10:04:40Z `session_destroyed reason=grace_expired`，10:06:02Z 新建会话。这是长断连后的新会话，不是续接。
+- 取消发生在服务端断开传输之后。客户端现在在网关状态变为 reconnecting 或 closed 时就停止当前播放，不等 `session.resumed`。该行为有单元测试。含这次改动的 debug APK 已用 `pm install -r -d` 装上并重新启动，但没有采集扬声器听感，因此不把「旧 PCM 完全听不见」记为通过。

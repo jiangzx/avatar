@@ -61,7 +61,11 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   updateInstructions(text: string): void { if (this.connected) this.send({ type: 'session.update', session: { instructions: text } }); }
   createResponse(): void { if (this.connected) this.send({ type: 'response.create' }); }
   cancelResponse(): void { if (this.connected) this.send({ type: 'response.cancel' }); }
-  sendToolResult(callId: string, result: unknown): void { if (this.connected) this.send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: callId, output: JSON.stringify(result) } }); }
+  sendToolResult(callId: string, result: unknown): void {
+    if (!this.connected) return;
+    this.send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: callId, output: JSON.stringify(result) } });
+    this.createResponse();
+  }
   injectContextNote(text: string): void { this.sendUserText(text); }
   close(): void { if (this.closed) return; this.closed = true; this.connected = false; this.failInitialization('qwen_connect_closed'); this.clearConnectTimer(); const ws = this.ws; this.ws = null; ws?.close(); }
   private send(event: Json): void { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(event)); }

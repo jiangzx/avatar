@@ -500,7 +500,7 @@ Expected: the app launches with `AUDIO_PATH=B`, the local page loads, and the ga
 
 - [ ] **Step 3: Execute the Plan 1.1 real-device checklist**
 
-  2026-10-13 续验：设备在线、`adb reverse`、Mock 网关和同 secret debug APK 启动完成；16 kHz 单声道采集初始化确认；30 分钟稳定性采样完成（31 点、renderer 31/31 存活）。真实语音/VAD、人工听感、活动回复续接、五个动作逐项验证、10 次真实打断和可靠的 10 分钟自打断计数仍未完成，故本步骤保持未勾选。详见 [native audio report](../../testing/2026-10-13-native-audio-plan1-1-report.md)。
+  2026-10-16：打断延迟分布和多次计数已由用户跳过，不记为通过。10 分钟静默采样仍保持早先的跳过。活动回复 seq 8 在开始 113 ms 后因 USB 断开被取消，约 3.7 s 后 `session_resumed`，旧 PCM 听感未确认。五个动作的中文关键词视觉检查已在更早的记录中完成。本步骤仍未勾选。详见 [native audio report](../../testing/2026-10-13-native-audio-plan1-1-report.md)。
 
 Record timestamps and counts only:
 

@@ -30,6 +30,7 @@ class NativeSessionController implements GatewayClientEvents {
   bool _ended = false;
   bool _started = false;
   bool _interrupting = false;
+  bool _speechOpen = false;
   int? _activeSeq;
   int _seqFloor = 0;
   int _lastLevelAt = 0;
@@ -47,11 +48,24 @@ class NativeSessionController implements GatewayClientEvents {
   double _rmsRecentMax = 0;
   int _rmsAboveRunMs = 0;
   int _rmsMaxAboveRunMs = 0;
+  int _playbackRmsMax = 0;
+  int _playbackAboveRunMs = 0;
+  int _playbackAboveRunMaxMs = 0;
+  int? _playbackDiagSeq;
   Future<void> _eventQueue = Future<void>.value();
+  int _controllerAcceptedChunks = 0;
+  int _controllerDroppedChunks = 0;
+  int _lastAcceptedSeq = 0;
+  int _lastDroppedSeq = 0;
+  int _cancelledSeq = 0;
+  int _cancelledDroppedChunks = 0;
+  AudioPlaybackSnapshot? _cancelBefore;
+  AudioPlaybackSnapshot? _cancelAfter;
 
   Future<void> start() async {
     if (_started) return;
     _ended = false;
+    var stage = 'audio';
     try {
       await audio.start(
         onFrame: _onFrame,
@@ -59,13 +73,14 @@ class NativeSessionController implements GatewayClientEvents {
         onPlaybackEnded: _onPlaybackEnded,
         onPlaybackError: _onPlaybackError,
       );
+      stage = 'gateway';
       await client.start();
       _started = true;
     } catch (error) {
       _started = false;
       await audio.stop().catchError((_) {});
       await client.close().catchError((_) {});
-      emit(UiError(_errorCode(error)));
+      emit(UiError(_errorCode(error, fallback: '${stage}_start_failed')));
       rethrow;
     }
   }
@@ -85,6 +100,7 @@ class NativeSessionController implements GatewayClientEvents {
   Future<void> stop() async {
     if (_ended) return;
     _ended = true;
+    _speechOpen = false;
     detector.reset();
     await _interruptActive(sendStopped: false);
     await audio.stop();
@@ -103,6 +119,19 @@ class NativeSessionController implements GatewayClientEvents {
         GatewayStatus.closed => 'closed',
       }),
     );
+    if (status == GatewayStatus.reconnecting || status == GatewayStatus.closed) {
+      _stopForDisconnect();
+    }
+  }
+
+  void _stopForDisconnect() {
+    _enqueue(() async {
+      if (_ended || _activeSeq == null) return;
+      await audio.stopResponse(reason: StopReason.reset);
+      _activeSeq = null;
+      detector.aiPlaying = false;
+      _emitPlaybackDiag();
+    });
   }
 
   @override
@@ -112,12 +141,24 @@ class NativeSessionController implements GatewayClientEvents {
       if (_ended ||
           frame.responseSeq <= _seqFloor ||
           frame.responseSeq != _activeSeq) {
+        _controllerDroppedChunks++;
+        _lastDroppedSeq = frame.responseSeq;
+        if (frame.responseSeq == _cancelledSeq) _cancelledDroppedChunks++;
+        _emitAudioDiag('chunk.dropped');
+        _emitCancelDiag();
         return;
       }
+      _controllerAcceptedChunks++;
+      final firstForSequence = _lastAcceptedSeq != frame.responseSeq;
+      _lastAcceptedSeq = frame.responseSeq;
       _audioReceivedMs[frame.responseSeq] =
           (_audioReceivedMs[frame.responseSeq] ?? 0) +
           ((frame.pcm.length * 1000) ~/ aiSampleRate);
       await audio.pushResponse(frame.responseSeq, frame.pcm);
+      if (firstForSequence) {
+        _emitAudioDiag('chunk.accepted');
+        _emitCancelDiag();
+      }
     });
   }
 
@@ -127,12 +168,18 @@ class NativeSessionController implements GatewayClientEvents {
   }
 
   void _enqueue(Future<void> Function() task) {
-    _eventQueue = _eventQueue.then<void>((_) => task()).catchError((
+    unawaited(_queueTask(task));
+  }
+
+  Future<void> _queueTask(Future<void> Function() task) {
+    final next = _eventQueue.then<void>((_) => task()).catchError((
       Object error,
       StackTrace stack,
     ) {
       if (!_ended) emit(UiError(_errorCode(error)));
     });
+    _eventQueue = next;
+    return next;
   }
 
   Future<void> _handleMessage(ServerMessage message) async {
@@ -143,6 +190,7 @@ class NativeSessionController implements GatewayClientEvents {
         _activeSeq = null;
         _assistantText.clear();
         _audioReceivedMs.clear();
+        _speechOpen = false;
         detector.reset();
         await audio.resetResponsesBelow(0);
         client.send(ClientMute(_muted));
@@ -152,15 +200,21 @@ class NativeSessionController implements GatewayClientEvents {
         _activeSeq = null;
         _assistantText.removeWhere((seq, _) => seq <= lastResponseSeq);
         _audioReceivedMs.removeWhere((seq, _) => seq <= lastResponseSeq);
+        _speechOpen = false;
         detector.reset();
         await audio.resetResponsesBelow(lastResponseSeq);
         client.send(ClientMute(_muted));
         emit(const UiState('idle'));
       case ResponseStart(:final responseSeq, :final kind):
         if (responseSeq <= _seqFloor) return;
+        _closeOpenSpeech();
         _activeSeq = responseSeq;
         _assistantText[responseSeq] = '';
         _audioReceivedMs[responseSeq] = 0;
+        _playbackRmsMax = 0;
+        _playbackAboveRunMs = 0;
+        _playbackAboveRunMaxMs = 0;
+        _playbackDiagSeq = responseSeq;
         try {
           await audio.startResponse(responseSeq);
         } catch (error) {
@@ -218,10 +272,12 @@ class NativeSessionController implements GatewayClientEvents {
     if (!_muted) client.sendAudio(frame);
     switch (edge) {
       case SpeechEdge.speaking:
+        _speechOpen = true;
         _vadSpeakingCount++;
         _emitAudioDiag('vad.speaking');
         unawaited(_interruptThenReportSpeech());
       case SpeechEdge.silent:
+        _speechOpen = false;
         _vadSilentCount++;
         client.send(
           VadMessage('silent', DateTime.now().millisecondsSinceEpoch),
@@ -246,11 +302,26 @@ class NativeSessionController implements GatewayClientEvents {
     if (level.rms >= defaultVadThresholdRms) {
       _rmsRecentAbove++;
       _rmsAboveRunMs += frameMs;
-      if (_rmsAboveRunMs > _rmsMaxAboveRunMs) _rmsMaxAboveRunMs = _rmsAboveRunMs;
+      if (_rmsAboveRunMs > _rmsMaxAboveRunMs) {
+        _rmsMaxAboveRunMs = _rmsAboveRunMs;
+      }
     } else {
       _rmsAboveRunMs = 0;
     }
+    if (_activeSeq != null) {
+      final rounded = level.rms.round();
+      if (rounded > _playbackRmsMax) _playbackRmsMax = rounded;
+      if (level.rms >= defaultVadThresholdRms) {
+        _playbackAboveRunMs += frameMs;
+        if (_playbackAboveRunMs > _playbackAboveRunMaxMs) {
+          _playbackAboveRunMaxMs = _playbackAboveRunMs;
+        }
+      } else {
+        _playbackAboveRunMs = 0;
+      }
+    }
     final report = _levelCount % 10 == 0;
+    if (report && _activeSeq != null) _emitPlaybackDiag();
     if (report) {
       _emitAudioDiag('audio.level');
       _rmsRecentCount = 0;
@@ -275,6 +346,7 @@ class NativeSessionController implements GatewayClientEvents {
     if (_ended || played.responseSeq != _activeSeq) return;
     _activeSeq = null;
     detector.aiPlaying = false;
+    _emitPlaybackDiag();
     client.send(PlaybackStopped(played.responseSeq, played.playedMs, 'ended'));
     emit(
       UiResponseEnd(responseSeq: played.responseSeq, playedMs: played.playedMs),
@@ -310,17 +382,30 @@ class NativeSessionController implements GatewayClientEvents {
     _emitAudioDiag('playback.error');
   }
 
+  void _closeOpenSpeech() {
+    if (!_speechOpen) return;
+    _speechOpen = false;
+    detector.reset();
+    _vadSilentCount++;
+    client.send(VadMessage('silent', DateTime.now().millisecondsSinceEpoch));
+    _emitAudioDiag('vad.segment.reset');
+  }
+
   Future<void> _interruptThenReportSpeech() async {
     await _interruptActive();
     if (_ended) return;
     client.send(VadMessage('speaking', DateTime.now().millisecondsSinceEpoch));
   }
 
-  Future<void> _interruptActive({bool sendStopped = true}) async {
+  Future<void> _interruptActive({bool sendStopped = true}) =>
+      _queueTask(() => _interruptActiveNow(sendStopped: sendStopped));
+
+  Future<void> _interruptActiveNow({required bool sendStopped}) async {
     final seq = _activeSeq;
     if (seq == null || _interrupting) return;
     _interrupting = true;
     try {
+      final before = audio.playbackSnapshot;
       final played = await audio.stopResponse(reason: StopReason.interrupted);
       if (seq != _activeSeq) return;
       _activeSeq = null;
@@ -333,17 +418,24 @@ class NativeSessionController implements GatewayClientEvents {
         emit(UiResponseCancelled(responseSeq: seq, playedMs: played.playedMs));
       }
       emit(const UiState('listening'));
-      _emitAudioDiag(sendStopped ? 'local.cancel' : 'session.stop');
+      _emitPlaybackDiag();
+      _emitAudioDiag(
+        sendStopped ? 'local.cancel' : 'session.stop',
+        before: before,
+      );
     } finally {
       _interrupting = false;
     }
   }
 
-  String _errorCode(Object error) => error is GatewayHttpException
+  String _errorCode(
+    Object error, {
+    String fallback = 'audio_playback_failed',
+  }) => error is GatewayHttpException
       ? 'gateway_http_${error.statusCode}'
-      : 'audio_start_failed';
+      : fallback;
 
-  void _emitAudioDiag(String edge) {
+  void _emitAudioDiag(String edge, {AudioPlaybackSnapshot? before}) {
     final snapshot = audio.playbackSnapshot;
     final min = _rmsCount == 0 ? 0 : _rmsMin.round();
     final recentMin = _rmsRecentCount == 0 ? 0 : _rmsRecentMin.round();
@@ -351,17 +443,76 @@ class NativeSessionController implements GatewayClientEvents {
       UiDiag(
         'audio',
         'edge=$edge;rmsLast=${_rmsLast.round()};rmsMin=$min;'
-        'rmsMax=${_rmsMax.round()};rmsCount=$_rmsCount;'
-        'recentRmsMin=$recentMin;recentRmsMax=${_rmsRecentMax.round()};'
-        'recentCount=$_rmsRecentCount;recentAbove=$_rmsRecentAbove;'
-        'aboveRunMs=$_rmsAboveRunMs;maxAboveRunMs=$_rmsMaxAboveRunMs;'
-        'vadSpeaking=$_vadSpeakingCount;vadSilent=$_vadSilentCount;'
-        'responseSeq=${snapshot.responseSeq ?? 0};queue=${snapshot.state};'
-        'pending=${snapshot.pendingChunks};feed=${snapshot.feedInFlight ? 1 : 0};'
-        'fedSamples=${snapshot.fedSamples};playedMs=${snapshot.playedMs};'
-        'acceptedChunks=${snapshot.acceptedChunks};droppedChunks=${snapshot.droppedChunks};'
-        'localCancel=$_localCancelCount',
+            'rmsMax=${_rmsMax.round()};rmsCount=$_rmsCount;'
+            'recentRmsMin=$recentMin;recentRmsMax=${_rmsRecentMax.round()};'
+            'recentCount=$_rmsRecentCount;recentAbove=$_rmsRecentAbove;'
+            'aboveRunMs=$_rmsAboveRunMs;maxAboveRunMs=$_rmsMaxAboveRunMs;'
+            'vadSpeaking=$_vadSpeakingCount;vadSilent=$_vadSilentCount;'
+            'responseSeq=${snapshot.responseSeq ?? 0};queue=${snapshot.state};'
+            'pending=${snapshot.pendingChunks};feed=${snapshot.feedInFlight ? 1 : 0};'
+            'fedSamples=${snapshot.fedSamples};playedMs=${snapshot.playedMs};'
+            'acceptedChunks=${snapshot.acceptedChunks};droppedChunks=${snapshot.droppedChunks};'
+            'localCancel=$_localCancelCount;'
+            '${_controllerDiag()}',
       ),
     );
+    if (before != null) {
+      _cancelledSeq = before.responseSeq ?? 0;
+      _cancelledDroppedChunks = 0;
+      _cancelBefore = before;
+      _cancelAfter = snapshot;
+      _emitCancelDiag();
+    }
+  }
+
+  void _emitPlaybackDiag() {
+    final seq = _playbackDiagSeq;
+    if (seq == null) return;
+    emit(
+      UiDiag(
+        'audio.playback',
+        'responseSeq=$seq;activeRmsMax=$_playbackRmsMax;'
+        'activeAboveRunMs=$_playbackAboveRunMaxMs',
+      ),
+    );
+  }
+
+  String _controllerDiag() =>
+      'controllerAcceptedChunks=$_controllerAcceptedChunks;'
+      'controllerDroppedChunks=$_controllerDroppedChunks;'
+      'lastAcceptedSeq=$_lastAcceptedSeq;lastDroppedSeq=$_lastDroppedSeq;';
+
+  void _emitCancelDiag() {
+    if (_cancelBefore == null) return;
+    emit(
+      UiDiag(
+        'audio.cancel',
+        'cancelledSeq=$_cancelledSeq;localCancel=$_localCancelCount;'
+            'cancelledDroppedChunks=$_cancelledDroppedChunks;'
+            '${_controllerDiag()}'
+            '${_diagSnapshot('before', _cancelBefore)}'
+            '${_diagSnapshot('after', _cancelAfter)}',
+      ),
+    );
+  }
+
+  String _diagSnapshot(String prefix, AudioPlaybackSnapshot? snapshot) {
+    if (snapshot == null) return '';
+    return '$prefix'
+        'ResponseSeq=${snapshot.responseSeq ?? 0};'
+        '$prefix'
+        'Queue=${snapshot.state};'
+        '$prefix'
+        'Pending=${snapshot.pendingChunks};'
+        '$prefix'
+        'Feed=${snapshot.feedInFlight ? 1 : 0};'
+        '$prefix'
+        'FedSamples=${snapshot.fedSamples};'
+        '$prefix'
+        'PlayedMs=${snapshot.playedMs};'
+        '$prefix'
+        'AcceptedChunks=${snapshot.acceptedChunks};'
+        '$prefix'
+        'DroppedChunks=${snapshot.droppedChunks};';
   }
 }

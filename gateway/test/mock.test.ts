@@ -64,6 +64,33 @@ describe('MockAdapter', () => {
     expect(c.audio()).toBe(before);
   });
 
+  it('inserts silence after cancel so the next reply is not the same waveform', async () => {
+    const speech = Int16Array.from({ length: 24000 }, (_, i) => 1000 + (i % 997));
+    const m = new MockAdapter({
+      script,
+      speech,
+      replyDelayMs: 0,
+      charMs: 200,
+      chunkMs: 100,
+      paceFactor: 1,
+      cancelGapMs: 100,
+    });
+    const chunks: Int16Array[] = [];
+    m.on('audioDelta', (_id, pcm) => chunks.push(Int16Array.from(pcm)));
+    m.sendUserText('随便说点');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chunks.length).toBeGreaterThan(0);
+    const seam = Int16Array.from(speech.subarray(chunks[0]!.length, chunks[0]!.length + 50));
+    m.cancelResponse();
+    chunks.length = 0;
+    m.sendUserText('再来一句');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chunks[0]?.every((sample) => sample === 0)).toBe(true);
+    await vi.advanceTimersByTimeAsync(100);
+    const afterGap = chunks.at(-1);
+    expect(afterGap?.subarray(0, 50)).not.toEqual(seam);
+  });
+
   it('emits a tool call for matching text', async () => {
     const m = make();
     const c = collect(m);

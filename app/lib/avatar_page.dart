@@ -36,6 +36,8 @@ String? errorAfterStatus(String? error, String status) => status == 'open' ? nul
 String _errorLabel(String code) => switch (code) {
       'NotAllowedError' => '麦克风被拒绝，请在设置中允许',
       'NotFoundError' => '没有找到麦克风',
+      'gateway_start_failed' => '网关暂时不可用，请稍后重试',
+      'audio_start_failed' => '音频初始化失败，请检查麦克风权限',
       _ => '出错了：$code',
     };
 

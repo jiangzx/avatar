@@ -38,8 +38,8 @@
 
 ### Task 5: Qwen fallback adapter
 
-**Status: partial live validation.** Added `gateway/src/adapters/qwen.ts`, explicit `ADAPTER=qwen` configuration, environment-only `DASHSCOPE_API_KEY`, workspace endpoint/model/voice settings, and sanitized fixture coverage. Live WSS and audio smoke succeeds; real `response.created`/audio mapping is covered. Function-call arguments are observed, but tool-result continuation currently returns `invalid_request_error` and needs an official payload example or follow-up experiment.
+**Status: tool continuation verified locally and live.** Added `gateway/src/adapters/qwen.ts`, explicit `ADAPTER=qwen` configuration, environment-only `DASHSCOPE_API_KEY`, workspace endpoint/model/voice settings, and sanitized fixture coverage. Official client-event docs require `conversation.item.create` (`function_call_output`) followed by `response.create`. The adapter sends that pair, covered by `gateway/test/qwen.test.ts`. A redacted live probe on 2026-10-16 sent the same pair as soon as the tool arguments finished and observed `response.created` twice, `response.done` twice, 65280 audio bytes, and no error event. No transcript or tool arguments were recorded.
 
 ### Task 6: Rolling summarizer
 
-**Status: local implementation complete; live smoke pending.** Added `QwenSummarizer` using the verified OpenAI-compatible DashScope endpoint, explicit `SUMMARIZER=qwen` configuration, timeout/error handling, and sanitized HTTP fixtures. `MockSummarizer` remains the default. A real call requires a workspace-specific text endpoint and `DASHSCOPE_API_KEY`; no such live credentials are available in this workspace.
+**Status: local implementation complete; one redacted live call recorded.** Added `QwenSummarizer` using the verified OpenAI-compatible DashScope endpoint, explicit `SUMMARIZER=qwen` configuration, timeout/error handling, and sanitized HTTP fixtures. `MockSummarizer` remains the default. On 2026-10-14 a real request returned HTTP 200 with a 346-byte body and `choices[0].message.content` present; the summary text was not stored. See `docs/research/qwen-text-summarizer.md`.

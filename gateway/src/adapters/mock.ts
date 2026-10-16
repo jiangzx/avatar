@@ -37,7 +37,12 @@ export interface MockOptions {
   chunkMs?: number;
   /** >1 sends audio faster than real time, like real models do. */
   paceFactor?: number;
+  /** Silence before the next reply after a started response is cancelled. TUNABLE. */
+  cancelGapMs?: number;
 }
+
+/** Keeps a cancelled reply from flowing straight into the next clip. TUNABLE. */
+export const MOCK_CANCEL_GAP_MS = 400;
 
 interface ActiveResponse {
   id: string;
@@ -58,6 +63,7 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
   private createCount = 0;
   private active: ActiveResponse | null = null;
   private speechOffset = 0;
+  private cancelGapSamples = 0;
   private closed = false;
 
   constructor(private readonly opts: MockOptions) {
@@ -184,21 +190,31 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
     if (!a) return;
     if (a.timer) clearTimeout(a.timer);
     this.active = null;
-    if (a.started) this.emit('responseCancelled', a.id);
+    if (!a.started) return;
+    const gapMs = this.opts.cancelGapMs ?? MOCK_CANCEL_GAP_MS;
+    this.cancelGapSamples = Math.max(0, Math.round((gapMs / 1000) * AI_SAMPLE_RATE));
+    this.speechOffset += this.cancelGapSamples + 1;
+    this.emit('responseCancelled', a.id);
   }
 
   private nextSpeech(ms: number): Int16Array {
     const n = Math.round((ms / 1000) * AI_SAMPLE_RATE);
     const out = new Int16Array(n);
     const src = this.opts.speech;
-    for (let k = 0; k < n; k++, this.speechOffset++) {
+    for (let k = 0; k < n; k++) {
+      if (this.cancelGapSamples > 0) {
+        out[k] = 0;
+        this.cancelGapSamples--;
+        continue;
+      }
       if (src && src.length > 0) {
-        out[k] = src[this.speechOffset % src.length];
+        out[k] = src[this.speechOffset % src.length]!;
       } else {
         const t = this.speechOffset / AI_SAMPLE_RATE;
         const envelope = 0.5 + 0.5 * Math.sin(2 * Math.PI * 4 * t);
         out[k] = Math.round(6000 * envelope * Math.sin(2 * Math.PI * 180 * t));
       }
+      this.speechOffset++;
     }
     return out;
   }

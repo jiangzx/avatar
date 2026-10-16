@@ -92,3 +92,5 @@ node /tmp/seeduplex_probe.mjs
 2026-10-14 使用本地 Qwen Key/WorkspaceID（只在进程内读取）完成真实最小验证：实时 WSS HTTP 101；收到 `session.created`、`session.updated`；发送 640 字节 PCM 和 `response.create` 后收到 `response.created`、`response.audio.delta`、`response.audio.done`、`response.audio_transcript.delta/done`、`response.done`，累计输出音频字节数 179,040。工具声明触发了 `response.function_call_arguments.delta/done`，事件字段键为 `call_id`、`name`、`arguments`、`response_id`；使用一次 `conversation.item.create`（`function_call_output`、相同 `call_id`）回传后收到 `conversation.item.created`，但没有足够证据证明第二轮音频生成。此前 `invalid_request_error` 由探针在 `response.done` 后重复发送 `response.create` 造成，已修正。适配器已补充真实 `response.created`、嵌套 response id、`response.done(status=cancelled)` 和顶层工具字段映射。
 
 同一 Key 调用官方 OpenAI-compatible 文本 endpoint 返回 HTTP 200，响应体 346 字节且存在 `choices[0].message.content` 字段；没有保存或输出文本内容。
+
+2026-10-16 核对官方 client events：工具结果必须先发 `conversation.item.create`（`function_call_output`），再发一次 `response.create`。适配器已按这个顺序发送，夹具测试锁住了这两条事件。同日脱敏实探在工具参数结束后立即发送这两条事件，观察到 `response.created` 2 次、`response.done` 2 次、音频 65280 字节，没有 error 事件。没有记录转写或工具参数。

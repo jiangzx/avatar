@@ -52,6 +52,24 @@ describe('QwenAdapter', () => {
     expect(seen).toEqual(['start:r', 'text:fixture', 'tool:c:perform_action', 'done:r']); expect(bytes).toBe(2); expect(done).toBe(1); a.close();
   });
 
+  it('continues with response.create after a tool result', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
+    const sent: Array<Record<string, unknown>> = [];
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString()) as Record<string, unknown>;
+      sent.push(e);
+      if (e.type === 'session.update') { ws.send(JSON.stringify({ type: 'session.created' })); ws.send(JSON.stringify({ type: 'session.updated' })); }
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture' });
+    await a.connect({ instructions: 'fixture', tools: [] });
+    a.sendToolResult('call-1', { ok: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const tail = sent.slice(1);
+    expect(tail.map((e) => e.type)).toEqual(['conversation.item.create', 'response.create']);
+    expect(tail[0]?.item).toMatchObject({ type: 'function_call_output', call_id: 'call-1', output: '{"ok":true}' });
+    a.close();
+  });
+
   it('creates a response after sending debug user text', async () => {
     const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
     const types: string[] = [];
