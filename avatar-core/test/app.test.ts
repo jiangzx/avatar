@@ -61,7 +61,7 @@ function setup(opts: { startFails?: boolean } = {}) {
       settings: () => null,
     },
     vad,
-    createAvatar: () => ({ load: async () => {}, talkingHead: {} as never, setMouth: () => {}, setEmotion: () => {}, enterState: () => {}, setRendering: () => {} }),
+    createAvatar: () => ({ load: async () => {}, talkingHead: {} as never, setMouth: () => {}, setEmotion: () => {}, enterState: () => {}, setActing: () => {}, setRendering: () => {} }),
     createActions: () => ({ play: () => {}, stopAll: () => {}, nod: () => {} }),
     createClient: (_o, ev) => { clientEv = ev; return client; },
     post: (m) => posted.push(m),

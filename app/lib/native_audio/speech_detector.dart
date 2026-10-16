@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'pcm.dart';
 
 const double defaultVadThresholdRms = 1200; // TUNABLE
+const double defaultVadBargeInThresholdRms = 200; // TUNABLE: AEC keeps playback near RMS 50
+const int defaultVadBargeInGraceMs = 400; // TUNABLE: ignore the trailing user voice
 const int defaultVadStartMs = 150; // TUNABLE
 const int defaultVadReleaseMs = 120; // TUNABLE
 const int defaultVadFrameMs = 20;
@@ -21,12 +23,16 @@ abstract interface class NativeSpeechDetector {
 class EnergySpeechDetector implements NativeSpeechDetector {
   EnergySpeechDetector({
     this.thresholdRms = defaultVadThresholdRms,
+    this.bargeInThresholdRms = defaultVadBargeInThresholdRms,
+    this.bargeInGraceMs = defaultVadBargeInGraceMs,
     this.startMs = defaultVadStartMs,
     this.releaseMs = defaultVadReleaseMs,
     this.frameMs = defaultVadFrameMs,
   });
 
   final double thresholdRms;
+  final double bargeInThresholdRms;
+  final int bargeInGraceMs;
   final int startMs;
   final int releaseMs;
   final int frameMs;
@@ -34,18 +40,24 @@ class EnergySpeechDetector implements NativeSpeechDetector {
   var _belowMs = 0;
   var _speaking = false;
   var _aiPlaying = false;
+  var _playingMs = 0;
 
   @override
   bool get aiPlaying => _aiPlaying;
 
   @override
-  set aiPlaying(bool value) => _aiPlaying = value;
+  set aiPlaying(bool value) {
+    _aiPlaying = value;
+    if (!value) _playingMs = 0;
+  }
 
   @override
   SpeechEdge push(Int16List frame, {required int timestampMs}) {
     // Keep the timestamp in the interface so a model-backed detector can use onset time later.
     if (timestampMs < 0) return SpeechEdge.none;
-    final loud = rmsInt16(frame) >= thresholdRms;
+    if (_aiPlaying) _playingMs += frameMs;
+    final barging = _aiPlaying && _playingMs >= bargeInGraceMs;
+    final loud = rmsInt16(frame) >= (barging ? bargeInThresholdRms : thresholdRms);
     if (loud) {
       _aboveMs += frameMs;
       _belowMs = 0;
@@ -72,5 +84,6 @@ class EnergySpeechDetector implements NativeSpeechDetector {
     _aboveMs = 0;
     _belowMs = 0;
     _speaking = false;
+    _playingMs = 0;
   }
 }

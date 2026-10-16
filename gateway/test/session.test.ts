@@ -321,8 +321,10 @@ describe('Session', () => {
     expect(uplink).toBe(0);
     await vi.advanceTimersByTimeAsync(1_000);
     s.session.handleMicAudio(loud());
-    expect(uplink).toBe(1);
+    expect(uplink).toBe(0);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(1);
     await vi.advanceTimersByTimeAsync(9_000);
     expect(of(s.sent, 'response.start').map((m) => m.kind)).toEqual(['greeting']);
   });

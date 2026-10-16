@@ -22,4 +22,21 @@ void main() {
     expect(vad.push(quiet, timestampMs: 60), SpeechEdge.none);
     expect(vad.push(quiet, timestampMs: 80), SpeechEdge.silent);
   });
+
+  test('energy VAD accepts quieter speech after the barge-in grace while the assistant plays', () {
+    final vad = EnergySpeechDetector(
+      thresholdRms: 1200,
+      bargeInThresholdRms: 200,
+      bargeInGraceMs: 40,
+      startMs: 40,
+      releaseMs: 60,
+    );
+    final mid = Int16List(320)..fillRange(0, 320, 400);
+    expect(vad.push(mid, timestampMs: 0), SpeechEdge.none);
+    expect(vad.push(mid, timestampMs: 20), SpeechEdge.none);
+    vad.aiPlaying = true;
+    expect(vad.push(mid, timestampMs: 40), SpeechEdge.none);
+    expect(vad.push(mid, timestampMs: 60), SpeechEdge.none);
+    expect(vad.push(mid, timestampMs: 80), SpeechEdge.speaking);
+  });
 }

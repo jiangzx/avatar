@@ -6,6 +6,7 @@ import { postToFlutter, type NativeViewEvent, type ToFlutter } from './bridge.ts
 import type { AvatarState } from './avatar/stateMachine.ts';
 import { ActionPlayer } from './avatar/actions.ts';
 import { AvatarView } from './avatar/avatarView.ts';
+import { SubtitleMouth } from './avatar/subtitleMouth.ts';
 
 export interface NativeAvatarDeps {
   createAvatar(el: HTMLElement): AvatarLike;
@@ -17,7 +18,7 @@ export interface NativeAvatarDeps {
 export function browserNativeDeps(): NativeAvatarDeps {
   return {
     createAvatar: (el) => new AvatarView(el),
-    createActions: (avatar) => new ActionPlayer(avatar.talkingHead, { waveFbx: './animations/waving.fbx' }),
+    createActions: (avatar) => new ActionPlayer(avatar.talkingHead, { waveFbx: './animations/waving.fbx' }, { setActing: (active) => avatar.setActing(active) }),
     post: postToFlutter,
     doc: document,
   };
@@ -30,6 +31,8 @@ export class NativeAvatarController {
   private state: AvatarState = 'idle';
   private activeSeq: number | null = null;
   private liveAssistantText = '';
+  private readonly subtitleMouth = new SubtitleMouth();
+  private speakTimer: ReturnType<typeof setInterval> | null = null;
   private ended = false;
   private readonly onVisibilityChange = () => {
     if (!this.ended) this.avatar?.setRendering(!this.deps.doc.hidden);
@@ -70,7 +73,10 @@ export class NativeAvatarController {
         this.transition(event.state);
         break;
       case 'subtitle':
-        if (event.role === 'assistant' && !event.final) this.liveAssistantText = event.text;
+        if (event.role === 'assistant' && !event.final) {
+          this.liveAssistantText = event.text;
+          this.speakSubtitle(event.text);
+        }
         if (event.role === 'assistant' && event.final) this.liveAssistantText = '';
         this.deps.post({ type: 'subtitle', role: event.role, text: event.text, final: event.final });
         break;
@@ -91,9 +97,7 @@ export class NativeAvatarController {
         this.avatar?.setEmotion(event.emotion);
         break;
       case 'audio.level':
-        const shape = this.mouth.update({ rms: event.rms / 32768, zcr: event.zcr }, event.dtMs);
         if (this.activeSeq !== null && this.state !== 'speaking') this.transition('speaking');
-        this.avatar?.setMouth(shape);
         break;
       case 'metric':
         this.deps.post({ type: 'metric', name: event.name, ms: event.ms });
@@ -111,6 +115,7 @@ export class NativeAvatarController {
       this.deps.doc.removeEventListener('visibilitychange', this.onVisibilityChange);
       this.visibilityListenerAttached = false;
     }
+    this.stopSubtitleMouth();
     this.actions?.stopAll();
     this.avatar?.setMouth(null);
     this.avatar?.setRendering(false);
@@ -125,8 +130,33 @@ export class NativeAvatarController {
     }
     if (this.activeSeq === responseSeq) this.activeSeq = null;
     if (cancelled) this.actions?.stopAll();
+    this.stopSubtitleMouth();
     this.avatar?.setMouth(null);
     this.transition('idle');
+  }
+
+  /** Drive the mouth from new subtitle characters, one slot at a time. */
+  private speakSubtitle(text: string): void {
+    const shape = this.subtitleMouth.feed(text);
+    if (shape) this.avatar?.setMouth(shape);
+    if (this.subtitleMouth.pending && this.speakTimer === null) {
+      this.speakTimer = setInterval(() => {
+        const next = this.subtitleMouth.poll(40);
+        if (next) this.avatar?.setMouth(next);
+        if (!this.subtitleMouth.pending && this.speakTimer !== null) {
+          clearInterval(this.speakTimer);
+          this.speakTimer = null;
+        }
+      }, 40);
+    }
+  }
+
+  private stopSubtitleMouth(): void {
+    this.subtitleMouth.reset();
+    if (this.speakTimer !== null) {
+      clearInterval(this.speakTimer);
+      this.speakTimer = null;
+    }
   }
 
   private transition(next: AvatarState): void {

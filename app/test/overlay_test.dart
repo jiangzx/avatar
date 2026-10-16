@@ -21,13 +21,13 @@ void main() {
         ),
       ),
     ));
-    expect(find.text('AI 虚拟人'), findsOneWidget);
+    expect(find.text('小柔'), findsOneWidget);
     expect(find.text('我叫老王'), findsOneWidget);
     expect(find.text('王叔好'), findsOneWidget);
     expect(find.text('网络有点慢，稍等我一下'), findsOneWidget);
     await tester.tap(find.byKey(const Key('mute')));
     await tester.tap(find.byKey(const Key('end')));
-    await tester.longPress(find.text('AI 虚拟人'));
+    await tester.longPress(find.text('小柔'));
     expect((muteTaps, endTaps, debugToggles), (1, 1, 1));
   });
 

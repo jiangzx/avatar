@@ -37,7 +37,7 @@ export type PlaybackLike = Pick<
 >;
 export type CaptureLike = Pick<MicCapture, 'start' | 'stop' | 'setEnabled' | 'settings'>;
 export type VadLike = Pick<LocalVad, 'start' | 'destroy' | 'aiPlaying'>;
-export type AvatarLike = Pick<AvatarView, 'load' | 'talkingHead' | 'setMouth' | 'setEmotion' | 'enterState' | 'setRendering'>;
+export type AvatarLike = Pick<AvatarView, 'load' | 'talkingHead' | 'setMouth' | 'setEmotion' | 'enterState' | 'setActing' | 'setRendering'>;
 export type ActionsLike = Pick<ActionPlayer, 'play' | 'stopAll' | 'nod'>;
 export type ClientLike = Pick<GatewayClient, 'start' | 'send' | 'sendAudio' | 'close'>;
 export interface DocLike {
@@ -63,7 +63,7 @@ export function browserDeps(): AppDeps {
     capture: new MicCapture(),
     vad: new LocalVad(),
     createAvatar: (el) => new AvatarView(el),
-    createActions: (avatar) => new ActionPlayer(avatar.talkingHead, { waveFbx: './animations/waving.fbx' }),
+    createActions: (avatar) => new ActionPlayer(avatar.talkingHead, { waveFbx: './animations/waving.fbx' }, { setActing: (active) => avatar.setActing(active) }),
     createClient: (o, ev) => new GatewayClient(o, ev),
     post: postToFlutter,
     doc: document,

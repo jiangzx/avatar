@@ -122,7 +122,9 @@ export class Session {
       if (this.rebuildMicBuffer.length < MAX_REBUILD_MIC_FRAMES) this.rebuildMicBuffer.push(pcm.slice());
       return;
     }
-    if (this.deps.modelOwnsTurns && this.modelGenerating) return;
+    // Drop the mic until playback ends. Otherwise the speaker, or a barge-in
+    // that should only stop the current reply, becomes the next model turn.
+    if (this.deps.modelOwnsTurns && (this.modelGenerating || this.interrupt.active !== null)) return;
     this.adapter.sendAudio(pcm);
   }
 

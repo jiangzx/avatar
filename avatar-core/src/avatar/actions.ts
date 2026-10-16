@@ -1,5 +1,6 @@
 import type { TalkingHead } from '@met4citizen/talkinghead';
 import type { ActionName } from '@anyidea/protocol';
+import { REST_SMILE } from './avatarView.ts';
 
 export interface ActionAssets {
   waveFbx?: string;
@@ -15,6 +16,13 @@ export function looksLikeFbx(contentType: string | null, head: Uint8Array): bool
 }
 
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+
+/** Extra camera distance while turning so the spin stays inside the portrait frame. */
+export const TURN_CAMERA_PULL = 4;
+
+export interface ActionHooks {
+  setActing?: (active: boolean) => void;
+}
 
 /** TUNABLE (estimates): action parameters tuned on device in Task 18. */
 export const ACTION_TUNING = {
@@ -55,10 +63,14 @@ export class ActionPlayer {
   private smileTimer: ReturnType<typeof setTimeout> | null = null;
   private heartRegistered = false;
   private waveFbxOk: boolean | null = null;
+  private actingDepth = 0;
+  private readonly actingTimers = new Set<ReturnType<typeof setTimeout>>();
+  private framingTurn = false;
 
   constructor(
     private readonly head: TalkingHead,
     private readonly assets: ActionAssets,
+    private readonly hooks: ActionHooks = {},
   ) {}
 
   play(action: ActionName): void {
@@ -92,10 +104,12 @@ export class ActionPlayer {
     if (this.smileTimer !== null) {
       clearTimeout(this.smileTimer);
       this.smileTimer = null;
-      this.head.setFixedValue('mouthSmile', null);
+      this.head.setFixedValue('mouthSmile', REST_SMILE);
     }
     this.head.stopGesture(ACTION_TUNING.stopFadeMs);
     this.head.stopAnimation();
+    this.clearActing();
+    this.releaseTurnFrame();
   }
 
   /** Never rejects: a missing/invalid FBX falls back to the built-in "handup" gesture. */
@@ -109,6 +123,7 @@ export class ActionPlayer {
     if (!this.isCurrent(generation)) return;
     if (this.assets.waveFbx && this.waveFbxOk) {
       try {
+        this.pushActing(ACTION_TUNING.wave.durationSec * 1000);
         await this.head.playAnimation(this.assets.waveFbx, null, ACTION_TUNING.wave.durationSec);
         if (!this.isCurrent(generation)) return;
         return;
@@ -118,6 +133,7 @@ export class ActionPlayer {
       }
     }
     if (!this.isCurrent(generation)) return;
+    this.pushActing(ACTION_TUNING.wave.durationSec * 1000);
     this.head.playGesture('handup', ACTION_TUNING.wave.durationSec, true, ACTION_TUNING.wave.fadeMs);
   }
 
@@ -141,6 +157,7 @@ export class ActionPlayer {
     if (!target || this.nodding) return;
     this.nodding = true;
     const { amplitude, cycles, durationMs: duration } = subtle ? ACTION_TUNING.nod.subtle : ACTION_TUNING.nod.full;
+    this.pushActing(duration);
     const t0 = performance.now();
     const generation = this.generation;
     const step = (now: number) => {
@@ -161,12 +178,13 @@ export class ActionPlayer {
   }
 
   smile(): void {
+    this.pushActing(ACTION_TUNING.smile.holdMs);
     this.head.setFixedValue('mouthSmile', ACTION_TUNING.smile.value);
     if (this.smileTimer !== null) clearTimeout(this.smileTimer);
     const generation = this.generation;
     this.smileTimer = setTimeout(() => {
       this.smileTimer = null;
-      if (this.isCurrent(generation)) this.head.setFixedValue('mouthSmile', null);
+      if (this.isCurrent(generation)) this.head.setFixedValue('mouthSmile', REST_SMILE);
     }, ACTION_TUNING.smile.holdMs);
   }
 
@@ -174,6 +192,8 @@ export class ActionPlayer {
     const root = this.head.armature;
     if (!root || this.turning) return;
     this.turning = true;
+    this.frameTurn();
+    this.pushActing(ACTION_TUNING.turn.durationMs);
     const start = root.rotation.y;
     const duration = ACTION_TUNING.turn.durationMs;
     const t0 = performance.now();
@@ -188,6 +208,7 @@ export class ActionPlayer {
       } else {
         root.rotation.y = start;
         this.turning = false;
+        this.releaseTurnFrame();
       }
     };
     this.turnFrame = requestAnimationFrame(step);
@@ -195,6 +216,7 @@ export class ActionPlayer {
 
   /** One-hand finger heart built from the "handup" arm pose with custom fingers (ACTION_TUNING.heartFingers). */
   heart(): void {
+    this.pushActing(ACTION_TUNING.heart.durationSec * 1000);
     if (!this.heartRegistered) {
       const base = this.head.gestureTemplates.handup;
       if (!base) {
@@ -205,6 +227,38 @@ export class ActionPlayer {
       this.heartRegistered = true;
     }
     this.head.playGesture('heart', ACTION_TUNING.heart.durationSec, true, ACTION_TUNING.heart.fadeMs);
+  }
+
+  private pushActing(durationMs: number): void {
+    this.actingDepth += 1;
+    this.hooks.setActing?.(true);
+    const generation = this.generation;
+    const timer = setTimeout(() => {
+      this.actingTimers.delete(timer);
+      if (!this.isCurrent(generation)) return;
+      this.actingDepth = Math.max(0, this.actingDepth - 1);
+      if (this.actingDepth === 0) this.hooks.setActing?.(false);
+    }, durationMs);
+    this.actingTimers.add(timer);
+  }
+
+  private clearActing(): void {
+    for (const timer of this.actingTimers) clearTimeout(timer);
+    this.actingTimers.clear();
+    if (this.actingDepth > 0) this.hooks.setActing?.(false);
+    this.actingDepth = 0;
+  }
+
+  /** Widen the half-body shot for the spin, then return to the resting frame. */
+  private frameTurn(): void {
+    this.framingTurn = true;
+    this.head.setView('mid', { cameraDistance: TURN_CAMERA_PULL });
+  }
+
+  private releaseTurnFrame(): void {
+    if (!this.framingTurn) return;
+    this.framingTurn = false;
+    this.head.setView('mid', { cameraDistance: 0 });
   }
 
   private isCurrent(generation: number): boolean {

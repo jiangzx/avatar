@@ -19,7 +19,7 @@ class AvatarApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final problem = AppConfig.validate();
     return MaterialApp(
-      title: 'AI 虚拟人',
+      title: '小柔',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: Colors.teal, brightness: Brightness.dark),
       home: AppConfig.spike == 'native_audio'

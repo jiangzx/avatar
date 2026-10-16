@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TalkingHead } from '@met4citizen/talkinghead';
-import { ActionPlayer, looksLikeFbx } from '../src/avatar/actions.ts';
+import { ActionPlayer, TURN_CAMERA_PULL, looksLikeFbx } from '../src/avatar/actions.ts';
 
 const bytes = (s: string) => new TextEncoder().encode(s);
 const FBX_HEAD = bytes('Kaydara FBX Binary  \0\x1a\0');
@@ -15,6 +15,7 @@ function createHead() {
     mtAvatar: { headRotateX: { realtime: null as number | null, needsUpdate: false } },
     armature: { rotation: { y: 0 } },
     gestureTemplates: { handup: {} },
+    setView: vi.fn(),
   };
   return head as unknown as TalkingHead;
 }
@@ -98,6 +99,27 @@ describe('ActionPlayer lifecycle', () => {
     staleFrame(100);
 
     expect(root.rotation.y).toBe(42);
+    expect(head.setView).toHaveBeenLastCalledWith('mid', { cameraDistance: 0 });
+    vi.unstubAllGlobals();
+  });
+
+  it('pulls the camera back for a turn and restores the half-body frame when it finishes', () => {
+    const callbacks: Array<(now: number) => void> = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: (now: number) => void) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    });
+    const setActing = vi.fn();
+    const head = createHead();
+    const actions = new ActionPlayer(head, {}, { setActing });
+
+    actions.turn();
+    expect(head.setView).toHaveBeenCalledWith('mid', { cameraDistance: TURN_CAMERA_PULL });
+    expect(setActing).toHaveBeenCalledWith(true);
+    callbacks[0](performance.now() + 5_000);
+
+    expect(head.armature!.rotation.y).toBe(0);
+    expect(head.setView).toHaveBeenLastCalledWith('mid', { cameraDistance: 0 });
     vi.unstubAllGlobals();
   });
 
@@ -113,7 +135,7 @@ describe('ActionPlayer lifecycle', () => {
 
     expect(head.setFixedValue).toHaveBeenCalledTimes(2);
     expect(head.setFixedValue).toHaveBeenNthCalledWith(1, 'mouthSmile', 0.8);
-    expect(head.setFixedValue).toHaveBeenNthCalledWith(2, 'mouthSmile', null);
+    expect(head.setFixedValue).toHaveBeenNthCalledWith(2, 'mouthSmile', 0.45);
     vi.useRealTimers();
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { NativeAvatarController, type NativeAvatarDeps } from '../src/nativeAvatar.ts';
 
 function nativeAvatarFakes(): { deps: NativeAvatarDeps; avatar: { mouthCalls: unknown[] }; posts: unknown[]; removedListeners: number } {
@@ -9,6 +9,7 @@ function nativeAvatarFakes(): { deps: NativeAvatarDeps; avatar: { mouthCalls: un
     setMouth(shape: unknown) { this.mouthCalls.push(shape); },
     setEmotion() {},
     enterState() {},
+    setActing() {},
     setRendering() {},
   };
   const actions = { play() {}, stopAll() {}, nod() {} };
@@ -24,12 +25,23 @@ function nativeAvatarFakes(): { deps: NativeAvatarDeps; avatar: { mouthCalls: un
 }
 
 describe('NativeAvatarController', () => {
-  it('routes native audio levels to mouth updates without PCM', async () => {
+  it('moves the mouth with assistant subtitle characters and ignores the microphone', async () => {
+    vi.useFakeTimers();
     const f = nativeAvatarFakes();
     const c = new NativeAvatarController({} as HTMLElement, f.deps);
     await c.start();
-    c.handleNativeEvent({ type: 'audio.level', rms: 1200, zcr: 0.12, dtMs: 20 });
+    c.handleNativeEvent({ type: 'response.start', responseSeq: 1, kind: 'reply' });
+    c.handleNativeEvent({ type: 'subtitle', role: 'assistant', text: '你', final: false });
     expect(f.avatar.mouthCalls).toHaveLength(1);
+    expect((f.avatar.mouthCalls[0] as { jawOpen: number }).jawOpen).toBeGreaterThan(0.3);
+    c.handleNativeEvent({ type: 'audio.level', rms: 9000, zcr: 0.2, dtMs: 20 });
+    expect(f.avatar.mouthCalls).toHaveLength(1);
+    c.handleNativeEvent({ type: 'subtitle', role: 'assistant', text: '你啊', final: false });
+    vi.advanceTimersByTime(200);
+    expect(f.avatar.mouthCalls.length).toBeGreaterThan(1);
+    c.handleNativeEvent({ type: 'response.end', responseSeq: 1, playedMs: 10 });
+    expect(f.avatar.mouthCalls.at(-1)).toBeNull();
+    vi.useRealTimers();
   });
 
   it('finalizes the active subtitle when a response is interrupted', async () => {

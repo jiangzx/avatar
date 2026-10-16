@@ -38,7 +38,7 @@ class AvatarOverlay extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(16)),
-                child: const Text('AI 虚拟人', style: TextStyle(color: Colors.white, fontSize: 16)),
+                child: const Text('小柔', style: TextStyle(color: Colors.white, fontSize: 16)),
               ),
             ),
           ),

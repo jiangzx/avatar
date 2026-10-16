@@ -8,12 +8,16 @@ declare module '@met4citizen/talkinghead' {
 
   export class TalkingHead {
     constructor(node: HTMLElement, opt?: Record<string, unknown>);
+    opt: { modelFPS: number };
+    animFrameDur: number;
+    renderer: { shadowMap: { enabled: boolean } };
     armature: Object3D | null;
     mtAvatar: Record<string, BlendshapeTarget | undefined>;
     gestureTemplates: Record<string, Record<string, unknown>>;
     showAvatar(avatar: Record<string, unknown>, onprogress?: ((ev: ProgressEvent) => void) | null): Promise<void>;
     setView(view: 'full' | 'mid' | 'upper' | 'head', opt?: Record<string, number>): void;
     setMood(mood: string): void;
+    setBaselineValue(key: string, value: number | null): void;
     setFixedValue(key: string, value: number | null): void;
     makeEyeContact(ms: number): void;
     lookAhead(ms: number): void;

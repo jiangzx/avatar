@@ -5,19 +5,37 @@ import type { AvatarState } from './stateMachine.ts';
 const MOUTH_KEYS = ['jawOpen', 'mouthFunnel', 'mouthPucker', 'mouthStretchLeft', 'mouthStretchRight'] as const;
 const MOODS = new Set(['neutral', 'happy', 'sad', 'love']);
 
-// TUNABLE: renderer and gaze parameters.
-export const MODEL_FPS = 30;
+// TUNABLE: renderer and gaze parameters. Speaking and actions use the higher cap.
+export const IDLE_MODEL_FPS = 30;
+export const ACTIVE_MODEL_FPS = 60;
 export const MAX_PIXEL_RATIO = 2;
 export const LISTEN_EYE_CONTACT_MS = 4000;
 export const THINK_LOOK_AHEAD_MS = 1200;
 export const SPEAK_EYE_CONTACT_MS = 3000;
 // TUNABLE: pucker follows funnel at this ratio.
 export const PUCKER_RATIO = 0.5;
+/** Resting smile. Stronger than TalkingHead's happy baseline, which reads as a flat face on this model. */
+export const REST_SMILE = 0.45;
+
+type ModelFpsTarget = { opt?: { modelFPS: number }; animFrameDur?: number };
+
+/** 60 while speaking or acting; 30 otherwise. */
+export function modelFpsFor(state: AvatarState, acting: boolean): number {
+  return acting || state === 'speaking' ? ACTIVE_MODEL_FPS : IDLE_MODEL_FPS;
+}
+
+/** TalkingHead throttles its render loop from these two fields. */
+export function applyModelFps(head: ModelFpsTarget, fps: number): void {
+  if (head.opt) head.opt.modelFPS = fps;
+  head.animFrameDur = 1000 / fps;
+}
 
 /** Thin wrapper over TalkingHead: we drive the mouth ourselves; TalkingHead handles idle life, eyes, gestures. */
 export class AvatarView {
   private readonly head: TalkingHead;
   private mouthActive = false;
+  private state: AvatarState = 'idle';
+  private acting = false;
 
   constructor(el: HTMLElement) {
     this.head = new TalkingHead(el, {
@@ -25,10 +43,14 @@ export class AvatarView {
       lipsyncModules: [], // we never use TalkingHead's TTS/lipsync; avoids dynamic imports that break when bundled
       cameraView: 'mid', // head to waist, keeps hands in frame on a portrait phone
       cameraRotateEnable: false,
-      modelFPS: MODEL_FPS,
+      modelFPS: IDLE_MODEL_FPS,
       modelPixelRatio: Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO),
-      avatarMood: 'neutral',
+      avatarMood: 'happy',
+      lightSpotIntensity: 0,
     });
+    const renderer = this.head.renderer;
+    if (renderer?.shadowMap) renderer.shadowMap.enabled = false;
+    applyModelFps(this.head, IDLE_MODEL_FPS);
   }
 
   get talkingHead(): TalkingHead {
@@ -36,7 +58,10 @@ export class AvatarView {
   }
 
   async load(url: string, body: 'F' | 'M' = 'F'): Promise<void> {
-    await this.head.showAvatar({ url, body, avatarMood: 'neutral', lipsyncLang: 'en' });
+    await this.head.showAvatar({ url, body, avatarMood: 'happy', lipsyncLang: 'en' });
+    this.head.setMood('happy');
+    this.head.setBaselineValue('eyesLookDown', 0);
+    this.head.setFixedValue('mouthSmile', REST_SMILE);
   }
 
   setMouth(shape: MouthShape | null): void {
@@ -54,7 +79,15 @@ export class AvatarView {
     this.set('mouthStretchRight', shape.stretch);
   }
 
+  setActing(active: boolean): void {
+    if (this.acting === active) return;
+    this.acting = active;
+    this.applyFps();
+  }
+
   enterState(state: AvatarState): void {
+    this.state = state;
+    this.applyFps();
     switch (state) {
       case 'listening':
         this.head.makeEyeContact(LISTEN_EYE_CONTACT_MS);
@@ -77,6 +110,10 @@ export class AvatarView {
   setRendering(on: boolean): void {
     if (on) this.head.start();
     else this.head.stop();
+  }
+
+  private applyFps(): void {
+    applyModelFps(this.head, modelFpsFor(this.state, this.acting));
   }
 
   private set(key: string, value: number | null): void {
