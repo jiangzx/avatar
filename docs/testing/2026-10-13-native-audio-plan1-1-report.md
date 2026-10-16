@@ -154,3 +154,10 @@ Plan 1 原有桌面 Chrome 完整 E2E、方案 A/B 10 分钟对比和完整 Task
 - 首次新观测截图：`rmsMax=6217` 但 `vadSpeaking=0`、`vadSilent=0`、`localCancel=0`；当时网关的 `response_cancel(source=local)` 不能与语音边沿对应，更像提交调试文字时的本地取消，未据此调阈值。
 - 第二次受控样本（北京时间 2026-10-16 07:46:57 起）：面板显示 `vadSpeaking=5`、`vadSilent=5`、`rmsMax=9600`、`maxAboveRunMs=300`、`localCancel=1`。网关匿名事件序列为：`response.start seq=4` → `vad_edge silent count=1 activeSeq=4` → `response_cancel seq=4 source=local` → `vad_edge speaking count=1 activeSeq=0` → `response.start seq=5` → `response_end seq=5`。这证明一次真实 VAD 检出、同序号本地取消和新序号启动；`maxAboveRunMs=300` 已超过当前 `startMs=150`，没有调低阈值或缩短 startMs 的证据。
 - 听感与验收结论：用户反馈本次说“停”后仍继续或像同一句重复。该反馈与网关的 local cancel 同时存在，但没有同一时刻的 accepted/dropped chunk 快照，不能区分旧序号残留与新序号音频听感相似。随后已把 `acceptedChunks/droppedChunks` 加入播放快照并重装 APK；下一次窗口未出现活动响应期间的 local cancel，因此仍不能证明同序号 PCM 残留。可听停止、旧 PCM 残留、字幕终结和定量样本继续记为“未验证”，blocker #10 保持未解除。
+
+### 2026-10-16 第三版 APK 复测与本轮复验
+
+- 第三版 debug APK 已重新构建、通过 `adb push` 和设备端 `pm install -r -d` 安装；Xiaomi 22101317C 在线，`adb reverse tcp:8787 tcp:8787` 保持成功。使用 `ADAPTER=mock` 的干净本地网关重启后，`GET /healthz` 返回 200，带本地配置 secret 的 `POST /session` 返回 200；secret 和会话令牌未写入日志或报告。
+- 第三次受控窗口只观察到空闲期 `vad_edge speaking activeSeq=0`、`vad_edge silent activeSeq=0`，随后 `response.start seq=5` 和 `response_end seq=5`；没有活动 response 期间对应的 `response_cancel(source=local)`，因此 `acceptedChunks/droppedChunks` 仍未取得可归因的取消窗口快照。
+- 用户对受控听感的反馈仍为“播放继续或像同一句重复”。现有证据不能区分本地 VAD 漏检、取消后新序号声音相似或同序号迟到 PCM；#10 保持未解除。
+- 本轮实际复验：`npm test` 通过（protocol 6、gateway 129、avatar-core 84），`npm run typecheck` 通过，`cd app && flutter test` 通过（45），`cd app && flutter analyze` 无问题，`git diff --check` 通过。
