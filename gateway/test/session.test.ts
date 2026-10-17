@@ -124,7 +124,7 @@ describe('Session', () => {
     expect(last.role).toBe('assistant');
     expect(last.interrupted).toBe(true);
     expect('我在听'.startsWith(last.text)).toBe(true);
-    expect(s.mocks[0].notes).toHaveLength(1);
+    expect(s.mocks[0].notes).toEqual([]);
   });
 
   it('does not inject a context note when nothing of the reply was played', async () => {
@@ -161,7 +161,7 @@ describe('Session', () => {
     const types = s.sent.map((m) => (m.type === 'response.cancelled' || m.type === 'response.start' ? `${m.type}:${m.responseSeq}` : null)).filter(Boolean);
     expect(types).toEqual(['response.start:1', 'response.cancelled:1', 'response.start:2']);
     expect(s.session.ledger.recent.at(-1)).toEqual({ role: 'assistant', text: '你好', ts: expect.any(Number), interrupted: true });
-    expect(s.mocks[0].notes).toHaveLength(1);
+    expect(s.mocks[0].notes).toEqual([]);
   });
 
   it('runs an action once when keyword and tool call agree', async () => {
@@ -355,6 +355,22 @@ describe('Session', () => {
     expect(uplink).toBe(1);
   });
 
+  it('streams the barge-in while playback is still active', async () => {
+    const s = setup({ modelOwnsTurns: true });
+    let uplink = 0;
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(200);
+    s.mocks[0].sendAudio = () => { uplink++; };
+    s.session.handleMicAudio(quiet());
+    s.session.handleMicAudio(loud());
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(0);
+    s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 1 });
+    expect(uplink).toBe(2);
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(3);
+  });
+
   it('does not delay uplink after an interruption', async () => {
     const s = setup({ modelOwnsTurns: true, tailGuardMs: 400 });
     let uplink = 0;
@@ -506,13 +522,24 @@ describe('Session', () => {
     expect(s.mocks[0].instructions.length).toBeLessThanOrEqual(200 + 4);
   });
 
+  it('restarts silence after a proactive line is cut off while nobody is speaking', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(5100);
+    expect(of(s.sent, 'response.start').map((m) => m.kind)).toEqual(['greeting', 'followup']);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
+    await vi.advanceTimersByTimeAsync(5100);
+    expect(of(s.sent, 'response.start').map((m) => m.kind)).toEqual(['greeting', 'followup', 'followup']);
+  });
+
   it('carries the interruption into the model instructions', async () => {
     const s = setup();
     await greetAndFinish(s);
     s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
     await vi.advanceTimersByTimeAsync(150);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
-    expect(s.mocks[0].instructions).toContain('（被用户打断）');
+    expect(s.mocks[0].instructions).not.toContain('被用户打断');
+    expect(s.session.ledger.recent.at(-1)?.interrupted).toBe(true);
   });
 
   it('passes the configured output cap to the adapter', async () => {

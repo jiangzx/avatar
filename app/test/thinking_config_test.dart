@@ -17,6 +17,7 @@ void main() {
     expect(c.audio.maxBufferedMs, lessThanOrEqualTo(100));
     expect(c.audio.fadeMs, lessThanOrEqualTo(100));
     expect(c.thinkingSilenceMs + c.tickMs, lessThanOrEqualTo(500));
+    expect(c.fillersEnabled, isFalse);
     expect(c.clipAsset('grandchild', 'think-1'), 'assets/filler/grandchild/think-1.pcm');
   });
 

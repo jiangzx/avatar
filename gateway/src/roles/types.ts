@@ -11,9 +11,43 @@ export interface DirectorConfig {
   maxConsecutive: number;
   maxPerWindow: number;
   windowMs: number;
+  /** After maxConsecutive quick beats, keep offering a light topic at this interval. Absent means stay quiet. */
+  companyAfterMs?: number;
+  /** Silence step 1, after playback ends. Default 5000 when omitted. */
+  contextAfterMs?: number;
+  /** Silence step 2. Default 10000 when omitted. */
+  checkAfterMs?: number;
+  /** Silence step 3, and the wait after a light reply. Default 10000 when omitted. */
+  leaveAfterMs?: number;
+  /** Step 1 when the user has said something concrete. The model writes the question from context. */
+  contextInstruction?: string;
+  /** Step 1 when the user has not said anything concrete. */
+  presenceInstruction?: string;
+  presenceText?: string;
+  /** First silence line after the opening, before the user has said anything. */
+  openingFollowInstruction?: string;
+  openingFollowText?: string;
+  /** Same moment, when a memory snapshot exists. */
+  memoryFollowText?: string;
+  /** Spoken when a barge-in is not a real utterance. */
+  bargeMissInstruction?: string;
+  bargeMissText?: string;
+  /** Step 2 fixed line. */
+  checkInstruction?: string;
+  checkText?: string;
+  /** Step 3 fixed line, then proactive speech stops. */
+  leaveInstruction?: string;
+  leaveText?: string;
+  /** Whole utterances that mean the user is still here. */
+  lightPhrases?: readonly string[];
   quietPhrases: string[];
   greetingInstruction: string;
   greetingText: string;
+  /** Opening when a memory snapshot exists. */
+  greetingMemoryInstruction?: string;
+  greetingMemoryText?: string;
+  /** How long to wait before repeating an opening that was cut off. */
+  greetingRetryMs?: number;
   followupInstruction: string;
   followupText: string;
   idleNoticeInstruction: string;

@@ -91,6 +91,24 @@ describe('config', () => {
   it('loads the shipped role director config through the shared schema', () => {
     const d = loadDirectorConfig(`${root}roles/elder-companion/director.json`);
     expect(d.maxConsecutive).toBe(2);
+    expect(d.maxPerWindow).toBe(8);
+    expect(d.companyAfterMs).toBe(45000);
+    expect(d.contextAfterMs).toBe(5000);
+    expect(d.checkAfterMs).toBe(10000);
+    expect(d.leaveAfterMs).toBe(10000);
+    expect(d.presenceText).toBe('我在');
+    expect(d.checkText).toBe('还在吗');
+    expect(d.leaveText).toBe('那我先安静一会儿，你想说话我就在。');
+    expect(d.lightPhrases).toEqual(['嗯', '哦', '好', '行', '好的', '嗯嗯', '我知道了', '知道了', '知道啦', '明白了', '明白啦']);
+    expect(d.contextInstruction).toContain('{utterance}');
+    expect(d.contextInstruction).not.toContain('后来呢');
+    expect(d.greetingText).toContain('小暖');
+    expect(d.greetingMemoryInstruction).toContain('记忆');
+    expect(d.greetingRetryMs).toBe(800);
+    expect(d.openingFollowText).toBe('您要是方便，告诉我怎么称呼您就好。');
+    expect(d.openingFollowInstruction).toContain('称呼');
+    expect(d.bargeMissText).toBe('没听清，您再说一遍。');
+    expect(d.presenceText).toBe('我在');
   });
 
   it('rejects an invalid director config', () => {

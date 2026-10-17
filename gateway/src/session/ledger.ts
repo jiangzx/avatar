@@ -82,7 +82,7 @@ export class ConversationLedger {
   }
 
   buildInstructions(persona: string): string {
-    const lines = this.entries.map((e) => `${label(e)}：${e.text}${e.interrupted ? '（被用户打断）' : ''}`);
+    const lines = this.entries.map((e) => `${label(e)}：${e.text}`);
     return [
       persona.trim(),
       '## 对话摘要',

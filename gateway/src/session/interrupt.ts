@@ -18,6 +18,10 @@ export class InterruptCoordinator {
 
   constructor(private readonly deps: InterruptDeps) {}
 
+  get isLocalSpeaking(): boolean {
+    return this.localSpeaking;
+  }
+
   get active(): number | null {
     return this.activeSeq;
   }

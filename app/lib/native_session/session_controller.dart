@@ -539,9 +539,12 @@ class NativeSessionController implements GatewayClientEvents {
   }
 
   Future<void> _interruptThenReportSpeech() async {
+    // Report speaking before the stop returns. Otherwise a short barge-in
+    // never reaches the gateway, and the scripted line continues.
+    if (!_ended && _speechOpen) {
+      client.send(VadMessage('speaking', _now()));
+    }
     await _interruptActive();
-    if (_ended) return;
-    client.send(VadMessage('speaking', _now()));
   }
 
   Future<void> _interruptActive({bool sendStopped = true}) =>

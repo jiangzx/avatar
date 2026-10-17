@@ -26,6 +26,7 @@ class FillerAudioConfig {
 /// App-side thresholds for the thinking state and fillers (assets/config/thinking.json).
 class ThinkingConfig {
   const ThinkingConfig({
+    required this.fillersEnabled,
     required this.thinkingSilenceMs,
     required this.fillerAfterMs,
     required this.longWaitAfterMs,
@@ -44,6 +45,8 @@ class ThinkingConfig {
 
   static const assetPath = 'assets/config/thinking.json';
 
+  /// Spoken fillers stay off until the clips match the reply voice and do not stutter.
+  final bool fillersEnabled;
   final int thinkingSilenceMs;
   final int fillerAfterMs;
   final int longWaitAfterMs;
@@ -95,6 +98,7 @@ class ThinkingConfig {
       throw const FormatException('default_style_not_listed');
     }
     final cfg = ThinkingConfig(
+      fillersEnabled: m['fillersEnabled'] == true,
       thinkingSilenceMs: _int(m, 'thinkingSilenceMs', 100, 1000),
       fillerAfterMs: _int(m, 'fillerAfterMs', 300, 5000),
       longWaitAfterMs: _int(m, 'longWaitAfterMs', 1000, 15000),

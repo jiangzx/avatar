@@ -9,6 +9,9 @@ const cfg: DirectorConfig = {
   maxConsecutive: 2,
   maxPerWindow: 3,
   windowMs: 300000,
+  contextAfterMs: 5000,
+  checkAfterMs: 10000,
+  leaveAfterMs: 10000,
   quietPhrases: ['别说了'],
   greetingInstruction: 'G',
   greetingText: 'greeting',
@@ -18,6 +21,16 @@ const cfg: DirectorConfig = {
   idleNoticeText: 'idle',
   resumeInstruction: 'R',
   resumeText: 'resume',
+  contextInstruction: 'CTX',
+  presenceInstruction: 'HERE',
+  presenceText: '我在',
+  checkInstruction: 'CHECK',
+  checkText: '还在吗',
+  leaveInstruction: 'LEAVE',
+  leaveText: '先安静',
+  lightPhrases: ['嗯', '哦', '好', '行', '好的', '嗯嗯', '我知道了', '知道了', '知道啦', '明白了', '明白啦'],
+  topicInstruction: '聊聊{topic}',
+  topics: [{ id: 'a', prompt: '天气', fallbackText: '天气不错。' }],
 };
 
 function make(c: DirectorConfig = cfg) {
@@ -35,15 +48,18 @@ describe('Director', () => {
     const d = new Director(cfg, { requestResponse: (_k, r) => reqs.push(r) });
     d.onSessionStart();
     d.onAiTurnEnded();
-    vi.advanceTimersByTime(8000);
+    vi.advanceTimersByTime(5000);
     d.onAiTurnEnded();
-    vi.advanceTimersByTime(25000);
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
     d.resume();
     expect(reqs).toEqual([
       { cue: 'greeting', instruction: 'G', fallbackText: 'greeting' },
-      { cue: 'followup', instruction: 'F', fallbackText: 'followup' },
-      { cue: 'idleNotice', instruction: 'I', fallbackText: 'idle' },
-      { cue: 'resume', instruction: 'R', fallbackText: 'resume' }, // greeting takes no speech slot, so the third slot is free
+      { cue: 'followup', instruction: 'HERE', fallbackText: '我在' },
+      { cue: 'followup', instruction: 'CHECK', fallbackText: '还在吗' },
+      { cue: 'followup', instruction: 'LEAVE', fallbackText: '先安静' },
+      { cue: 'resume', instruction: 'R', fallbackText: 'resume' },
     ]);
   });
 
@@ -53,31 +69,136 @@ describe('Director', () => {
     expect(calls).toEqual([['greeting', 'G']]);
   });
 
-  it('follows up once, then posts an idle notice, then stays quiet', () => {
+  it('opens from memory when a snapshot exists, and introduces itself when it does not', () => {
+    const withMemory = make({ ...cfg, greetingMemoryInstruction: 'MEM', greetingMemoryText: '又见到您了' });
+    const reqs: ProactiveRequest[] = [];
+    const remembered = new Director({ ...cfg, greetingMemoryInstruction: 'MEM', greetingMemoryText: '又见到您了' }, {
+      requestResponse: (_k, r) => reqs.push(r),
+    });
+    remembered.onSessionStart(true);
+    expect(reqs).toEqual([{ cue: 'greeting', instruction: 'MEM', fallbackText: '又见到您了' }]);
+    withMemory.d.onSessionStart(false);
+    expect(withMemory.calls).toEqual([['greeting', 'G']]);
+  });
+
+  it('repeats the opening instead of the presence line when the greeting is cut off', () => {
+    const { d, calls } = make();
+    d.onSessionStart();
+    d.onAssistantInterrupted();
+    vi.advanceTimersByTime(799);
+    expect(calls).toEqual([['greeting', 'G']]);
+    vi.advanceTimersByTime(1);
+    expect(calls).toEqual([['greeting', 'G'], ['greeting', 'G']]);
+    vi.advanceTimersByTime(5000);
+    expect(calls).toEqual([['greeting', 'G'], ['greeting', 'G']]);
+  });
+
+  it('says it is here, then checks, then leaves, and does not speak again', () => {
     const { d, calls } = make();
     d.onAiTurnEnded();
-    vi.advanceTimersByTime(7999);
+    vi.advanceTimersByTime(4999);
     expect(calls).toEqual([]);
     vi.advanceTimersByTime(1);
-    expect(calls).toEqual([['followup', 'F']]);
+    expect(calls).toEqual([['followup', 'HERE']]);
     d.onAiTurnEnded();
-    vi.advanceTimersByTime(25000);
-    expect(calls).toEqual([['followup', 'F'], ['followup', 'I']]);
+    vi.advanceTimersByTime(10000);
+    expect(calls).toEqual([['followup', 'HERE'], ['followup', 'CHECK']]);
     d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    expect(calls).toEqual([['followup', 'HERE'], ['followup', 'CHECK'], ['followup', 'LEAVE']]);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(60000);
+    expect(calls).toHaveLength(3);
+  });
+
+  it('continues the opening instead of saying it is merely here', () => {
+    const { d, calls } = make({ ...cfg, openingFollowInstruction: 'OPEN', openingFollowText: '称呼', memoryFollowText: '接着' });
+    d.onSessionStart(false);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    expect(calls).toEqual([['greeting', 'G'], ['followup', 'OPEN']]);
+  });
+
+  it('anchors the first silence step to the user\'s own words', () => {
+    const { d, calls } = make({ ...cfg, contextInstruction: '只围绕「{utterance}」' });
+    d.onUserFinal('孙子周末来看我');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    expect(calls).toEqual([['followup', '只围绕「孙子周末来看我」']]);
+  });
+
+  it('treats an acknowledgement of the assistant as light, not a new story', () => {
+    const { d, calls } = make();
+    d.onUserFinal('孙子周末来看我');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnEnded();
+    d.onUserFinal('我知道了');
+    vi.advanceTimersByTime(9999);
+    expect(calls).toEqual([['followup', 'CTX']]);
+    vi.advanceTimersByTime(1);
+    expect(calls).toEqual([['followup', 'CTX'], ['followup', 'LEAVE']]);
+  });
+
+  it('continues the last concrete thing instead of a topic card', () => {
+    const reqs: ProactiveRequest[] = [];
+    const d = new Director(cfg, { requestResponse: (_k, r) => reqs.push(r) });
+    d.onUserFinal('孙子周末来看我');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    expect(reqs).toEqual([{ cue: 'followup', instruction: 'CTX', fallbackText: '我在' }]);
+  });
+
+  it('treats a longer sentence that merely contains a light word as new content', () => {
+    const { d, calls } = make();
+    d.onUserFinal('今天还行');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    expect(calls).toEqual([['followup', 'CTX']]);
+  });
+
+  it('a light reply skips the check and then leaves once', () => {
+    const { d, calls } = make();
+    d.onUserFinal('孙子周末来看我');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnEnded();
+    d.onUserFinal('嗯。');
+    vi.advanceTimersByTime(9999);
+    expect(calls).toEqual([['followup', 'CTX']]);
+    vi.advanceTimersByTime(1);
+    expect(calls).toEqual([['followup', 'CTX'], ['followup', 'LEAVE']]);
+    d.onAiTurnEnded();
+    d.onUserFinal('好');
     vi.advanceTimersByTime(60000);
     expect(calls).toHaveLength(2);
   });
 
-  it('user activity cancels the timer and resets the sequence', () => {
+  it('starts again from the new thing after the leave line', () => {
     const { d, calls } = make();
     d.onAiTurnEnded();
     vi.advanceTimersByTime(5000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    d.onUserFinal('今天去公园了');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    expect(calls.at(-1)).toEqual(['followup', 'CTX']);
+  });
+
+  it('user activity cancels the timer and the next silence starts over', () => {
+    const { d, calls } = make();
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(4000);
     d.onUserActivity();
     vi.advanceTimersByTime(10000);
     expect(calls).toEqual([]);
     d.onAiTurnEnded();
-    vi.advanceTimersByTime(8000);
-    expect(calls).toEqual([['followup', 'F']]);
+    vi.advanceTimersByTime(5000);
+    expect(calls).toEqual([['followup', 'HERE']]);
   });
 
   it('never fires while the user is speaking', () => {
@@ -85,16 +206,16 @@ describe('Director', () => {
     d.onAiTurnEnded();
     vi.advanceTimersByTime(1000);
     d.onUserSpeech(true);
-    d.onAiTurnEnded(); // e.g. a short reply ended while user keeps talking
+    d.onAiTurnEnded();
     vi.advanceTimersByTime(30000);
     expect(calls).toEqual([]);
     d.onUserSpeech(false);
     d.onAiTurnEnded();
-    vi.advanceTimersByTime(8000);
-    expect(calls).toEqual([['followup', 'F']]);
+    vi.advanceTimersByTime(5000);
+    expect(calls).toEqual([['followup', 'HERE']]);
   });
 
-  it('stops following up after a quiet phrase', () => {
+  it('stops after a quiet phrase without the leave line', () => {
     const { d, calls } = make();
     d.onUserFinal('你先别说了好吗');
     d.onAiTurnEnded();
@@ -102,16 +223,16 @@ describe('Director', () => {
     expect(calls).toEqual([]);
   });
 
-  it('respects the per-window limit', () => {
-    const { d, calls } = make({ ...cfg, maxConsecutive: 10, maxPerWindow: 2, idleNoticeAfterMs: 8000 });
-    for (let i = 0; i < 4; i++) {
-      d.onAiTurnEnded();
-      vi.advanceTimersByTime(8000);
-    }
-    expect(calls).toHaveLength(2);
-    vi.advanceTimersByTime(300000);
+  it('still speaks the three silence lines when the resume window is already full', () => {
+    const { d, calls } = make({ ...cfg, maxPerWindow: 0 });
     d.onAiTurnEnded();
-    vi.advanceTimersByTime(8000);
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    expect(calls).toHaveLength(3);
+    d.resume();
     expect(calls).toHaveLength(3);
   });
 
@@ -129,16 +250,63 @@ describe('Director', () => {
     expect(calls).toEqual([['followup', 'R']]);
   });
 
-  it('follows up when the user goes quiet and no reply starts (e.g. a false interruption)', () => {
+  it('repeats the unfinished silence step when playback is cut off and the user is already quiet', () => {
     const { d, calls } = make();
+    d.onUserFinal('今天去公园了');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnStarted();
+    d.onAssistantInterrupted();
+    vi.advanceTimersByTime(4999);
+    expect(calls).toEqual([['followup', 'CTX']]);
+    vi.advanceTimersByTime(1);
+    expect(calls).toEqual([['followup', 'CTX'], ['followup', 'CTX']]);
+  });
+
+  it('waits for the reply after a barge-in, then continues silence', () => {
+    const { d, calls } = make();
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnStarted();
+    d.onUserSpeech(true);
+    d.onAssistantInterrupted();
+    d.onUserSpeech(false);
+    vi.advanceTimersByTime(2000);
+    expect(calls).toEqual([['followup', 'HERE']]);
+    d.onAiTurnStarted();
+    vi.advanceTimersByTime(30000);
+    expect(calls).toEqual([['followup', 'HERE']]);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    expect(calls).toEqual([['followup', 'HERE'], ['followup', 'HERE']]);
+  });
+
+  it('speaks again when a barge-in never becomes a reply', () => {
+    const { d, calls } = make();
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnStarted();
     d.onUserSpeech(true);
     d.onUserSpeech(false);
-    vi.advanceTimersByTime(8000);
-    expect(calls).toEqual([['followup', 'F']]);
+    d.onAssistantInterrupted();
+    vi.advanceTimersByTime(2499);
+    expect(calls).toEqual([['followup', 'HERE']]);
+    vi.advanceTimersByTime(1);
+    expect(calls[1]?.[1]).toContain('没听清');
+  });
+
+  it('follows up when the user goes quiet and no reply starts (e.g. a false interruption)', () => {
+    const { d, calls } = make();
+    d.onAiTurnEnded();
+    d.onUserSpeech(true);
+    d.onUserSpeech(false);
+    vi.advanceTimersByTime(5000);
+    expect(calls).toEqual([['followup', 'HERE']]);
   });
 
   it('a starting AI turn cancels the pending follow-up', () => {
     const { d, calls } = make();
+    d.onAiTurnEnded();
     d.onUserSpeech(true);
     d.onUserSpeech(false);
     vi.advanceTimersByTime(1500);
@@ -170,29 +338,5 @@ describe('Director', () => {
     d.stop();
     vi.advanceTimersByTime(60000);
     expect(calls).toEqual([]);
-  });
-
-  it('uses topic cards round-robin for the first silence follow-up', () => {
-    const topics = [{ id: 'a', prompt: '天气', fallbackText: '天气不错。' }, { id: 'b', prompt: '吃饭', fallbackText: '吃了吗？' }];
-    const reqs: ProactiveRequest[] = [];
-    const d = new Director({ ...cfg, maxPerWindow: 10, topicInstruction: '聊聊{topic}', topics }, { requestResponse: (_k, r) => reqs.push(r) });
-    for (let i = 0; i < 3; i++) {
-      d.onUserActivity();
-      d.onAiTurnEnded();
-      vi.advanceTimersByTime(8000);
-    }
-    expect(reqs.map((r) => [r.cue, r.instruction, r.fallbackText])).toEqual([
-      ['followup', '聊聊天气', '天气不错。'],
-      ['followup', '聊聊吃饭', '吃了吗？'],
-      ['followup', '聊聊天气', '天气不错。'],
-    ]);
-  });
-
-  it('keeps the plain follow-up when the role has no topics', () => {
-    const reqs: ProactiveRequest[] = [];
-    const d = new Director({ ...cfg, topicInstruction: '聊聊{topic}', topics: [] }, { requestResponse: (_k, r) => reqs.push(r) });
-    d.onAiTurnEnded();
-    vi.advanceTimersByTime(8000);
-    expect(reqs).toEqual([{ cue: 'followup', instruction: 'F', fallbackText: 'followup' }]);
   });
 });

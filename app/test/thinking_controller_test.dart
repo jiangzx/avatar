@@ -1,3 +1,4 @@
+import 'package:avatar_app/native_session/thinking_config.dart';
 import 'package:avatar_app/native_session/thinking_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -37,6 +38,19 @@ void main() {
     final c = t.tick(1180);
     expect(states(c), ['thinking']);
     expect(c.whereType<ThinkDiag>().single.fields['after_silence_ms'], 300);
+  });
+
+  test('plays no filler when fillers are disabled', () {
+    final t = ThinkingController(
+      ThinkingConfig.fromMap(thinkingMap()..['fillersEnabled'] = false),
+      vadReleaseMs: 120,
+    );
+    t.onVadSpeaking(0);
+    t.onUserTranscript();
+    t.onVadSilent(1000);
+    t.tick(1180);
+    t.onResponseStart(1200, reply: true);
+    expect(t.tick(9000).whereType<PlayFiller>(), isEmpty);
   });
 
   test('plays one filler after fillerAfterMs once a user transcript was seen', () {
@@ -121,6 +135,29 @@ void main() {
     final t = make();
     expect(states(t.onResponseStart(0, reply: false)), ['thinking']);
     expect(t.tick(5000).whereType<PlayFiller>(), isEmpty);
+  });
+
+  test('a barge-in that ends before the cancel still skips the filler', () {
+    final t = make();
+    t.onFirstAudio(0);
+    t.onVadSpeaking(500);
+    t.onVadSilent(800);
+    t.onCancelled(900);
+    t.onUserTranscript();
+    t.onResponseStart(1000, reply: true);
+    expect(t.tick(4000).whereType<PlayFiller>(), isEmpty);
+  });
+
+  test('a barge-in does not play a filler before the next reply', () {
+    final t = make();
+    t.onFirstAudio(0);
+    t.onVadSpeaking(500);
+    t.onUserTranscript();
+    t.onVadSilent(1500);
+    t.tick(1680);
+    t.onResponseStart(1700, reply: true);
+    expect(t.tick(4000).whereType<PlayFiller>(), isEmpty);
+    expect(t.phase, 'thinking');
   });
 
   test('a reply response.start counts as a user turn even if local VAD never fired', () {

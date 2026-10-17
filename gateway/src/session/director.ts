@@ -8,52 +8,171 @@ export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
 }
 
-/** Controls proactive speech: greeting, silence follow-ups, and how often the assistant may speak first. */
+type SilenceStep = 'context' | 'check' | 'leave';
+
+/** Agreed defaults when a fixture omits the silence fields. Shipped roles set them in director.json. */
+const DEFAULT_CONTEXT_AFTER_MS = 5_000;
+const DEFAULT_CHECK_AFTER_MS = 10_000;
+const DEFAULT_LEAVE_AFTER_MS = 10_000;
+const DEFAULT_GREETING_RETRY_MS = 800;
+/** If a barge-in never becomes a real utterance, say so. Do not fall through to 「我在」. */
+const DEFAULT_BARGE_REPLY_WAIT_MS = 2_500;
+const DEFAULT_BARGE_MISS_INSTRUCTION = '刚才那一下听不清，不是一句完整的话。请只说：没听清，您再说一遍。不要接被打断的内容。';
+const DEFAULT_BARGE_MISS_TEXT = '没听清，您再说一遍。';
+const DEFAULT_LIGHT = ['嗯', '哦', '好', '行', '好的', '嗯嗯', '我知道了', '知道了', '知道啦', '明白了', '明白啦'] as const;
+
+interface SilenceCopy {
+  contextAfterMs: number;
+  checkAfterMs: number;
+  leaveAfterMs: number;
+  contextInstruction: string;
+  presenceInstruction: string;
+  presenceText: string;
+  checkInstruction: string;
+  checkText: string;
+  leaveInstruction: string;
+  leaveText: string;
+  lightPhrases: readonly string[];
+}
+
+/** Controls proactive speech: greeting, a three-step silence chain, and reconnect. */
 export class Director {
   private timer: NodeJS.Timeout | null = null;
-  private consecutive = 0;
   private history: number[] = [];
   private quiet = false;
   private muted = false;
   private paused = false;
   private stopped = false;
   private userSpeaking = false;
-  private topicIndex = 0;
+  private aiBusy = false;
+  private hadContent = false;
+  private left = false;
+  private lightHold = false;
+  private next: SilenceStep = 'context';
+  /** Last substantive thing the user said. Step 1 may quote only this, never the assistant. */
+  private lastContent = '';
+  /** True after the opening line has played to the end. Until then, do not say the presence line. */
+  private opened = false;
+  private hasMemory = false;
+  /** The user cut in. Do not resume the script until their reply has finished. */
+  private bargeIn = false;
+  /** Silence step whose playback is in flight. Cleared when the user speaks. */
+  private pending: SilenceStep | null = null;
 
   constructor(
     private readonly cfg: DirectorConfig,
     private readonly deps: DirectorDeps,
   ) {}
 
-  onSessionStart(): void {
-    this.deps.requestResponse('greeting', this.request('greeting'));
+  onSessionStart(hasMemory = false): void {
+    this.hasMemory = hasMemory;
+    this.deps.requestResponse('greeting', this.greetingRequest());
   }
 
   /** Local VAD state from the client. */
   onUserSpeech(speaking: boolean): void {
     const wasSpeaking = this.userSpeaking;
     this.userSpeaking = speaking;
-    if (speaking) this.onUserActivity();
-    else if (wasSpeaking) this.arm(); // if no reply starts (false interruption, nothing recognized), follow up later
+    if (speaking) {
+      if (this.aiBusy || this.pending !== null) this.bargeIn = true;
+      this.clear();
+      this.pending = null;
+    } else if (wasSpeaking) {
+      if (this.bargeIn) {
+        // The word often ends before playback has stopped. Keep the hold.
+        if (!this.aiBusy) this.armBargeReplyWait();
+        return;
+      }
+      if (this.opened) this.arm();
+      else this.armOpening();
+    }
   }
 
   /** Any sign of the user engaging (model-side speech, transcripts). */
   onUserActivity(): void {
     this.clear();
-    this.consecutive = 0;
+    this.pending = null;
+    if (this.bargeIn && !this.aiBusy) this.armBargeReplyWait();
   }
 
   onUserFinal(text: string): void {
-    this.onUserActivity();
-    if (this.cfg.quietPhrases.some((p) => text.includes(p))) this.quiet = true;
+    if (this.cfg.quietPhrases.some((p) => text.includes(p))) {
+      this.quiet = true;
+      this.clear();
+      this.pending = null;
+      return;
+    }
+    const key = normalizeUtterance(text);
+    if (!key) return;
+    this.clear();
+    this.pending = null;
+    if (this.isLight(key)) {
+      if (this.left) return;
+      this.lightHold = true;
+      this.next = 'leave';
+      if (!this.aiBusy) this.arm();
+      return;
+    }
+    this.hadContent = true;
+    this.lastContent = text.trim();
+    this.lightHold = false;
+    this.left = false;
+    this.next = 'context';
+    if (this.bargeIn && !this.aiBusy) this.armBargeReplyWait();
   }
 
   /** A new assistant response started: the silence timer no longer applies. */
   onAiTurnStarted(): void {
+    this.aiBusy = true;
+    this.bargeIn = false;
     this.clear();
   }
 
+  /** The line was cut off. A real barge-in waits for the reply; a false cut repeats the step. */
+  onAssistantInterrupted(): void {
+    this.aiBusy = false;
+    if (this.stopped || this.quiet || this.muted || this.paused || this.left) return;
+    if (this.userSpeaking) return;
+    this.pending = null;
+    if (this.bargeIn) {
+      this.armBargeReplyWait();
+      return;
+    }
+    if (!this.opened) {
+      this.armOpening();
+      return;
+    }
+    this.arm();
+  }
+
   onAiTurnEnded(): void {
+    this.aiBusy = false;
+    this.opened = true;
+    this.bargeIn = false;
+    if (this.blocked() || this.left) return;
+    const done = this.pending;
+    this.pending = null;
+    if (done === 'leave') {
+      this.left = true;
+      this.lightHold = false;
+      return;
+    }
+    if (done === 'context' && this.lightHold) {
+      this.next = 'leave';
+      this.arm();
+      return;
+    }
+    if (done === 'context') {
+      this.next = 'check';
+      this.arm();
+      return;
+    }
+    if (done === 'check') {
+      this.next = 'leave';
+      this.arm();
+      return;
+    }
+    this.next = this.lightHold ? 'leave' : 'context';
     this.arm();
   }
 
@@ -69,7 +188,7 @@ export class Director {
 
   resume(): void {
     this.paused = false;
-    this.consecutive = 0;
+    this.pending = null;
     if (!this.blocked() && this.takeSpeechSlot()) this.deps.requestResponse('followup', this.request('resume'));
   }
 
@@ -78,46 +197,120 @@ export class Director {
     this.clear();
   }
 
-  /** Starts the silence timer: first a follow-up, then (if still silent) the idle notice. */
+  /** Repeats the opening after a cut-off, instead of the empty-state presence line. */
+  private armOpening(): void {
+    this.clear();
+    if (this.blocked() || this.left || this.opened) return;
+    const wait = this.cfg.greetingRetryMs ?? DEFAULT_GREETING_RETRY_MS;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      if (this.blocked() || this.left || this.opened) return;
+      this.deps.requestResponse('greeting', this.greetingRequest());
+    }, wait);
+  }
+
+  private greetingRequest(): ProactiveRequest {
+    const c = this.cfg;
+    if (this.hasMemory && c.greetingMemoryInstruction && c.greetingMemoryText) {
+      return { cue: 'greeting', instruction: c.greetingMemoryInstruction, fallbackText: c.greetingMemoryText };
+    }
+    return { cue: 'greeting', instruction: c.greetingInstruction, fallbackText: c.greetingText };
+  }
+
+  /** A noise barge-in. If no real reply starts, say it was not heard. */
+  private armBargeReplyWait(): void {
+    this.clear();
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      if (!this.bargeIn) return;
+      this.bargeIn = false;
+      if (this.blocked() || this.left) return;
+      const c = this.cfg;
+      this.deps.requestResponse('followup', {
+        cue: 'followup',
+        instruction: c.bargeMissInstruction ?? DEFAULT_BARGE_MISS_INSTRUCTION,
+        fallbackText: c.bargeMissText ?? DEFAULT_BARGE_MISS_TEXT,
+      });
+    }, DEFAULT_BARGE_REPLY_WAIT_MS);
+  }
+
+  /** Starts the timer for the current silence step. Each delay begins when the previous line has finished. */
   private arm(): void {
     this.clear();
-    if (this.blocked() || this.consecutive >= this.cfg.maxConsecutive) return;
-    const isLast = this.consecutive === this.cfg.maxConsecutive - 1;
-    const delay = this.consecutive === 0 ? this.cfg.followupAfterMs : this.cfg.idleNoticeAfterMs;
-    const cue: ProactiveCue = isLast ? 'idleNotice' : 'followup';
-    this.timer = setTimeout(() => this.fire(cue), delay);
+    if (this.blocked() || this.left) return;
+    const step = this.next;
+    this.timer = setTimeout(() => this.fire(step), this.delayFor(step));
+  }
+
+  private fire(step: SilenceStep): void {
+    this.timer = null;
+    if (this.blocked() || this.left) return;
+    this.pending = step;
+    this.deps.requestResponse('followup', this.silenceRequest(step));
+  }
+
+  private delayFor(step: SilenceStep): number {
+    const s = this.silence();
+    if (step === 'context') return s.contextAfterMs;
+    if (step === 'check') return s.checkAfterMs;
+    return s.leaveAfterMs;
+  }
+
+  private silenceRequest(step: SilenceStep): ProactiveRequest {
+    const s = this.silence();
+    if (step === 'context' && this.hadContent) {
+      return { cue: 'followup', instruction: s.contextInstruction.replaceAll('{utterance}', this.lastContent), fallbackText: s.presenceText };
+    }
+    if (step === 'context') return this.openingFollow(s);
+    if (step === 'check') return { cue: 'followup', instruction: s.checkInstruction, fallbackText: s.checkText };
+    return { cue: 'followup', instruction: s.leaveInstruction, fallbackText: s.leaveText };
+  }
+
+  private openingFollow(s: SilenceCopy): ProactiveRequest {
+    const c = this.cfg;
+    if (c.openingFollowInstruction && c.openingFollowText) {
+      const fallback = this.hasMemory && c.memoryFollowText ? c.memoryFollowText : c.openingFollowText;
+      return { cue: 'followup', instruction: c.openingFollowInstruction, fallbackText: fallback };
+    }
+    return { cue: 'followup', instruction: s.presenceInstruction, fallbackText: s.presenceText };
+  }
+
+  private silence(): SilenceCopy {
+    const c = this.cfg;
+    return {
+      contextAfterMs: c.contextAfterMs ?? DEFAULT_CONTEXT_AFTER_MS,
+      checkAfterMs: c.checkAfterMs ?? DEFAULT_CHECK_AFTER_MS,
+      leaveAfterMs: c.leaveAfterMs ?? DEFAULT_LEAVE_AFTER_MS,
+      contextInstruction: c.contextInstruction ?? c.followupInstruction,
+      presenceInstruction: c.presenceInstruction ?? c.idleNoticeInstruction,
+      presenceText: c.presenceText ?? c.idleNoticeText,
+      checkInstruction: c.checkInstruction ?? c.followupInstruction,
+      checkText: c.checkText ?? c.followupText,
+      leaveInstruction: c.leaveInstruction ?? c.idleNoticeInstruction,
+      leaveText: c.leaveText ?? c.idleNoticeText,
+      lightPhrases: c.lightPhrases ?? DEFAULT_LIGHT,
+    };
+  }
+
+  private isLight(key: string): boolean {
+    return this.silence().lightPhrases.some((p) => normalizeUtterance(p) === key);
   }
 
   private blocked(): boolean {
     return this.stopped || this.quiet || this.muted || this.paused || this.userSpeaking;
   }
 
-  private fire(cue: ProactiveCue): void {
-    this.timer = null;
-    if (this.blocked()) return;
-    if (!this.takeSpeechSlot()) return;
-    this.consecutive++;
-    this.deps.requestResponse('followup', this.request(cue));
-  }
-
   private request(cue: ProactiveCue): ProactiveRequest {
     const c = this.cfg;
     switch (cue) {
       case 'greeting': return { cue, instruction: c.greetingInstruction, fallbackText: c.greetingText };
-      case 'followup': return this.topicRequest() ?? { cue, instruction: c.followupInstruction, fallbackText: c.followupText };
+      case 'followup': return { cue, instruction: c.followupInstruction, fallbackText: c.followupText };
       case 'idleNotice': return { cue, instruction: c.idleNoticeInstruction, fallbackText: c.idleNoticeText };
       case 'resume': return { cue, instruction: c.resumeInstruction, fallbackText: c.resumeText };
     }
   }
 
-  /** Next topic card, round-robin within the session; null when the role has none. */
-  private topicRequest(): ProactiveRequest | null {
-    const { topics, topicInstruction } = this.cfg;
-    if (!topics || topics.length === 0 || !topicInstruction) return null;
-    const card = topics[this.topicIndex++ % topics.length]!;
-    return { cue: 'followup', instruction: topicInstruction.replaceAll('{topic}', card.prompt), fallbackText: card.fallbackText };
-  }
-
+  /** Resume announcements still use the window. Silence steps do not. */
   private takeSpeechSlot(): boolean {
     const now = Date.now();
     this.history = this.history.filter((t) => now - t < this.cfg.windowMs);
@@ -131,4 +324,9 @@ export class Director {
     clearTimeout(this.timer);
     this.timer = null;
   }
+}
+
+/** Drops whitespace and sentence punctuation so "嗯。" is the same utterance as "嗯". */
+function normalizeUtterance(text: string): string {
+  return text.trim().replace(/[\s。！？!?，,、.~～…]+/gu, '');
 }

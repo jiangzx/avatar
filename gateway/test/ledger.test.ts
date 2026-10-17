@@ -74,7 +74,7 @@ describe('ConversationLedger', () => {
     l.addUser('我叫老王', 1);
     l.addAssistant('王叔好', 2, true);
     const text = l.buildInstructions('你是小暖。');
-    expect(text).toBe('你是小暖。\n\n## 对话摘要\n\n（暂无）\n\n## 最近对话\n\n用户：我叫老王\n助手：王叔好（被用户打断）');
+    expect(text).toBe('你是小暖。\n\n## 对话摘要\n\n（暂无）\n\n## 最近对话\n\n用户：我叫老王\n助手：王叔好');
   });
 });
 

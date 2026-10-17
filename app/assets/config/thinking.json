@@ -1,4 +1,5 @@
 {
+  "fillersEnabled": false,
   "thinkingSilenceMs": 300,
   "fillerAfterMs": 1200,
   "longWaitAfterMs": 4000,

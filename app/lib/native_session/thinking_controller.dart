@@ -51,6 +51,7 @@ class ThinkingController {
   bool _anyResponseStarted = false;
   bool _reconnecting = false;
   bool _fillerPlaying = false;
+  bool _fromBargeIn = false;
   bool _skipLogged = false;
   int _tailGuardUntil = 0;
   int _clipIndex = 0;
@@ -74,7 +75,9 @@ class ThinkingController {
         ..add(const ThinkDiag('filler_stopped', {'reason': 'speech'}));
     }
     _tailGuardUntil = 0; // resume real uplink right away
+    final bargeIn = _phase == _Phase.speaking;
     if (_phase == _Phase.idle || _phase == _Phase.speaking) _resetTurn();
+    if (bargeIn) _fromBargeIn = true; // the next reply should follow the interrupt, not a canned filler
     _phase = _Phase.listening;
     _speechStartAt = now;
     _lastNodAt = null;
@@ -129,8 +132,11 @@ class ThinkingController {
       out.add(const StopFiller(fade: false));
     }
     if (_phase == _Phase.listening) return out; // the user is talking; stay listening
+    // They already went quiet. Keep the barge-in mark so the next reply is not a canned filler.
+    final bargeIn = _fromBargeIn;
     _phase = _Phase.idle;
     _resetTurn();
+    _fromBargeIn = bargeIn;
     out.add(const SetAvatarState('idle'));
     return out;
   }
@@ -192,8 +198,11 @@ class ThinkingController {
         ..add(const SetAvatarState('idle'));
       return out;
     }
-    // Fillers only answer a user turn: local silence seen, or a reply response started (VAD may miss quiet speech).
-    if ((_silenceAt == null && !_replyStarted) || _fillerPlaying) return const [];
+    // Placeholder clips use the wrong voice and stutter, so the shipped config leaves them off.
+    // A barge-in already stopped the avatar; a canned line before the next reply sounds stuck.
+    if (!cfg.fillersEnabled || _fromBargeIn || (_silenceAt == null && !_replyStarted) || _fillerPlaying) {
+      return const [];
+    }
     if (_fillers == 0 && now - since >= cfg.fillerAfterMs) {
       if (_hasEvidence()) {
         return _playFiller(now, cfg.thinkingClips[_clipIndex++ % cfg.thinkingClips.length], 'thinking', since);
@@ -237,6 +246,7 @@ class ThinkingController {
     _replyStarted = false;
     _anyResponseStarted = false;
     _reconnecting = false;
+    _fromBargeIn = false;
     _skipLogged = false;
   }
 }

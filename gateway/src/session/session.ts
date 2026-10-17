@@ -60,6 +60,10 @@ interface ResponseState {
 }
 
 const MAX_REBUILD_MIC_FRAMES = 25;
+/** 600 ms. The local detector confirms speech after 150 ms, so the onset is already in this buffer. */
+const BARGE_PREROLL_FRAMES = 30;
+/** Matches the client barge-in threshold. Playback echo sits well below it. */
+const BARGE_PREROLL_RMS = 200;
 
 /** Used only when no policy is injected (tests); production reads gateway/config/pacing.json. */
 const DEFAULT_SUMMARIZE_POLICY: PolicySpec = { timeoutMs: 15_000, retries: 0, backoffMs: 1_000, maxBackoffMs: 1_000 };
@@ -87,6 +91,12 @@ export class Session {
   private lastInstructionsChars = 0;
   private rebuilding = false;
   private ended = false;
+  /** Recent mic frames dropped while a reply was playing, so a barge-in can include its onset. */
+  private bargePreroll: Int16Array[] = [];
+  /** Once the user barges in, keep streaming so the server VAD hears the whole utterance. */
+  private streamBarge = false;
+  /** True only while the upstream response has not finished. Cancelling a finished one drops the next turn. */
+  private responseLive = false;
   private rebuildTimer: NodeJS.Timeout | null = null;
   private rebuildAttempt = 0;
   private readonly rebuildMicBuffer: Int16Array[] = [];
@@ -129,7 +139,7 @@ export class Session {
       this.adapter.close();
       return;
     }
-    this.director.onSessionStart();
+    this.director.onSessionStart(Boolean(this.context.memorySnapshot?.trim()));
   }
 
   attachTransport(transport: Transport): void {
@@ -155,12 +165,37 @@ export class Session {
       if (this.rebuildMicBuffer.length < MAX_REBUILD_MIC_FRAMES) this.rebuildMicBuffer.push(pcm.slice());
       return;
     }
-    // Drop the mic until playback ends. Otherwise the speaker, or a barge-in
-    // that should only stop the current reply, becomes the next model turn.
-    if (this.deps.modelOwnsTurns && (this.modelGenerating || this.interrupt.active !== null)) return;
+    // Drop playback echo until the user actually barges in. Then stream, including the onset,
+    // so the server VAD can hear the new question while the old reply is still open.
+    const playing = this.modelGenerating || this.interrupt.active !== null;
+    if (this.deps.modelOwnsTurns && playing && !this.streamBarge) {
+      this.rememberBargePreroll(pcm);
+      return;
+    }
     // Speaker tail after a reply played to the end must not become the next model turn.
-    if (this.deps.modelOwnsTurns && Date.now() < this.uplinkResumeAt) return;
+    if (this.deps.modelOwnsTurns && !this.streamBarge && Date.now() < this.uplinkResumeAt) return;
+    this.flushBargePreroll();
     this.adapter.sendAudio(pcm);
+  }
+
+  private rememberBargePreroll(pcm: Int16Array): void {
+    this.bargePreroll.push(pcm.slice());
+    if (this.bargePreroll.length > BARGE_PREROLL_FRAMES) this.bargePreroll.shift();
+  }
+
+  /** Sends the buffered onset from the first loud frame. Quiet echo before it stays dropped. */
+  private flushBargePreroll(): void {
+    const frames = this.bargePreroll.splice(0);
+    const start = frames.findIndex((frame) => this.frameRms(frame) >= BARGE_PREROLL_RMS);
+    if (start < 0) return;
+    for (let i = start; i < frames.length; i++) this.adapter.sendAudio(frames[i]!);
+  }
+
+  private frameRms(pcm: Int16Array): number {
+    if (pcm.length === 0) return 0;
+    let sum = 0;
+    for (let i = 0; i < pcm.length; i++) sum += pcm[i]! * pcm[i]!;
+    return Math.sqrt(sum / pcm.length);
   }
 
   handleClientMessage(msg: ClientMessage): void {
@@ -175,6 +210,11 @@ export class Session {
           count: speaking ? this.vadSpeakingCount : this.vadSilentCount,
           activeSeq: this.interrupt.active ?? 0,
         });
+        const playing = this.modelGenerating || this.interrupt.active !== null;
+        if (speaking && playing) {
+          this.streamBarge = true;
+          this.flushBargePreroll();
+        }
         this.interrupt.onLocalVad(speaking);
         this.director.onUserSpeech(speaking);
         if (!speaking) this.metrics.onLocalVadSilent();
@@ -190,12 +230,18 @@ export class Session {
         if (!s) break;
         s.playedMs = Math.max(s.playedMs, msg.playedMs);
         if (msg.reason === 'interrupted') {
+          const wasActive = this.interrupt.active === msg.responseSeq;
           this.interrupt.onClientInterrupted(msg.responseSeq);
+          this.streamBarge = false;
+          this.bargePreroll.length = 0;
           this.finalize(s, true);
-          this.uplinkResumeAt = 0; // the user is talking: no speaker tail to guard against
+          this.uplinkResumeAt = 0; // the user may be talking: no speaker tail to guard against
+          if (wasActive) this.director.onAssistantInterrupted();
         } else {
           // Stale end (already cancelled/superseded, a newer turn may be active): ignore.
           if (this.interrupt.active !== msg.responseSeq) break;
+          this.streamBarge = false;
+          this.bargePreroll.length = 0;
           this.finalize(s, false);
           this.interrupt.onResponseFinished(msg.responseSeq);
           this.uplinkResumeAt = Date.now() + (this.deps.tailGuardMs ?? 0);
@@ -299,6 +345,7 @@ export class Session {
       this.metrics.onResponseStarted(s.seq, s.kind);
       this.emotion?.onResponseStart(s.seq);
       this.modelGenerating = true;
+      this.responseLive = true;
       this.director.onAiTurnStarted();
       const superseded = this.interrupt.onResponseStart(s.seq);
       if (superseded !== null) {
@@ -346,6 +393,7 @@ export class Session {
         this.metrics.onDone(s.seq);
         this.send({ type: 'response.end', responseSeq: s.seq });
         this.modelGenerating = false;
+        this.responseLive = false;
       }
     });
     a.on('responseCancelled', (id) => {
@@ -353,8 +401,8 @@ export class Session {
       const s = this.byId.get(id);
       if (!s || !this.interrupt.onModelAutoCancelled(s.seq)) return;
       this.modelGenerating = false;
+      this.responseLive = false;
       log('model_auto_cancel', { seq: s.seq });
-      this.send({ type: 'response.cancelled', responseSeq: s.seq });
       this.finalize(s, true);
     });
     a.on('error', (code, retryable) => {
@@ -381,7 +429,8 @@ export class Session {
   private cancel(seq: number, source: string): void {
     log('response_cancel', { seq, source });
     this.modelGenerating = false;
-    this.adapter.cancelResponse();
+    if (this.responseLive) this.adapter.cancelResponse();
+    this.responseLive = false;
     this.send({ type: 'response.cancelled', responseSeq: seq });
     const s = this.bySeq.get(seq);
     if (s) this.finalize(s, true);
@@ -397,12 +446,8 @@ export class Session {
     }
     const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
     this.ledger.addAssistant(text, Date.now(), interrupted);
-    // Skip the note when nothing was played: an empty quote would mislead the model.
-    if (interrupted && text.length > 0 && !this.adapter.supportsPlaybackTruncate) {
-      this.adapter.injectContextNote(`助手上一句只说到：「${text}」，被用户打断。`);
-      // The ledger line now ends with （被用户打断）: send it as instructions, no extra user item or reply.
-      this.pushInstructions();
-    }
+    // Do not session.update here. An instructions refresh in the middle of a barge-in
+    // drops the audio the server is still hearing, so the next question never lands.
     this.maybeSummarize();
   }
 
@@ -452,6 +497,7 @@ export class Session {
     this.interrupt.cancelActive('local'); // uses the old adapter
     // The old adapter's responseDone/cancel will never arrive; drop in-flight generation state.
     this.modelGenerating = false;
+    this.responseLive = false;
     this.pendingKind = null;
     this.uplinkResumeAt = 0;
     const old = this.adapter;

@@ -13,7 +13,7 @@ export interface InstructionParts {
   recent: readonly LedgerEntry[];
 }
 
-const line = (e: LedgerEntry) => `${e.role === 'user' ? '用户' : '助手'}：${e.text}${e.interrupted ? '（被用户打断）' : ''}`;
+const line = (e: LedgerEntry) => `${e.role === 'user' ? '用户' : '助手'}：${e.text}`;
 
 function render(persona: string, snapshot: string, summary: string, lines: readonly string[]): string {
   const parts = [persona.trim()];

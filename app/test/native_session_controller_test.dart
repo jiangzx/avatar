@@ -78,7 +78,24 @@ void main() {
     );
   });
 
-  test('interrupts active playback before reporting vad.speaking', () async {
+  test('silence during a barge-in is not followed by a stale speaking edge', () async {
+    final f = SessionFakes();
+    final c = f.controller();
+    await c.start();
+    f.audio.stopResponseGate = Completer<void>();
+    f.client.emit(const ResponseStart(8, 'followup'));
+    await pumpEvents();
+    f.detector.queued.add(SpeechEdge.speaking);
+    f.audio.emitFrame(Int16List(320));
+    await Future<void>.delayed(Duration.zero);
+    f.detector.queued.add(SpeechEdge.silent);
+    f.audio.emitFrame(Int16List(320));
+    f.audio.stopResponseGate!.complete();
+    await pumpEvents();
+    expect(f.client.sent.whereType<VadMessage>().last.state, 'silent');
+  });
+
+  test('reports barge-in speech before playback stops', () async {
     final f = SessionFakes();
     final c = f.controller();
     await c.start();
@@ -88,12 +105,12 @@ void main() {
       f.audio.emitFrame(Int16List(320)..fillRange(0, 320, 2000));
     }
     await Future<void>.delayed(Duration.zero);
+    final sent = f.client.sent;
+    final speakingAt = sent.indexWhere((m) => m is VadMessage && m.state == 'speaking');
+    final stoppedAt = sent.indexWhere((m) => m is PlaybackStopped);
+    expect(speakingAt, greaterThanOrEqualTo(0));
+    expect(stoppedAt, greaterThan(speakingAt));
     expect(f.audio.stopCalls.single.responseSeq, 3);
-    expect(f.client.sent.whereType<VadMessage>(), hasLength(1));
-    expect(
-      f.client.sent.whereType<PlaybackStopped>().single.reason,
-      'interrupted',
-    );
   });
 
   test('keeps playback rms after the response ends', () async {

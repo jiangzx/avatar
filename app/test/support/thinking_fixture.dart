@@ -1,6 +1,7 @@
 import 'package:avatar_app/native_session/thinking_config.dart';
 
 Map<String, Object?> thinkingMap({List<String> evidence = const ['transcript']}) => {
+      'fillersEnabled': true,
       'thinkingSilenceMs': 300,
       'fillerAfterMs': 1200,
       'longWaitAfterMs': 4000,
