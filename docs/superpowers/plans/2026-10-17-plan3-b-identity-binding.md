@@ -1994,7 +1994,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   When `identity` is absent, the three new routes answer 404 (dev mode). CORS: `Access-Control-Allow-Methods: POST, PATCH, DELETE, OPTIONS`, `Access-Control-Allow-Headers: content-type, x-app-secret, authorization`.
 - Produces (`GatewayServerOptions` additions): `identity?: IdentityService`, `registerRateLimit?: { max: number; windowMs: number }`, `devToken?: string`.
 
-- [ ] **Step 1: Write the failing HTTP tests**
+- [x] **Step 1: Write the failing HTTP tests**
 
 Create `gateway/test/identity-http.test.ts`:
 
@@ -2252,12 +2252,12 @@ describe('dev owner deletion', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/identity-http.test.ts`
 Expected: FAIL. TypeScript rejects `identity`/`registerRateLimit`/`devToken` options; at runtime `/device/register` returns 404 and preflight methods are `POST, OPTIONS`.
 
-- [ ] **Step 3: Add the request schemas**
+- [x] **Step 3: Add the request schemas**
 
 Append to `gateway/src/server/schemas.ts`:
 
@@ -2277,7 +2277,7 @@ export const StyleRequestSchema = z.object({ style: styleId });
 export const OwnerIdSchema = z.uuid();
 ```
 
-- [ ] **Step 4: Update `server.ts`**
+- [x] **Step 4: Update `server.ts`**
 
 1. Replace the import block at the top of `gateway/src/server/server.ts` with (keep any Task 0 import that is not listed here):
 
@@ -2513,12 +2513,12 @@ class RateLimiter {
 
 (Rate limits count per source address; behind `adb reverse` every request comes from 127.0.0.1, so in practice each bucket is global. That is acceptable for the POC and documented here.)
 
-- [ ] **Step 5: Run the full gateway suite and typecheck**
+- [x] **Step 5: Run the full gateway suite and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, including the existing `server.test.ts` (Task 0's CORS test only checks that `authorization` is contained); typecheck clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gateway/src/server/schemas.ts gateway/src/server/server.ts gateway/test/identity-http.test.ts
