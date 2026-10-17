@@ -2,7 +2,7 @@
 
 ## 状态
 
-草案第 4 版。决策来源有四部分：2026-10-17 的三轮问答（Q1–Q29）、用户确认的 D1–D4、用户补充的体验与工程要求，以及三轮审查的修正。审阅通过后，用 writing-plans 拆成 Task 0、Plan A–D 和 Spike S。
+已批准（第 4 版，2026-10-17）。决策来源：三轮问答（Q1–Q29）、用户确认的 D1–D4、用户补充的体验与工程要求、三轮审查的修正，以及写计划阶段确认的四项（热线号码、401 重新注册、文件归属例外、试听推迟到 Plan D）。实施计划：Task 0、A1、A2、B、A+B 合并（`docs/superpowers/plans/2026-10-17-plan3-*.md`）；Plan C、D、Spike S 待写。
 
 ## 背景与目标
 
@@ -100,7 +100,7 @@
 ```text
 Flutter app
   ├─ DeviceIdentity: Keystore 保存 deviceToken；本地保存当前风格
-  ├─ 首次启动：选择风格（两张卡片，各带示例语音）
+  ├─ 首次启动：选择风格（两张卡片；示例语音推迟到 Plan D 的首次使用流程）
   ├─ ThinkingController: 倾听 → 思考 → 本地垫话（§3）
   ├─ 无声附和：复用 Bridge 的 avatar.action(nod) / avatar.emotion / state
   └─ [Spike S] 本地有声附和（开关，默认关）
@@ -214,7 +214,7 @@ gateway/test/fixtures/roles/test-role/
 - `deviceToken` 是 CSPRNG 生成的 32 字节随机值，库里只存它的 SHA-256。日志只记 `agentId` 的短哈希。所有 ID 用 UUID。
 - 注册单独限流（不和 `/session` 共用计数桶），另设 `MAX_OWNERS` 和每日注册上限。
 - 孤儿清理只针对"注册后从未建立过会话、并且超过 N 天"的主人，不清理长时间没打开 app 的老人。
-- Flutter 端用 Keystore 保存 token，具体方案在 Plan B 第一步验证。卸载重装会变成一个新主人，POC 阶段接受。
+- Flutter 端用 Keystore 保存 token，具体方案在 Plan B 第一步验证。卸载重装会变成一个新主人，POC 阶段接受。`/session` 返回 401 时，app 自动重新注册一次，也会变成新主人；app 记一条匿名诊断 `device_reregistered`（2026-10-17 用户确认）。
 
 **SQLite**
 - 用 `DatabaseSync`，开启 WAL，设置 `busy_timeout`。路径来自 `MEMORY_DB_PATH`，放在仓库外，文件权限 600，明文存储。
@@ -316,13 +316,13 @@ memory_changes(id, owner_id, table_name, row_id, op, diff, actor, created_at)
 - **开场**：根据记忆快照、上次的情绪、当前时段和节日来选话题。快照把称呼放在最前面。
 - **活动卡**：会话指令里只放活动目录，用户要进入某个活动时，通过 `start_activity` 加载全文。活动流程由模型主导，不做状态机。
 - **首次使用**：
-  1. 选风格；
+  1. 选风格，并在卡片上试听示例语音（从 Plan B 推迟到这里）；
   2. 最小告知；
   3. 由智能体主导"认识一下"，分几次聊完，进度记在 `onboarding_stage`。
 
 ### 10. 危机情况
 
-- 提示词层面（`_shared/safety.md`）：身体急症时让用户打 120；流露轻生念头时，引导联系家人，并告知热线。
+- 提示词层面（`_shared/safety.md`）：身体急症时让用户打 120；流露轻生念头时，引导联系家人，并告知全国心理援助热线 12356（写入前须核实官方来源，核实不了就不写号码）。
 - gateway 只记匿名的 `safety_event` 计数。
 
 ## 配置
@@ -371,7 +371,7 @@ Plan A 第一个任务先测两个基线：
 ## 计划拆分与执行
 
 - **开工前**：工作区里 `persona.md` 和 `director.json` 的未提交改动，先随规格一起提交，作为迁移的起点。
-- **Task 0**：在 `master` 上串行完成，A、B 都依赖它。内容包括：
+- **Task 0**：在 `master` 上串行完成，A、B 都依赖它（`DirectorConfig` 的扩展实际由 Plan A1 以可选字段方式完成，只有 A 改 `director.ts`，不冲突）。内容包括：
   - 冻结 `SessionContext`、Session 构造签名、`manager.create(ctx)`、`SessionConfig.voice?`；
   - 冻结 `ContextResolver.resolve(bearer?) → SessionContext | 401`（由 B 实现）和 `RoleCatalog { hasStyle, defaultStyle, voiceFor, buildPersona }`（由 A 实现），两者都先给桩实现，并在 `index.ts` 里接好线。
   - `SessionDeps.persona` 改为从 ctx 经 `RoleCatalog` 获取。`index.ts:15-16` 里加载 persona 和 director 的逻辑一并迁到桩实现里，之后 A 只需要替换桩，不用再改 `index.ts`。
@@ -381,7 +381,9 @@ Plan A 第一个任务先测两个基线：
   - **Plan A**：gateway 的 `session.ts`、`director.ts`、`ledger.ts`、`adapters/qwen.ts`、`roles/**`、`config/emotion.json`；app 的 `native_audio_io.dart`、播放队列、`speech_detector.dart`、`session_controller.dart`；avatar-core 的 `nativeAvatar.ts`、`avatarView.ts`。
   - **Plan B**：`server.ts`、`schemas.ts`、`manager.ts`、`identity/**`（包括 `ContextResolver` 的实现）、`memory/**`；app 端的 `native_gateway/gateway_client.dart`、`transports.dart`（加 Bearer 请求头）、凭证存储、风格选择界面、`main.dart`。
   - **Plan A 在 app 端另外负责** `avatar_page.dart`（思考态和字幕）和新增的 `FillerPlayer`。
-  - **共享文件**：`index.ts` 和 `config.ts`。Task 0 之后只允许追加；合并冲突由主会话处理。
+  - **共享文件**：`index.ts` 和 `config.ts`。Task 0 之后只允许插入新行，除了标注的接线点，不改已有的行；合并冲突由主会话处理。
+  - **认可的例外**（2026-10-17 用户确认）：Plan B 在 Plan A 的 `app/lib/avatar_page.dart` 里加 3 行，用于传入设备凭证。
+  - **A+B 合并**：见 `docs/superpowers/plans/2026-10-17-plan3-ab-merge.md`（先合 B 再合 A；风格驱动的垫话片段；A+B 合并门槛）。
 - **Plan C** 依赖 A 和 B（它要修改 `qwen.ts` 和 `session.ts` 的工具轮逻辑）。第一个任务是错误分级和工具轮。
 - **Plan D** 依赖 C。
 - **Spike S** 不阻塞其他计划。
