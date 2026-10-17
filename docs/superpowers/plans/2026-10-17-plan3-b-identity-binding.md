@@ -1225,7 +1225,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   `ended` reasons: `client_end`, `grace_expired`, `owner_replaced`, `owner_deleted`, `shutdown`, `unclaimed` (never for unstarted sessions, so `unclaimed`/`start_failed` never reach `ended`). Hook exceptions are caught and logged as `session_lifecycle_failed`. Plan C attaches end-of-session work to `ended`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/manager.test.ts`:
 
@@ -1353,12 +1353,12 @@ describe('SessionManager lifecycle hook', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/manager.test.ts`
 Expected: FAIL. TypeScript/runtime: `SessionLifecycle` is not exported, `endOwner` is not a function, and the owner tests see `size` 2 (no replacement).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Replace `gateway/src/session/manager.ts` with (unchanged logic is kept verbatim; new parts: `SessionLifecycle`, `Entry.ctx`, the `create` replacement, `endOwner`, the two `notify` calls):
 
@@ -1565,12 +1565,12 @@ export class SessionManager {
 
 (Before replacing, diff the Task 0 version of `manager.ts` against the "unchanged" parts above; if Task 0 changed anything else, keep Task 0's version of that part.)
 
-- [ ] **Step 4: Run the full gateway suite and typecheck**
+- [x] **Step 4: Run the full gateway suite and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS (server/session tests unchanged: dev contexts have no `ownerId`, so nothing is replaced); typecheck clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gateway/src/session/manager.ts gateway/test/manager.test.ts
