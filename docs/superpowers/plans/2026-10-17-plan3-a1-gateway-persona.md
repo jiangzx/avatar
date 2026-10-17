@@ -3750,7 +3750,7 @@ Run (Mock, no key; `.env` must hold `APP_SECRET`):
 cd gateway && node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter mock --only quiet,actions
 ```
 
-Expected: stderr lists `scenario actions`, `scenario quiet`; stdout prints one summary JSON line. (The Mock script's canned replies are not persona-shaped; the exit code may be 1 — this run only proves the wiring.)
+Expected: stderr lists `scenario actions`, `scenario quiet`; stdout prints one summary JSON line (summary is the last stdout line; session JSON logs precede it). (The Mock script's canned replies are not persona-shaped; the exit code may be 1 — this run only proves the wiring.)
 
 Run: `npm run typecheck -w gateway`
 Expected: clean.
@@ -3801,7 +3801,7 @@ node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter qwen --sty
 node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter qwen --style old-friend --out ../docs/testing/plan-a-eval/2026-10-1x-qwen-old-friend.md
 ```
 
-Expected: each prints a summary JSON line; exit code 0 means question ratio ≤ 1/3 and average reply chars ≤ 45 (Plan A gate items 1–2).
+Expected: each prints a summary JSON line (summary is the last stdout line; session JSON logs precede it); exit code 0 means question ratio ≤ 1/3 and average reply chars ≤ 45 (Plan A gate items 1–2).
 
 If a style fails: adjust only that style file's 陪伴的方式/说话方式 wording (for example make the "三句话里最多一句是问句" rule more concrete), rerun, at most 3 rounds. Each round's report stays in `docs/testing/plan-a-eval/` with a `-rN` suffix. Still failing after 3 rounds → record in `docs/blockers.md` and report it; do not raise the gate values.
 

@@ -165,6 +165,8 @@ export interface EvalSummary {
   avgOutputTokens: number | null;
   mentions: number;
   pass: { questionRatio: boolean; avgChars: boolean };
+  /** Content-free reason the run is invalid regardless of the gate; null when fine. */
+  failure: string | null;
 }
 
 export function summarize(records: ReplyRecord[], gate: EvalConfig['gate']): EvalSummary {
@@ -178,6 +180,7 @@ export function summarize(records: ReplyRecord[], gate: EvalConfig['gate']): Eva
     avgOutputTokens: tokens.length === 0 ? null : tokens.reduce((a, b) => a + b, 0) / tokens.length,
     mentions: records.filter((r) => r.mentioned).length,
     pass: { questionRatio: questionRatio <= gate.maxQuestionRatio, avgChars: avgChars <= gate.maxAvgReplyChars },
+    failure: records.length === 0 ? 'no replies' : null,
   };
 }
 

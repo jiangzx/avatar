@@ -20,6 +20,7 @@ describe('logReport', () => {
     expect(s.output_tokens).toEqual({ n: 1, p50: 50, p90: 50 });
     expect(s.input_tokens).toEqual({ n: 0, p50: 0, p90: 0 });
   });
+
   it('counts replies without preceding local speech and proactive replies per window', () => {
     const at = (s: number) => new Date(Date.UTC(2026, 9, 17, 0, 0, s)).toISOString();
     const lines = parseLogLines([

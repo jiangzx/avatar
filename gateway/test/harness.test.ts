@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
+import { parseEvalArgs, resolveEvalOut } from '../src/eval/cli.ts';
 import { loadEvalConfig, loadScenarios, renderReport, runScenario, summarize, type EvalConfig, type SessionMaker } from '../src/eval/harness.ts';
 import { fixedRoleCatalog } from '../src/roles/catalog.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
@@ -42,4 +43,26 @@ describe('eval harness', () => {
     expect(report).toContain('| 问句比例 | 0.400 |');
     expect(report).toContain('我在听呢。今天还好吗？');
   }, 10_000);
+
+  it('fails the gate when there are zero replies', () => {
+    const summary = summarize([], { maxQuestionRatio: 1 / 3, maxAvgReplyChars: 45 });
+    expect(summary.replies).toBe(0);
+    expect(summary.failure).toBe('no replies');
+  });
+
+  it('confines --out to docs/testing', () => {
+    const base = '/repo/docs/testing';
+    expect(resolveEvalOut('/repo/docs/testing/plan-a-eval/x.md', base)).toBe('/repo/docs/testing/plan-a-eval/x.md');
+    expect(() => resolveEvalOut('/tmp/x.md', base)).toThrow(/docs\/testing/);
+    expect(() => resolveEvalOut('/repo/docs/testing/../../x.md', base)).toThrow(/docs\/testing/);
+    expect(() => resolveEvalOut('/repo/docs/testing-evil/x.md', base)).toThrow(/docs\/testing/);
+  });
+
+  it('parses flags strictly', () => {
+    expect(parseEvalArgs(['--adapter', 'mock', '--only', 'a,b'])).toEqual({ adapter: 'mock', only: ['a', 'b'] });
+    expect(() => parseEvalArgs(['--adapter'])).toThrow(/requires a value/);
+    expect(() => parseEvalArgs(['--adapter', '--style'])).toThrow(/requires a value/);
+    expect(() => parseEvalArgs(['--bogus', 'x'])).toThrow(/unknown flag/);
+    expect(() => parseEvalArgs(['stray'])).toThrow(/unexpected argument/);
+  });
 });
