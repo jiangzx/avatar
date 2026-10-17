@@ -10,6 +10,8 @@ export interface ToolSpec {
 export interface SessionConfig {
   instructions: string;
   tools: ToolSpec[];
+  /** Per-session voice; undefined = the adapter's configured default. */
+  voice?: string;
 }
 
 /** What the Director wants said. Qwen speaks from `instruction`; adapters that cannot prompt the model speak `fallbackText`. */

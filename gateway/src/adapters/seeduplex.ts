@@ -27,6 +27,7 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
   private eventCounter = 0;
   private instructions = '';
   private tools: ToolSpec[] = [];
+  private voice = '';
   private readonly opts: Required<Pick<SeeduplexOptions, 'endpoint' | 'model' | 'voice' | 'connectTimeoutMs' | 'inputFrameMs'>> & Pick<SeeduplexOptions, 'apiKey'>;
 
   constructor(options: SeeduplexOptions) {
@@ -39,6 +40,7 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
     if (this.ws || this.closed) throw new Error('adapter_not_connectable');
     this.instructions = config.instructions;
     this.tools = config.tools;
+    this.voice = config.voice ?? this.opts.voice;
     await new Promise<void>((resolve, reject) => {
       this.initialization = { resolve, reject };
       const ws = new WebSocket(this.opts.endpoint, { headers: { 'X-Api-Key': this.opts.apiKey }, perMessageDeflate: false });
@@ -92,7 +94,7 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
   injectContextNote(text: string): void { if (this.connected) this.send({ type: 'conversation.item.create', event_id: this.eventId(), items: [{ type: 'message', role: 'assistant', content: [{ type: 'input_text', text }] }] }); }
   close(): void { if (this.closed) return; this.closed = true; this.connected = false; this.failInitialization('seeduplex_connect_closed'); this.clearConnectTimer(); const ws = this.ws; this.ws = null; if (ws && ws.readyState === WebSocket.OPEN) { try { ws.send(JSON.stringify({ type: 'session.close', event_id: this.eventId() })); } catch {} ws.close(); } else ws?.terminate(); }
 
-  private sessionPayload(): Json { return { id: 'anyidea', model: this.opts.model, instructions: this.instructions, audio: { input: { format: { type: 'pcm', rate: MIC_SAMPLE_RATE } }, output: { format: { type: 'pcm_s16le', rate: AI_SAMPLE_RATE }, voice: this.opts.voice } }, tools: this.tools.map((tool) => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.parameters })) }; }
+  private sessionPayload(): Json { return { id: 'anyidea', model: this.opts.model, instructions: this.instructions, audio: { input: { format: { type: 'pcm', rate: MIC_SAMPLE_RATE } }, output: { format: { type: 'pcm_s16le', rate: AI_SAMPLE_RATE }, voice: this.voice } }, tools: this.tools.map((tool) => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.parameters })) }; }
   private sendSessionCreate(): void { this.send({ type: 'session.create', event_id: this.eventId(), session: this.sessionPayload() }); }
   private send(event: Json): void { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(event)); }
   private eventId(): string { return `anyidea-${++this.eventCounter}`; }

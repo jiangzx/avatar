@@ -146,4 +146,24 @@ describe('QwenAdapter', () => {
     await expect(a.connect({ instructions: 'fixture', tools: [] })).rejects.toThrow(expected);
     a.close();
   });
+
+  it('uses the per-session voice when the session config provides one', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
+    const voices: unknown[] = [];
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString()) as { type: string; session?: { audio?: { output?: { voice?: unknown } } } };
+      if (e.type === 'session.update') {
+        voices.push(e.session?.audio?.output?.voice);
+        ws.send(JSON.stringify({ type: 'session.created' }));
+        ws.send(JSON.stringify({ type: 'session.updated' }));
+      }
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'default-voice' });
+    await a.connect({ instructions: 'fixture', tools: [], voice: 'session-voice' });
+    a.close();
+    const b = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'default-voice' });
+    await b.connect({ instructions: 'fixture', tools: [] });
+    b.close();
+    expect(voices).toEqual(['session-voice', 'default-voice']);
+  });
 });

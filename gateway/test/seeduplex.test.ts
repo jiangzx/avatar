@@ -130,4 +130,22 @@ describe('SeeduplexAdapter', () => {
     },
   );
 
+
+  it('uses the per-session voice when the session config provides one', async () => {
+    const server = new WebSocketServer({ port: 0 }); servers.push(server);
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const port = (server.address() as { port: number }).port;
+    const voices: unknown[] = [];
+    server.on('connection', (socket) => socket.on('message', (raw) => {
+      const event = JSON.parse(raw.toString()) as { type: string; session?: { audio?: { output?: { voice?: unknown } } } };
+      if (event.type === 'session.create') {
+        voices.push(event.session?.audio?.output?.voice);
+        socket.send(JSON.stringify({ type: 'session.created', session: { id: 'fixture' } }));
+      }
+    }));
+    const adapter = new SeeduplexAdapter({ apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${port}`, voice: 'default-voice' });
+    await adapter.connect({ ...config, voice: 'session-voice' }); await wait();
+    adapter.close();
+    expect(voices).toEqual(['session-voice']);
+  });
 });
