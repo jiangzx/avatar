@@ -3152,7 +3152,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   }
   ```
 
-- [ ] **Step 1: Write the shared fakes**
+- [x] **Step 1: Write the shared fakes**
 
 Create `app/test/support/identity_fakes.dart`:
 
@@ -3199,7 +3199,7 @@ class ThrowingCredentialStore implements CredentialStore {
 }
 ```
 
-- [ ] **Step 2: Write the failing API test**
+- [x] **Step 2: Write the failing API test**
 
 Create `app/test/identity_api_test.dart`:
 
@@ -3269,7 +3269,7 @@ void main() {
 }
 ```
 
-- [ ] **Step 3: Write the failing identity and storage tests**
+- [x] **Step 3: Write the failing identity and storage tests**
 
 Create `app/test/device_identity_test.dart`:
 
@@ -3390,12 +3390,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 4: Run them to verify they fail**
+- [x] **Step 4: Run them to verify they fail**
 
 Run: `cd app && flutter test test/identity_api_test.dart test/device_identity_test.dart test/secure_credential_store_test.dart`
 Expected: FAIL at compile time: the `package:avatar_app/identity/...` files do not exist.
 
-- [ ] **Step 5: Implement the credential stores**
+- [x] **Step 5: Implement the credential stores**
 
 Create `app/lib/identity/credential_store.dart`:
 
@@ -3444,7 +3444,7 @@ class SecureCredentialStore implements CredentialStore {
 }
 ```
 
-- [ ] **Step 6: Implement the API client**
+- [x] **Step 6: Implement the API client**
 
 Create `app/lib/identity/identity_api.dart`:
 
@@ -3527,7 +3527,7 @@ class IdentityApi implements IdentityBackend {
 }
 ```
 
-- [ ] **Step 7: Implement `DeviceIdentity`**
+- [x] **Step 7: Implement `DeviceIdentity`**
 
 Create `app/lib/identity/device_identity.dart`:
 
@@ -3626,12 +3626,12 @@ class DeviceIdentity implements DeviceTokenProvider {
 }
 ```
 
-- [ ] **Step 8: Run tests and analyze**
+- [x] **Step 8: Run tests and analyze**
 
 Run: `cd app && flutter test test/identity_api_test.dart test/device_identity_test.dart test/secure_credential_store_test.dart && flutter analyze`
 Expected: PASS; `No issues found!`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add app/lib/identity/credential_store.dart app/lib/identity/secure_credential_store.dart app/lib/identity/identity_api.dart app/lib/identity/device_identity.dart app/test/support/identity_fakes.dart app/test/identity_api_test.dart app/test/device_identity_test.dart app/test/secure_credential_store_test.dart
