@@ -5,6 +5,7 @@ import type { SessionConfig } from '../src/adapters/types.ts';
 import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
+import type { ReplyMetrics } from '../src/session/metrics.ts';
 import { Session, type SessionDeps, type Transport } from '../src/session/session.ts';
 
 const script: MockScript = {
@@ -363,5 +364,26 @@ describe('Session', () => {
     s.session.handleClientMessage({ type: 'debug.userText', text: '还在吗' });
     await vi.advanceTimersByTimeAsync(1000);
     expect(of(s.sent, 'response.start')).toHaveLength(1);
+  });
+  it('reports content-free metrics for every finalized reply', async () => {
+    const metrics: ReplyMetrics[] = [];
+    const writes: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => { writes.push(String(chunk)); return true; }) as typeof process.stdout.write);
+    const s = setup({ onReplyMetrics: (m) => metrics.push(m) });
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    s.mocks[0].emit('responseUsage', 'mock-1', { inputTokens: 10, outputTokens: 5 });
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    spy.mockRestore();
+    expect(metrics.map((m) => [m.seq, m.kind, m.outcome, m.replyChars, m.toolCalls, m.outputTokens])).toEqual([
+      [1, 'greeting', 'ended', 3, 0, 5],
+      [2, 'reply', 'ended', 2, 1, null],
+    ]);
+    const lines = writes.filter((w) => w.includes('"reply_metrics"'));
+    expect(lines).toHaveLength(2);
+    expect(lines.join('')).not.toMatch(/你好呀|好呀|挥挥手/);
   });
 });

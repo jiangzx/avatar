@@ -166,4 +166,23 @@ describe('QwenAdapter', () => {
     b.close();
     expect(voices).toEqual(['session-voice', 'default-voice']);
   });
+  it('emits speech stop and token usage from server events', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString()) as { type: string };
+      if (e.type !== 'session.update') return;
+      ws.send(JSON.stringify({ type: 'session.updated' }));
+      ws.send(JSON.stringify({ type: 'input_audio_buffer.speech_stopped' }));
+      ws.send(JSON.stringify({ type: 'response.created', response: { id: 'r1' } }));
+      ws.send(JSON.stringify({ type: 'response.done', response: { id: 'r1', status: 'completed', usage: { input_tokens: 321, output_tokens: 45 } } }));
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture' });
+    const seen: unknown[] = [];
+    a.on('userSpeechStopped', () => seen.push('stopped'));
+    a.on('responseUsage', (id, usage) => seen.push([id, usage]));
+    await a.connect({ instructions: 'fixture', tools: [] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(seen).toEqual(['stopped', ['r1', { inputTokens: 321, outputTokens: 45 }]]);
+    a.close();
+  });
 });

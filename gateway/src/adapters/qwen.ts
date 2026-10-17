@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import { AI_SAMPLE_RATE, MIC_SAMPLE_RATE } from '@anyidea/protocol';
-import type { AdapterEvents, ProactiveRequest, RealtimeAdapter, SessionConfig, ToolSpec } from './types.ts';
+import type { AdapterEvents, ProactiveRequest, RealtimeAdapter, SessionConfig, TokenUsage, ToolSpec } from './types.ts';
 
 export interface QwenOptions { apiKey: string; endpoint: string; model?: string; voice: string; connectTimeoutMs?: number; }
 type Json = Record<string, unknown>;
@@ -90,6 +90,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     }
     if (type === 'input_audio_buffer.committed') return;
     if (type === 'input_audio_buffer.speech_started') { this.emit('userSpeechStarted'); return; }
+    if (type === 'input_audio_buffer.speech_stopped') { this.emit('userSpeechStopped'); return; }
     if (type === 'conversation.item.input_audio_transcription.delta') { this.emit('userTranscript', String(e.delta ?? e.text ?? ''), false); return; }
     if (type === 'conversation.item.input_audio_transcription.completed') { this.emit('userTranscript', String(e.transcript ?? e.text ?? ''), true); return; }
     if (type === 'response.audio.started') { this.responseId = this.responseIdFrom(e); this.completedResponses.delete(this.responseId); this.emit('responseStarted', this.responseId); return; }
@@ -106,6 +107,10 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     if (type === 'response.audio.done' || type === 'response.done') {
       const id = this.responseIdFrom(e);
       const nested = e.response as Json | undefined;
+      if (type === 'response.done') {
+        const usage = parseUsage(nested?.usage);
+        if (usage) this.emit('responseUsage', id, usage);
+      }
       if (type === 'response.done' && nested?.status === 'cancelled') {
         this.completedResponses.delete(id);
         this.emit('responseCancelled', id);
@@ -127,3 +132,9 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
 }
 function toQwenTool(tool: ToolSpec): Json { return { type: 'function', name: tool.name, description: tool.description, parameters: tool.parameters }; }
 function decode(value: unknown): Int16Array | null { if (typeof value !== 'string') return null; try { const b = Buffer.from(value, 'base64'); const n = b.byteLength - b.byteLength % 2; return new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + n)); } catch { return null; } }
+
+function parseUsage(raw: unknown): TokenUsage | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const u = raw as Json;
+  return typeof u.input_tokens === 'number' && typeof u.output_tokens === 'number' ? { inputTokens: u.input_tokens, outputTokens: u.output_tokens } : null;
+}

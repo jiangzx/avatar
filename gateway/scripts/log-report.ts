@@ -1,0 +1,11 @@
+// Usage (from gateway/): node --import tsx scripts/log-report.ts metrics < /tmp/gateway.log
+import { readFileSync } from 'node:fs';
+import { parseLogLines, summarizeReplyMetrics } from '../src/eval/logReport.ts';
+
+const mode = process.argv[2] ?? 'metrics';
+const lines = parseLogLines(readFileSync(0, 'utf8'));
+if (mode === 'metrics') process.stdout.write(`${JSON.stringify(summarizeReplyMetrics(lines), null, 2)}\n`);
+else {
+  process.stderr.write('usage: log-report.ts metrics < gateway.log\n');
+  process.exit(2);
+}

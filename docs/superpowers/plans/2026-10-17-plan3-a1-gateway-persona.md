@@ -624,7 +624,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces (`SessionDeps`): `onReplyMetrics?: (m: ReplyMetrics) => void` (eval harness, Task 9). Session logs one `reply_metrics` line per finalized reply.
 - Produces (`logReport.ts`): `export interface LogLine { t: string; event: string; [k: string]: unknown }`, `parseLogLines(text: string): LogLine[]`, `percentile(sorted: number[], p: number): number`, `summarizeReplyMetrics(lines: LogLine[]): Record<string, { n: number; p50: number; p90: number }>`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/metrics.test.ts`:
 
@@ -748,12 +748,12 @@ Append to `describe('Session', ...)` in `gateway/test/session.test.ts` (add `imp
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/metrics.test.ts test/logReport.test.ts test/qwen.test.ts test/session.test.ts`
 Expected: FAIL — `metrics.ts`/`logReport.ts` not found; Qwen emits neither event; `onReplyMetrics` is not a `SessionDeps` key.
 
-- [ ] **Step 3: Add adapter events**
+- [x] **Step 3: Add adapter events**
 
 In `gateway/src/adapters/types.ts`, add above `export type AdapterEvents`:
 
@@ -800,7 +800,7 @@ In `gateway/src/adapters/qwen.ts`:
   }
   ```
 
-- [ ] **Step 4: Implement the tracker and log report**
+- [x] **Step 4: Implement the tracker and log report**
 
 Create `gateway/src/session/metrics.ts`:
 
@@ -974,7 +974,7 @@ else {
 }
 ```
 
-- [ ] **Step 5: Wire the tracker into Session**
+- [x] **Step 5: Wire the tracker into Session**
 
 In `gateway/src/session/session.ts`:
 - imports:
@@ -1020,12 +1020,14 @@ In `gateway/src/session/session.ts`:
     }
   ```
 
-- [ ] **Step 6: Run the tests and typecheck**
+- [x] **Step 6: Run the tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS (existing tests unchanged), typecheck clean.
 
 - [ ] **Step 7: Measure the gateway latency baseline (manual, before Task 4 changes behavior)**
+
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #13. Placeholder baseline doc created with NOT RUN tables.
 
 **Ask the user first**: this replaces the gateway they keep running on 8787. Setup (same as the roadmap's local phone path): gateway on the Mac with `ADAPTER=qwen`, Xiaomi via USB, `adb reverse tcp:8787 tcp:8787`, debug APK already installed.
 
@@ -1068,7 +1070,7 @@ Filled by A2 Task 1.
 
 Fill the table from the command output. If the device session cannot run (blocked 20 minutes), record a `docs/blockers.md` row and leave the table empty with the reason; Plan A's "P50 not worse than baseline" gate then stays open.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gateway/src/adapters/types.ts gateway/src/adapters/qwen.ts gateway/src/session/metrics.ts gateway/src/session/session.ts gateway/src/eval/logReport.ts gateway/scripts/log-report.ts gateway/test/metrics.test.ts gateway/test/logReport.test.ts gateway/test/qwen.test.ts gateway/test/session.test.ts docs/testing/plan-a-latency-baseline.md

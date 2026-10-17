@@ -14,6 +14,7 @@ import { devContext, type SessionContext } from './context.ts';
 import { Director } from './director.ts';
 import { InterruptCoordinator } from './interrupt.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
+import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
 
 export interface Transport {
   send(msg: ServerMessage): void;
@@ -32,6 +33,8 @@ export interface SessionDeps {
   rebuildBackoffMaxMs?: number;
   /** The upstream model detects turns itself. Do not upload speaker audio or add silence follow-ups. */
   modelOwnsTurns?: boolean;
+  /** Receives each finalized reply's metrics (eval harness). Production only logs them. */
+  onReplyMetrics?: (m: ReplyMetrics) => void;
 }
 
 interface ResponseState {
@@ -54,6 +57,7 @@ export class Session {
   private readonly director: Director;
   private readonly interrupt: InterruptCoordinator;
   private readonly actions = new ActionRouter();
+  private readonly metrics = new ReplyMetricsTracker();
   private readonly byId = new Map<string, ResponseState>();
   private readonly bySeq = new Map<number, ResponseState>();
   private seqCounter = 0;
@@ -147,6 +151,7 @@ export class Session {
         });
         this.interrupt.onLocalVad(speaking);
         this.director.onUserSpeech(speaking);
+        if (!speaking) this.metrics.onLocalVadSilent();
         break;
       }
       case 'playback.progress': {
@@ -230,6 +235,13 @@ export class Session {
       this.director.onUserActivity();
       this.interrupt.onModelSpeechStarted();
     });
+    a.on('userSpeechStopped', () => {
+      if (current()) this.metrics.onSpeechStopped();
+    });
+    a.on('responseUsage', (id, usage) => {
+      const s = current() ? this.byId.get(id) : undefined;
+      if (s) this.metrics.onUsage(s.seq, usage);
+    });
     a.on('userTranscript', (text, final) => {
       if (!current()) return;
       this.director.onUserActivity();
@@ -243,6 +255,7 @@ export class Session {
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
       log('response_start', { seq: s.seq, kind: s.kind });
+      this.metrics.onResponseStarted(s.seq, s.kind);
       this.modelGenerating = true;
       this.director.onAiTurnStarted();
       const superseded = this.interrupt.onResponseStart(s.seq);
@@ -258,6 +271,7 @@ export class Session {
     a.on('audioDelta', (id, pcm) => {
       const s = this.live(a, id);
       if (!s) return;
+      if (s.audioMs === 0) this.metrics.onFirstAudio(s.seq);
       s.audioMs += (pcm.length / AI_SAMPLE_RATE) * 1000;
       this.transport?.sendAudio(s.seq, pcm);
     });
@@ -265,6 +279,7 @@ export class Session {
       const s = this.live(a, id);
       if (!s) return;
       s.text += text;
+      this.metrics.onText(s.seq, text.length);
       this.charsSinceRebuild += text.length;
       this.send({ type: 'transcript.assistant', responseSeq: s.seq, text });
     });
@@ -277,6 +292,7 @@ export class Session {
       const { action, result } = this.actions.fromTool(args);
       a.sendToolResult(callId, result);
       const s = this.byId.get(id);
+      if (s) this.metrics.onToolCall(s.seq);
       const cancelled = s ? this.interrupt.isCancelled(s.seq) : false;
       if (action && !cancelled) this.send({ type: 'avatar.action', action, source: 'tool' });
     });
@@ -284,6 +300,7 @@ export class Session {
       const s = this.live(a, id);
       if (s) {
         log('response_end', { seq: s.seq });
+        this.metrics.onDone(s.seq);
         this.send({ type: 'response.end', responseSeq: s.seq });
         this.modelGenerating = false;
       }
@@ -300,6 +317,7 @@ export class Session {
     a.on('error', (code, retryable) => {
       if (!current()) return;
       log('adapter_error', { code, retryable });
+      this.metrics.onError(code);
       if (retryable) void this.rebuild('error');
       else this.send({ type: 'error', code, retryable: false });
     });
@@ -329,6 +347,11 @@ export class Session {
   private finalize(s: ResponseState, interrupted: boolean): void {
     if (s.finalized) return;
     s.finalized = true;
+    const m = this.metrics.finish(s.seq, interrupted ? 'interrupted' : 'ended');
+    if (m) {
+      log('reply_metrics', metricFields(m));
+      this.deps.onReplyMetrics?.(m);
+    }
     const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
     this.ledger.addAssistant(text, Date.now(), interrupted);
     // Skip the note when nothing was played: an empty quote would mislead the model.
