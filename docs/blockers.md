@@ -21,6 +21,7 @@
 | 15 | 2026-10-17 | Plan A A1 Task 10 Step 3（真实 Qwen 评测） | 用户指示本次仅用 Mock、不调用真实模型、无 key：grandchild / old-friend 两种风格的评测均未运行 | 未做手动验证；评测框架（`gateway/src/eval/*`、`scripts/eval.ts`、20 条场景）已实现并有单元测试；未生成任何评测报告，未取得提问比例与平均回复字数 | Plan A 门槛第 1–2 项（提问占比 ≤ 1/3、平均回复 ≤ 45 字）及 scam-call / chest-tight / are-you-real / lonely-evening 人工检查均未关闭；风格文案未经真实模型调优 | 提供 `gateway/.env` 的 key 后按 Step 3 运行两条 eval 命令（每种风格约 10 分钟），失败则按计划最多调 3 轮并记录 | 用户延期 |
 | 16 | 2026-10-17 | Plan A A1 Task 3（安全文案，遗留项） | `gateway/roles/_shared/safety.md` 只有「心理援助热线」措辞，没有电话号码（规格第 325 行附近亦无已核实号码） | 未核实任何号码，未编造；按执行约定只写措辞 | 危机场景下回复无法给出具体热线号码 | 核实并确认一个有效热线号码后写入 `safety.md`（并由人工审核），上线前必须完成 | 未解除 |
 | 17 | 2026-10-17 | Plan A A1 Task 3（音色，遗留项；依赖 #12） | `gateway/roles/elder-companion/role.json` 两种风格均为 `"voice": null`，Qwen 音色探针未运行（见 #12） | 未做手动验证；按回退使用适配器默认音色 | 规格要求的「每种风格独立音色」未满足，两种风格听起来同一声音 | 运行 #12 的 voices 探针，选定音色后回填两种风格的 `voice` | 未解除 |
+| 18 | 2026-10-17 | Plan A A2 Task 1 Step 5（客户端感知延迟基线） | 用户指示本次仅用 Mock、无服务/真机/真实模型：小米真机上的 20 句基线测量未运行 | 未做手动验证；`anyidea.diag event=latency` 日志已实现并有单元测试；未取得任何 perceived_ms 数据，`docs/testing/plan-a-latency-baseline.md` 客户端表格留空 | Plan A 门槛「P50 不差于基线」的客户端部分未关闭 | 基线须在提交 `33dfbf4`（A1 Task 4 之前）上测量：接入小米真机，按计划 Step 5 说同样的 20 句并统计 p50/p90 填表 | 用户延期 |
 
 ## 2026-10-13 Plan 1.1 更新
 

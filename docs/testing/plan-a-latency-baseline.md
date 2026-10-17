@@ -21,4 +21,12 @@ How to measure: run the gateway with `ADAPTER=qwen` and log to `/tmp/gw-baseline
 
 ## Client perceived latency (A2 Task 1)
 
-Filled by A2 Task 1.
+Status: **NOT RUN.** Reason: NOT RUN (user instruction: Mock only, no services/device/real model). See `docs/blockers.md` #18. No numbers below were measured; the table is intentionally empty.
+
+Commit: `33dfbf4` (the baseline must be measured on this commit, the one before A1 Task 4). Device: Xiaomi 22101317C, debug APK. Definition: local VAD silent edge minus 120 ms release to first accepted reply audio chunk (logcat `anyidea.diag event=latency`, implemented in A2 Task 1).
+
+| n | p50 ms | p90 ms |
+|---|---|---|
+| | | |
+
+Notes: NOT RUN. Until this is measured, the Plan A gate "P50 not worse than baseline" stays open.

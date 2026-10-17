@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:avatar_app/diag_log.dart';
 import 'package:avatar_app/native_audio/audio_types.dart';
 import 'package:avatar_app/native_audio/speech_detector.dart';
 import 'package:avatar_app/native_gateway/gateway_client.dart';
@@ -10,6 +11,39 @@ import 'package:avatar_app/native_session/session_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('logs perceived latency from local speech end to first reply audio', () async {
+    var now = 1000;
+    final lines = <String>[];
+    final f = SessionFakes();
+    final c = f.controller(diag: lines.add, now: () => now);
+    await c.start();
+    f.detector.queued.add(SpeechEdge.speaking);
+    f.audio.emitFrame(Int16List(320));
+    now = 2000;
+    f.detector.queued.add(SpeechEdge.silent);
+    f.audio.emitFrame(Int16List(320));
+    f.client.emit(const ResponseStart(5, 'reply'));
+    await pumpEvents();
+    now = 2700;
+    f.client.emitAudio(5, Int16List(2400));
+    await pumpEvents();
+    expect(lines, contains('anyidea.diag event=latency seq=5 perceived_ms=820'));
+  });
+
+  test('does not log latency for proactive replies', () async {
+    final lines = <String>[];
+    final f = SessionFakes();
+    final c = f.controller(diag: lines.add);
+    await c.start();
+    f.detector.queued.addAll([SpeechEdge.speaking, SpeechEdge.silent]);
+    f.audio.emitFrame(Int16List(320));
+    f.audio.emitFrame(Int16List(320));
+    f.client.emit(const ResponseStart(6, 'followup'));
+    f.client.emitAudio(6, Int16List(2400));
+    await pumpEvents();
+    expect(lines.where((l) => l.contains('event=latency')), isEmpty);
+  });
+
   test('interrupts a later response after an earlier speech segment', () async {
     final f = SessionFakes();
     final c = f.controller();
@@ -382,12 +416,15 @@ class SessionFakes {
   final client = FakeClient();
   final events = <NativeUiEvent>[];
 
-  NativeSessionController controller() => NativeSessionController(
-    audio: audio,
-    detector: detector,
-    client: client,
-    emit: events.add,
-  );
+  NativeSessionController controller({DiagSink? diag, int Function()? now}) =>
+      NativeSessionController(
+        audio: audio,
+        detector: detector,
+        client: client,
+        emit: events.add,
+        diag: diag ?? (_) {},
+        now: now,
+      );
 }
 
 class FakeAudio implements NativeAudioIO {
@@ -502,9 +539,13 @@ class FakeDetector implements NativeSpeechDetector {
   @override
   set aiPlaying(bool value) => _aiPlaying = value;
 
+  final queued = <SpeechEdge>[];
+
   @override
-  SpeechEdge push(Int16List frame, {required int timestampMs}) =>
-      ++frames == 4 ? SpeechEdge.speaking : SpeechEdge.none;
+  SpeechEdge push(Int16List frame, {required int timestampMs}) {
+    if (queued.isNotEmpty) return queued.removeAt(0);
+    return ++frames == 4 ? SpeechEdge.speaking : SpeechEdge.none;
+  }
 
   @override
   void reset() => frames = 0;
@@ -545,4 +586,10 @@ class FakeClient implements GatewayClientLike {
   void emitAudio(int responseSeq, Int16List pcm) => events?.onAudio(
     DecodedAudioFrame(kind: frameAi, responseSeq: responseSeq, pcm: pcm),
   );
+}
+
+Future<void> pumpEvents() async {
+  for (var i = 0; i < 6; i++) {
+    await Future<void>.delayed(Duration.zero);
+  }
 }

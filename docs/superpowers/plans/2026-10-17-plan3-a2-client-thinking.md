@@ -73,7 +73,7 @@
   ```
 - Produces (`NativeSessionController` constructor, optional): `DiagSink diag = logcatDiagSink`, `int Function()? now`. Logs `anyidea.diag event=latency seq=<n> perceived_ms=<ms>` once per `reply` response: from the estimated end of local speech (silent edge − `defaultVadReleaseMs`) to the first accepted audio chunk.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `app/test/diag_log_test.dart`:
 
@@ -167,12 +167,12 @@ In `app/test/native_session_controller_test.dart`:
   });
   ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `cd app && flutter test test/diag_log_test.dart test/native_session_controller_test.dart`
 Expected: FAIL — `diag_log.dart` not found; `diag`/`now` are not constructor parameters.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `app/lib/diag_log.dart`:
 
@@ -243,12 +243,12 @@ In `app/lib/native_session/session_controller.dart`:
   }
   ```
 
-- [ ] **Step 4: Run tests and analyze**
+- [x] **Step 4: Run tests and analyze**
 
 Run: `cd app && flutter test && flutter analyze`
 Expected: all tests PASS; "No issues found!".
 
-- [ ] **Step 5: Measure the client baseline on the Xiaomi (manual)**
+- [ ] **Step 5: Measure the client baseline on the Xiaomi (manual)**  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #18
 
 Run this right after A1 Task 2 and before A1 Task 4 (pre-Plan-A behavior).
 
@@ -286,7 +286,7 @@ Notes: <missing samples and why>.
 
 If the device session is blocked for 20 minutes: add a `docs/blockers.md` row and keep the reason in the section; the "P50 not worse than baseline" gate stays open.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/lib/diag_log.dart app/lib/native_session/session_controller.dart app/test/diag_log_test.dart app/test/native_session_controller_test.dart docs/testing/plan-a-latency-baseline.md

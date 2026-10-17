@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import '../diag_log.dart';
 import '../native_audio/audio_types.dart';
 import '../native_audio/speech_detector.dart';
 import '../native_gateway/gateway_client.dart';
@@ -9,13 +10,17 @@ import 'events.dart';
 
 const int nativeBridgeLevelIntervalMs = 30; // TUNABLE
 
+int _wallClockMs() => DateTime.now().millisecondsSinceEpoch;
+
 class NativeSessionController implements GatewayClientEvents {
   NativeSessionController({
     required this.audio,
     required this.detector,
     required this.client,
     required this.emit,
-  }) {
+    this.diag = logcatDiagSink,
+    int Function()? now,
+  }) : _now = now ?? _wallClockMs {
     client.attachEvents(this);
   }
 
@@ -23,6 +28,12 @@ class NativeSessionController implements GatewayClientEvents {
   final NativeSpeechDetector detector;
   final GatewayClientLike client;
   final void Function(NativeUiEvent event) emit;
+  final DiagSink diag;
+  final int Function() _now;
+  final _responseKinds = <int, String>{};
+
+  /// Estimated end of the user's last speech segment; consumed by the first reply audio.
+  int? _speechEndAt;
 
   final _assistantText = <int, String>{};
   final _audioReceivedMs = <int, int>{};
@@ -154,6 +165,7 @@ class NativeSessionController implements GatewayClientEvents {
       _audioReceivedMs[frame.responseSeq] =
           (_audioReceivedMs[frame.responseSeq] ?? 0) +
           ((frame.pcm.length * 1000) ~/ aiSampleRate);
+      if (firstForSequence) _reportPerceivedLatency(frame.responseSeq);
       await audio.pushResponse(frame.responseSeq, frame.pcm);
       if (firstForSequence) {
         _emitAudioDiag('chunk.accepted');
@@ -191,6 +203,8 @@ class NativeSessionController implements GatewayClientEvents {
         _assistantText.clear();
         _audioReceivedMs.clear();
         _speechOpen = false;
+        _speechEndAt = null;
+        _responseKinds.clear();
         detector.reset();
         await audio.resetResponsesBelow(0);
         client.send(ClientMute(_muted));
@@ -201,6 +215,8 @@ class NativeSessionController implements GatewayClientEvents {
         _assistantText.removeWhere((seq, _) => seq <= lastResponseSeq);
         _audioReceivedMs.removeWhere((seq, _) => seq <= lastResponseSeq);
         _speechOpen = false;
+        _speechEndAt = null;
+        _responseKinds.clear();
         detector.reset();
         await audio.resetResponsesBelow(lastResponseSeq);
         client.send(ClientMute(_muted));
@@ -211,6 +227,7 @@ class NativeSessionController implements GatewayClientEvents {
         _activeSeq = responseSeq;
         _assistantText[responseSeq] = '';
         _audioReceivedMs[responseSeq] = 0;
+        _responseKinds[responseSeq] = kind;
         _playbackRmsMax = 0;
         _playbackAboveRunMs = 0;
         _playbackAboveRunMaxMs = 0;
@@ -265,27 +282,32 @@ class NativeSessionController implements GatewayClientEvents {
 
   void _onFrame(Int16List frame) {
     if (_ended) return;
-    final edge = detector.push(
-      frame,
-      timestampMs: DateTime.now().millisecondsSinceEpoch,
-    );
+    final now = _now();
+    final edge = detector.push(frame, timestampMs: now);
     if (!_muted) client.sendAudio(frame);
     switch (edge) {
       case SpeechEdge.speaking:
         _speechOpen = true;
+        _speechEndAt = null;
         _vadSpeakingCount++;
         _emitAudioDiag('vad.speaking');
         unawaited(_interruptThenReportSpeech());
       case SpeechEdge.silent:
         _speechOpen = false;
+        _speechEndAt = now - defaultVadReleaseMs;
         _vadSilentCount++;
-        client.send(
-          VadMessage('silent', DateTime.now().millisecondsSinceEpoch),
-        );
+        client.send(VadMessage('silent', now));
         _emitAudioDiag('vad.silent');
       case SpeechEdge.none:
         break;
     }
+  }
+
+  void _reportPerceivedLatency(int seq) {
+    final endAt = _speechEndAt;
+    if (endAt == null || _responseKinds[seq] != 'reply') return;
+    _speechEndAt = null;
+    diag(formatDiag('latency', {'seq': seq, 'perceived_ms': _now() - endAt}));
   }
 
   void _onLevel(AudioLevel level) {
@@ -385,6 +407,7 @@ class NativeSessionController implements GatewayClientEvents {
   void _closeOpenSpeech() {
     if (!_speechOpen) return;
     _speechOpen = false;
+    _speechEndAt ??= _now();
     detector.reset();
     _vadSilentCount++;
     client.send(VadMessage('silent', DateTime.now().millisecondsSinceEpoch));
