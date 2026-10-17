@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve, sep } from 'node:path';
 import { z } from 'zod';
-import type { DirectorConfig } from './session/director.ts';
+import type { DirectorConfig } from './roles/types.ts';
 import type { LedgerOptions } from './session/ledger.ts';
 
 export interface GatewayConfig {
@@ -223,3 +223,5 @@ export function loadIdentityConfig(env: Record<string, string | undefined>, repo
     ...(enableDevEndpoints && devToken ? { devToken } : {}),
   };
 }
+
+export { DirectorSchema };

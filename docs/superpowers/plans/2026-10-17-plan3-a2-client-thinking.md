@@ -73,7 +73,7 @@
   ```
 - Produces (`NativeSessionController` constructor, optional): `DiagSink diag = logcatDiagSink`, `int Function()? now`. Logs `anyidea.diag event=latency seq=<n> perceived_ms=<ms>` once per `reply` response: from the estimated end of local speech (silent edge − `defaultVadReleaseMs`) to the first accepted audio chunk.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `app/test/diag_log_test.dart`:
 
@@ -167,12 +167,12 @@ In `app/test/native_session_controller_test.dart`:
   });
   ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `cd app && flutter test test/diag_log_test.dart test/native_session_controller_test.dart`
 Expected: FAIL — `diag_log.dart` not found; `diag`/`now` are not constructor parameters.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `app/lib/diag_log.dart`:
 
@@ -243,12 +243,12 @@ In `app/lib/native_session/session_controller.dart`:
   }
   ```
 
-- [ ] **Step 4: Run tests and analyze**
+- [x] **Step 4: Run tests and analyze**
 
 Run: `cd app && flutter test && flutter analyze`
 Expected: all tests PASS; "No issues found!".
 
-- [ ] **Step 5: Measure the client baseline on the Xiaomi (manual)**
+- [ ] **Step 5: Measure the client baseline on the Xiaomi (manual)**  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #18
 
 Run this right after A1 Task 2 and before A1 Task 4 (pre-Plan-A behavior).
 
@@ -286,7 +286,7 @@ Notes: <missing samples and why>.
 
 If the device session is blocked for 20 minutes: add a `docs/blockers.md` row and keep the reason in the section; the "P50 not worse than baseline" gate stays open.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/lib/diag_log.dart app/lib/native_session/session_controller.dart app/test/diag_log_test.dart app/test/native_session_controller_test.dart docs/testing/plan-a-latency-baseline.md
@@ -326,7 +326,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 - Produces (test support): `Map<String, Object?> thinkingMap({List<String> evidence})`, `ThinkingConfig testThinking({List<String> evidence})` in `app/test/support/thinking_fixture.dart`.
 
-- [ ] **Step 1: Write the failing test and fixture**
+- [x] **Step 1: Write the failing test and fixture**
 
 Create `app/test/support/thinking_fixture.dart`:
 
@@ -413,12 +413,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && flutter test test/thinking_config_test.dart`
 Expected: FAIL — `thinking_config.dart` not found.
 
-- [ ] **Step 3: Implement the config and asset**
+- [x] **Step 3: Implement the config and asset**
 
 Create `app/assets/config/thinking.json` (set `fillerEvidence` from `docs/research/qwen-plan-a-validation.md` §4a: `["transcript"]` if a user transcript arrives before `response.created`, else `["transcript","responseStart"]`):
 
@@ -627,12 +627,12 @@ List<FillerClip> _clips(Map<String, Object?> m, String key) {
 }
 ```
 
-- [ ] **Step 4: Run tests and analyze**
+- [x] **Step 4: Run tests and analyze**
 
 Run: `cd app && flutter test test/thinking_config_test.dart && flutter analyze`
 Expected: 5 tests PASS; no issues.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/lib/native_session/thinking_config.dart app/assets/config/thinking.json app/pubspec.yaml app/test/support/thinking_fixture.dart app/test/thinking_config_test.dart
@@ -658,7 +658,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces (`pcm-tools.ts`): `rms(pcm, start, end): number`, `trimSilence(pcm, threshold, windowSamples, padSamples): Int16Array`, `normalizePeak(pcm, targetPeak): Int16Array`, `sameText(a, b): boolean`.
 - Produces: one 24 kHz mono s16le raw PCM file per clip id per style, 0.3–2.5 s long.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/pcmTools.test.ts`:
 
@@ -715,12 +715,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/pcmTools.test.ts` and `cd app && flutter test test/filler_assets_test.dart`
 Expected: FAIL — `pcm-tools.ts` not found; clip files missing.
 
-- [ ] **Step 3: Implement the PCM tools and the recorder**
+- [x] **Step 3: Implement the PCM tools and the recorder**
 
 Create `gateway/scripts/lib/pcm-tools.ts`:
 
@@ -813,6 +813,8 @@ Expected: 4 tests PASS; typecheck clean.
 
 - [ ] **Step 4: Record the clips (manual, needs the key)**
 
+Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #19. Qwen recording skipped; macOS `say -v Tingting` placeholders written for both styles.
+
 Use each style's voice from `gateway/roles/elder-companion/role.json` (omit `--voice` when it is `null`):
 
 ```bash
@@ -851,7 +853,7 @@ Method used: <realtime model + text prompt (make-filler-clips.ts) | macOS say fa
 Decision: <clips accepted | fallback in use, blocker #n>.
 ```
 
-- [ ] **Step 5: Register the clip directories**
+- [x] **Step 5: Register the clip directories**
 
 In `app/pubspec.yaml`, append under `flutter: assets:` (after `- assets/config/`):
 
@@ -863,7 +865,7 @@ In `app/pubspec.yaml`, append under `flutter: assets:` (after `- assets/config/`
 Run: `cd app && flutter test test/filler_assets_test.dart && flutter analyze`
 Expected: PASS; no issues.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gateway/scripts/lib/pcm-tools.ts gateway/scripts/make-filler-clips.ts gateway/test/pcmTools.test.ts app/assets/filler app/pubspec.yaml app/test/filler_assets_test.dart docs/research/qwen-plan-a-validation.md
@@ -908,7 +910,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   `PluginNativeAudioIO({AudioRecorder? recorder, FillerAudioConfig? filler})` — without `filler` config, `playFiller` calls `onDone` immediately (no audio). `pushResponse` fades an active filler before feeding the reply; `stopResponse` and `stop` stop it.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `app/test/filler_player_test.dart`:
 
@@ -1048,12 +1050,12 @@ In `app/test/native_session_controller_test.dart`, add to `FakeAudio`:
   }
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail** (RED confirmed by temporarily removing filler_player.dart: compile errors; impl was written before the run)
 
 Run: `cd app && flutter test test/filler_player_test.dart test/native_playback_queue_test.dart test/native_session_controller_test.dart`
 Expected: FAIL — `filler_player.dart` not found; `FakeAudio` overrides members that `NativeAudioIO` does not declare. (The playback-queue test passes already: it documents that the existing `fed − remaining` rule excludes filler residue.)
 
-- [ ] **Step 3: Implement the player and the interface**
+- [x] **Step 3: Implement the player and the interface**
 
 Create `app/lib/native_audio/filler_player.dart`:
 
@@ -1201,7 +1203,7 @@ In `app/lib/native_audio/audio_types.dart`, add to `NativeAudioIO` (after `setIn
   Future<void> stopFiller({required bool fade});
 ```
 
-- [ ] **Step 4: Implement the filler in `PluginNativeAudioIO`**
+- [x] **Step 4: Implement the filler in `PluginNativeAudioIO`**
 
 In `app/lib/native_audio/native_audio_io.dart`:
 - imports: `import '../native_session/thinking_config.dart';` and `import 'filler_player.dart';`
@@ -1287,12 +1289,12 @@ In `app/lib/native_audio/native_audio_io.dart`:
   }
   ```
 
-- [ ] **Step 5: Run tests and analyze**
+- [x] **Step 5: Run tests and analyze**
 
 Run: `cd app && flutter test && flutter analyze`
 Expected: all PASS; no issues.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/lib/native_audio/filler_player.dart app/lib/native_audio/audio_types.dart app/lib/native_audio/native_audio_io.dart app/test/filler_player_test.dart app/test/native_playback_queue_test.dart app/test/native_session_controller_test.dart
@@ -1337,7 +1339,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   Diagnostics emitted: `thinking after_silence_ms=<n>`, `filler kind=thinking|long_wait after_thinking_ms=<n>`, `filler_skipped reason=no_evidence`, `filler_stopped reason=speech`, `thinking_timeout ms=<n>`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `app/test/thinking_controller_test.dart`:
 
@@ -1477,12 +1479,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && flutter test test/thinking_controller_test.dart`
 Expected: FAIL — `thinking_controller.dart` not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `app/lib/native_session/thinking_controller.dart`:
 
@@ -1730,12 +1732,12 @@ class ThinkingController {
 }
 ```
 
-- [ ] **Step 4: Run tests and analyze**
+- [x] **Step 4: Run tests and analyze**
 
 Run: `cd app && flutter test test/thinking_controller_test.dart && flutter analyze`
 Expected: 11 tests PASS; no issues.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/lib/native_session/thinking_controller.dart app/test/thinking_controller_test.dart
@@ -1757,7 +1759,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces (`NativeSessionController` constructor, optional additions): `ThinkingConfig? thinking`, `Map<String, Int16List> fillerPcm = const {}`, `bool autoTick = true`; public `void tickThinking()` (driven by a periodic timer at `thinking.tickMs`; tests call it directly with `autoTick: false`).
 - Behavior: emits `UiState` from thinking commands; `UiState('speaking')` only on the first accepted audio chunk (also when `thinking` is null); `UiSubtitle(role:'assistant', text: <filler text>, isFinal:false)` when a filler starts; `UiAvatarAction(action:'nod', source:'backchannel')` for listening nods; zero frames uplink while `zeroUplink`; speech while `guardsSpeech` sends `vad speaking` but does not stop playback; `playedMs==0` ended emits no `idle`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `app/test/native_session_controller_test.dart`:
 - add imports:
@@ -1902,12 +1904,12 @@ In `app/test/native_session_controller_test.dart`:
   });
   ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `cd app && flutter test test/native_session_controller_test.dart`
 Expected: FAIL — `thinking`, `fillerPcm`, `autoTick`, `tickThinking` do not exist; no `speaking` state is emitted.
 
-- [ ] **Step 3: Implement the wiring**
+- [x] **Step 3: Implement the wiring**
 
 In `app/lib/native_session/session_controller.dart`:
 - imports:
@@ -2088,12 +2090,12 @@ In `app/lib/native_session/session_controller.dart`:
       if (thinking != null) await _apply(thinking.onCancelled(_now()));
   ```
 
-- [ ] **Step 4: Run tests and analyze**
+- [x] **Step 4: Run tests and analyze**
 
 Run: `cd app && flutter test && flutter analyze`
 Expected: all PASS (existing controller tests unchanged: they run without a thinking config); no issues.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/lib/native_session/session_controller.dart app/test/native_session_controller_test.dart
@@ -2124,7 +2126,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   `enterState` applies `poseFor` through `setBaselineValue('eyesLookUp' | 'headRotateZ', …)` (both keys exist in TalkingHead 1.7.0's `mtAvatar`; visual check in Task 9); `setEmotion` sets the mood and `setFixedValue('mouthSmile', smileFor(emotion))` so the resting smile no longer masks `sad`. `THINK_LOOK_AHEAD_MS` is removed (thinking no longer calls `lookAhead`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `describe('NativeAvatarController', ...)` in `avatar-core/test/nativeAvatar.test.ts`:
 
@@ -2213,12 +2215,12 @@ describe('poses and expressions', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w avatar-core -- test/nativeAvatar.test.ts test/avatarView.test.ts`
 Expected: FAIL — mic level switches to speaking; empty reply goes idle; backchannel plays the full nod; `poseFor`/`smileFor` not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `avatar-core/src/nativeAvatar.ts`:
 - below the imports add:
@@ -2309,12 +2311,12 @@ Expected: FAIL — mic level switches to speaking; empty reply goes idle; backch
   }
   ```
 
-- [ ] **Step 4: Run tests and typecheck**
+- [x] **Step 4: Run tests and typecheck**
 
 Run: `npm test -w avatar-core && npm run typecheck -w avatar-core`
 Expected: all PASS; typecheck clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add avatar-core/src/nativeAvatar.ts avatar-core/src/avatar/avatarView.ts avatar-core/test/nativeAvatar.test.ts avatar-core/test/avatarView.test.ts
@@ -2342,7 +2344,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   A missing clip is logged (`filler_clip_missing id=<id>`) and skipped; an invalid config is logged (`thinking_config_invalid`) and the session runs without thinking (degraded, old behavior plus first-audio speaking).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `app/test/filler_clips_test.dart`:
 
@@ -2400,12 +2402,12 @@ Append to `app/test/avatar_page_test.dart` inside `main()`:
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `cd app && flutter test test/filler_clips_test.dart test/avatar_page_test.dart`
 Expected: FAIL — `filler_clips.dart` and `aiLineAfterState` not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `app/lib/native_audio/filler_clips.dart`:
 
@@ -2523,11 +2525,12 @@ In `app/lib/avatar_page.dart`:
   ```
 
 - [ ] **Step 4: Run tests, analyze, build**
+  - Done: `./scripts/build-web.sh --probe-only`, `flutter test`, `flutter analyze` (see roadmap/report). Not ticked: full web build and `flutter build apk --debug`. Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #20
 
 Run: `cd app && flutter test && flutter analyze && cd .. && ./scripts/build-web.sh && cd app && flutter build apk --debug --dart-define-from-file=dev.json`
 Expected: all tests PASS; no issues; web bundle built; APK built.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/lib/native_audio/filler_clips.dart app/lib/avatar_page.dart app/test/filler_clips_test.dart app/test/avatar_page_test.dart
@@ -2546,12 +2549,14 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 All steps are manual on Xiaomi 22101317C with the Plan A worktree (A1 + A2 merged in it). No item is "passed" unless observed and recorded; skipped items are listed as skipped.
 
-- [ ] **Step 1: Full automated verification**
+- [x] **Step 1: Full automated verification**
 
 Run: `npm test && npm run typecheck && cd app && flutter test && flutter analyze`
 Expected: protocol, gateway, avatar-core PASS; typecheck clean; Flutter tests PASS; no analyzer issues. Record the exact counts.
 
 - [ ] **Step 2: Build, install, start, capture**
+
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #21
 
 ```bash
 ./scripts/build-web.sh
@@ -2568,6 +2573,8 @@ Second terminal: `adb logcat -c && adb logcat -s flutter:I | grep --line-buffere
 Confirm `/tmp/gw-plan-a.log` has one `instruction_budget` line and `ADAPTER=qwen` in `gateway_listening`.
 
 - [ ] **Step 3: 20 spoken turns (latency, thinking, filler, no blank)**
+
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #22
 
 Speak the 20 sentences from A1 Task 2 Step 7, then 5 that tend to take longer: 你给我挥挥手 / 给我讲个短故事吧 / 你给我比个心 / 你说说秋天该吃点什么 / 我想听你猜个谜语. For each turn the tester records in a table: did the avatar show either the thinking pose (eyes up, slight tilt, "…" subtitle) or speech within about half a second of stopping? (Y/N); was a filler heard; did it sound like the reply voice; did the filler cut off cleanly when the reply began.
 
@@ -2595,9 +2602,13 @@ Gate checks to record:
 
 - [ ] **Step 4: Emotion and backchannel**
 
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #23
+
 Say: "我今天特别开心" → happy face; wait 7 s. Say: "我心里有点难过" → the resting smile disappears and a sad face is visible; it returns to the default after about 6 s. While speaking a long sentence (> 2 s), the avatar nods subtly at least once. Record each as observed / not observed.
 
 - [ ] **Step 5: 10-minute silence**
+
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #24
 
 Restart the gateway with a fresh log (`| tee /tmp/gw-silence.log`), open the app, let the greeting finish, put the phone on the table, nobody speaks for 10 minutes (keep the room quiet; note any noise). Then:
 
@@ -2609,6 +2620,8 @@ Gate: `unprompted` = 0 (replies without a local `vad_edge speaking`, excluding g
 
 - [ ] **Step 6: Both styles (persona and voice)**
 
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #25
+
 Default run above is grandchild. For old-friend, locally edit (do not commit) `gateway/roles/elder-companion/role.json` `"defaultStyle": "old-friend"` and `app/assets/config/thinking.json` `"defaultStyle": "old-friend"`, rebuild/install the APK (Step 2 commands), restart the gateway, talk for 3 turns. Record: persona wording matches the style (steady, fewer 撒娇 particles), reply voice is the old-friend voice, filler voice matches. Then revert both files:
 
 ```bash
@@ -2617,7 +2630,7 @@ git checkout -- gateway/roles/elder-companion/role.json app/assets/config/thinki
 
 and rebuild/install the default APK. (Style switching through the app belongs to the A+B merge gate.)
 
-- [ ] **Step 7: Write the report, update roadmap and blockers, commit**
+- [x] **Step 7: Write the report, update roadmap and blockers, commit**
 
 Create `docs/testing/2026-10-1x-plan-a-device-report.md`:
 

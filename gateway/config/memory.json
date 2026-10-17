@@ -1,0 +1,3 @@
+{
+  "instructions": { "budgetRatio": 0.4, "snapshotMaxChars": 600, "summaryMaxChars": 800, "minHistoryChars": 400 }
+}

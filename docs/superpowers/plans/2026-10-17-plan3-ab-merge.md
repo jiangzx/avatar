@@ -35,32 +35,32 @@
 
 **Files:** the shared files above (conflict resolution only).
 
-- [ ] **Step 1: Confirm a clean `master`**
+- [x] **Step 1: Confirm a clean `master`**
 
 Run: `git status --short && git log --oneline -5`
 Expected: no staged changes; Task 0 commits present. If unrelated uncommitted changes exist, stop and ask the user.
 
-- [ ] **Step 2: Merge Plan B**
+- [x] **Step 2: Merge Plan B**
 
 Run: `git merge --no-ff <plan-b-branch>`
 Expected: clean merge (Plan B touches the shared files only on top of Task 0). If it conflicts, resolve per the table.
 
-- [ ] **Step 3: Verify after Plan B**
+- [x] **Step 3: Verify after Plan B**
 
 Run: `npm test && npm run typecheck && (cd app && flutter test && flutter analyze)`
 Expected: all PASS. Record counts.
 
-- [ ] **Step 4: Merge Plan A**
+- [x] **Step 4: Merge Plan A**
 
 Run: `git merge --no-ff <plan-a-branch>`
 Expected: conflicts in some of `gateway/src/index.ts`, `gateway/src/config.ts`, `gateway/test/config.test.ts`, `app/lib/avatar_page.dart`, `app/pubspec.yaml`, `docs/project/roadmap.md`, `docs/blockers.md`. Resolve each per the table, then `git add` each resolved path explicitly.
 
-- [ ] **Step 5: Verify after Plan A**
+- [x] **Step 5: Verify after Plan A**
 
 Run: `npm test && npm run typecheck && (cd app && flutter test && flutter analyze)`
 Expected: all PASS. If a test fails, fix only the merge resolution (not feature code) and re-run.
 
-- [ ] **Step 6: Commit the merge**
+- [x] **Step 6: Commit the merge**
 
 ```bash
 git commit -m "merge: Plan 3 A (persona, pacing, thinking state) into master

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocketServer } from 'ws';
-import { QwenAdapter } from '../src/adapters/qwen.ts';
+import { QwenAdapter, RESPONSE_INSTRUCTIONS, SYSTEM_NOTE_PREFIX, proactiveEvents } from '../src/adapters/qwen.ts';
 
 describe('QwenAdapter', () => {
   const servers: WebSocketServer[] = [];
@@ -108,28 +108,60 @@ describe('QwenAdapter', () => {
     a.close();
   });
 
-  it('configures server-side speech detection and speaks a proactive instruction', async () => {
+  it('configures server-side speech detection and speaks a proactive request in the verified mode', async () => {
     const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
     let session: Record<string, unknown> | undefined;
     const sent: Array<Record<string, unknown>> = [];
     s.on('connection', (ws) => ws.on('message', (raw) => {
       const e = JSON.parse(raw.toString()) as Record<string, unknown>;
       sent.push(e);
-      if (e.type === 'session.update') {
+      if (e.type === 'session.update' && !session) {
         session = e.session as Record<string, unknown>;
         ws.send(JSON.stringify({ type: 'session.created' }));
         ws.send(JSON.stringify({ type: 'session.updated' }));
       }
     }));
     const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture-voice' });
-    await a.connect({ instructions: 'fixture', tools: [] });
-    a.createResponse({ cue: 'greeting', instruction: 'fixture instruction', fallbackText: 'unused' });
+    await a.connect({ instructions: 'base', tools: [] });
+    a.updateInstructions('updated');
+    const request = { cue: 'greeting' as const, instruction: 'fixture instruction', fallbackText: 'unused' };
+    a.createResponse(request);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(session?.turn_detection).toEqual({ type: 'semantic_vad', silence_duration_ms: 800 });
     expect(session?.input_audio_transcription).toEqual({ model: 'qwen3-asr-flash-realtime' });
-    const tail = sent.slice(1);
-    expect(tail.map((e) => e.type)).toEqual(['conversation.item.create', 'response.create']);
-    expect(tail[0]?.item).toMatchObject({ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'fixture instruction' }] });
+    expect(session && 'max_response_output_tokens' in session).toBe(false);
+    expect(sent.slice(2)).toEqual(proactiveEvents(RESPONSE_INSTRUCTIONS, 'updated', request));
+    a.close();
+  });
+
+  it('uses the item fallback as the active mode pending the probe', () => {
+    expect(RESPONSE_INSTRUCTIONS).toBe('item');
+  });
+
+  it('builds proactive events for each instruction mode', () => {
+    const r = { cue: 'followup' as const, instruction: 'TASK', fallbackText: 'f' };
+    expect(proactiveEvents('replace', 'BASE', r)).toEqual([{ type: 'response.create', response: { instructions: 'BASE\n\n## 本次任务\nTASK' } }]);
+    expect(proactiveEvents('append', 'BASE', r)).toEqual([{ type: 'response.create', response: { instructions: 'TASK' } }]);
+    expect(proactiveEvents('item', 'BASE', r)).toEqual([
+      { type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: `${SYSTEM_NOTE_PREFIX}TASK` }] } },
+      { type: 'response.create' },
+    ]);
+  });
+
+  it('sends the output cap only when configured and never turns context notes into user items', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
+    const sent: Array<Record<string, unknown>> = [];
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString()) as Record<string, unknown>;
+      sent.push(e);
+      if (e.type === 'session.update') { ws.send(JSON.stringify({ type: 'session.created' })); ws.send(JSON.stringify({ type: 'session.updated' })); }
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture' });
+    await a.connect({ instructions: 'fixture', tools: [], maxOutputTokens: 120 });
+    a.injectContextNote('助手上一句只说到：「你好」，被用户打断。');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect((sent[0]?.session as Record<string, unknown>).max_response_output_tokens).toBe(120);
+    expect(sent).toHaveLength(1);
     a.close();
   });
 
@@ -165,5 +197,24 @@ describe('QwenAdapter', () => {
     await b.connect({ instructions: 'fixture', tools: [] });
     b.close();
     expect(voices).toEqual(['session-voice', 'default-voice']);
+  });
+  it('emits speech stop and token usage from server events', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString()) as { type: string };
+      if (e.type !== 'session.update') return;
+      ws.send(JSON.stringify({ type: 'session.updated' }));
+      ws.send(JSON.stringify({ type: 'input_audio_buffer.speech_stopped' }));
+      ws.send(JSON.stringify({ type: 'response.created', response: { id: 'r1' } }));
+      ws.send(JSON.stringify({ type: 'response.done', response: { id: 'r1', status: 'completed', usage: { input_tokens: 321, output_tokens: 45 } } }));
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture' });
+    const seen: unknown[] = [];
+    a.on('userSpeechStopped', () => seen.push('stopped'));
+    a.on('responseUsage', (id, usage) => seen.push([id, usage]));
+    await a.connect({ instructions: 'fixture', tools: [] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(seen).toEqual(['stopped', ['r1', { inputTokens: 321, outputTokens: 45 }]]);
+    a.close();
   });
 });

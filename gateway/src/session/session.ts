@@ -8,12 +8,16 @@ import {
 } from '@anyidea/protocol';
 import { PERFORM_ACTION_TOOL, type AdapterFactory, type ProactiveRequest, type RealtimeAdapter, type SessionConfig } from '../adapters/types.ts';
 import { log } from '../log.ts';
+import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { devContext, type SessionContext } from './context.ts';
 import { Director } from './director.ts';
+import { EmotionTagger, type EmotionConfig } from './emotion.ts';
 import { InterruptCoordinator } from './interrupt.ts';
+import { buildInstructions, historyBudget, type InstructionBudget } from './instructions.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
+import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
 
 export interface Transport {
   send(msg: ServerMessage): void;
@@ -32,6 +36,18 @@ export interface SessionDeps {
   rebuildBackoffMaxMs?: number;
   /** The upstream model detects turns itself. Do not upload speaker audio or add silence follow-ups. */
   modelOwnsTurns?: boolean;
+  /** Receives each finalized reply's metrics (eval harness). Production only logs them. */
+  onReplyMetrics?: (m: ReplyMetrics) => void;
+  summarizePolicy?: PolicySpec;
+  maxOutputTokens?: number;
+  /** Uplink resumes this long after playback ended (reason=ended) when the model owns turns. */
+  tailGuardMs?: number;
+  /** Instruction size budget (gateway/config/memory.json); undefined = unbounded (tests). */
+  budget?: InstructionBudget;
+  /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
+  rebuildTriggerRatio?: number;
+  /** Emotion lexicon (gateway/config/emotion.json); undefined = no avatar.emotion messages. */
+  emotion?: EmotionConfig;
 }
 
 interface ResponseState {
@@ -45,6 +61,9 @@ interface ResponseState {
 
 const MAX_REBUILD_MIC_FRAMES = 25;
 
+/** Used only when no policy is injected (tests); production reads gateway/config/pacing.json. */
+const DEFAULT_SUMMARIZE_POLICY: PolicySpec = { timeoutMs: 15_000, retries: 0, backoffMs: 1_000, maxBackoffMs: 1_000 };
+
 export class Session {
   readonly ledger: ConversationLedger;
   readonly context: SessionContext;
@@ -52,8 +71,10 @@ export class Session {
   private adapter: RealtimeAdapter;
   private transport: Transport | null = null;
   private readonly director: Director;
+  private readonly emotion: EmotionTagger | null;
   private readonly interrupt: InterruptCoordinator;
   private readonly actions = new ActionRouter();
+  private readonly metrics = new ReplyMetricsTracker();
   private readonly byId = new Map<string, ResponseState>();
   private readonly bySeq = new Map<number, ResponseState>();
   private seqCounter = 0;
@@ -62,6 +83,8 @@ export class Session {
   private keepalive: NodeJS.Timeout | null = null;
   private turnsSinceRebuild = 0;
   private charsSinceRebuild = 0;
+  /** Length of the instructions the live model session currently holds. */
+  private lastInstructionsChars = 0;
   private rebuilding = false;
   private ended = false;
   private rebuildTimer: NodeJS.Timeout | null = null;
@@ -69,15 +92,21 @@ export class Session {
   private readonly rebuildMicBuffer: Int16Array[] = [];
   private summarizeRetryAt = 0;
   private summarizeBackoffMs = 1_000;
+  private summarizeInFlight = false;
   private vadSpeakingCount = 0;
   private vadSilentCount = 0;
   private modelGenerating = false;
+  private uplinkResumeAt = 0;
 
   constructor(private readonly deps: SessionDeps, ctx: SessionContext = devContext(deps.roles)) {
     this.context = ctx;
     this.persona = deps.roles.buildPersona(ctx.roleId, ctx.styleId);
-    this.ledger = new ConversationLedger(deps.ledger ?? DEFAULT_LEDGER_OPTIONS);
+    const ledgerOpts = deps.ledger ?? DEFAULT_LEDGER_OPTIONS;
+    // Summarize before the instruction budget would have to drop unsummarized turns.
+    const history = deps.budget ? historyBudget(this.persona, deps.budget) : Number.POSITIVE_INFINITY;
+    this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
     this.director = new Director(deps.roles.director(ctx.roleId), { requestResponse: (kind, request) => this.requestResponse(kind, request) });
+    this.emotion = deps.emotion ? new EmotionTagger(deps.emotion, (emotion) => this.send({ type: 'avatar.emotion', emotion })) : null;
     this.interrupt = new InterruptCoordinator({
       confirmWindowMs: deps.confirmWindowMs ?? 300,
       cancel: (seq, source) => this.cancel(seq, source),
@@ -101,14 +130,13 @@ export class Session {
       return;
     }
     this.director.onSessionStart();
-    if (this.deps.modelOwnsTurns) this.director.pause();
   }
 
   attachTransport(transport: Transport): void {
     this.transport = transport;
     this.stopKeepalive();
     transport.send({ type: 'session.resumed', lastResponseSeq: this.seqCounter });
-    if (!this.deps.modelOwnsTurns) this.director.resume();
+    this.director.resume();
   }
 
   detachTransport(): void {
@@ -130,6 +158,8 @@ export class Session {
     // Drop the mic until playback ends. Otherwise the speaker, or a barge-in
     // that should only stop the current reply, becomes the next model turn.
     if (this.deps.modelOwnsTurns && (this.modelGenerating || this.interrupt.active !== null)) return;
+    // Speaker tail after a reply played to the end must not become the next model turn.
+    if (this.deps.modelOwnsTurns && Date.now() < this.uplinkResumeAt) return;
     this.adapter.sendAudio(pcm);
   }
 
@@ -147,6 +177,7 @@ export class Session {
         });
         this.interrupt.onLocalVad(speaking);
         this.director.onUserSpeech(speaking);
+        if (!speaking) this.metrics.onLocalVadSilent();
         break;
       }
       case 'playback.progress': {
@@ -161,11 +192,13 @@ export class Session {
         if (msg.reason === 'interrupted') {
           this.interrupt.onClientInterrupted(msg.responseSeq);
           this.finalize(s, true);
+          this.uplinkResumeAt = 0; // the user is talking: no speaker tail to guard against
         } else {
           // Stale end (already cancelled/superseded, a newer turn may be active): ignore.
           if (this.interrupt.active !== msg.responseSeq) break;
           this.finalize(s, false);
           this.interrupt.onResponseFinished(msg.responseSeq);
+          this.uplinkResumeAt = Date.now() + (this.deps.tailGuardMs ?? 0);
           this.director.onAiTurnEnded();
           this.maybeSlimContext();
         }
@@ -196,6 +229,7 @@ export class Session {
     this.rebuildMicBuffer.length = 0;
     this.stopKeepalive();
     this.director.stop();
+    this.emotion?.dispose();
     this.interrupt.dispose();
     this.adapter.removeAllListeners();
     this.adapter.close();
@@ -208,15 +242,27 @@ export class Session {
   }
 
   private instructions(): string {
-    return this.ledger.buildInstructions(this.persona);
+    return buildInstructions(
+      { persona: this.persona, memorySnapshot: this.context.memorySnapshot, summary: this.ledger.summary, recent: this.ledger.recent },
+      this.deps.budget,
+    );
   }
 
   private sessionConfig(): SessionConfig {
-    return { instructions: this.instructions(), tools: [PERFORM_ACTION_TOOL], voice: this.context.voice };
+    const instructions = this.instructions();
+    this.lastInstructionsChars = instructions.length;
+    return { instructions, tools: [PERFORM_ACTION_TOOL], voice: this.context.voice, ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
+  }
+
+  /** Sends fresh instructions to the live model session and remembers their size. */
+  private pushInstructions(): void {
+    const instructions = this.instructions();
+    this.lastInstructionsChars = instructions.length;
+    this.adapter.updateInstructions(instructions);
   }
 
   private requestResponse(kind: ResponseKind, request: ProactiveRequest): void {
-    if (this.ended || this.interrupt.active !== null) return; // never talk over an active response
+    if (this.ended || this.interrupt.active !== null || this.modelGenerating) return; // never talk over an active or generating response
     this.pendingKind = kind;
     this.adapter.createResponse(request);
   }
@@ -229,6 +275,13 @@ export class Session {
       if (!current()) return;
       this.director.onUserActivity();
       this.interrupt.onModelSpeechStarted();
+    });
+    a.on('userSpeechStopped', () => {
+      if (current()) this.metrics.onSpeechStopped();
+    });
+    a.on('responseUsage', (id, usage) => {
+      const s = current() ? this.byId.get(id) : undefined;
+      if (s) this.metrics.onUsage(s.seq, usage);
     });
     a.on('userTranscript', (text, final) => {
       if (!current()) return;
@@ -243,6 +296,8 @@ export class Session {
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
       log('response_start', { seq: s.seq, kind: s.kind });
+      this.metrics.onResponseStarted(s.seq, s.kind);
+      this.emotion?.onResponseStart(s.seq);
       this.modelGenerating = true;
       this.director.onAiTurnStarted();
       const superseded = this.interrupt.onResponseStart(s.seq);
@@ -258,6 +313,7 @@ export class Session {
     a.on('audioDelta', (id, pcm) => {
       const s = this.live(a, id);
       if (!s) return;
+      if (s.audioMs === 0) this.metrics.onFirstAudio(s.seq);
       s.audioMs += (pcm.length / AI_SAMPLE_RATE) * 1000;
       this.transport?.sendAudio(s.seq, pcm);
     });
@@ -265,6 +321,8 @@ export class Session {
       const s = this.live(a, id);
       if (!s) return;
       s.text += text;
+      this.metrics.onText(s.seq, text.length);
+      this.emotion?.onAssistantDelta(s.seq, text);
       this.charsSinceRebuild += text.length;
       this.send({ type: 'transcript.assistant', responseSeq: s.seq, text });
     });
@@ -277,6 +335,7 @@ export class Session {
       const { action, result } = this.actions.fromTool(args);
       a.sendToolResult(callId, result);
       const s = this.byId.get(id);
+      if (s) this.metrics.onToolCall(s.seq);
       const cancelled = s ? this.interrupt.isCancelled(s.seq) : false;
       if (action && !cancelled) this.send({ type: 'avatar.action', action, source: 'tool' });
     });
@@ -284,6 +343,7 @@ export class Session {
       const s = this.live(a, id);
       if (s) {
         log('response_end', { seq: s.seq });
+        this.metrics.onDone(s.seq);
         this.send({ type: 'response.end', responseSeq: s.seq });
         this.modelGenerating = false;
       }
@@ -300,6 +360,7 @@ export class Session {
     a.on('error', (code, retryable) => {
       if (!current()) return;
       log('adapter_error', { code, retryable });
+      this.metrics.onError(code);
       if (retryable) void this.rebuild('error');
       else this.send({ type: 'error', code, retryable: false });
     });
@@ -329,11 +390,18 @@ export class Session {
   private finalize(s: ResponseState, interrupted: boolean): void {
     if (s.finalized) return;
     s.finalized = true;
+    const m = this.metrics.finish(s.seq, interrupted ? 'interrupted' : 'ended');
+    if (m) {
+      log('reply_metrics', metricFields(m));
+      this.deps.onReplyMetrics?.(m);
+    }
     const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
     this.ledger.addAssistant(text, Date.now(), interrupted);
     // Skip the note when nothing was played: an empty quote would mislead the model.
     if (interrupted && text.length > 0 && !this.adapter.supportsPlaybackTruncate) {
       this.adapter.injectContextNote(`助手上一句只说到：「${text}」，被用户打断。`);
+      // The ledger line now ends with （被用户打断）: send it as instructions, no extra user item or reply.
+      this.pushInstructions();
     }
     this.maybeSummarize();
   }
@@ -344,31 +412,35 @@ export class Session {
     this.turnsSinceRebuild++;
     this.charsSinceRebuild += text.length;
     this.director.onUserFinal(text);
+    this.emotion?.onUserFinal(text);
     const action = this.actions.fromKeyword(text);
     if (action) this.send({ type: 'avatar.action', action, source: 'keyword' });
     this.maybeSummarize();
   }
 
   private maybeSummarize(): void {
-    if (!this.ledger.needsSummary()) return;
+    if (!this.ledger.needsSummary() || this.summarizeInFlight) return;
     if (Date.now() < this.summarizeRetryAt) return;
-    this.ledger
-      .summarize(this.deps.summarizer)
-      .then((applied) => {
+    this.summarizeInFlight = true;
+    void runWithPolicy('summarize', this.deps.summarizePolicy ?? DEFAULT_SUMMARIZE_POLICY, () => this.ledger.summarize(this.deps.summarizer)).then((r) => {
+      this.summarizeInFlight = false;
+      if (r.ok) {
         this.summarizeRetryAt = 0;
         this.summarizeBackoffMs = 1_000;
-        if (applied && !this.ended) this.adapter.updateInstructions(this.instructions());
-      })
-      .catch(() => {
-        this.summarizeRetryAt = Date.now() + this.summarizeBackoffMs;
-        this.summarizeBackoffMs = Math.min(this.summarizeBackoffMs * 2, 30_000);
-        log('summarize_failed');
-      });
+        if (r.value && !this.ended) this.pushInstructions();
+        return;
+      }
+      // The policy already logged policy_failed with the code; keep the cross-call cool-down.
+      this.summarizeRetryAt = Date.now() + this.summarizeBackoffMs;
+      this.summarizeBackoffMs = Math.min(this.summarizeBackoffMs * 2, 30_000);
+      log('summarize_failed', { code: r.code });
+    });
   }
 
   private maybeSlimContext(): void {
-    const limit = (this.deps.modelContextTokenLimit ?? 12_000) * 0.8;
-    const estimate = this.charsSinceRebuild + this.instructions().length;
+    const limit = (this.deps.modelContextTokenLimit ?? 12_000) * (this.deps.rebuildTriggerRatio ?? 0.8);
+    // The model holds the instructions it was last given plus everything said since the rebuild.
+    const estimate = this.charsSinceRebuild + this.lastInstructionsChars;
     if (estimate > limit || this.turnsSinceRebuild >= (this.deps.rebuildAfterTurns ?? 30)) void this.rebuild('slim');
   }
 
@@ -378,6 +450,10 @@ export class Session {
     log('model_rebuild', { reason });
     if (reason !== 'slim') this.send({ type: 'error', code: 'model_reconnecting', retryable: true });
     this.interrupt.cancelActive('local'); // uses the old adapter
+    // The old adapter's responseDone/cancel will never arrive; drop in-flight generation state.
+    this.modelGenerating = false;
+    this.pendingKind = null;
+    this.uplinkResumeAt = 0;
     const old = this.adapter;
     this.adapter = this.createAdapter();
     old.removeAllListeners();

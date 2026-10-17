@@ -1,0 +1,10 @@
+{
+  "id": "test-role",
+  "defaultStyle": "plain",
+  "styles": {
+    "plain": { "file": "styles/plain.md", "voice": null },
+    "second": { "file": "styles/second.md", "voice": "fixture-voice" }
+  },
+  "activityIntro": "## FIXTURE ACTIVITIES",
+  "activities": [{ "id": "one", "title": "活动一", "summary": "第一个活动", "file": "activities/one.md" }]
+}

@@ -5,6 +5,7 @@ import type { SessionConfig } from '../src/adapters/types.ts';
 import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
+import type { ReplyMetrics } from '../src/session/metrics.ts';
 import { Session, type SessionDeps, type Transport } from '../src/session/session.ts';
 
 const script: MockScript = {
@@ -337,8 +338,8 @@ describe('Session', () => {
     expect(muteTransitions).toEqual([true, false]);
   });
 
-  it('keeps playback audio off the model and skips silence follow-ups when the model owns turns', async () => {
-    const s = setup({ modelOwnsTurns: true });
+  it('keeps playback audio off the model and resumes uplink after the tail guard', async () => {
+    const s = setup({ modelOwnsTurns: true, tailGuardMs: 400 });
     let uplink = 0;
     await s.session.start(s.transport);
     await vi.advanceTimersByTimeAsync(200);
@@ -346,13 +347,78 @@ describe('Session', () => {
     s.session.handleMicAudio(loud());
     expect(uplink).toBe(0);
     await vi.advanceTimersByTimeAsync(1_000);
-    s.session.handleMicAudio(loud());
-    expect(uplink).toBe(0);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(0); // speaker tail
+    await vi.advanceTimersByTimeAsync(400);
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(1);
+  });
+
+  it('does not delay uplink after an interruption', async () => {
+    const s = setup({ modelOwnsTurns: true, tailGuardMs: 400 });
+    let uplink = 0;
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(400);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(150);
+    s.mocks[0].sendAudio = () => { uplink++; };
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(1);
+  });
+
+  it('runs silence follow-ups and the reconnect line when the model owns turns', async () => {
+    const s = setup({ modelOwnsTurns: true });
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(8_500);
+    expect(of(s.sent, 'response.start').map((m) => m.kind)).toEqual(['greeting', 'followup']);
+    await vi.advanceTimersByTimeAsync(1_000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    s.session.detachTransport();
+    const second = collector();
+    s.session.attachTransport(second.transport);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(of(second.sent, 'response.start').map((m) => m.kind)).toEqual(['followup']);
+  });
+
+  it('never starts a proactive response while the model is still generating', async () => {
+    const s = setup({ modelOwnsTurns: true });
+    await greetAndFinish(s);
+    const creates = vi.spyOn(s.mocks[0], 'createResponse');
+    s.mocks[0].emit('responseStarted', 'external'); // e.g. an audio-less reply before a tool call
+    // Playback of seq 2 ends (nothing to play) while generation is still running: active is cleared, generating is not.
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 0, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(8_500);
+    expect(creates).not.toHaveBeenCalled();
+  });
+
+  it('clears the generating flag when the model is rebuilt mid-generation', async () => {
+    const s = setup({ modelOwnsTurns: true });
+    await greetAndFinish(s);
+    s.mocks[0].emit('responseStarted', 'external'); // generating, no audio
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 0, reason: 'ended' });
+    s.mocks[0].simulateDrop(); // rebuild drops the old adapter; its responseDone never arrives
+    await vi.advanceTimersByTimeAsync(50);
+    expect(s.mocks).toHaveLength(2);
+    let uplink = 0;
+    s.mocks[1].sendAudio = () => { uplink++; };
     s.session.handleMicAudio(loud());
     expect(uplink).toBe(1);
     await vi.advanceTimersByTimeAsync(9_000);
-    expect(of(s.sent, 'response.start').map((m) => m.kind)).toEqual(['greeting']);
+    expect(of(s.sent, 'response.start').map((m) => m.kind)).toContain('followup');
+  });
+
+  it('does not let a stale tail guard block uplink after an interruption', async () => {
+    const s = setup({ modelOwnsTurns: true, tailGuardMs: 400 });
+    let uplink = 0;
+    await greetAndFinish(s); // greeting ended: tail guard armed
+    s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(150);
+    s.mocks[0].sendAudio = () => { uplink++; };
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(1);
   });
 
   it('end() closes the model and clears memory', async () => {
@@ -363,5 +429,128 @@ describe('Session', () => {
     s.session.handleClientMessage({ type: 'debug.userText', text: '还在吗' });
     await vi.advanceTimersByTimeAsync(1000);
     expect(of(s.sent, 'response.start')).toHaveLength(1);
+  });
+  it('reports content-free metrics for every finalized reply', async () => {
+    const metrics: ReplyMetrics[] = [];
+    const writes: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => { writes.push(String(chunk)); return true; }) as typeof process.stdout.write);
+    const s = setup({ onReplyMetrics: (m) => metrics.push(m) });
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    s.mocks[0].emit('responseUsage', 'mock-1', { inputTokens: 10, outputTokens: 5 });
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    spy.mockRestore();
+    expect(metrics.map((m) => [m.seq, m.kind, m.outcome, m.replyChars, m.toolCalls, m.outputTokens])).toEqual([
+      [1, 'greeting', 'ended', 3, 0, 5],
+      [2, 'reply', 'ended', 2, 1, null],
+    ]);
+    const lines = writes.filter((w) => w.includes('"reply_metrics"'));
+    expect(lines).toHaveLength(2);
+    expect(lines.join('')).not.toMatch(/你好呀|好呀|挥挥手/);
+  });
+
+  it('times out a hanging summarizer through the policy and retries after backoff', async () => {
+    let calls = 0;
+    const writes: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => { writes.push(String(chunk)); return true; }) as typeof process.stdout.write);
+    try {
+      const s = setup({
+        ledger: { keepRecentTurns: 1, summarizeAfterTurns: 1, summarizeAfterTokens: 10_000 },
+        // Settles (rejects) at 1000 ms, after the 500 ms policy timeout, so the ledger flag clears by then.
+        summarizer: { summarize: () => { calls++; return new Promise<string>((_, reject) => setTimeout(() => reject(new Error('slow_summarizer')), 1000)); } },
+        summarizePolicy: { timeoutMs: 500, retries: 0, backoffMs: 100, maxBackoffMs: 100 },
+      });
+      await greetAndFinish(s);
+      s.session.handleClientMessage({ type: 'debug.userText', text: '第一句' });
+      s.session.handleClientMessage({ type: 'debug.userText', text: '第二句' }); // > 1 user turn: summarize starts
+      expect(calls).toBe(1);
+      await vi.advanceTimersByTimeAsync(600); // policy timeout fires at 500 ms; cooldown (1 s) runs to ~1500 ms
+      const failed = writes.filter((w) => w.includes('"policy_failed"')).join('');
+      expect(failed).toContain('"summarize_timeout"');
+      expect(failed).not.toMatch(/第一句|第二句/);
+      await vi.advanceTimersByTimeAsync(500); // t~1100: late rejection settled, still inside the cooldown
+      s.session.handleClientMessage({ type: 'debug.userText', text: '第三句' });
+      expect(calls).toBe(1);
+      await vi.advanceTimersByTimeAsync(600); // past the cooldown
+      s.session.handleClientMessage({ type: 'debug.userText', text: '第四句' });
+      expect(calls).toBe(2);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+  it('does not count recent turns twice when deciding to slim the context', async () => {
+    // Old estimate (chars since rebuild + current instructions incl. recent turns) ≈ 150 > 120 → rebuild.
+    // Correct estimate (chars since rebuild + instructions last sent, 31 chars) ≈ 87 → no rebuild.
+    const s = setup({ modelContextTokenLimit: 120, rebuildTriggerRatio: 1 });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '好'.repeat(50) });
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(s.mocks).toHaveLength(1);
+  });
+
+  it('keeps instructions within the budget and summarizes before history is truncated', async () => {
+    const budget = { totalChars: 200, snapshotMaxChars: 0, summaryMaxChars: 60 };
+    const s = setup({ budget, ledger: { keepRecentTurns: 1, summarizeAfterTurns: 100, summarizeAfterTokens: 10_000 } });
+    await greetAndFinish(s);
+    // History room = 200 - 31 (persona 'P' + empty sections) = 169 chars; two 90-char turns exceed it.
+    for (const text of ['甲'.repeat(90), '乙'.repeat(90)]) {
+      s.session.handleClientMessage({ type: 'debug.userText', text });
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(s.session.ledger.summary).not.toBe('');
+    expect(s.mocks[0].instructions.length).toBeLessThanOrEqual(200 + 4);
+  });
+
+  it('carries the interruption into the model instructions', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(150);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
+    expect(s.mocks[0].instructions).toContain('（被用户打断）');
+  });
+
+  it('passes the configured output cap to the adapter', async () => {
+    const seen: Array<number | undefined> = [];
+    const s = setup({
+      maxOutputTokens: 150,
+      adapterFactory: () => {
+        const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+        const connect = m.connect.bind(m);
+        vi.spyOn(m, 'connect').mockImplementation((c) => { seen.push(c.maxOutputTokens); return connect(c); });
+        return m;
+      },
+    });
+    await s.session.start(s.transport);
+    expect(seen).toEqual([150]);
+  });
+
+  it('omits the output cap when none is configured', async () => {
+    const seen: Array<SessionConfig> = [];
+    const s = setup({
+      adapterFactory: () => {
+        const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+        const connect = m.connect.bind(m);
+        vi.spyOn(m, 'connect').mockImplementation((c) => { seen.push(c); return connect(c); });
+        return m;
+      },
+    });
+    await s.session.start(s.transport);
+    expect(seen).toHaveLength(1);
+    expect('maxOutputTokens' in seen[0]!).toBe(false);
+  });
+
+  it('sends avatar emotions from user and assistant text when configured', async () => {
+    const s = setup({ emotion: { defaultEmotion: 'happy', debounceMs: 0, revertAfterMs: 6000, firstSentenceMaxChars: 20, priority: ['sad', 'love', 'happy'], lexicon: { neutral: [], happy: ['你好'], sad: ['难过'], love: [] } } });
+    await greetAndFinish(s); // greeting '你好呀' has no sentence end yet; happy is already the default anyway
+    s.session.handleClientMessage({ type: 'debug.userText', text: '我今天很难过' });
+    expect(of(s.sent, 'avatar.emotion').map((m) => m.emotion)).toEqual(['sad']);
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(of(s.sent, 'avatar.emotion').map((m) => m.emotion)).toEqual(['sad', 'happy']);
   });
 });

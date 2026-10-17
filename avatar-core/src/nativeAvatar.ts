@@ -8,6 +8,9 @@ import { ActionPlayer } from './avatar/actions.ts';
 import { AvatarView } from './avatar/avatarView.ts';
 import { SubtitleMouth } from './avatar/subtitleMouth.ts';
 
+/** Bridge `avatar.action` source used by Flutter for listening nods (local VAD backchannel). */
+export const BACKCHANNEL_SOURCE = 'backchannel';
+
 export interface NativeAvatarDeps {
   createAvatar(el: HTMLElement): AvatarLike;
   createActions(avatar: AvatarLike): ActionsLike;
@@ -85,19 +88,21 @@ export class NativeAvatarController {
         this.transition('thinking');
         break;
       case 'response.end':
-        this.finishResponse(event.responseSeq, false);
+        // playedMs 0 = empty reply (e.g. before a tool call): keep the thinking pose.
+        this.finishResponse(event.responseSeq, false, event.playedMs === 0);
         break;
       case 'response.cancelled':
         this.finishResponse(event.responseSeq, true);
         break;
       case 'avatar.action':
-        this.actions?.play(event.action);
+        if (event.action === 'nod' && event.source === BACKCHANNEL_SOURCE) this.actions?.nod(true);
+        else this.actions?.play(event.action);
         break;
       case 'avatar.emotion':
         this.avatar?.setEmotion(event.emotion);
         break;
       case 'audio.level':
-        if (this.activeSeq !== null && this.state !== 'speaking') this.transition('speaking');
+        break; // speaking follows the first reply audio frame (state message from Flutter), not mic levels
         break;
       case 'metric':
         this.deps.post({ type: 'metric', name: event.name, ms: event.ms });
@@ -123,7 +128,7 @@ export class NativeAvatarController {
     this.actions = null;
   }
 
-  private finishResponse(responseSeq: number, cancelled: boolean): void {
+  private finishResponse(responseSeq: number, cancelled: boolean, keepState = false): void {
     if (this.liveAssistantText) {
       this.deps.post({ type: 'subtitle', role: 'assistant', text: this.liveAssistantText, final: true });
       this.liveAssistantText = '';
@@ -132,7 +137,7 @@ export class NativeAvatarController {
     if (cancelled) this.actions?.stopAll();
     this.stopSubtitleMouth();
     this.avatar?.setMouth(null);
-    this.transition('idle');
+    if (!keepState) this.transition('idle');
   }
 
   /** Drive the mouth from new subtitle characters, one slot at a time. */

@@ -1,10 +1,34 @@
 import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import { AI_SAMPLE_RATE, MIC_SAMPLE_RATE } from '@anyidea/protocol';
-import type { AdapterEvents, ProactiveRequest, RealtimeAdapter, SessionConfig, ToolSpec } from './types.ts';
+import type { AdapterEvents, ProactiveRequest, RealtimeAdapter, SessionConfig, TokenUsage, ToolSpec } from './types.ts';
 
 export interface QwenOptions { apiKey: string; endpoint: string; model?: string; voice: string; connectTimeoutMs?: number; }
 type Json = Record<string, unknown>;
+
+export type ResponseInstructionMode = 'replace' | 'append' | 'item';
+/**
+ * How response.create `instructions` behave on Qwen: 'replace' overrides session instructions,
+ * 'append' adds to them, 'item' = unsupported, fall back to a labeled item.
+ * 'item' is the fallback pending the probe (unverified, no real calls made); see docs/blockers.md #12.
+ */
+export const RESPONSE_INSTRUCTIONS: ResponseInstructionMode = 'item';
+/** Label for the fallback path so the model does not read the item as something the user said. */
+export const SYSTEM_NOTE_PREFIX = '（系统提示，非用户发言）';
+
+export function proactiveEvents(mode: ResponseInstructionMode, sessionInstructions: string, request: ProactiveRequest): Json[] {
+  switch (mode) {
+    case 'replace':
+      return [{ type: 'response.create', response: { instructions: `${sessionInstructions}\n\n## 本次任务\n${request.instruction}` } }];
+    case 'append':
+      return [{ type: 'response.create', response: { instructions: request.instruction } }];
+    case 'item':
+      return [
+        { type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: `${SYSTEM_NOTE_PREFIX}${request.instruction}` }] } },
+        { type: 'response.create' },
+      ];
+  }
+}
 
 /** Qwen-Omni WebSocket adapter. Audio and event shapes follow the official Realtime API. */
 export class QwenAdapter extends EventEmitter<AdapterEvents> implements RealtimeAdapter {
@@ -13,6 +37,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   private connected = false;
   private closed = false;
   private responseId: string | null = null;
+  private instructions = '';
   private eventCounter = 0;
   private completedResponses = new Set<string>();
   private initialization: { resolve: () => void; reject: (error: Error) => void } | null = null;
@@ -25,6 +50,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   }
   async connect(config: SessionConfig): Promise<void> {
     if (this.ws || this.closed) throw new Error('adapter_not_connectable');
+    this.instructions = config.instructions;
     const url = new URL(this.opts.endpoint); url.searchParams.set('model', this.opts.model);
     await new Promise<void>((resolve, reject) => {
       this.initialization = { resolve, reject };
@@ -40,7 +66,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
         else if (!this.closed) this.emit('closed');
       });
       this.connectTimer = setTimeout(() => this.failInitialization('qwen_connect_timeout'), this.opts.connectTimeoutMs);
-      ws.once('open', () => { if (!this.closed) this.send({ type: 'session.update', session: { modalities: ['text', 'audio'], instructions: config.instructions, turn_detection: { type: 'semantic_vad', silence_duration_ms: 800 }, input_audio_transcription: { model: 'qwen3-asr-flash-realtime' }, audio: { input: { format: { type: 'pcm', sample_rate: MIC_SAMPLE_RATE, sample_format: 's16le', channels: 1, packing: 'interleaved', channel_layout: 'mono' } }, output: { voice: config.voice ?? this.opts.voice, format: { type: 'pcm', sample_rate: AI_SAMPLE_RATE } } }, tools: config.tools.map(toQwenTool) } }); });
+      ws.once('open', () => { if (!this.closed) this.send({ type: 'session.update', session: { modalities: ['text', 'audio'], instructions: config.instructions, turn_detection: { type: 'semantic_vad', silence_duration_ms: 800 }, input_audio_transcription: { model: 'qwen3-asr-flash-realtime' }, audio: { input: { format: { type: 'pcm', sample_rate: MIC_SAMPLE_RATE, sample_format: 's16le', channels: 1, packing: 'interleaved', channel_layout: 'mono' } }, output: { voice: config.voice ?? this.opts.voice, format: { type: 'pcm', sample_rate: AI_SAMPLE_RATE } } }, tools: config.tools.map(toQwenTool), ...(config.maxOutputTokens !== undefined ? { max_response_output_tokens: config.maxOutputTokens } : {}) } }); });
     });
   }
 
@@ -58,11 +84,14 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } });
     this.createResponse();
   }
-  updateInstructions(text: string): void { if (this.connected) this.send({ type: 'session.update', session: { instructions: text } }); }
+  updateInstructions(text: string): void {
+    this.instructions = text;
+    if (this.connected) this.send({ type: 'session.update', session: { instructions: text } });
+  }
   createResponse(request?: ProactiveRequest): void {
     if (!this.connected) return;
-    if (request) this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: request.instruction }] } });
-    this.send({ type: 'response.create' });
+    if (!request) { this.send({ type: 'response.create' }); return; }
+    for (const event of proactiveEvents(RESPONSE_INSTRUCTIONS, this.instructions, request)) this.send(event);
   }
   cancelResponse(): void { if (this.connected) this.send({ type: 'response.cancel' }); }
   sendToolResult(callId: string, result: unknown): void {
@@ -70,7 +99,8 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     this.send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: callId, output: JSON.stringify(result) } });
     this.createResponse();
   }
-  injectContextNote(text: string): void { this.sendUserText(text); }
+  /** Interruption notes reach Qwen through session instructions (Session.pushInstructions), never as a user item. */
+  injectContextNote(_text: string): void {}
   close(): void { if (this.closed) return; this.closed = true; this.connected = false; this.failInitialization('qwen_connect_closed'); this.clearConnectTimer(); const ws = this.ws; this.ws = null; ws?.close(); }
   private send(event: Json): void { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(event)); }
   private eventId(): string { return `qwen-${++this.eventCounter}`; }
@@ -90,6 +120,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     }
     if (type === 'input_audio_buffer.committed') return;
     if (type === 'input_audio_buffer.speech_started') { this.emit('userSpeechStarted'); return; }
+    if (type === 'input_audio_buffer.speech_stopped') { this.emit('userSpeechStopped'); return; }
     if (type === 'conversation.item.input_audio_transcription.delta') { this.emit('userTranscript', String(e.delta ?? e.text ?? ''), false); return; }
     if (type === 'conversation.item.input_audio_transcription.completed') { this.emit('userTranscript', String(e.transcript ?? e.text ?? ''), true); return; }
     if (type === 'response.audio.started') { this.responseId = this.responseIdFrom(e); this.completedResponses.delete(this.responseId); this.emit('responseStarted', this.responseId); return; }
@@ -106,6 +137,10 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     if (type === 'response.audio.done' || type === 'response.done') {
       const id = this.responseIdFrom(e);
       const nested = e.response as Json | undefined;
+      if (type === 'response.done') {
+        const usage = parseUsage(nested?.usage);
+        if (usage) this.emit('responseUsage', id, usage);
+      }
       if (type === 'response.done' && nested?.status === 'cancelled') {
         this.completedResponses.delete(id);
         this.emit('responseCancelled', id);
@@ -127,3 +162,9 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
 }
 function toQwenTool(tool: ToolSpec): Json { return { type: 'function', name: tool.name, description: tool.description, parameters: tool.parameters }; }
 function decode(value: unknown): Int16Array | null { if (typeof value !== 'string') return null; try { const b = Buffer.from(value, 'base64'); const n = b.byteLength - b.byteLength % 2; return new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + n)); } catch { return null; } }
+
+function parseUsage(raw: unknown): TokenUsage | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const u = raw as Json;
+  return typeof u.input_tokens === 'number' && typeof u.output_tokens === 'number' ? { inputTokens: u.input_tokens, outputTokens: u.output_tokens } : null;
+}

@@ -12,6 +12,8 @@ export interface SessionConfig {
   tools: ToolSpec[];
   /** Per-session voice; undefined = the adapter's configured default. */
   voice?: string;
+  /** Per-response output token cap; undefined = no cap (see docs/research/qwen-plan-a-validation.md §3). */
+  maxOutputTokens?: number;
 }
 
 /** What the Director wants said. Qwen speaks from `instruction`; adapters that cannot prompt the model speak `fallbackText`. */
@@ -23,8 +25,15 @@ export interface ProactiveRequest {
   fallbackText: string;
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export type AdapterEvents = {
   userSpeechStarted: [];
+  /** Server-side VAD detected the end of user speech (Qwen `input_audio_buffer.speech_stopped`). */
+  userSpeechStopped: [];
   userTranscript: [text: string, final: boolean];
   responseStarted: [id: string];
   audioDelta: [id: string, pcm24k: Int16Array];
@@ -32,6 +41,8 @@ export type AdapterEvents = {
   toolCall: [id: string, callId: string, name: string, args: unknown];
   responseDone: [id: string];
   responseCancelled: [id: string];
+  /** Token usage reported when a response completes (Qwen `response.done.response.usage`). */
+  responseUsage: [id: string, usage: TokenUsage];
   error: [code: string, retryable: boolean];
   closed: [];
 };

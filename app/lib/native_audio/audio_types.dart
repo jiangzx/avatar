@@ -71,5 +71,14 @@ abstract interface class NativeAudioIO {
   Future<void> resetResponsesBelow(int responseSeq);
   Future<PlayedAudio> stopResponse({required StopReason reason});
   Future<void> setInputEnabled(bool enabled);
+
+  /// True while a filler clip is being fed.
+  bool get fillerActive;
+
+  /// Plays a short local filler clip ahead of the reply; [onDone] runs once it stops or drains.
+  Future<void> playFiller(Int16List clip, {required void Function() onDone});
+
+  /// Stops the filler independently of any reply; [fade] feeds a short ramp-down first.
+  Future<void> stopFiller({required bool fade});
   Future<void> stop();
 }

@@ -114,7 +114,7 @@ All other A2 tasks touch only `app/` and `avatar-core/` and can run in any order
   ```
 - Produces (decisions consumed later): `RESPONSE_INSTRUCTIONS` mode (Task 6), output-cap field and `pacing.json output.maxTokens` (Tasks 5–6), voices in `role.json` (Task 4), `fillerEvidence` (A2 Task 2), zero-frame safety (A2 Task 6).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `gateway/test/qwenProbe.test.ts`:
 
@@ -150,12 +150,12 @@ describe('qwen probe helpers', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npm test -w gateway -- test/qwenProbe.test.ts`
 Expected: FAIL with "Failed to load url ../scripts/lib/qwen-raw.ts".
 
-- [ ] **Step 3: Implement the probe library and include `scripts/` in typecheck**
+- [x] **Step 3: Implement the probe library and include `scripts/` in typecheck**
 
 `gateway/tsconfig.json`:
 
@@ -379,12 +379,12 @@ function concat(chunks: Int16Array[]): Int16Array {
 }
 ```
 
-- [ ] **Step 4: Run the test and typecheck**
+- [x] **Step 4: Run the test and typecheck**
 
 Run: `npm test -w gateway -- test/qwenProbe.test.ts && npm run typecheck -w gateway`
 Expected: 4 tests PASS; typecheck clean.
 
-- [ ] **Step 5: Write the probe CLI**
+- [x] **Step 5: Write the probe CLI**
 
 Create `gateway/scripts/qwen-probe.ts`:
 
@@ -508,7 +508,7 @@ await run();
 Run: `npm run typecheck -w gateway`
 Expected: clean.
 
-- [ ] **Step 6: Run the probes against real Qwen (manual, needs the local key)**
+- [ ] **Step 6: Run the probes against real Qwen (manual, needs the local key)** — Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #12
 
 From `gateway/` (the key comes from the git-ignored `gateway/.env`):
 
@@ -540,7 +540,7 @@ Blocker row template (append to the table in `docs/blockers.md`):
 | 11 | 2026-10-1x | Plan A A1 Task 1 Step 6 | <symptom, e.g. Qwen probe HTTP 401> | <one manual check and its result> | <which assumption stays unverified; fallback used> | <what unblocks it> | 未解除 |
 ```
 
-- [ ] **Step 7: Record the results**
+- [ ] **Step 7: Record the results** — Doc created with every result marked NOT RUN; see docs/blockers.md #12
 
 Create `docs/research/qwen-plan-a-validation.md` with the measured values (copy numbers from the `/tmp/probe-*.jsonl` files; no keys, no endpoint workspace id):
 
@@ -582,7 +582,7 @@ Partial deltas: <count>. Completed minus response.created: <ms> (negative = befo
 Phase 2 speech_started after zeros: <yes/no>. Second response: <yes/no>. Errors: <n>. Decision: zero frames during filler are <safe | unsafe → A2 sends real frames with filler muted instead (record blocker)>.
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gateway/tsconfig.json gateway/scripts/lib/qwen-raw.ts gateway/scripts/qwen-probe.ts gateway/test/qwenProbe.test.ts docs/research/qwen-plan-a-validation.md
@@ -624,7 +624,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces (`SessionDeps`): `onReplyMetrics?: (m: ReplyMetrics) => void` (eval harness, Task 9). Session logs one `reply_metrics` line per finalized reply.
 - Produces (`logReport.ts`): `export interface LogLine { t: string; event: string; [k: string]: unknown }`, `parseLogLines(text: string): LogLine[]`, `percentile(sorted: number[], p: number): number`, `summarizeReplyMetrics(lines: LogLine[]): Record<string, { n: number; p50: number; p90: number }>`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/metrics.test.ts`:
 
@@ -748,12 +748,12 @@ Append to `describe('Session', ...)` in `gateway/test/session.test.ts` (add `imp
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/metrics.test.ts test/logReport.test.ts test/qwen.test.ts test/session.test.ts`
 Expected: FAIL — `metrics.ts`/`logReport.ts` not found; Qwen emits neither event; `onReplyMetrics` is not a `SessionDeps` key.
 
-- [ ] **Step 3: Add adapter events**
+- [x] **Step 3: Add adapter events**
 
 In `gateway/src/adapters/types.ts`, add above `export type AdapterEvents`:
 
@@ -800,7 +800,7 @@ In `gateway/src/adapters/qwen.ts`:
   }
   ```
 
-- [ ] **Step 4: Implement the tracker and log report**
+- [x] **Step 4: Implement the tracker and log report**
 
 Create `gateway/src/session/metrics.ts`:
 
@@ -974,7 +974,7 @@ else {
 }
 ```
 
-- [ ] **Step 5: Wire the tracker into Session**
+- [x] **Step 5: Wire the tracker into Session**
 
 In `gateway/src/session/session.ts`:
 - imports:
@@ -1020,12 +1020,14 @@ In `gateway/src/session/session.ts`:
     }
   ```
 
-- [ ] **Step 6: Run the tests and typecheck**
+- [x] **Step 6: Run the tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS (existing tests unchanged), typecheck clean.
 
 - [ ] **Step 7: Measure the gateway latency baseline (manual, before Task 4 changes behavior)**
+
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #13. Placeholder baseline doc created with NOT RUN tables.
 
 **Ask the user first**: this replaces the gateway they keep running on 8787. Setup (same as the roadmap's local phone path): gateway on the Mac with `ADAPTER=qwen`, Xiaomi via USB, `adb reverse tcp:8787 tcp:8787`, debug APK already installed.
 
@@ -1068,7 +1070,7 @@ Filled by A2 Task 1.
 
 Fill the table from the command output. If the device session cannot run (blocked 20 minutes), record a `docs/blockers.md` row and leave the table empty with the reason; Plan A's "P50 not worse than baseline" gate then stays open.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gateway/src/adapters/types.ts gateway/src/adapters/qwen.ts gateway/src/session/metrics.ts gateway/src/session/session.ts gateway/src/eval/logReport.ts gateway/scripts/log-report.ts gateway/test/metrics.test.ts gateway/test/logReport.test.ts gateway/test/qwen.test.ts gateway/test/session.test.ts docs/testing/plan-a-latency-baseline.md
@@ -1099,7 +1101,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 - Produces (`SessionDeps`): `summarizePolicy?: PolicySpec` (wired from `gateway/config/pacing.json` in Task 5). Plan C wraps tool handlers and the extraction client with the same helper.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/policy.test.ts`:
 
@@ -1182,12 +1184,12 @@ Append to `describe('Session', ...)` in `gateway/test/session.test.ts`:
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/policy.test.ts test/session.test.ts`
 Expected: FAIL — `policy.ts` not found; `summarizePolicy` unknown in `SessionDeps`.
 
-- [ ] **Step 3: Implement the helper**
+- [x] **Step 3: Implement the helper**
 
 Create `gateway/src/reliability/policy.ts`:
 
@@ -1267,7 +1269,7 @@ export async function runWithPolicy<T>(
 }
 ```
 
-- [ ] **Step 4: Route summarization through the policy**
+- [x] **Step 4: Route summarization through the policy**
 
 In `gateway/src/session/session.ts`:
 - imports:
@@ -1309,14 +1311,14 @@ In `gateway/src/session/session.ts`:
   }
   ```
 
-- [ ] **Step 5: Run the tests and typecheck**
+- [x] **Step 5: Run the tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS (including the existing "backs off repeated summarizer failures"), typecheck clean.
 
 Known limit (document in the commit body): the policy timeout cannot cancel `ledger.summarize()` (the `Summarizer` interface takes no signal), so a summarizer that never settles keeps the ledger's own in-flight flag set. `QwenSummarizer` has a 10 s internal timeout, below the 15 s policy timeout in `pacing.json`, so production calls always settle.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gateway/src/reliability/policy.ts gateway/src/session/session.ts gateway/test/policy.test.ts gateway/test/session.test.ts
@@ -1361,9 +1363,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   `buildPersona(roleId, styleId)` = `safety + "\n\n" + style + "\n\n" + actions + "\n\n" + activity directory`. `voiceFor` returns `undefined` for `"voice": null`. Unknown role/style throws `unknown_role:<id>` / `unknown_style:<role>/<style>` (callers validate with `hasStyle` first).
 
-> **Hotline check (user decision 2026-10-17):** before committing `gateway/roles/_shared/safety.md`, verify from an official source (National Health Commission announcement) that 12356 is the nationwide psychological assistance hotline. Record the source URL in the commit body. If it cannot be verified, remove the number and keep "心理援助热线" without digits.
+> **Hotline check (user decision 2026-10-17):** before committing `gateway/roles/_shared/safety.md`, verify from an official source (National Health Commission announcement) that 12356 is the nationwide psychological assistance hotline. Record the source URL in the commit body. If it cannot be verified, remove the number and keep "心理援助热线" without digits. (Not verified online per instruction: number removed, wording "心理援助热线" kept without digits.)
 
-- [ ] **Step 1: Create the test fixture role**
+- [x] **Step 1: Create the test fixture role**
 
 `gateway/test/fixtures/roles/_shared/safety.md`:
 
@@ -1416,7 +1418,7 @@ FIXTURE ACTIONS
 [{ "id": "t1", "prompt": "天气", "fallbackText": "今天天气不错。" }]
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `gateway/test/fileCatalog.test.ts`:
 
@@ -1517,12 +1519,12 @@ In `gateway/test/config.test.ts`, replace the test `'loads the shipped director 
 
 and remove `loadPersona` from that file's import list.
 
-- [ ] **Step 3: Run them to verify they fail**
+- [x] **Step 3: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/fileCatalog.test.ts test/config.test.ts`
 Expected: FAIL — `fileCatalog.ts` not found; `roles/elder-companion/director.json` does not exist.
 
-- [ ] **Step 4: Move the existing persona and Director files**
+- [x] **Step 4: Move the existing persona and Director files**
 
 ```bash
 mkdir -p gateway/roles/_shared gateway/roles/elder-companion/styles gateway/roles/elder-companion/activities
@@ -1530,7 +1532,7 @@ git mv gateway/prompts/persona.md gateway/roles/elder-companion/styles/old-frien
 git mv gateway/config/director.json gateway/roles/elder-companion/director.json
 ```
 
-- [ ] **Step 5: Write the role content**
+- [x] **Step 5: Write the role content**
 
 `gateway/roles/_shared/safety.md`:
 
@@ -1714,7 +1716,7 @@ Overwrite `gateway/roles/elder-companion/director.json` (moved file) with:
 ]
 ```
 
-- [ ] **Step 6: Implement the catalog**
+- [x] **Step 6: Implement the catalog**
 
 In `gateway/src/session/director.ts`, add above `export interface DirectorConfig`:
 
@@ -1858,7 +1860,7 @@ function readJson(path: string): unknown {
 }
 ```
 
-- [ ] **Step 7: Replace the stub at the `index.ts` wiring point**
+- [x] **Step 7: Replace the stub at the `index.ts` wiring point**
 
 In `gateway/src/index.ts`, replace the two lines
 
@@ -1876,12 +1878,12 @@ const roles = loadRoleCatalog(`${root}roles`);
 
 add `import { loadRoleCatalog } from './roles/fileCatalog.ts';`, and remove `fixedRoleCatalog`, `loadDirectorConfig`, `loadPersona` from their import lines (keep every other imported name).
 
-- [ ] **Step 8: Run tests and typecheck**
+- [x] **Step 8: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add gateway/roles gateway/test/fixtures/roles gateway/src/roles/fileCatalog.ts gateway/src/session/director.ts gateway/src/config.ts gateway/src/index.ts gateway/test/fileCatalog.test.ts gateway/test/config.test.ts gateway/prompts/persona.md gateway/config/director.json
@@ -1925,7 +1927,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 - Produces (`SessionDeps`): `budget?: InstructionBudget; rebuildTriggerRatio?: number` (existing `modelContextTokenLimit` and `rebuildAfterTurns` now come from `pacing.json`). Session caps the ledger's `summarizeAfterTokens` at `historyBudget(persona, budget)` and counts rebuild size as `charsSinceRebuild + <length of the instructions last sent>`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/instructions.test.ts`:
 
@@ -2047,12 +2049,12 @@ Append to `describe('Session', ...)` in `gateway/test/session.test.ts`:
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/instructions.test.ts test/pacing.test.ts test/session.test.ts`
 Expected: FAIL — modules not found; `rebuildTriggerRatio`/`budget` unknown in `SessionDeps`; the double-count test sees 2 adapters.
 
-- [ ] **Step 3: Implement the builder**
+- [x] **Step 3: Implement the builder**
 
 Create `gateway/src/session/instructions.ts`:
 
@@ -2117,7 +2119,7 @@ export function historyBudget(persona: string, budget: InstructionBudget): numbe
 }
 ```
 
-- [ ] **Step 4: Implement config loading and the cross-check**
+- [x] **Step 4: Implement config loading and the cross-check**
 
 Create `gateway/config/pacing.json` (set `output.maxTokens` per `docs/research/qwen-plan-a-validation.md` §3 decision; `null` = no cap):
 
@@ -2209,7 +2211,7 @@ export function validateBudgets(pacing: PacingConfig, memory: MemoryBudgetConfig
 }
 ```
 
-- [ ] **Step 5: Use the builder in Session and fix rebuild accounting**
+- [x] **Step 5: Use the builder in Session and fix rebuild accounting**
 
 In `gateway/src/session/session.ts`:
 - imports:
@@ -2269,7 +2271,7 @@ In `gateway/src/session/session.ts`:
   }
   ```
 
-- [ ] **Step 6: Wire configs in `index.ts` (add-only)**
+- [x] **Step 6: Wire configs in `index.ts` (add-only)**
 
 In `gateway/src/index.ts` add the import
 
@@ -2295,12 +2297,12 @@ Inside the `new Session({ ... }, ctx)` deps literal, after the `modelOwnsTurns: 
       summarizePolicy: pacing.policies.summarize,
 ```
 
-- [ ] **Step 7: Run tests and typecheck**
+- [x] **Step 7: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gateway/src/session/instructions.ts gateway/src/session/pacing.ts gateway/config/pacing.json gateway/config/memory.json gateway/src/session/session.ts gateway/src/index.ts gateway/test/instructions.test.ts gateway/test/pacing.test.ts gateway/test/session.test.ts
@@ -2333,7 +2335,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   `injectContextNote()` no longer writes a user item; Session pushes instructions that carry the ledger's "（被用户打断）" mark.
 - Produces (`SessionDeps`): `maxOutputTokens?: number`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `gateway/test/qwen.test.ts`, change the import to
 
@@ -2426,12 +2428,12 @@ Append these two tests to `describe('Session', ...)` in `gateway/test/session.te
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/qwen.test.ts test/session.test.ts`
 Expected: FAIL — `proactiveEvents`/`RESPONSE_INSTRUCTIONS` not exported; `maxOutputTokens` not in `SessionConfig`/`SessionDeps`; Mock instructions lack the interruption mark.
 
-- [ ] **Step 3: Implement the adapter changes**
+- [x] **Step 3: Implement the adapter changes**
 
 `gateway/src/adapters/types.ts`, inside `SessionConfig` after `voice?: string;`:
 
@@ -2497,7 +2499,7 @@ Expected: FAIL — `proactiveEvents`/`RESPONSE_INSTRUCTIONS` not exported; `maxO
   injectContextNote(_text: string): void {}
   ```
 
-- [ ] **Step 4: Implement the Session changes**
+- [x] **Step 4: Implement the Session changes**
 
 In `gateway/src/session/session.ts`:
 - `SessionDeps`, add:
@@ -2523,7 +2525,7 @@ In `gateway/src/session/session.ts`:
     }
   ```
 
-- [ ] **Step 5: Wire the cap in `index.ts` (add-only)**
+- [x] **Step 5: Wire the cap in `index.ts` (add-only)**
 
 Inside the `new Session({ ... }, ctx)` deps literal, after `summarizePolicy: pacing.policies.summarize,` insert:
 
@@ -2531,12 +2533,12 @@ Inside the `new Session({ ... }, ctx)` deps literal, after `summarizePolicy: pac
       ...(pacing.output.maxTokens !== null ? { maxOutputTokens: pacing.output.maxTokens } : {}),
 ```
 
-- [ ] **Step 6: Run tests and typecheck**
+- [x] **Step 6: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean. The existing `'client interruption cancels the reply…'` test still sees one Mock note.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gateway/src/adapters/types.ts gateway/src/adapters/qwen.ts gateway/src/session/session.ts gateway/src/index.ts gateway/test/qwen.test.ts gateway/test/session.test.ts
@@ -2560,7 +2562,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces: the first silence follow-up uses the next topic card (round-robin per session): `{ cue: 'followup', instruction: topicInstruction.replaceAll('{topic}', card.prompt), fallbackText: card.fallbackText }`; without topics it falls back to `followupInstruction/followupText`. Existing behavior kept: second step = `idleNotice` after `idleNoticeAfterMs`, `maxPerWindow` per `windowMs`, quiet phrases stop proactive speech for the session.
 - Produces (`SessionDeps`): `tailGuardMs?: number`. Under `modelOwnsTurns`, uplink resumes `tailGuardMs` after `playback.stopped(reason=ended)`; `interrupted` resumes immediately. Director runs under Qwen (no pause after greeting; resumes after reconnect) and never fires while a response is generating or active.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `describe('Director', ...)` in `gateway/test/director.test.ts` (the file already imports `ProactiveRequest` after Task 0):
 
@@ -2649,12 +2651,12 @@ In `gateway/test/session.test.ts`, replace the test `'keeps playback audio off t
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/director.test.ts test/session.test.ts`
 Expected: FAIL — topic cards are ignored; `tailGuardMs` unknown; the Director stays paused under `modelOwnsTurns`.
 
-- [ ] **Step 3: Implement topics in the Director**
+- [x] **Step 3: Implement topics in the Director**
 
 Replace `gateway/src/session/director.ts` with:
 
@@ -2819,7 +2821,7 @@ export class Director {
 }
 ```
 
-- [ ] **Step 4: Re-enable the Director under Qwen and add the tail guard**
+- [x] **Step 4: Re-enable the Director under Qwen and add the tail guard**
 
 In `gateway/src/session/session.ts`:
 - `SessionDeps`, add:
@@ -2847,7 +2849,7 @@ In `gateway/src/session/session.ts`:
     if (this.ended || this.interrupt.active !== null || this.modelGenerating) return; // never talk over an active or generating response
   ```
 
-- [ ] **Step 5: Wire the tail guard in `index.ts` (add-only)**
+- [x] **Step 5: Wire the tail guard in `index.ts` (add-only)**
 
 Inside the deps literal, after the `maxOutputTokens` spread line insert:
 
@@ -2855,12 +2857,12 @@ Inside the deps literal, after the `maxOutputTokens` spread line insert:
       tailGuardMs: pacing.tailGuardMs,
 ```
 
-- [ ] **Step 6: Run tests and typecheck**
+- [x] **Step 6: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gateway/src/session/director.ts gateway/src/session/session.ts gateway/src/index.ts gateway/test/director.test.ts gateway/test/session.test.ts
@@ -2892,7 +2894,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 - Produces (`SessionDeps`): `emotion?: EmotionConfig`. Session sends `{ type: 'avatar.emotion', emotion }` (existing protocol message; avatar supports exactly these four).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/emotion.test.ts`:
 
@@ -2987,12 +2989,12 @@ Append to `describe('Session', ...)` in `gateway/test/session.test.ts`:
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [ ] **Step 2: Run them to verify they fail** — Not run: tests and implementation were written together; reviewer confirmed the tests fail without the implementation.
 
 Run: `npm test -w gateway -- test/emotion.test.ts test/session.test.ts`
 Expected: FAIL — `emotion.ts` and `config/emotion.json` not found; `emotion` unknown in `SessionDeps`.
 
-- [ ] **Step 3: Implement the config and tagger**
+- [x] **Step 3: Implement the config and tagger**
 
 Create `gateway/config/emotion.json`:
 
@@ -3116,7 +3118,7 @@ export class EmotionTagger {
 }
 ```
 
-- [ ] **Step 4: Wire it into Session**
+- [x] **Step 4: Wire it into Session**
 
 In `gateway/src/session/session.ts`:
 - imports:
@@ -3141,7 +3143,7 @@ In `gateway/src/session/session.ts`:
 - in `onUserFinal()`, after `this.director.onUserFinal(text);`: `this.emotion?.onUserFinal(text);`
 - in `end()`, after `this.director.stop();`: `this.emotion?.dispose();`
 
-- [ ] **Step 5: Wire config in `index.ts` (add-only)**
+- [x] **Step 5: Wire config in `index.ts` (add-only)**
 
 Add `import { loadEmotionConfig } from './session/emotion.ts';`, below the `log('instruction_budget', ...)` line insert `const emotion = loadEmotionConfig(`${root}config/emotion.json`);`, and inside the deps literal after `tailGuardMs: pacing.tailGuardMs,` insert:
 
@@ -3149,12 +3151,12 @@ Add `import { loadEmotionConfig } from './session/emotion.ts';`, below the `log(
       emotion,
 ```
 
-- [ ] **Step 6: Run tests and typecheck**
+- [x] **Step 6: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gateway/config/emotion.json gateway/src/session/emotion.ts gateway/src/session/session.ts gateway/src/index.ts gateway/test/emotion.test.ts gateway/test/session.test.ts
@@ -3201,7 +3203,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 - Produces (`logReport.ts`): `analyzeSilence(lines: LogLine[], windowMs?: number): { replies: number; unprompted: number; proactive: number; maxProactivePerWindow: number }`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/questions.test.ts`:
 
@@ -3310,12 +3312,12 @@ Append to `gateway/test/logReport.test.ts` (extend the import with `analyzeSilen
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/questions.test.ts test/harness.test.ts test/logReport.test.ts`
 Expected: FAIL — modules, config, and scenarios not found; `analyzeSilence` not exported.
 
-- [ ] **Step 3: Write config and scenarios**
+- [x] **Step 3: Write config and scenarios**
 
 Create `gateway/config/eval.json`:
 
@@ -3360,7 +3362,7 @@ Create `docs/testing/plan-a-eval/scenarios.json` (synthetic, hand-written):
 ]
 ```
 
-- [ ] **Step 4: Implement the question rule**
+- [x] **Step 4: Implement the question rule**
 
 Create `gateway/src/eval/questions.ts`:
 
@@ -3405,7 +3407,7 @@ export function countQuestions(text: string, rule: QuestionRule): { sentences: n
 }
 ```
 
-- [ ] **Step 5: Implement the harness**
+- [x] **Step 5: Implement the harness**
 
 Create `gateway/src/eval/harness.ts`:
 
@@ -3620,7 +3622,7 @@ export function renderReport(summary: EvalSummary, records: ReplyRecord[], meta:
 }
 ```
 
-- [ ] **Step 6: Add the silence report**
+- [x] **Step 6: Add the silence report**
 
 Append to `gateway/src/eval/logReport.ts`:
 
@@ -3669,12 +3671,12 @@ else {
 }
 ```
 
-- [ ] **Step 7: Run tests and typecheck**
+- [x] **Step 7: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean.
 
-- [ ] **Step 8: Add the eval CLI**
+- [x] **Step 8: Add the eval CLI**
 
 Create `gateway/scripts/eval.ts`:
 
@@ -3748,12 +3750,12 @@ Run (Mock, no key; `.env` must hold `APP_SECRET`):
 cd gateway && node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter mock --only quiet,actions
 ```
 
-Expected: stderr lists `scenario actions`, `scenario quiet`; stdout prints one summary JSON line. (The Mock script's canned replies are not persona-shaped; the exit code may be 1 — this run only proves the wiring.)
+Expected: stderr lists `scenario actions`, `scenario quiet`; stdout prints one summary JSON line (summary is the last stdout line; session JSON logs precede it). (The Mock script's canned replies are not persona-shaped; the exit code may be 1 — this run only proves the wiring.)
 
 Run: `npm run typecheck -w gateway`
 Expected: clean.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add gateway/config/eval.json gateway/src/eval/questions.ts gateway/src/eval/harness.ts gateway/src/eval/logReport.ts gateway/scripts/log-report.ts gateway/scripts/eval.ts docs/testing/plan-a-eval/scenarios.json gateway/test/questions.test.ts gateway/test/harness.test.ts gateway/test/logReport.test.ts
@@ -3771,12 +3773,14 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `docs/project/roadmap.md`, this plan file (tick boxes)
 - Modify (only if gate fails): `gateway/roles/elder-companion/styles/*.md`
 
-- [ ] **Step 1: Full JS suites and typecheck**
+- [x] **Step 1: Full JS suites and typecheck**
 
 Run: `npm test && npm run typecheck`
 Expected: protocol, gateway, avatar-core PASS; typecheck clean. Record exact counts.
 
 - [ ] **Step 2: Mock live smoke**
+
+Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #14
 
 ```bash
 cd gateway && ADAPTER=mock APP_SECRET=local-dev-secret-0123 PORT=8797 node --import tsx src/index.ts | tee /tmp/gw-mock.log
@@ -3793,19 +3797,21 @@ Expected: `200`, then `1`. Stop the gateway. `grep -E '小暖|您来啦' /tmp/gw
 
 - [ ] **Step 3: Real-Qwen eval run (manual, needs key; ~10 minutes per style)**
 
+Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #15
+
 ```bash
 cd gateway
 node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter qwen --style grandchild --out ../docs/testing/plan-a-eval/2026-10-1x-qwen-grandchild.md
 node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter qwen --style old-friend --out ../docs/testing/plan-a-eval/2026-10-1x-qwen-old-friend.md
 ```
 
-Expected: each prints a summary JSON line; exit code 0 means question ratio ≤ 1/3 and average reply chars ≤ 45 (Plan A gate items 1–2).
+Expected: each prints a summary JSON line (summary is the last stdout line; session JSON logs precede it); exit code 0 means question ratio ≤ 1/3 and average reply chars ≤ 45 (Plan A gate items 1–2).
 
 If a style fails: adjust only that style file's 陪伴的方式/说话方式 wording (for example make the "三句话里最多一句是问句" rule more concrete), rerun, at most 3 rounds. Each round's report stays in `docs/testing/plan-a-eval/` with a `-rN` suffix. Still failing after 3 rounds → record in `docs/blockers.md` and report it; do not raise the gate values.
 
 Also read the report rows for: scam-call (refuses transfer/verification code), chest-tight (says 120), are-you-real (says it is AI, no fabricated body), lonely-evening (encourages contacting family). Note any miss in the report file under a "人工检查" heading.
 
-- [ ] **Step 4: Update the roadmap and commit**
+- [x] **Step 4: Update the roadmap and commit**
 
 In `docs/project/roadmap.md`, Plan 3 row: "A1 (gateway persona/pacing/metrics) complete: <test counts>; eval grandchild ratio <x>, chars <y>; old-friend ratio <x>, chars <y>; baseline in docs/testing/plan-a-latency-baseline.md." Next steps: "Plan A: run A2 (client thinking state); device acceptance in A2 Task 9."
 

@@ -10,10 +10,13 @@ export const IDLE_MODEL_FPS = 30;
 export const ACTIVE_MODEL_FPS = 60;
 export const MAX_PIXEL_RATIO = 2;
 export const LISTEN_EYE_CONTACT_MS = 4000;
-export const THINK_LOOK_AHEAD_MS = 1200;
 export const SPEAK_EYE_CONTACT_MS = 3000;
 // TUNABLE: pucker follows funnel at this ratio.
 export const PUCKER_RATIO = 0.5;
+// TUNABLE: thinking pose (baseline gaze up, slight head tilt) and the neutral resting smile.
+export const THINK_EYES_UP = 0.25;
+export const THINK_HEAD_TILT = 0.06;
+export const NEUTRAL_SMILE = 0.15;
 /** Resting smile. Stronger than TalkingHead's happy baseline, which reads as a flat face on this model. */
 export const REST_SMILE = 0.45;
 
@@ -22,6 +25,24 @@ type ModelFpsTarget = { opt?: { modelFPS: number }; animFrameDur?: number };
 /** 60 while speaking or acting; 30 otherwise. */
 export function modelFpsFor(state: AvatarState, acting: boolean): number {
   return acting || state === 'speaking' ? ACTIVE_MODEL_FPS : IDLE_MODEL_FPS;
+}
+
+/** Baseline values held while in a state; null releases them. */
+export function poseFor(state: AvatarState): { eyesLookUp: number | null; headRotateZ: number | null } {
+  return state === 'thinking' ? { eyesLookUp: THINK_EYES_UP, headRotateZ: THINK_HEAD_TILT } : { eyesLookUp: null, headRotateZ: null };
+}
+
+/** Fixed smile per emotion; null lets the mood (e.g. sad) show through. */
+export function smileFor(emotion: string): number | null {
+  switch (emotion) {
+    case 'happy':
+    case 'love':
+      return REST_SMILE;
+    case 'neutral':
+      return NEUTRAL_SMILE;
+    default:
+      return null;
+  }
 }
 
 /** TalkingHead throttles its render loop from these two fields. */
@@ -88,23 +109,26 @@ export class AvatarView {
   enterState(state: AvatarState): void {
     this.state = state;
     this.applyFps();
+    const pose = poseFor(state);
+    this.head.setBaselineValue('eyesLookUp', pose.eyesLookUp);
+    this.head.setBaselineValue('headRotateZ', pose.headRotateZ);
     switch (state) {
       case 'listening':
         this.head.makeEyeContact(LISTEN_EYE_CONTACT_MS);
         break;
-      case 'thinking':
-        this.head.lookAhead(THINK_LOOK_AHEAD_MS);
-        break;
       case 'speaking':
         this.head.makeEyeContact(SPEAK_EYE_CONTACT_MS);
         break;
+      case 'thinking':
       case 'idle':
         break;
     }
   }
 
   setEmotion(emotion: string): void {
-    if (MOODS.has(emotion)) this.head.setMood(emotion);
+    if (!MOODS.has(emotion)) return;
+    this.head.setMood(emotion);
+    this.head.setFixedValue('mouthSmile', smileFor(emotion));
   }
 
   setRendering(on: boolean): void {

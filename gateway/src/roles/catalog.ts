@@ -1,4 +1,4 @@
-import type { DirectorConfig } from '../session/director.ts';
+import type { DirectorConfig } from './types.ts';
 
 /** Role and style lookup. Task 0 ships a stub; Plan A replaces it with files under gateway/roles/. */
 export interface RoleCatalog {
