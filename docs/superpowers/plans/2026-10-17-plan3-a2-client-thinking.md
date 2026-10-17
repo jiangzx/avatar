@@ -1339,7 +1339,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   Diagnostics emitted: `thinking after_silence_ms=<n>`, `filler kind=thinking|long_wait after_thinking_ms=<n>`, `filler_skipped reason=no_evidence`, `filler_stopped reason=speech`, `thinking_timeout ms=<n>`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `app/test/thinking_controller_test.dart`:
 
@@ -1479,12 +1479,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && flutter test test/thinking_controller_test.dart`
 Expected: FAIL — `thinking_controller.dart` not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `app/lib/native_session/thinking_controller.dart`:
 
@@ -1732,12 +1732,12 @@ class ThinkingController {
 }
 ```
 
-- [ ] **Step 4: Run tests and analyze**
+- [x] **Step 4: Run tests and analyze**
 
 Run: `cd app && flutter test test/thinking_controller_test.dart && flutter analyze`
 Expected: 11 tests PASS; no issues.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/lib/native_session/thinking_controller.dart app/test/thinking_controller_test.dart
