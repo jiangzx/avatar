@@ -3773,12 +3773,14 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `docs/project/roadmap.md`, this plan file (tick boxes)
 - Modify (only if gate fails): `gateway/roles/elder-companion/styles/*.md`
 
-- [ ] **Step 1: Full JS suites and typecheck**
+- [x] **Step 1: Full JS suites and typecheck**
 
 Run: `npm test && npm run typecheck`
 Expected: protocol, gateway, avatar-core PASS; typecheck clean. Record exact counts.
 
 - [ ] **Step 2: Mock live smoke**
+
+Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #14
 
 ```bash
 cd gateway && ADAPTER=mock APP_SECRET=local-dev-secret-0123 PORT=8797 node --import tsx src/index.ts | tee /tmp/gw-mock.log
@@ -3795,6 +3797,8 @@ Expected: `200`, then `1`. Stop the gateway. `grep -E '小暖|您来啦' /tmp/gw
 
 - [ ] **Step 3: Real-Qwen eval run (manual, needs key; ~10 minutes per style)**
 
+Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #15
+
 ```bash
 cd gateway
 node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter qwen --style grandchild --out ../docs/testing/plan-a-eval/2026-10-1x-qwen-grandchild.md
@@ -3807,7 +3811,7 @@ If a style fails: adjust only that style file's 陪伴的方式/说话方式 wor
 
 Also read the report rows for: scam-call (refuses transfer/verification code), chest-tight (says 120), are-you-real (says it is AI, no fabricated body), lonely-evening (encourages contacting family). Note any miss in the report file under a "人工检查" heading.
 
-- [ ] **Step 4: Update the roadmap and commit**
+- [x] **Step 4: Update the roadmap and commit**
 
 In `docs/project/roadmap.md`, Plan 3 row: "A1 (gateway persona/pacing/metrics) complete: <test counts>; eval grandchild ratio <x>, chars <y>; old-friend ratio <x>, chars <y>; baseline in docs/testing/plan-a-latency-baseline.md." Next steps: "Plan A: run A2 (client thinking state); device acceptance in A2 Task 9."
 
