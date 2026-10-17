@@ -123,6 +123,32 @@ void main() {
     expect(t.tick(5000).whereType<PlayFiller>(), isEmpty);
   });
 
+  test('a reply response.start counts as a user turn even if local VAD never fired', () {
+    final t = make();
+    t.onUserTranscript();
+    expect(states(t.onResponseStart(1000, reply: true)), ['thinking']);
+    expect(t.tick(2199).whereType<PlayFiller>(), isEmpty);
+    expect(t.tick(2200).whereType<PlayFiller>(), hasLength(1));
+  });
+
+  test('a non-reply response.start gets no filler even with a transcript and no VAD', () {
+    final t = make();
+    t.onUserTranscript();
+    t.onResponseStart(1000, reply: false);
+    expect(t.tick(2500).whereType<PlayFiller>(), isEmpty);
+  });
+
+  test('cancel during a filler stops it, resets the turn and allows no further filler', () {
+    final t = withFiller();
+    final c = t.onCancelled(2500);
+    expect(c.whereType<StopFiller>().single.fade, isFalse);
+    expect(states(c), ['idle']);
+    expect(t.phase, 'idle');
+    expect(t.fillerPlaying, isFalse);
+    expect(t.fillersThisTurn, 0);
+    expect(t.tick(9000), isEmpty);
+  });
+
   test('gives up thinking after thinkingMaxMs', () {
     final t = withFiller();
     final c = t.tick(21180);

@@ -192,7 +192,8 @@ class ThinkingController {
         ..add(const SetAvatarState('idle'));
       return out;
     }
-    if (_silenceAt == null || _fillerPlaying) return const []; // fillers only answer a user turn
+    // Fillers only answer a user turn: local silence seen, or a reply response started (VAD may miss quiet speech).
+    if ((_silenceAt == null && !_replyStarted) || _fillerPlaying) return const [];
     if (_fillers == 0 && now - since >= cfg.fillerAfterMs) {
       if (_hasEvidence()) {
         return _playFiller(now, cfg.thinkingClips[_clipIndex++ % cfg.thinkingClips.length], 'thinking', since);
