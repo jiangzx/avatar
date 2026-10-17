@@ -46,6 +46,7 @@ const manager = new SessionManager(
       rebuildAfterTurns: pacing.rebuild.afterTurns,
       summarizePolicy: pacing.policies.summarize,
       ...(pacing.output.maxTokens !== null ? { maxOutputTokens: pacing.output.maxTokens } : {}),
+      tailGuardMs: pacing.tailGuardMs,
     }, ctx),
   config.sessionGraceMs,
   config.sessionUnclaimedMs,

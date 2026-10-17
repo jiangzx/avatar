@@ -2562,7 +2562,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces: the first silence follow-up uses the next topic card (round-robin per session): `{ cue: 'followup', instruction: topicInstruction.replaceAll('{topic}', card.prompt), fallbackText: card.fallbackText }`; without topics it falls back to `followupInstruction/followupText`. Existing behavior kept: second step = `idleNotice` after `idleNoticeAfterMs`, `maxPerWindow` per `windowMs`, quiet phrases stop proactive speech for the session.
 - Produces (`SessionDeps`): `tailGuardMs?: number`. Under `modelOwnsTurns`, uplink resumes `tailGuardMs` after `playback.stopped(reason=ended)`; `interrupted` resumes immediately. Director runs under Qwen (no pause after greeting; resumes after reconnect) and never fires while a response is generating or active.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `describe('Director', ...)` in `gateway/test/director.test.ts` (the file already imports `ProactiveRequest` after Task 0):
 
@@ -2651,12 +2651,12 @@ In `gateway/test/session.test.ts`, replace the test `'keeps playback audio off t
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/director.test.ts test/session.test.ts`
 Expected: FAIL — topic cards are ignored; `tailGuardMs` unknown; the Director stays paused under `modelOwnsTurns`.
 
-- [ ] **Step 3: Implement topics in the Director**
+- [x] **Step 3: Implement topics in the Director**
 
 Replace `gateway/src/session/director.ts` with:
 
@@ -2821,7 +2821,7 @@ export class Director {
 }
 ```
 
-- [ ] **Step 4: Re-enable the Director under Qwen and add the tail guard**
+- [x] **Step 4: Re-enable the Director under Qwen and add the tail guard**
 
 In `gateway/src/session/session.ts`:
 - `SessionDeps`, add:
@@ -2849,7 +2849,7 @@ In `gateway/src/session/session.ts`:
     if (this.ended || this.interrupt.active !== null || this.modelGenerating) return; // never talk over an active or generating response
   ```
 
-- [ ] **Step 5: Wire the tail guard in `index.ts` (add-only)**
+- [x] **Step 5: Wire the tail guard in `index.ts` (add-only)**
 
 Inside the deps literal, after the `maxOutputTokens` spread line insert:
 
@@ -2857,12 +2857,12 @@ Inside the deps literal, after the `maxOutputTokens` spread line insert:
       tailGuardMs: pacing.tailGuardMs,
 ```
 
-- [ ] **Step 6: Run tests and typecheck**
+- [x] **Step 6: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gateway/src/session/director.ts gateway/src/session/session.ts gateway/src/index.ts gateway/test/director.test.ts gateway/test/session.test.ts

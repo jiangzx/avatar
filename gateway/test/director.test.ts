@@ -171,4 +171,28 @@ describe('Director', () => {
     vi.advanceTimersByTime(60000);
     expect(calls).toEqual([]);
   });
+
+  it('uses topic cards round-robin for the first silence follow-up', () => {
+    const topics = [{ id: 'a', prompt: '天气', fallbackText: '天气不错。' }, { id: 'b', prompt: '吃饭', fallbackText: '吃了吗？' }];
+    const reqs: ProactiveRequest[] = [];
+    const d = new Director({ ...cfg, maxPerWindow: 10, topicInstruction: '聊聊{topic}', topics }, { requestResponse: (_k, r) => reqs.push(r) });
+    for (let i = 0; i < 3; i++) {
+      d.onUserActivity();
+      d.onAiTurnEnded();
+      vi.advanceTimersByTime(8000);
+    }
+    expect(reqs.map((r) => [r.cue, r.instruction, r.fallbackText])).toEqual([
+      ['followup', '聊聊天气', '天气不错。'],
+      ['followup', '聊聊吃饭', '吃了吗？'],
+      ['followup', '聊聊天气', '天气不错。'],
+    ]);
+  });
+
+  it('keeps the plain follow-up when the role has no topics', () => {
+    const reqs: ProactiveRequest[] = [];
+    const d = new Director({ ...cfg, topicInstruction: '聊聊{topic}', topics: [] }, { requestResponse: (_k, r) => reqs.push(r) });
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(8000);
+    expect(reqs).toEqual([{ cue: 'followup', instruction: 'F', fallbackText: 'followup' }]);
+  });
 });

@@ -39,6 +39,8 @@ export interface SessionDeps {
   onReplyMetrics?: (m: ReplyMetrics) => void;
   summarizePolicy?: PolicySpec;
   maxOutputTokens?: number;
+  /** Uplink resumes this long after playback ended (reason=ended) when the model owns turns. */
+  tailGuardMs?: number;
   /** Instruction size budget (gateway/config/memory.json); undefined = unbounded (tests). */
   budget?: InstructionBudget;
   /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
@@ -90,6 +92,7 @@ export class Session {
   private vadSpeakingCount = 0;
   private vadSilentCount = 0;
   private modelGenerating = false;
+  private uplinkResumeAt = 0;
 
   constructor(private readonly deps: SessionDeps, ctx: SessionContext = devContext(deps.roles)) {
     this.context = ctx;
@@ -122,14 +125,13 @@ export class Session {
       return;
     }
     this.director.onSessionStart();
-    if (this.deps.modelOwnsTurns) this.director.pause();
   }
 
   attachTransport(transport: Transport): void {
     this.transport = transport;
     this.stopKeepalive();
     transport.send({ type: 'session.resumed', lastResponseSeq: this.seqCounter });
-    if (!this.deps.modelOwnsTurns) this.director.resume();
+    this.director.resume();
   }
 
   detachTransport(): void {
@@ -151,6 +153,8 @@ export class Session {
     // Drop the mic until playback ends. Otherwise the speaker, or a barge-in
     // that should only stop the current reply, becomes the next model turn.
     if (this.deps.modelOwnsTurns && (this.modelGenerating || this.interrupt.active !== null)) return;
+    // Speaker tail after a reply played to the end must not become the next model turn.
+    if (this.deps.modelOwnsTurns && Date.now() < this.uplinkResumeAt) return;
     this.adapter.sendAudio(pcm);
   }
 
@@ -188,6 +192,7 @@ export class Session {
           if (this.interrupt.active !== msg.responseSeq) break;
           this.finalize(s, false);
           this.interrupt.onResponseFinished(msg.responseSeq);
+          this.uplinkResumeAt = Date.now() + (this.deps.tailGuardMs ?? 0);
           this.director.onAiTurnEnded();
           this.maybeSlimContext();
         }
@@ -250,7 +255,7 @@ export class Session {
   }
 
   private requestResponse(kind: ResponseKind, request: ProactiveRequest): void {
-    if (this.ended || this.interrupt.active !== null) return; // never talk over an active response
+    if (this.ended || this.interrupt.active !== null || this.modelGenerating) return; // never talk over an active or generating response
     this.pendingKind = kind;
     this.adapter.createResponse(request);
   }

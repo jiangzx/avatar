@@ -338,8 +338,8 @@ describe('Session', () => {
     expect(muteTransitions).toEqual([true, false]);
   });
 
-  it('keeps playback audio off the model and skips silence follow-ups when the model owns turns', async () => {
-    const s = setup({ modelOwnsTurns: true });
+  it('keeps playback audio off the model and resumes uplink after the tail guard', async () => {
+    const s = setup({ modelOwnsTurns: true, tailGuardMs: 400 });
     let uplink = 0;
     await s.session.start(s.transport);
     await vi.advanceTimersByTimeAsync(200);
@@ -347,13 +347,50 @@ describe('Session', () => {
     s.session.handleMicAudio(loud());
     expect(uplink).toBe(0);
     await vi.advanceTimersByTimeAsync(1_000);
-    s.session.handleMicAudio(loud());
-    expect(uplink).toBe(0);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
     s.session.handleMicAudio(loud());
+    expect(uplink).toBe(0); // speaker tail
+    await vi.advanceTimersByTimeAsync(400);
+    s.session.handleMicAudio(loud());
     expect(uplink).toBe(1);
-    await vi.advanceTimersByTimeAsync(9_000);
-    expect(of(s.sent, 'response.start').map((m) => m.kind)).toEqual(['greeting']);
+  });
+
+  it('does not delay uplink after an interruption', async () => {
+    const s = setup({ modelOwnsTurns: true, tailGuardMs: 400 });
+    let uplink = 0;
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(400);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(150);
+    s.mocks[0].sendAudio = () => { uplink++; };
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(1);
+  });
+
+  it('runs silence follow-ups and the reconnect line when the model owns turns', async () => {
+    const s = setup({ modelOwnsTurns: true });
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(8_500);
+    expect(of(s.sent, 'response.start').map((m) => m.kind)).toEqual(['greeting', 'followup']);
+    await vi.advanceTimersByTimeAsync(1_000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    s.session.detachTransport();
+    const second = collector();
+    s.session.attachTransport(second.transport);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(of(second.sent, 'response.start').map((m) => m.kind)).toEqual(['followup']);
+  });
+
+  it('never starts a proactive response while the model is still generating', async () => {
+    const s = setup({ modelOwnsTurns: true });
+    await greetAndFinish(s);
+    const creates = vi.spyOn(s.mocks[0], 'createResponse');
+    s.mocks[0].emit('responseStarted', 'external'); // e.g. an audio-less reply before a tool call
+    // Playback of seq 2 ends (nothing to play) while generation is still running: active is cleared, generating is not.
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 0, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(8_500);
+    expect(creates).not.toHaveBeenCalled();
   });
 
   it('end() closes the model and clears memory', async () => {

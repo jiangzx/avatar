@@ -18,6 +18,7 @@ export class Director {
   private paused = false;
   private stopped = false;
   private userSpeaking = false;
+  private topicIndex = 0;
 
   constructor(
     private readonly cfg: DirectorConfig,
@@ -103,10 +104,18 @@ export class Director {
     const c = this.cfg;
     switch (cue) {
       case 'greeting': return { cue, instruction: c.greetingInstruction, fallbackText: c.greetingText };
-      case 'followup': return { cue, instruction: c.followupInstruction, fallbackText: c.followupText };
+      case 'followup': return this.topicRequest() ?? { cue, instruction: c.followupInstruction, fallbackText: c.followupText };
       case 'idleNotice': return { cue, instruction: c.idleNoticeInstruction, fallbackText: c.idleNoticeText };
       case 'resume': return { cue, instruction: c.resumeInstruction, fallbackText: c.resumeText };
     }
+  }
+
+  /** Next topic card, round-robin within the session; null when the role has none. */
+  private topicRequest(): ProactiveRequest | null {
+    const { topics, topicInstruction } = this.cfg;
+    if (!topics || topics.length === 0 || !topicInstruction) return null;
+    const card = topics[this.topicIndex++ % topics.length]!;
+    return { cue: 'followup', instruction: topicInstruction.replaceAll('{topic}', card.prompt), fallbackText: card.fallbackText };
   }
 
   private takeSpeechSlot(): boolean {
