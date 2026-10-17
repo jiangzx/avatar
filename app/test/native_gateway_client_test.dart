@@ -95,6 +95,95 @@ void main() {
       await expectLater(c.start(), throwsA(isA<TimeoutException>()));
     },
   );
+
+  NativeGatewayClient client(
+    FakeGatewayTransport transport,
+    DeviceTokenProvider? identity,
+  ) => NativeGatewayClient(
+    baseUri: Uri.parse('http://gw.test'),
+    appSecret: 'secret-123456789',
+    transport: transport,
+    events: RecordingGatewayEvents(),
+    reconnectBase: Duration.zero,
+    identity: identity,
+  );
+
+  test('sends the device bearer when creating a session', () async {
+    final transport = FakeGatewayTransport(tokens: firstTokens);
+    await client(
+      transport,
+      FakeTokenProvider('device-token-0123456789'),
+    ).start();
+    expect(transport.postedBearers, ['device-token-0123456789']);
+    expect(transport.lastSocket.jsonMessages.single['type'], 'session.start');
+  });
+
+  test(
+    'renews a rejected device token once and retries with the new one',
+    () async {
+      final transport = FakeGatewayTransport(
+        tokens: firstTokens,
+        rejectedBearers: {'old-token-0123456789'},
+      );
+      final identity = FakeTokenProvider(
+        'old-token-0123456789',
+        renewed: 'new-token-0123456789',
+      );
+      await client(transport, identity).start();
+      expect(transport.postedBearers, [
+        'old-token-0123456789',
+        'new-token-0123456789',
+      ]);
+      expect(identity.renewCalls, 1);
+      expect(transport.lastSocket.jsonMessages.single['type'], 'session.start');
+    },
+  );
+
+  test('continues without a bearer when renewal is unavailable', () async {
+    final transport = FakeGatewayTransport(
+      tokens: firstTokens,
+      rejectedBearers: {'old-token-0123456789'},
+    );
+    await client(transport, FakeTokenProvider('old-token-0123456789')).start();
+    expect(transport.postedBearers, ['old-token-0123456789', null]);
+  });
+
+  test('does not renew when the request had no bearer', () async {
+    final transport = FakeGatewayTransport(
+      tokens: firstTokens,
+      rejectedBearers: {null},
+    );
+    final identity = FakeTokenProvider(null);
+    await expectLater(
+      client(transport, identity).start(),
+      throwsA(
+        isA<GatewayHttpException>().having(
+          (e) => e.statusCode,
+          'statusCode',
+          401,
+        ),
+      ),
+    );
+    expect(identity.renewCalls, 0);
+  });
+
+  test('resume never sends the bearer', () async {
+    final transport = FakeGatewayTransport(
+      tokens: firstTokens,
+      resumeTokens: [secondTokens],
+    );
+    await client(
+      transport,
+      FakeTokenProvider('device-token-0123456789'),
+    ).start();
+    transport.lastSocket.emitText(
+      '{"type":"session.ready","sessionId":"first"}',
+    );
+    transport.lastSocket.closeUnexpectedly();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(transport.postedPaths, ['/session', '/session/resume']);
+    expect(transport.postedBearers, ['device-token-0123456789']);
+  });
 }
 
 class RecordingGatewayEvents implements GatewayClientEvents {
@@ -116,11 +205,17 @@ class FakeGatewayTransport implements GatewayTransport {
   FakeGatewayTransport({
     required this.tokens,
     List<SessionTokens>? resumeTokens,
-  }) : _resumeTokens = Queue<SessionTokens>.from(resumeTokens ?? const []);
+    Set<String?>? rejectedBearers,
+  }) : _resumeTokens = Queue<SessionTokens>.from(resumeTokens ?? const []),
+       rejectedBearers = rejectedBearers ?? {};
 
   final SessionTokens tokens;
   final Queue<SessionTokens> _resumeTokens;
+
+  /// POST /session answers 401 for these bearers (null = no bearer).
+  final Set<String?> rejectedBearers;
   final postedPaths = <String>[];
+  final postedBearers = <String?>[];
   final sockets = <FakeSocket>[];
   bool hangPosts = false;
 
@@ -131,9 +226,19 @@ class FakeGatewayTransport implements GatewayTransport {
     Uri uri, {
     required String appSecret,
     required Map<String, Object?> body,
+    String? bearer,
   }) async {
     if (hangPosts) return Completer<GatewayHttpResponse>().future;
     postedPaths.add(uri.path);
+    if (uri.path == '/session') {
+      postedBearers.add(bearer);
+      if (rejectedBearers.contains(bearer)) {
+        return const GatewayHttpResponse(
+          statusCode: 401,
+          body: {'error': 'unauthorized'},
+        );
+      }
+    }
     final SessionTokens next = uri.path == '/session/resume'
         ? _resumeTokens.removeFirst()
         : tokens;
@@ -141,10 +246,36 @@ class FakeGatewayTransport implements GatewayTransport {
   }
 
   @override
+  Future<GatewayHttpResponse> patch(
+    Uri uri, {
+    required String appSecret,
+    required String bearer,
+    required Map<String, Object?> body,
+  }) async => const GatewayHttpResponse(statusCode: 404, body: null);
+
+  @override
   Future<NativeSocket> openWebSocket(Uri uri) async {
     final socket = FakeSocket();
     sockets.add(socket);
     return socket;
+  }
+}
+
+class FakeTokenProvider implements DeviceTokenProvider {
+  FakeTokenProvider(this.current, {this.renewed});
+
+  String? current;
+  final String? renewed;
+  int renewCalls = 0;
+
+  @override
+  Future<String?> token() async => current;
+
+  @override
+  Future<String?> renew() async {
+    renewCalls++;
+    if (renewed != null) current = renewed;
+    return renewed;
   }
 }
 

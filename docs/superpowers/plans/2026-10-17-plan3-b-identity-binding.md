@@ -2713,7 +2713,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   `/session/resume` never sends the bearer (the resume token is bound to the session).
 
-- [ ] **Step 1: Write the failing transport test**
+- [x] **Step 1: Write the failing transport test**
 
 Create `app/test/native_gateway_transport_test.dart`:
 
@@ -2788,7 +2788,7 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Update the fake transport and add failing client tests**
+- [x] **Step 2: Update the fake transport and add failing client tests**
 
 In `app/test/native_gateway_client_test.dart`, replace the `FakeGatewayTransport` class with:
 
@@ -2922,12 +2922,12 @@ and add inside `main()` (after the existing tests):
   });
 ```
 
-- [ ] **Step 3: Run them to verify they fail**
+- [x] **Step 3: Run them to verify they fail**
 
 Run: `cd app && flutter test test/native_gateway_transport_test.dart test/native_gateway_client_test.dart`
 Expected: FAIL at compile time: `No named parameter with the name 'bearer'`, `The method 'patch' isn't defined`, `Undefined class 'DeviceTokenProvider'`, `No named parameter with the name 'identity'`.
 
-- [ ] **Step 4: Implement the transport**
+- [x] **Step 4: Implement the transport**
 
 Replace `app/lib/native_gateway/transports.dart` with:
 
@@ -3039,7 +3039,7 @@ class _IoNativeSocket implements NativeSocket {
 }
 ```
 
-- [ ] **Step 5: Implement the client change**
+- [x] **Step 5: Implement the client change**
 
 In `app/lib/native_gateway/gateway_client.dart`:
 
@@ -3101,12 +3101,12 @@ abstract interface class DeviceTokenProvider {
 
 (`_tryResume` keeps calling `_post('/session/resume', {...})` without a bearer.)
 
-- [ ] **Step 6: Run tests and analyze**
+- [x] **Step 6: Run tests and analyze**
 
 Run: `cd app && flutter test test/native_gateway_transport_test.dart test/native_gateway_client_test.dart && flutter analyze && flutter test`
 Expected: all PASS (existing client tests unchanged); `No issues found!`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/lib/native_gateway/transports.dart app/lib/native_gateway/gateway_client.dart app/test/native_gateway_transport_test.dart app/test/native_gateway_client_test.dart

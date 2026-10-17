@@ -28,6 +28,14 @@ class GatewayHttpException implements Exception {
   final int statusCode;
 }
 
+/// Supplies the device bearer for POST /session (Plan 3 B). token() == null means dev mode.
+abstract interface class DeviceTokenProvider {
+  Future<String?> token();
+
+  /// The gateway rejected the token: a new token, or null to continue without identity.
+  Future<String?> renew();
+}
+
 class NativeGatewayClient implements GatewayClientLike {
   NativeGatewayClient({
     required this.baseUri,
@@ -41,6 +49,7 @@ class NativeGatewayClient implements GatewayClientLike {
     this.reconnectMax = const Duration(seconds: 4),
     this.requestTimeout = AppConfig.gatewayRequestTimeout,
     this.socketTimeout = AppConfig.gatewaySocketTimeout,
+    this.identity,
   });
 
   final Uri baseUri;
@@ -54,6 +63,9 @@ class NativeGatewayClient implements GatewayClientLike {
   final Duration reconnectMax;
   final Duration requestTimeout;
   final Duration socketTimeout;
+
+  /// Device identity; null = dev mode (APP_SECRET only).
+  final DeviceTokenProvider? identity;
 
   NativeSocket? _socket;
   StreamSubscription<Object>? _subscription;
@@ -111,9 +123,23 @@ class NativeGatewayClient implements GatewayClientLike {
   }
 
   Future<void> _startFresh() async {
-    _tokens = await _post('/session', const {}).timeout(requestTimeout);
+    _tokens = await _createSession().timeout(requestTimeout);
     if (_closedByUser) return;
     await _open(resume: false);
+  }
+
+  /// POST /session with the device bearer; after a 401, one retry with the renewed (or no) bearer.
+  Future<SessionTokens> _createSession() async {
+    final provider = identity;
+    final bearer = await provider?.token();
+    try {
+      return await _post('/session', const {}, bearer: bearer);
+    } on GatewayHttpException catch (error) {
+      if (provider == null || bearer == null || error.statusCode != 401) {
+        rethrow;
+      }
+      return _post('/session', const {}, bearer: await provider.renew());
+    }
   }
 
   Future<void> _open({required bool resume}) async {
@@ -239,11 +265,16 @@ class NativeGatewayClient implements GatewayClientLike {
     }
   }
 
-  Future<SessionTokens> _post(String path, Map<String, Object?> body) async {
+  Future<SessionTokens> _post(
+    String path,
+    Map<String, Object?> body, {
+    String? bearer,
+  }) async {
     final response = await transport.post(
       _httpUri(path),
       appSecret: appSecret,
       body: body,
+      bearer: bearer,
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw GatewayHttpException(response.statusCode);

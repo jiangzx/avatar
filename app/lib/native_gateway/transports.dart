@@ -18,9 +18,17 @@ abstract interface class NativeSocket {
 }
 
 abstract interface class GatewayTransport {
+  /// [bearer] adds `Authorization: Bearer <token>` (device identity); null sends none.
   Future<GatewayHttpResponse> post(
     Uri uri, {
     required String appSecret,
+    required Map<String, Object?> body,
+    String? bearer,
+  });
+  Future<GatewayHttpResponse> patch(
+    Uri uri, {
+    required String appSecret,
+    required String bearer,
     required Map<String, Object?> body,
   });
   Future<NativeSocket> openWebSocket(Uri uri);
@@ -34,14 +42,34 @@ class IoGatewayTransport implements GatewayTransport {
     Uri uri, {
     required String appSecret,
     required Map<String, Object?> body,
+    String? bearer,
+  }) => _send('POST', uri, appSecret: appSecret, body: body, bearer: bearer);
+
+  @override
+  Future<GatewayHttpResponse> patch(
+    Uri uri, {
+    required String appSecret,
+    required String bearer,
+    required Map<String, Object?> body,
+  }) => _send('PATCH', uri, appSecret: appSecret, body: body, bearer: bearer);
+
+  Future<GatewayHttpResponse> _send(
+    String method,
+    Uri uri, {
+    required String appSecret,
+    required Map<String, Object?> body,
+    String? bearer,
   }) async {
     final client = HttpClient();
     try {
       final request = await client
-          .postUrl(uri)
+          .openUrl(method, uri)
           .timeout(AppConfig.gatewayRequestTimeout);
       request.headers.contentType = ContentType.json;
       request.headers.set('x-app-secret', appSecret);
+      if (bearer != null) {
+        request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $bearer');
+      }
       request.add(utf8.encode(jsonEncode(body)));
       final response = await request.close().timeout(
         AppConfig.gatewayRequestTimeout,
