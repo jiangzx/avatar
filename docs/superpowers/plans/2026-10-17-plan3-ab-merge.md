@@ -177,10 +177,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `docs/blockers.md` (only if an item fails or is skipped)
 
 - [ ] **Step 1: Ask the user before touching the phone gateway**
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #38 and #39
 
 The gate needs the merged gateway on 8787 with `ADAPTER=qwen`. Ask the user to confirm that the running gateway may be restarted. Do not proceed without confirmation.
 
 - [ ] **Step 2: Build, install, run**
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #38
 
 Run:
 
@@ -196,6 +198,7 @@ Start the merged gateway with the user's Qwen environment (`ADAPTER=qwen`, port 
 Expected: install `Success`; gateway logs `gateway_listening`.
 
 - [ ] **Step 3: Gate procedure**
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #39
 
 1. Fresh install: pick 孙辈型 on first launch; talk for one exchange; note the voice and tone.
 2. Open settings, switch to 老朋友型; leave the conversation so the session ends (back out of the app, wait past the 60 s grace, reopen).
@@ -204,7 +207,7 @@ Expected: install `Success`; gateway logs `gateway_listening`.
 
 Expected: after step 2 the next session uses the old-friend voice and persona. Record pass/fail per step.
 
-- [ ] **Step 4: Update the roadmap and commit**
+- [x] **Step 4: Update the roadmap and commit**
 
 In `docs/project/roadmap.md`, set the Plan 3 row to "A and B merged; A+B gate: <result>; next: Plan C", and list the commands and results actually run. Add a `docs/blockers.md` row for any failed or skipped step.
 
