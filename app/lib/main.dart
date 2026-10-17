@@ -60,6 +60,6 @@ class _HomeState extends State<_Home> {
   @override
   Widget build(BuildContext context) => AppShell(
     identity: _identity,
-    avatarBuilder: (identity) => AvatarPage(identity: identity),
+    avatarBuilder: (identity) => AvatarPage(identity: identity, savedStyle: _identity.savedStyle),
   );
 }

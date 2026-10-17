@@ -52,11 +52,16 @@ String _errorLabel(String code) => switch (code) {
       _ => '出错了：$code',
     };
 
+/// Filler clips follow the agent's saved style; unknown or missing styles use the config default.
+String fillerStyle(ThinkingConfig cfg, String? saved) =>
+    saved != null && cfg.styles.contains(saved) ? saved : cfg.defaultStyle;
+
 class AvatarPage extends StatefulWidget {
-  const AvatarPage({super.key, this.identity});
+  const AvatarPage({super.key, this.identity, this.savedStyle});
 
   /// Device bearer source for POST /session; null = dev mode (APP_SECRET only).
   final DeviceTokenProvider? identity;
+  final Future<String?> Function()? savedStyle;
 
   @override
   State<AvatarPage> createState() => _AvatarPageState();
@@ -161,10 +166,15 @@ class _AvatarPageState extends State<AvatarPage> {
     if (_session != null || _startingSession) return;
     _startingSession = true;
     final thinking = await _loadThinking();
-    // A+B merge point: use the style stored by Plan B instead of the config default.
+    String? saved;
+    try {
+      saved = await widget.savedStyle?.call();
+    } on Exception {
+      saved = null; // storage failure: fall back to the config default
+    }
     final clips = thinking == null
         ? const <String, Int16List>{}
-        : await loadFillerClips(rootBundle, thinking, thinking.defaultStyle);
+        : await loadFillerClips(rootBundle, thinking, fillerStyle(thinking, saved));
     final session = NativeSessionController(
       audio: PluginNativeAudioIO(filler: thinking?.audio),
       detector: EnergySpeechDetector(),

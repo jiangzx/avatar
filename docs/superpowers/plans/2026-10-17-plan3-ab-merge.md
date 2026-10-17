@@ -81,7 +81,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `DeviceIdentity.savedStyle(): Future<String?>` (Plan B Task 9); `ThinkingConfig.parse(String)`, `ThinkingConfig.assetPath`, `ThinkingConfig.styles: List<String>`, `ThinkingConfig.defaultStyle: String`, `loadFillerClips(AssetBundle, ThinkingConfig, String style, {DiagSink diag})` (Plan A2 Tasks 2–4).
 - Produces: `AvatarPage({Key? key, DeviceTokenProvider? identity, Future<String?> Function()? savedStyle})` and a pure helper `String fillerStyle(ThinkingConfig cfg, String? saved)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `app/test/avatar_page_style_test.dart`:
 
@@ -107,12 +107,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && flutter test test/avatar_page_style_test.dart`
 Expected: FAIL with `fillerStyle` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `app/lib/avatar_page.dart`, add at top level:
 
@@ -154,12 +154,12 @@ In `app/lib/main.dart`, change the builder:
     avatarBuilder: (identity) => AvatarPage(identity: identity, savedStyle: _identity.savedStyle),
 ```
 
-- [ ] **Step 4: Run tests and analyze**
+- [x] **Step 4: Run tests and analyze**
 
 Run: `cd app && flutter test && flutter analyze`
 Expected: PASS, no issues.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/lib/avatar_page.dart app/lib/main.dart app/test/avatar_page_style_test.dart
