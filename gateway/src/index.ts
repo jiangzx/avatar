@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
-import { loadConfig, makeOriginCheck } from './config.ts';
+import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
 import { log } from './log.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from './session/pacing.ts';
@@ -12,7 +12,6 @@ import { QwenSummarizer } from './session/qwenSummarizer.ts';
 import { SessionManager } from './session/manager.ts';
 import { Session } from './session/session.ts';
 import { createGatewayServer } from './server/server.ts';
-import { loadIdentityConfig } from './config.ts';
 import { DeviceRegistry, ORPHAN_CLEANUP_INTERVAL_MS } from './identity/registry.ts';
 import { openDatabase } from './memory/db.ts';
 import { SqliteMemoryStore } from './memory/store.ts';
@@ -79,7 +78,7 @@ const manager = new SessionManager(
 const server = createGatewayServer({
   manager,
   appSecret: config.appSecret,
-  // Wiring point: Plan B swaps in the MemoryStore-backed resolver here.
+  // Identity on: DeviceRegistry resolves bearers; identity off: dev resolver (no bearer, default role/style).
   contextResolver: registry ?? devContextResolver(roles),
   identity: registry ?? undefined,
   registerRateLimit: { max: identityConfig.registerRateLimitMax, windowMs: identityConfig.registerRateLimitWindowMs },

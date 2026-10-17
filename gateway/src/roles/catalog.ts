@@ -1,6 +1,6 @@
 import type { DirectorConfig } from './types.ts';
 
-/** Role and style lookup. Task 0 ships a stub; Plan A replaces it with files under gateway/roles/. */
+/** Role and style lookup. Production: FileRoleCatalog (gateway/roles/); fixedRoleCatalog is the test stub. */
 export interface RoleCatalog {
   defaultRole(): string;
   defaultStyle(roleId: string): string;

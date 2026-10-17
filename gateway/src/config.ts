@@ -152,10 +152,6 @@ export function loadDirectorConfig(path: string): DirectorConfig {
   return DirectorSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
 }
 
-export function loadPersona(path: string): string {
-  return readFileSync(path, 'utf8');
-}
-
 /** Device identity and memory store settings (Plan 3 B). Env only; never in files. */
 export interface IdentityConfig {
   /** Absolute path outside the repo, or ':memory:'. Undefined = identity disabled (dev mode). */

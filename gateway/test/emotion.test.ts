@@ -21,6 +21,8 @@ describe('tagEmotion', () => {
     const shipped = loadEmotionConfig(`${root}config/emotion.json`);
     expect(tagEmotion('我今天有点难过', shipped)).toBe('sad');
     expect(tagEmotion('我今天特别开心', shipped)).toBe('happy');
+    expect(tagEmotion('孙子可疼我了', shipped)).toBe('love');
+    expect(tagEmotion('我心里难过', shipped)).toBe('sad');
   });
 });
 

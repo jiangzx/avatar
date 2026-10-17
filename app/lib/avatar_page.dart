@@ -169,7 +169,8 @@ class _AvatarPageState extends State<AvatarPage> {
     String? saved;
     try {
       saved = await widget.savedStyle?.call();
-    } on Exception {
+    } on Exception catch (e) {
+      logcatDiagSink(formatDiag('saved_style_read_failed', {'type': e.runtimeType.toString()}));
       saved = null; // storage failure: fall back to the config default
     }
     final clips = thinking == null

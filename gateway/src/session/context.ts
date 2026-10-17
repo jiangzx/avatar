@@ -21,12 +21,12 @@ export function devContext(roles: RoleCatalog): SessionContext {
 
 export type ResolveResult = { ok: true; ctx: SessionContext } | { ok: false };
 
-/** Maps the optional device bearer token to a session context. Plan B replaces the stub with a MemoryStore-backed resolver. */
+/** Maps the optional device bearer token to a session context. DeviceRegistry implements this when MEMORY_DB_PATH is set. */
 export interface ContextResolver {
   resolve(bearer: string | undefined): ResolveResult;
 }
 
-/** Stub: dev / Mock sessions only. Any bearer is unknown until device identity exists. */
+/** Dev / Mock resolver (identity disabled): any bearer is rejected. */
 export function devContextResolver(roles: RoleCatalog): ContextResolver {
   return { resolve: (bearer) => (bearer === undefined ? { ok: true, ctx: devContext(roles) } : { ok: false }) };
 }

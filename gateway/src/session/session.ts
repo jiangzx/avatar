@@ -34,7 +34,7 @@ export interface SessionDeps {
   rebuildAfterTurns?: number;
   rebuildBackoffBaseMs?: number;
   rebuildBackoffMaxMs?: number;
-  /** The upstream model detects turns itself. Do not upload speaker audio or add silence follow-ups. */
+  /** The upstream model detects turns itself. Drop mic uplink while a reply is active and for tailGuardMs after playback; Director follow-ups still apply. */
   modelOwnsTurns?: boolean;
   /** Receives each finalized reply's metrics (eval harness). Production only logs them. */
   onReplyMetrics?: (m: ReplyMetrics) => void;

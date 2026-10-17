@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, loadDirectorConfig, loadIdentityConfig, loadPersona, makeOriginCheck } from '../src/config.ts';
+import { loadConfig, loadDirectorConfig, loadIdentityConfig, makeOriginCheck } from '../src/config.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
