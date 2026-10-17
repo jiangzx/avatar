@@ -13,10 +13,12 @@ describe('SeeduplexAdapter', () => {
     const server = new WebSocketServer({ port: 0 }); servers.push(server);
     await new Promise<void>((resolve) => server.once('listening', resolve));
     const port = (server.address() as { port: number }).port;
+    const committed: string[] = [];
     server.on('connection', (socket) => socket.on('message', (raw) => {
-      const event = JSON.parse(raw.toString()) as { type: string };
+      const event = JSON.parse(raw.toString()) as { type: string; text?: string };
       if (event.type === 'session.create') socket.send(JSON.stringify({ type: 'session.created', session: { id: 'fixture' } }));
       if (event.type === 'speech_text_buffer.commit') {
+        committed.push(event.text ?? '');
         socket.send(JSON.stringify({ type: 'response.output_audio.started', response_id: 'r1' }));
         socket.send(JSON.stringify({ type: 'response.output_text.delta', response_id: 'r1', delta: 'fixture text' }));
         socket.send(JSON.stringify({ type: 'response.output_audio.delta', response_id: 'r1', delta: Buffer.from(new Int16Array([1, 2]).buffer).toString('base64') }));
@@ -36,6 +38,8 @@ describe('SeeduplexAdapter', () => {
     await adapter.connect(config); await wait(); adapter.createResponse({ cue: 'greeting', instruction: 'G', fallbackText: 'safe greeting' }); await wait();
     expect(events).toEqual(['start:r1', 'text:fixture text', 'tool:c1:perform_action', 'done:r1']);
     expect(samples).toBe(2);
+    // Director request commits only the fallback text, not instruction or cue
+    expect(committed).toEqual(['safe greeting']);
     adapter.cancelResponse(); await wait();
     expect(events).toContain('cancel:r1');
     adapter.close();

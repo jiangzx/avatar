@@ -65,7 +65,7 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
   ```text
   npm ci
   cp ../avatar/gateway/.env gateway/.env        # if present; never commit
-  cp ../avatar/app/dev.json app/dev.json        # never commit
+  cp ../avatar/app/dev.json app/dev.json        # if present; never commit
   ./scripts/fetch-assets.sh                     # avatar GLB/animations, if the worktree needs the app
   ./scripts/build-web.sh                        # before any flutter build
   (cd app && flutter pub get)
