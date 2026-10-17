@@ -42,7 +42,10 @@ String _errorLabel(String code) => switch (code) {
     };
 
 class AvatarPage extends StatefulWidget {
-  const AvatarPage({super.key});
+  const AvatarPage({super.key, this.identity});
+
+  /// Device bearer source for POST /session; null = dev mode (APP_SECRET only).
+  final DeviceTokenProvider? identity;
 
   @override
   State<AvatarPage> createState() => _AvatarPageState();
@@ -152,6 +155,7 @@ class _AvatarPageState extends State<AvatarPage> {
         transport: const IoGatewayTransport(),
         events: _UnwiredGatewayEvents(),
         audioPath: AppConfig.audioPath,
+        identity: widget.identity,
       ),
       emit: _onNativeEvent,
     );

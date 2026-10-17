@@ -3671,7 +3671,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   Widget keys used by tests and later plans: `style-grandchild`, `style-old-friend`, `style-confirm`, `style-cancel`, `settings`. Sample voice: `StyleOption.sampleAsset` is `null` for both; Plan A adds clips and a 试听 button.
 
-- [ ] **Step 1: Write the failing picker test**
+- [x] **Step 1: Write the failing picker test**
 
 Create `app/test/style_picker_test.dart`:
 
@@ -3730,7 +3730,7 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Write the failing shell test**
+- [x] **Step 2: Write the failing shell test**
 
 Create `app/test/app_shell_test.dart`:
 
@@ -3833,12 +3833,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 3: Run them to verify they fail**
+- [x] **Step 3: Run them to verify they fail**
 
 Run: `cd app && flutter test test/style_picker_test.dart test/app_shell_test.dart`
 Expected: FAIL at compile time: `style_picker_page.dart` and `app_shell.dart` do not exist.
 
-- [ ] **Step 4: Implement the style options (app-side config)**
+- [x] **Step 4: Implement the style options (app-side config)**
 
 Create `app/lib/identity/styles.dart`:
 
@@ -3863,7 +3863,7 @@ const styleOptions = <StyleOption>[
 ];
 ```
 
-- [ ] **Step 5: Implement the picker and settings pages**
+- [x] **Step 5: Implement the picker and settings pages**
 
 Create `app/lib/identity/style_picker_page.dart`:
 
@@ -4061,7 +4061,7 @@ class _StyleSettingsPageState extends State<StyleSettingsPage> {
 }
 ```
 
-- [ ] **Step 6: Implement the shell**
+- [x] **Step 6: Implement the shell**
 
 Create `app/lib/identity/app_shell.dart`:
 
@@ -4193,12 +4193,12 @@ class _SettingsButton extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 7: Run the widget tests**
+- [x] **Step 7: Run the widget tests**
 
 Run: `cd app && flutter test test/style_picker_test.dart test/app_shell_test.dart`
 Expected: PASS.
 
-- [ ] **Step 8: Pass the bearer source into `AvatarPage` (Plan A's file, 3 lines)**
+- [x] **Step 8: Pass the bearer source into `AvatarPage` (Plan A's file, 3 lines)**
 
 In `app/lib/avatar_page.dart`:
 
@@ -4218,7 +4218,7 @@ and in `_startNativeSession`, add one named argument to the `NativeGatewayClient
 
 (`DeviceTokenProvider` comes from the already imported `native_gateway/gateway_client.dart`.) Make no other change to this file; mention it in the commit body so the A/B merge keeps it.
 
-- [ ] **Step 9: Wire `main.dart`**
+- [x] **Step 9: Wire `main.dart`**
 
 Replace `app/lib/main.dart` with:
 
@@ -4294,13 +4294,15 @@ class _HomeState extends State<_Home> {
 
 - [ ] **Step 10: Analyze, full test run, debug build**
 
+  Analyze and full test run done (analyze clean, 90 tests pass). The `flutter build apk --debug` part is Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #30 (`app/dev.json` does not exist). Step left unticked.
+
 Run: `cd app && flutter analyze && flutter test`
 Expected: `No issues found!`; all tests PASS.
 
 Run: `cd app && flutter build apk --debug --dart-define-from-file=dev.json`
 Expected: `✓ Built build/app/outputs/flutter-apk/app-debug.apk`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add app/lib/identity/styles.dart app/lib/identity/style_picker_page.dart app/lib/identity/app_shell.dart app/lib/main.dart app/lib/avatar_page.dart app/test/style_picker_test.dart app/test/app_shell_test.dart
