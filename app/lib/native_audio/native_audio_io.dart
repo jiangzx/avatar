@@ -5,7 +5,9 @@ import 'dart:typed_data';
 import 'package:flutter_pcm_sound/flutter_pcm_sound.dart';
 import 'package:record/record.dart';
 
+import '../native_session/thinking_config.dart';
 import 'audio_types.dart';
+import 'filler_player.dart';
 import 'pcm.dart';
 import 'playback_queue.dart';
 
@@ -14,10 +16,16 @@ const int nativePlaybackChannels = 1;
 const int nativePlaybackFeedThreshold = 12000; // TUNABLE: 500 ms at 24 kHz
 
 class PluginNativeAudioIO implements NativeAudioIO {
-  PluginNativeAudioIO({AudioRecorder? recorder})
-    : _recorder = recorder ?? AudioRecorder();
+  PluginNativeAudioIO({AudioRecorder? recorder, FillerAudioConfig? filler})
+    : _recorder = recorder ?? AudioRecorder(),
+      _fillerCfg = filler;
 
   final AudioRecorder _recorder;
+  final FillerAudioConfig? _fillerCfg;
+  late final FillerPlayer? _filler = _fillerCfg == null
+      ? null
+      : FillerPlayer(sink: _FillerSink(this), cfg: _fillerCfg, sampleRate: nativePlaybackSampleRate);
+  Timer? _fillerTimer;
   final PlaybackQueue _queue = PlaybackQueue(
     sampleRate: nativePlaybackSampleRate,
   );
@@ -101,6 +109,8 @@ class PluginNativeAudioIO implements NativeAudioIO {
       return;
     }
     _acceptedChunks++;
+    // Safety net: the reply must never queue behind more than a short faded filler tail.
+    if (_filler?.active ?? false) await _filler!.fadeOut();
     _pending.add(_PendingChunk(responseSeq, Int16List.fromList(pcm24k)));
     await _drainPending();
     FlutterPcmSound.start();
@@ -127,6 +137,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
     if (_activeSeq == null) {
       return const PlayedAudio(responseSeq: 0, playedMs: 0);
     }
+    _filler?.stop();
     final result = _queue.stop(reason);
     _activeSeq = null;
     _pending.clear();
@@ -141,7 +152,49 @@ class PluginNativeAudioIO implements NativeAudioIO {
   }
 
   @override
+  bool get fillerActive => _filler?.active ?? false;
+
+  @override
+  Future<void> playFiller(Int16List clip, {required void Function() onDone}) async {
+    final filler = _filler;
+    final cfg = _fillerCfg;
+    if (filler == null || cfg == null) {
+      onDone();
+      return;
+    }
+    await _ensurePlayback();
+    _fillerTimer?.cancel();
+    filler.play(clip, onDone: () {
+      _fillerTimer?.cancel();
+      _fillerTimer = null;
+      onDone();
+    });
+    if (!filler.active) return;
+    _fillerTimer = Timer.periodic(Duration(milliseconds: cfg.pumpMs), (_) => unawaited(filler.pump()));
+    await filler.pump();
+  }
+
+  @override
+  Future<void> stopFiller({required bool fade}) async {
+    final filler = _filler;
+    if (filler == null || !filler.active) return;
+    if (fade) {
+      await filler.fadeOut();
+    } else {
+      filler.stop();
+    }
+  }
+
+  Future<void> _feedFiller(Int16List pcm) async {
+    await FlutterPcmSound.feed(PcmArrayInt16(bytes: ByteData.sublistView(pcm)));
+    FlutterPcmSound.start();
+  }
+
+  @override
   Future<void> stop() async {
+    _fillerTimer?.cancel();
+    _fillerTimer = null;
+    _filler?.stop();
     await _subscription?.cancel();
     _subscription = null;
     await _recorder.stop().catchError((_) => null);
@@ -196,6 +249,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
   }
 
   Future<void> _onFeed(int remainingFrames) async {
+    _filler?.updateRemaining(remainingFrames);
     final seq = _activeSeq;
     if (seq == null) return;
     _queue.updateRemaining(seq, remainingFrames);
@@ -254,4 +308,17 @@ class _PendingChunk {
 
   final int responseSeq;
   final Int16List pcm;
+}
+
+class _FillerSink implements PcmSink {
+  _FillerSink(this._io);
+
+  final PluginNativeAudioIO _io;
+
+  /// A reply owns the player once it has fed audio for the active sequence.
+  @override
+  bool get busy => _io._activeSeq != null && _io._queue.hasFedSamples;
+
+  @override
+  Future<void> feed(Int16List pcm) => _io._feedFiller(pcm);
 }

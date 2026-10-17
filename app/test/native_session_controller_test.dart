@@ -440,6 +440,33 @@ class FakeAudio implements NativeAudioIO {
   int startCalls = 0;
   int failNextStarts = 0;
   int? activeSeq;
+  final fillerPlays = <int>[];
+  final fillerStops = <bool>[];
+  void Function()? _fillerDone;
+
+  @override
+  bool fillerActive = false;
+
+  @override
+  Future<void> playFiller(Int16List clip, {required void Function() onDone}) async {
+    fillerPlays.add(clip.length);
+    fillerActive = true;
+    _fillerDone = onDone;
+  }
+
+  @override
+  Future<void> stopFiller({required bool fade}) async {
+    fillerStops.add(fade);
+    finishFiller();
+  }
+
+  void finishFiller() {
+    if (!fillerActive) return;
+    fillerActive = false;
+    final done = _fillerDone;
+    _fillerDone = null;
+    done?.call();
+  }
   AudioPlaybackSnapshot? cancelBeforeSnapshot;
 
   @override

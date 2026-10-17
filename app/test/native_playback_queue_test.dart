@@ -34,4 +34,14 @@ void main() {
     q.start(5);
     expect(q.accept(5, Int16List(240)), isTrue);
   });
+
+  test('filler residue queued ahead of a reply is not counted as played', () {
+    final q = PlaybackQueue(sampleRate: 24000);
+    q.start(9);
+    q.markFed(9, 2400);
+    q.updateRemaining(9, 2400 + 1200); // 50 ms of filler still ahead in the native buffer
+    expect(q.playedMs, 0);
+    q.updateRemaining(9, 1200);
+    expect(q.playedMs, 50);
+  });
 }

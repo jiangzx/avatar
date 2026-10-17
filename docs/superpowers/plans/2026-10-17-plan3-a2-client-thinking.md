@@ -910,7 +910,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   `PluginNativeAudioIO({AudioRecorder? recorder, FillerAudioConfig? filler})` — without `filler` config, `playFiller` calls `onDone` immediately (no audio). `pushResponse` fades an active filler before feeding the reply; `stopResponse` and `stop` stop it.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `app/test/filler_player_test.dart`:
 
@@ -1050,12 +1050,12 @@ In `app/test/native_session_controller_test.dart`, add to `FakeAudio`:
   }
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail** (RED confirmed by temporarily removing filler_player.dart: compile errors; impl was written before the run)
 
 Run: `cd app && flutter test test/filler_player_test.dart test/native_playback_queue_test.dart test/native_session_controller_test.dart`
 Expected: FAIL — `filler_player.dart` not found; `FakeAudio` overrides members that `NativeAudioIO` does not declare. (The playback-queue test passes already: it documents that the existing `fed − remaining` rule excludes filler residue.)
 
-- [ ] **Step 3: Implement the player and the interface**
+- [x] **Step 3: Implement the player and the interface**
 
 Create `app/lib/native_audio/filler_player.dart`:
 
@@ -1203,7 +1203,7 @@ In `app/lib/native_audio/audio_types.dart`, add to `NativeAudioIO` (after `setIn
   Future<void> stopFiller({required bool fade});
 ```
 
-- [ ] **Step 4: Implement the filler in `PluginNativeAudioIO`**
+- [x] **Step 4: Implement the filler in `PluginNativeAudioIO`**
 
 In `app/lib/native_audio/native_audio_io.dart`:
 - imports: `import '../native_session/thinking_config.dart';` and `import 'filler_player.dart';`
@@ -1289,12 +1289,12 @@ In `app/lib/native_audio/native_audio_io.dart`:
   }
   ```
 
-- [ ] **Step 5: Run tests and analyze**
+- [x] **Step 5: Run tests and analyze**
 
 Run: `cd app && flutter test && flutter analyze`
 Expected: all PASS; no issues.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/lib/native_audio/filler_player.dart app/lib/native_audio/audio_types.dart app/lib/native_audio/native_audio_io.dart app/test/filler_player_test.dart app/test/native_playback_queue_test.dart app/test/native_session_controller_test.dart
