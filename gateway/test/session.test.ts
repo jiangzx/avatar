@@ -393,6 +393,34 @@ describe('Session', () => {
     expect(creates).not.toHaveBeenCalled();
   });
 
+  it('clears the generating flag when the model is rebuilt mid-generation', async () => {
+    const s = setup({ modelOwnsTurns: true });
+    await greetAndFinish(s);
+    s.mocks[0].emit('responseStarted', 'external'); // generating, no audio
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 0, reason: 'ended' });
+    s.mocks[0].simulateDrop(); // rebuild drops the old adapter; its responseDone never arrives
+    await vi.advanceTimersByTimeAsync(50);
+    expect(s.mocks).toHaveLength(2);
+    let uplink = 0;
+    s.mocks[1].sendAudio = () => { uplink++; };
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(1);
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(of(s.sent, 'response.start').map((m) => m.kind)).toContain('followup');
+  });
+
+  it('does not let a stale tail guard block uplink after an interruption', async () => {
+    const s = setup({ modelOwnsTurns: true, tailGuardMs: 400 });
+    let uplink = 0;
+    await greetAndFinish(s); // greeting ended: tail guard armed
+    s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(150);
+    s.mocks[0].sendAudio = () => { uplink++; };
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
+    s.session.handleMicAudio(loud());
+    expect(uplink).toBe(1);
+  });
+
   it('end() closes the model and clears memory', async () => {
     const s = setup();
     await greetAndFinish(s);

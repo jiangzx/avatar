@@ -187,6 +187,7 @@ export class Session {
         if (msg.reason === 'interrupted') {
           this.interrupt.onClientInterrupted(msg.responseSeq);
           this.finalize(s, true);
+          this.uplinkResumeAt = 0; // the user is talking: no speaker tail to guard against
         } else {
           // Stale end (already cancelled/superseded, a newer turn may be active): ignore.
           if (this.interrupt.active !== msg.responseSeq) break;
@@ -440,6 +441,10 @@ export class Session {
     log('model_rebuild', { reason });
     if (reason !== 'slim') this.send({ type: 'error', code: 'model_reconnecting', retryable: true });
     this.interrupt.cancelActive('local'); // uses the old adapter
+    // The old adapter's responseDone/cancel will never arrive; drop in-flight generation state.
+    this.modelGenerating = false;
+    this.pendingKind = null;
+    this.uplinkResumeAt = 0;
     const old = this.adapter;
     this.adapter = this.createAdapter();
     old.removeAllListeners();
