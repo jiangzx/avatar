@@ -9,7 +9,7 @@ Last updated: 2026-10-17 (companionship, memory and agent-binding design drafted
 | Plan 1 | Mock-driven end-to-end on a Xiaomi phone: greeting, multi-turn, barge-in with zero residue, 5 actions, reconnect, Day 1 audio A/B spike | **Complete with blockers.** Code Tasks 0–17 implemented, reviewed and merged on `master`; Task 18 checklist/report written but every device/browser item is "not run". Not demonstrated on a device. | [plan1](../superpowers/plans/2026-10-12-avatar-poc-plan1/00-overview.md) |
 | Plan 1.1 | Flutter 原生采集/播放/VAD/网关会话，WebView 头像和界面 | **代码已合并至 `master`；小米启动冒烟和 30 分钟稳定性采样完成，完整真机验收延期，待本地后续任务完成后统一执行。** | [native-audio-path](../superpowers/plans/2026-10-13-native-audio-path-plan.md) |
 | Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | **In progress: local gateway-first debugging is now the active path. Seeduplex/Qwen adapters, Qwen-compatible summarizer, local integration, and live Seeduplex/Qwen/text smoke are implemented; debug APK installation and local phone connection are verified; full phone acceptance remains open. Cloud deployment is explicitly deferred until phone debugging is complete.** | [seeduplex-plan2](../superpowers/plans/2026-10-14-seeduplex-plan2.md) |
-| Plan 3 | Companionship, memory and agent binding: A persona & pacing, B device identity & binding, C memory MVP, D proactivity & activities, S backchannel/Seeduplex spike | **Spec v4 approved 2026-10-17; plans written for Task 0, A1, A2, B and the A+B merge (`docs/superpowers/plans/2026-10-17-plan3-*.md`). No code yet.** Order: Task 0 → A (A1→A2) ∥ B → A+B merge → C → D; S independent. Plans C/D/S not yet written. | [companionship-memory-design](../superpowers/specs/2026-10-17-companionship-memory-design.md) |
+| Plan 3 | Companionship, memory and agent binding: A persona & pacing, B device identity & binding, C memory MVP, D proactivity & activities, S backchannel/Seeduplex spike | **Spec v4 approved 2026-10-17; plans written for Task 0, A1, A2, B and the A+B merge (`docs/superpowers/plans/2026-10-17-plan3-*.md`). Task 0 complete (gateway contract refactors, commits 349bdb0..1fc7ed1 plus the docs commit): `npm test` passed (protocol 6, gateway 143, avatar-core 91), `npm run typecheck` clean. The live Mock smoke on port 8797 is pending a manual run (not run by user instruction).** Order: Task 0 → A (A1→A2) ∥ B → A+B merge → C → D; S independent. Plans C/D/S not yet written. | [companionship-memory-design](../superpowers/specs/2026-10-17-companionship-memory-design.md) |
 
 Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-poc-design.md).
 
@@ -45,7 +45,7 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 ## Next steps
 
-0. Plan 3: execute Task 0 (`docs/superpowers/plans/2026-10-17-plan3-task0-contracts.md`) on `master` with subagent-driven-development; then Plan A and Plan B in parallel worktrees. Uncommitted `gateway/prompts/persona.md` and `gateway/config/director.json` edits are the starting point for Plan A (persona becomes the old-friend style draft).
+0. Plan 3: Task 0 complete; Plan A and Plan B may start in parallel worktrees (file ownership per spec). Before device work, run the Task 0 Step 2 Mock smoke on port 8797 manually (see `docs/blockers.md` #11).
 
 1. Keep the local Qwen gateway running for phone debugging (`ADAPTER=qwen` on port 8787, phone `APP_SECRET` from `app/dev.json`, `adb reverse tcp:8787`). While a Qwen reply is still playing, the gateway does not upload mic audio, and silence follow-ups stay paused. Local barge-in uses RMS 200 after 400 ms of playback; idle speech stays at RMS 1200. At 20:04 the user confirmed the conversation was fluent. At 20:08 avatar actions worked after gestures were no longer cancelled on `response.end`. Do not restart it as Mock. Do not resume interruption latency percentiles or multi-attempt interruption counts: the user skipped both on 2026-10-16, and that skip is not a pass. The 10-minute silence sample stays skipped as well. The latest interrupt rebuild is installed, but the user has not yet confirmed that a live shout stops playback.
 2. Continue the remaining Xiaomi/desktop checks that were not skipped: active-response stale-audio listening, network cases beyond the 2026-10-16 short resume and grace expiry, subtitle finalization once, remaining Task 18 checks, ADR-001, and desktop Chrome E2E. Five actions were already observed with Chinese keywords. Cloud WSS stays deferred.
@@ -60,6 +60,18 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 
 ## Repo notes
 
+- Plan 3 worktree prep (run inside each new worktree):
+
+  ```text
+  npm ci
+  cp ../avatar/gateway/.env gateway/.env        # if present; never commit
+  cp ../avatar/app/dev.json app/dev.json        # never commit
+  ./scripts/fetch-assets.sh                     # avatar GLB/animations, if the worktree needs the app
+  ./scripts/build-web.sh                        # before any flutter build
+  (cd app && flutter pub get)
+  ```
+
+  Worktrees: plan3-a (A1 → A2 serial), plan3-b. Device gates run one at a time on the Xiaomi; ask the user before restarting the 8787 gateway; smoke runs use 8797.
 - Untracked `.codegraph/` is the user's CodeGraph index; not ignored or committed by this work (user's call).
 - Progress ledger for this session lives in the git-ignored `.superpowers/sdd/` (per-task briefs, reports, diffs).
 - 2026-10-12: host Flutter was upgraded 3.41.2 → 3.47.7 (latest stable, via `flutter upgrade`; Dart 3.13.5, DevTools 2.60.0, revision abaf9c523), Android licenses accepted; `flutter doctor` all green. Re-ran `cd app && flutter pub get && flutter analyze && flutter test` → 19 passed, no issues. Version pins updated in the migration guide and plan overview.

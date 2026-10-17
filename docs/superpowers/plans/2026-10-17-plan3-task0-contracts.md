@@ -62,7 +62,7 @@
 - Produces (in `gateway/src/session/director.ts`): `DirectorDeps.requestResponse(kind: ResponseKind, request: ProactiveRequest): void`.
 - Later plans add cues (for example `'topic'`, `'notice'`, `'forgetAck'`) by extending the `ProactiveCue` union; that is an additive change.
 
-- [ ] **Step 1: Write the failing Director test**
+- [x] **Step 1: Write the failing Director test**
 
 In `gateway/test/director.test.ts`, change the import line and `make()` helper, then add a test inside `describe('Director', ...)`:
 
@@ -98,12 +98,12 @@ function make(c: DirectorConfig = cfg) {
 
 (`resume()` is rate limited by `maxPerWindow: 3` after three requests, so it adds nothing; that keeps the expectation exact.)
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npm test -w gateway -- test/director.test.ts`
 Expected: FAIL (TypeScript/runtime: `r.instruction` is undefined because `requestResponse` still receives a string).
 
-- [ ] **Step 3: Add the types**
+- [x] **Step 3: Add the types**
 
 In `gateway/src/adapters/types.ts`, add above `export type AdapterEvents`:
 
@@ -124,7 +124,7 @@ and change the `RealtimeAdapter` member:
   createResponse(request?: ProactiveRequest): void;
 ```
 
-- [ ] **Step 4: Update the Director**
+- [x] **Step 4: Update the Director**
 
 In `gateway/src/session/director.ts`:
 
@@ -187,7 +187,7 @@ Replace `onSessionStart`, `resume`, `arm`, and `fire` with:
   }
 ```
 
-- [ ] **Step 5: Update Session to forward the request**
+- [x] **Step 5: Update Session to forward the request**
 
 In `gateway/src/session/session.ts`, add `type ProactiveRequest` to the existing `../adapters/types.ts` import, then:
 
@@ -203,12 +203,12 @@ In `gateway/src/session/session.ts`, add `type ProactiveRequest` to the existing
   }
 ```
 
-- [ ] **Step 6: Run the Director tests**
+- [x] **Step 6: Run the Director tests**
 
 Run: `npm test -w gateway -- test/director.test.ts`
 Expected: PASS (all existing Director tests plus the new one).
 
-- [ ] **Step 7: Write failing adapter tests**
+- [x] **Step 7: Write failing adapter tests**
 
 In `gateway/test/mock.test.ts`, replace the two tests `'answers the first createResponse with the greeting, later ones with the follow-up'` and `'uses the scripted line mapped to a known Director instruction'` with:
 
@@ -260,12 +260,12 @@ In `gateway/test/qwen.test.ts:126`:
     a.createResponse({ cue: 'greeting', instruction: 'fixture instruction', fallbackText: 'unused' });
 ```
 
-- [ ] **Step 8: Run them to verify they fail**
+- [x] **Step 8: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/mock.test.ts test/seeduplex.test.ts test/seeduplex.integration.test.ts test/qwen.test.ts`
 Expected: FAIL. Mock ignores the cue (`我在呢` missing), Seeduplex sends no commit (the event list misses `start:r1`), and the integration test gets no greeting audio.
 
-- [ ] **Step 9: Update the adapters**
+- [x] **Step 9: Update the adapters**
 
 `gateway/src/adapters/mock.ts`: delete the `instructionReplies` option and its doc comment from `MockOptions` (lines 28-29), import the types, and replace `createResponse`:
 
@@ -318,12 +318,12 @@ import type { ProactiveCue, ProactiveRequest } from './types.ts';
           : new MockAdapter({ script, speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor }),
 ```
 
-- [ ] **Step 10: Run the full gateway suite and typecheck**
+- [x] **Step 10: Run the full gateway suite and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all tests PASS (one more than before this task: the new Director test; the two Mock tests are replaced one-for-one), typecheck clean. Record the actual count in the commit body.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add gateway/src/adapters/types.ts gateway/src/session/director.ts gateway/src/session/session.ts gateway/src/adapters/mock.ts gateway/src/adapters/seeduplex.ts gateway/src/adapters/qwen.ts gateway/src/index.ts gateway/test/director.test.ts gateway/test/mock.test.ts gateway/test/seeduplex.test.ts gateway/test/seeduplex.integration.test.ts gateway/test/qwen.test.ts
@@ -346,7 +346,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: nothing new.
 - Produces: `SessionConfig { instructions: string; tools: ToolSpec[]; voice?: string }`. `undefined` means "use the adapter's configured default voice" (`QWEN_VOICE` / `SEEDUPLEX_VOICE`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `describe('QwenAdapter', ...)` in `gateway/test/qwen.test.ts`:
 
@@ -394,12 +394,12 @@ Append to `describe('SeeduplexAdapter', ...)` in `gateway/test/seeduplex.test.ts
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/qwen.test.ts test/seeduplex.test.ts`
 Expected: FAIL. TypeScript rejects `voice` on `SessionConfig`; after that, the voices are `['default-voice', ...]`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `gateway/src/adapters/types.ts`:
 
@@ -432,12 +432,12 @@ in `connect(config)` next to `this.tools = config.tools;`:
 
 and in `sessionPayload()` replace `voice: this.opts.voice` with `voice: this.voice`.
 
-- [ ] **Step 4: Run tests and typecheck**
+- [x] **Step 4: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS, typecheck clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gateway/src/adapters/types.ts gateway/src/adapters/qwen.ts gateway/src/adapters/seeduplex.ts gateway/test/qwen.test.ts gateway/test/seeduplex.test.ts
@@ -479,7 +479,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 - Produces (`gateway/src/session/session.ts`): `SessionDeps` loses `persona` and `director`, gains `roles: RoleCatalog`; constructor is `new Session(deps: SessionDeps, ctx: SessionContext = devContext(deps.roles))`; `readonly context: SessionContext`. `sessionConfig()` passes `voice: ctx.voice`. `memorySnapshot` is stored but unused until Plan C.
 
-- [ ] **Step 1: Write the failing catalog test**
+- [x] **Step 1: Write the failing catalog test**
 
 Create `gateway/test/catalog.test.ts`:
 
@@ -514,12 +514,12 @@ describe('fixedRoleCatalog', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npm test -w gateway -- test/catalog.test.ts`
 Expected: FAIL with "Failed to load url ../src/roles/catalog.ts" (module not found).
 
-- [ ] **Step 3: Create the catalog and context modules**
+- [x] **Step 3: Create the catalog and context modules**
 
 `gateway/src/roles/catalog.ts`:
 
@@ -578,12 +578,12 @@ export function devContext(roles: RoleCatalog): SessionContext {
 }
 ```
 
-- [ ] **Step 4: Run the catalog test**
+- [x] **Step 4: Run the catalog test**
 
 Run: `npm test -w gateway -- test/catalog.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Write the failing Session test and migrate Session test setup**
+- [x] **Step 5: Write the failing Session test and migrate Session test setup**
 
 In `gateway/test/session.test.ts`:
 - add imports:
@@ -624,12 +624,12 @@ In `gateway/test/session.test.ts`:
 
 In `gateway/test/server.test.ts:28-38` and `gateway/test/seeduplex.integration.test.ts:55-61`, replace `persona: 'P', director,` / `persona: 'persona', director,` with `roles: fixedRoleCatalog('P', director),` and add `import { fixedRoleCatalog } from '../src/roles/catalog.ts';` to each file.
 
-- [ ] **Step 6: Run to verify failure**
+- [x] **Step 6: Run to verify failure**
 
 Run: `npm test -w gateway -- test/session.test.ts`
 Expected: FAIL. TypeScript reports that `roles` does not exist in `SessionDeps`, and the two-argument constructor and `session.context` do not exist.
 
-- [ ] **Step 7: Implement in Session**
+- [x] **Step 7: Implement in Session**
 
 In `gateway/src/session/session.ts`:
 - imports:
@@ -667,7 +667,7 @@ In `gateway/src/session/session.ts`:
   }
   ```
 
-- [ ] **Step 8: Wire the stub catalog in `index.ts`**
+- [x] **Step 8: Wire the stub catalog in `index.ts`**
 
 In `gateway/src/index.ts`:
 - replace lines 15-16 (`const director = ...; const persona = ...;`) with:
@@ -680,12 +680,12 @@ In `gateway/src/index.ts`:
 
 (Task 4 changes the factory to take a context; leave `() => new Session({...})` as is for now.)
 
-- [ ] **Step 9: Run tests and typecheck**
+- [x] **Step 9: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS, typecheck clean.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add gateway/src/roles/catalog.ts gateway/src/session/context.ts gateway/src/session/session.ts gateway/src/index.ts gateway/test/catalog.test.ts gateway/test/session.test.ts gateway/test/server.test.ts gateway/test/seeduplex.integration.test.ts
@@ -717,7 +717,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces (`gateway/src/session/manager.ts`): `new SessionManager(makeSession: (ctx: SessionContext) => Session, ...)`, `create(ctx: SessionContext): SessionTokens`.
 - Produces (`gateway/src/server/server.ts`): `GatewayServerOptions.contextResolver: ContextResolver` (required). `/session` still requires `x-app-secret`; an `Authorization` header, if present, must be `Bearer <16-128 chars of [A-Za-z0-9_-]>` and resolve successfully, else 401 `{ error: 'unauthorized' }`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `gateway/test/catalog.test.ts`:
 
@@ -800,12 +800,12 @@ In `gateway/test/server.test.ts`:
 
 In `gateway/test/seeduplex.integration.test.ts`, change the factory to `(ctx) => new Session({...}, ctx)` and pass `contextResolver: devContextResolver(roles)` to `createGatewayServer`, with `const roles = fixedRoleCatalog('P', director);` declared before both, and import `devContextResolver`.
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/catalog.test.ts test/server.test.ts test/seeduplex.integration.test.ts`
 Expected: FAIL. `devContextResolver` is not exported, `contextResolver` is not a known option, and the bearer requests return 200.
 
-- [ ] **Step 3: Implement the resolver**
+- [x] **Step 3: Implement the resolver**
 
 Append to `gateway/src/session/context.ts`:
 
@@ -823,7 +823,7 @@ export function devContextResolver(roles: RoleCatalog): ContextResolver {
 }
 ```
 
-- [ ] **Step 4: Implement the manager change**
+- [x] **Step 4: Implement the manager change**
 
 In `gateway/src/session/manager.ts`:
 
@@ -846,7 +846,7 @@ import type { SessionContext } from './context.ts';
   }
 ```
 
-- [ ] **Step 5: Implement the server change**
+- [x] **Step 5: Implement the server change**
 
 In `gateway/src/server/server.ts`:
 - `import type { ContextResolver } from '../session/context.ts';`
@@ -881,7 +881,7 @@ In `gateway/src/server/server.ts`:
     json(res, 200, opts.manager.create(resolved.ctx));
   ```
 
-- [ ] **Step 6: Wire `index.ts`**
+- [x] **Step 6: Wire `index.ts`**
 
 In `gateway/src/index.ts`:
 - `import { devContextResolver } from './session/context.ts';`
@@ -892,12 +892,12 @@ In `gateway/src/index.ts`:
   contextResolver: devContextResolver(roles),
   ```
 
-- [ ] **Step 7: Run tests and typecheck**
+- [x] **Step 7: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS, typecheck clean.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gateway/src/session/context.ts gateway/src/session/manager.ts gateway/src/server/server.ts gateway/src/index.ts gateway/test/catalog.test.ts gateway/test/server.test.ts gateway/test/seeduplex.integration.test.ts
@@ -914,7 +914,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `docs/project/roadmap.md`
 - Modify: this plan file (tick boxes)
 
-- [ ] **Step 1: Run every JS suite and typecheck**
+- [x] **Step 1: Run every JS suite and typecheck**
 
 Run: `npm test && npm run typecheck`
 Expected: protocol, gateway, avatar-core all PASS; typecheck clean. Record the exact counts.
@@ -936,7 +936,9 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'x-app-secret: local-dev-sec
 
 Expected: `200` then `401`. Stop the gateway afterwards. (Port 8797 keeps the user's Qwen gateway on 8787 untouched.) (If `.env` already sets these variables, the inline values override them.)
 
-- [ ] **Step 3: Document worktree preparation**
+Not run in this session (user instruction: no local services); run manually before Plan A/B device work. Tracked in `docs/blockers.md` #11.
+
+- [x] **Step 3: Document worktree preparation**
 
 Plan A (A1 then A2, one worktree, serial) and Plan B (second worktree) run in parallel. Ignored files do not follow a worktree, so add this block to `docs/project/roadmap.md` under "Repo notes":
 
@@ -954,11 +956,11 @@ ask the user before restarting the 8787 gateway; smoke runs use 8797.
 
 (Check that `scripts/fetch-assets.sh` exists with `ls scripts/`; if it does not, drop that line.)
 
-- [ ] **Step 4: Update the roadmap**
+- [x] **Step 4: Update the roadmap**
 
 In `docs/project/roadmap.md`, change the Plan 3 row status to say Task 0 is complete with the test counts from Step 1, and replace Next steps item 0 with: "Plan 3: Task 0 complete; Plan A and Plan B may start in parallel worktrees (file ownership per spec)."
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/project/roadmap.md docs/superpowers/plans/2026-10-17-plan3-task0-contracts.md
