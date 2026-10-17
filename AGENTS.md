@@ -13,12 +13,24 @@ AI avatar voice-chat POC (Android phone first). Read this file first, then `docs
 
 - Language: replies in Simplified Chinese; code comments in English, short.
 - Never log conversation content (audio, ASR text, reply text). Logs carry event names, ids, counts, durations, error codes only.
+- Conversation text may be persisted only in the memory store (SQLite behind `MemoryStore`, per `docs/superpowers/specs/2026-10-17-companionship-memory-design.md`), after the memory notice and unless the owner declined, and must be deletable. Never store audio. Exception: hand-written synthetic eval scenarios and their results may live in `docs/testing/`.
 - Never commit secrets. Keys go in env vars or `--dart-define`; `.env*` stays ignored (`.env.example` excepted).
 - Until a model Key exists, everything must run on `MockAdapter` (`ADAPTER=mock` only).
 - Tunable values live in config files, not scattered in code.
 - Do not invent skills, commands, dependencies, or APIs. Unverified third-party behavior is an assumption: mark it and validate with a minimal step first.
 - Never overwrite unrelated uncommitted changes; never stage with `git add -A`. Add explicit paths.
 - Never claim code, tests, or verification are done unless you ran them. Report the real command and result; if you could not verify, say what and why.
+
+## 2.1 Engineering Rules
+
+- Layers: server → (session, identity) → (adapter, memory, roles); no reverse imports. Realtime models go through `RealtimeAdapter`, text models through one text-model client interface.
+- Prompts, spoken copy, thresholds, budgets, word lists live in `gateway/roles/**`, `gateway/config/*.json`, or app-side config files; gateway config is zod-validated (cross-checked where values interact) at startup. No hardcoding.
+- Extend via registries (tools, roles, adapters), not if-else chains in the session flow. No generic plugin framework.
+- No module-level mutable state (inject shared resources such as the DB connection); per-session data (voice, role, style, memory snapshot) lives in the session context.
+- Timeouts, retries, fallbacks go through one shared policy helper; classify adapter errors as ignorable / retryable / fatal. Never fail silently, never leave the user in dead air.
+- Metrics per reply: first-audio latency, generation time, token usage, error code (content-free). Client-side metrics go to anonymous logcat diagnostics, not new protocol messages.
+- Validate at boundaries only (HTTP, WS, tool args, config, model JSON) with zod; reject on failure.
+- Keep code small and readable; short English comments on core paths; unit tests for key logic (TDD).
 
 ## 3. Workflow (Superpowers)
 

@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-16 (Xiaomi debug APK rebuilt so a shout during playback can stop 小柔; Qwen mic stays off until playback ends). Update at the end of every session.
+Last updated: 2026-10-17 (companionship, memory and agent-binding design drafted after a three-round grilling session; awaiting spec review). Update at the end of every session.
 
 ## Phases
 
@@ -9,6 +9,7 @@ Last updated: 2026-10-16 (Xiaomi debug APK rebuilt so a shout during playback ca
 | Plan 1 | Mock-driven end-to-end on a Xiaomi phone: greeting, multi-turn, barge-in with zero residue, 5 actions, reconnect, Day 1 audio A/B spike | **Complete with blockers.** Code Tasks 0–17 implemented, reviewed and merged on `master`; Task 18 checklist/report written but every device/browser item is "not run". Not demonstrated on a device. | [plan1](../superpowers/plans/2026-10-12-avatar-poc-plan1/00-overview.md) |
 | Plan 1.1 | Flutter 原生采集/播放/VAD/网关会话，WebView 头像和界面 | **代码已合并至 `master`；小米启动冒烟和 30 分钟稳定性采样完成，完整真机验收延期，待本地后续任务完成后统一执行。** | [native-audio-path](../superpowers/plans/2026-10-13-native-audio-path-plan.md) |
 | Plan 2 | Real adapters (Seeduplex/Qwen), LlmSummarizer, persona/Director tuning, cloud deploy (WSS), release APK, Day 6 device report | **In progress: local gateway-first debugging is now the active path. Seeduplex/Qwen adapters, Qwen-compatible summarizer, local integration, and live Seeduplex/Qwen/text smoke are implemented; debug APK installation and local phone connection are verified; full phone acceptance remains open. Cloud deployment is explicitly deferred until phone debugging is complete.** | [seeduplex-plan2](../superpowers/plans/2026-10-14-seeduplex-plan2.md) |
+| Plan 3 | Companionship, memory and agent binding: A persona & pacing, B device identity & binding, C memory MVP, D proactivity & activities, S backchannel/Seeduplex spike | **Design spec drafted 2026-10-17, awaiting user review. No code yet.** Order: Task 0 → A ∥ B → C → D; S independent. Spec v3 after two review rounds. | [companionship-memory-design](../superpowers/specs/2026-10-17-companionship-memory-design.md) |
 
 Design: [avatar-voice-poc-design](../superpowers/specs/2026-10-12-avatar-voice-poc-design.md).
 
@@ -43,6 +44,8 @@ Plan 2 entry conditions:
 See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by the Plan 1.1 device smoke; #2 desktop Chrome E2E and #4 A/B measurement remain open.
 
 ## Next steps
+
+0. Plan 3: user reviews `docs/superpowers/specs/2026-10-17-companionship-memory-design.md`; after approval, write Plan A and Plan B with writing-plans, then C and D. Uncommitted `gateway/prompts/persona.md` and `gateway/config/director.json` edits are the starting point for Plan A (persona becomes the old-friend style draft).
 
 1. Keep the local Qwen gateway running for phone debugging (`ADAPTER=qwen` on port 8787, phone `APP_SECRET` from `app/dev.json`, `adb reverse tcp:8787`). While a Qwen reply is still playing, the gateway does not upload mic audio, and silence follow-ups stay paused. Local barge-in uses RMS 200 after 400 ms of playback; idle speech stays at RMS 1200. At 20:04 the user confirmed the conversation was fluent. At 20:08 avatar actions worked after gestures were no longer cancelled on `response.end`. Do not restart it as Mock. Do not resume interruption latency percentiles or multi-attempt interruption counts: the user skipped both on 2026-10-16, and that skip is not a pass. The 10-minute silence sample stays skipped as well. The latest interrupt rebuild is installed, but the user has not yet confirmed that a live shout stops playback.
 2. Continue the remaining Xiaomi/desktop checks that were not skipped: active-response stale-audio listening, network cases beyond the 2026-10-16 short resume and grace expiry, subtitle finalization once, remaining Task 18 checks, ADR-001, and desktop Chrome E2E. Five actions were already observed with Chinese keywords. Cloud WSS stays deferred.
