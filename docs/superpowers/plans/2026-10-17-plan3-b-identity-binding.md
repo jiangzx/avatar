@@ -2540,7 +2540,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 No unit test (index.ts is composition only, as before); verification is typecheck plus the live smoke below.
 
-- [ ] **Step 1: Add the imports**
+- [x] **Step 1: Add the imports**
 
 Append below the existing imports in `gateway/src/index.ts` (separate lines keep the shared file append-only):
 
@@ -2551,7 +2551,7 @@ import { openDatabase } from './memory/db.ts';
 import { SqliteMemoryStore } from './memory/store.ts';
 ```
 
-- [ ] **Step 2: Build the store and registry before the manager**
+- [x] **Step 2: Build the store and registry before the manager**
 
 Insert directly after the Task 0 line that defines `const roles = ...` (and before `const manager = new SessionManager(`):
 
@@ -2574,7 +2574,7 @@ const registry = memoryDb
 log('identity_mode', { enabled: registry !== null, devEndpoints: identityConfig.enableDevEndpoints });
 ```
 
-- [ ] **Step 3: The two edits to existing lines**
+- [x] **Step 3: The two edits to existing lines**
 
 a) In the `new SessionManager(` call, add a fifth argument after `config.sessionStartTimeoutMs,`:
 
@@ -2599,7 +2599,7 @@ with:
 
 (keep Task 0's comment line `// Wiring point: Plan B swaps in the MemoryStore-backed resolver here.` above it).
 
-- [ ] **Step 4: Append orphan cleanup and DB close at the end of the file**
+- [x] **Step 4: Append orphan cleanup and DB close at the end of the file**
 
 ```ts
 // Orphan owners (registered, never connected, older than ORPHAN_OWNER_DAYS): at startup, then daily.
@@ -2616,7 +2616,7 @@ process.on('SIGINT', closeMemoryDb);
 process.on('SIGTERM', closeMemoryDb);
 ```
 
-- [ ] **Step 5: Document the env vars**
+- [x] **Step 5: Document the env vars**
 
 Append to `gateway/.env.example`:
 
@@ -2636,12 +2636,13 @@ Append to `gateway/.env.example`:
 # DEV_TOKEN=
 ```
 
-- [ ] **Step 6: Tests and typecheck**
+- [x] **Step 6: Tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS; typecheck clean.
 
 - [ ] **Step 7: Live smoke on Mock (port 8797; do not touch the user's 8787 gateway)**
+  Not run (user instruction: Mock only, no services); see docs/blockers.md #31
 
 Terminal 1:
 
@@ -2673,7 +2674,7 @@ Stop the gateway with Ctrl-C and confirm the log ends with `session_destroyed` l
 
 If any expectation differs, fix before committing; record the real outputs in the commit body.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gateway/src/index.ts gateway/.env.example
