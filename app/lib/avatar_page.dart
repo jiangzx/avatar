@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,14 +11,17 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'bridge.dart';
 import 'config.dart';
+import 'diag_log.dart';
 import 'local_asset_server.dart';
 import 'metrics.dart';
+import 'native_audio/filler_clips.dart';
 import 'native_audio/native_audio_io.dart';
 import 'native_audio/speech_detector.dart';
 import 'native_gateway/gateway_client.dart';
 import 'native_gateway/transports.dart';
 import 'native_session/events.dart';
 import 'native_session/session_controller.dart';
+import 'native_session/thinking_config.dart';
 import 'overlay.dart';
 
 const _statusLabels = {
@@ -32,6 +36,13 @@ const _statusLabels = {
 
 /// A connection that is open again clears a transient error.
 String? errorAfterStatus(String? error, String status) => status == 'open' ? null : error;
+
+/// Subtitle line per avatar state: "…" while thinking; cleared when going idle after thinking.
+String aiLineAfterState(String state, String current) => switch (state) {
+      'thinking' => '…',
+      'idle' when current == '…' => '',
+      _ => current,
+    };
 
 String _errorLabel(String code) => switch (code) {
       'NotAllowedError' => '麦克风被拒绝，请在设置中允许',
@@ -108,7 +119,10 @@ class _AvatarPageState extends State<AvatarPage> {
       case JsSubtitle(:final role, :final text):
         setState(() => role == 'user' ? _userLine = text : _aiLine = text);
       case JsState(:final state):
-        setState(() => _state = state);
+        setState(() {
+          _state = state;
+          _aiLine = aiLineAfterState(state, _aiLine);
+        });
       case JsMetric(:final name, :final ms):
         setState(() => _metrics.add(name, ms));
       case JsStatus(:final status):
@@ -143,8 +157,13 @@ class _AvatarPageState extends State<AvatarPage> {
   Future<void> _startNativeSession() async {
     if (_session != null || _startingSession) return;
     _startingSession = true;
+    final thinking = await _loadThinking();
+    // A+B merge point: use the style stored by Plan B instead of the config default.
+    final clips = thinking == null
+        ? const <String, Int16List>{}
+        : await loadFillerClips(rootBundle, thinking, thinking.defaultStyle);
     final session = NativeSessionController(
-      audio: PluginNativeAudioIO(),
+      audio: PluginNativeAudioIO(filler: thinking?.audio),
       detector: EnergySpeechDetector(),
       client: NativeGatewayClient(
         baseUri: Uri.parse(AppConfig.gatewayUrl),
@@ -154,6 +173,8 @@ class _AvatarPageState extends State<AvatarPage> {
         audioPath: AppConfig.audioPath,
       ),
       emit: _onNativeEvent,
+      thinking: thinking,
+      fillerPcm: clips,
     );
     _session = session;
     try {
@@ -162,6 +183,15 @@ class _AvatarPageState extends State<AvatarPage> {
       if (identical(_session, session)) _session = null;
     } finally {
       _startingSession = false;
+    }
+  }
+
+  Future<ThinkingConfig?> _loadThinking() async {
+    try {
+      return ThinkingConfig.parse(await rootBundle.loadString(ThinkingConfig.assetPath));
+    } catch (_) {
+      logcatDiagSink(formatDiag('thinking_config_invalid', {}));
+      return null;
     }
   }
 
@@ -179,7 +209,10 @@ class _AvatarPageState extends State<AvatarPage> {
           _error = errorAfterStatus(_error, status);
         });
       case UiState(:final state):
-        setState(() => _state = state);
+        setState(() {
+          _state = state;
+          _aiLine = aiLineAfterState(state, _aiLine);
+        });
       case UiSubtitle(:final role, :final text):
         setState(() => role == 'user' ? _userLine = text : _aiLine = text);
       case UiMetric(:final name, :final ms):

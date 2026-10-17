@@ -2344,7 +2344,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   A missing clip is logged (`filler_clip_missing id=<id>`) and skipped; an invalid config is logged (`thinking_config_invalid`) and the session runs without thinking (degraded, old behavior plus first-audio speaking).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `app/test/filler_clips_test.dart`:
 
@@ -2402,12 +2402,12 @@ Append to `app/test/avatar_page_test.dart` inside `main()`:
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `cd app && flutter test test/filler_clips_test.dart test/avatar_page_test.dart`
 Expected: FAIL — `filler_clips.dart` and `aiLineAfterState` not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `app/lib/native_audio/filler_clips.dart`:
 
@@ -2525,11 +2525,12 @@ In `app/lib/avatar_page.dart`:
   ```
 
 - [ ] **Step 4: Run tests, analyze, build**
+  - Done: `./scripts/build-web.sh --probe-only`, `flutter test`, `flutter analyze` (see roadmap/report). Not ticked: full web build and `flutter build apk --debug`. Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #20
 
 Run: `cd app && flutter test && flutter analyze && cd .. && ./scripts/build-web.sh && cd app && flutter build apk --debug --dart-define-from-file=dev.json`
 Expected: all tests PASS; no issues; web bundle built; APK built.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/lib/native_audio/filler_clips.dart app/lib/avatar_page.dart app/test/filler_clips_test.dart app/test/avatar_page_test.dart

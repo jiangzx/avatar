@@ -23,6 +23,7 @@
 | 17 | 2026-10-17 | Plan A A1 Task 3（音色，遗留项；依赖 #12） | `gateway/roles/elder-companion/role.json` 两种风格均为 `"voice": null`，Qwen 音色探针未运行（见 #12） | 未做手动验证；按回退使用适配器默认音色 | 规格要求的「每种风格独立音色」未满足，两种风格听起来同一声音 | 运行 #12 的 voices 探针，选定音色后回填两种风格的 `voice` | 未解除 |
 | 18 | 2026-10-17 | Plan A A2 Task 1 Step 5（客户端感知延迟基线） | 用户指示本次仅用 Mock、无服务/真机/真实模型：小米真机上的 20 句基线测量未运行 | 未做手动验证；`anyidea.diag event=latency` 日志已实现并有单元测试；未取得任何 perceived_ms 数据，`docs/testing/plan-a-latency-baseline.md` 客户端表格留空 | Plan A 门槛「P50 不差于基线」的客户端部分未关闭 | 基线须在提交 `33dfbf4`（A1 Task 4 之前）上测量：接入小米真机，按计划 Step 5 说同样的 20 句并统计 p50/p90 填表 | 用户延期 |
 | 19 | 2026-10-17 | Plan A A2 Task 3 Step 4（填充语片段录制） | 填充音色与回复音色不同：Qwen 片段录制未运行（用户指示本次仅用 Mock、无 key、无真实模型），两种风格目录均使用 macOS `say -v Tingting` 占位片段 | 未做手动验证；`make-filler-clips.ts` 与 PCM 工具已实现并有单元测试，但未对 Qwen 执行；占位片段时长 1.2–1.8 秒，已通过资源存在性/时长测试，未经人工试听 | 在片段重新录制前，用户听到的填充语音色与回复音色不同，两种风格的填充语听起来相同 | 提供 key 并确定音色后（依赖 #12、#17）按 Step 4 对两种风格运行 `make-filler-clips.ts`，试听确认后替换占位片段，并更新研究文档 §4 | 未解除 |
+| 20 | 2026-10-17 | Plan A A2 Task 8 Step 4（完整 Web 构建与 debug APK 构建） | 用户指示本次不运行完整 `build-web.sh`（会拉取资源）、不构建 APK（无真机、`app/dev.json` 不存在）：仅运行了 `--probe-only`、`flutter test`、`flutter analyze` | 未做手动验证；配置/片段加载由 `filler_clips_test.dart` 与 `avatar_page_test.dart` 单元测试覆盖，`avatar_page.dart` 已通过 analyze，但未在真实 APK/WebView 中运行 | Web 包与 APK 能否成功构建、`AvatarPage` 实际加载资源与「…」显示均未在设备上确认 | 准备好 `app/dev.json` 与设备后，运行完整 `./scripts/build-web.sh` 与 `cd app && flutter build apk --debug --dart-define-from-file=dev.json`，并在 Task 9 真机验证中确认 | 用户延期 |
 
 ## 2026-10-13 Plan 1.1 更新
 
