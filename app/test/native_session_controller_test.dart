@@ -8,7 +8,10 @@ import 'package:avatar_app/native_gateway/gateway_client.dart';
 import 'package:avatar_app/native_gateway/protocol.dart';
 import 'package:avatar_app/native_session/events.dart';
 import 'package:avatar_app/native_session/session_controller.dart';
+import 'package:avatar_app/native_session/thinking_config.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/thinking_fixture.dart';
 
 void main() {
   test('logs perceived latency from local speech end to first reply audio', () async {
@@ -408,6 +411,179 @@ void main() {
     f.client.emitAudio(3, Int16List(2400));
     expect(f.audio.acceptedSequences, isEmpty);
   });
+
+  group('thinking state', () {
+    late SessionFakes f;
+    late NativeSessionController c;
+    var now = 0;
+    final clips = {'think-1': Int16List(2400), 'think-2': Int16List(2400), 'wait-1': Int16List(2400)};
+
+    List<String> states() => f.events.whereType<UiState>().map((e) => e.state).toList();
+
+    Future<void> speakThenPause() async {
+      f.detector.queued.add(SpeechEdge.speaking);
+      f.audio.emitFrame(Int16List(320));
+      f.client.emit(const TranscriptUser('嗯', false));
+      now = 1000;
+      f.detector.queued.add(SpeechEdge.silent);
+      f.audio.emitFrame(Int16List(320));
+      await pumpEvents();
+    }
+
+    Future<void> tickAt(int t) async {
+      now = t;
+      c.tickThinking();
+      await pumpEvents();
+    }
+
+    Future<void> reachFiller() async {
+      await speakThenPause();
+      await tickAt(1180);
+      await tickAt(2380);
+    }
+
+    setUp(() async {
+      now = 0;
+      f = SessionFakes();
+      c = f.controller(thinking: testThinking(), fillerPcm: clips, now: () => now);
+      await c.start();
+    });
+
+    test('shows listening, then thinking within 300 ms of silence', () async {
+      await speakThenPause();
+      expect(states().last, 'listening');
+      await tickAt(1180);
+      expect(states().last, 'thinking');
+    });
+
+    test('plays a filler with its subtitle and sends zero frames while it plays', () async {
+      await reachFiller();
+      expect(f.audio.fillerPlays, [2400]);
+      expect(f.events.whereType<UiSubtitle>().last.text, '嗯，我想想。');
+      f.audio.emitFrame(Int16List(320)..fillRange(0, 320, 900));
+      expect(f.client.audioFrames.last.every((s) => s == 0), isTrue);
+    });
+
+    test('local speech during a filler stops the filler and keeps the reply', () async {
+      await reachFiller();
+      f.client.emit(const ResponseStart(5, 'reply'));
+      await pumpEvents();
+      now = 2500;
+      f.detector.queued.add(SpeechEdge.speaking);
+      f.audio.emitFrame(Int16List(320));
+      await pumpEvents();
+      expect(f.audio.fillerStops, [false]);
+      expect(f.audio.stopCalls, isEmpty);
+      expect(f.client.sent.whereType<PlaybackStopped>(), isEmpty);
+      expect(f.client.sent.whereType<VadMessage>().last.state, 'speaking');
+    });
+
+    test('switches to speaking on the first audio frame, not on response.start', () async {
+      await speakThenPause();
+      f.client.emit(const ResponseStart(6, 'reply'));
+      await pumpEvents();
+      expect(states(), isNot(contains('speaking')));
+      f.client.emitAudio(6, Int16List(2400));
+      await pumpEvents();
+      expect(states().last, 'speaking');
+    });
+
+    test('an empty ended reply keeps thinking until the timeout', () async {
+      await speakThenPause();
+      f.client.emit(const ResponseStart(7, 'reply'));
+      await pumpEvents();
+      f.audio.onPlaybackEnded?.call(const PlayedAudio(responseSeq: 7, playedMs: 0));
+      await pumpEvents();
+      expect(states().last, 'thinking');
+      await tickAt(21000);
+      expect(states().last, 'idle');
+    });
+
+    test('nods while the user keeps talking', () async {
+      f.detector.queued.add(SpeechEdge.speaking);
+      f.audio.emitFrame(Int16List(320));
+      await tickAt(1500);
+      final nod = f.events.whereType<UiAvatarAction>().single;
+      expect([nod.action, nod.source], ['nod', 'backchannel']);
+    });
+
+    test('first reply audio fades the filler before the reply chunk is fed', () async {
+      await reachFiller();
+      f.client.emit(const ResponseStart(8, 'reply'));
+      await pumpEvents();
+      f.audio.operationOrder.clear();
+      f.client.emitAudio(8, Int16List(2400));
+      await pumpEvents();
+      expect(f.audio.fillerStops, [true]);
+      expect(f.audio.operationOrder, ['filler-stop', 'push']);
+    });
+
+    test('a failing playFiller still reports the filler done', () async {
+      f.audio.playFillerError = StateError('feed failed');
+      final lines = <String>[];
+      c = f.controller(thinking: testThinking(), fillerPcm: clips, now: () => now, diag: lines.add);
+      await c.start();
+      await reachFiller();
+      expect(lines.where((l) => l.contains('event=filler_play_failed')), hasLength(1));
+      expect(f.events.whereType<UiError>(), isEmpty);
+      // The tail guard ends 400 ms later; uplink is real again (filler is not stuck).
+      now = 2800;
+      f.audio.emitFrame(Int16List(320)..fillRange(0, 320, 900));
+      expect(f.client.audioFrames.last.every((s) => s == 900), isTrue);
+    });
+
+    test('a natural filler drain starts the zero-uplink tail guard', () async {
+      await reachFiller();
+      f.audio.finishFiller(); // natural drain: onDone is queued, not run inline
+      await pumpEvents();
+      f.audio.emitFrame(Int16List(320)..fillRange(0, 320, 900));
+      expect(f.client.audioFrames.last.every((s) => s == 0), isTrue); // tail guard active
+      now = 3000;
+      f.audio.emitFrame(Int16List(320)..fillRange(0, 320, 900));
+      expect(f.client.audioFrames.last.every((s) => s == 900), isTrue);
+    });
+
+    test('a cancelled reply stops the filler and returns to idle', () async {
+      await reachFiller();
+      f.client.emit(const ResponseStart(9, 'reply'));
+      await pumpEvents();
+      f.client.emit(const ResponseCancelled(9));
+      await pumpEvents();
+      expect(f.audio.fillerStops, [false]);
+      expect(states().last, 'idle');
+    });
+
+    test('model_reconnecting keeps thinking visible and allows the long-wait filler', () async {
+      await reachFiller();
+      f.client.emit(const GatewayError('model_reconnecting', true));
+      await pumpEvents();
+      f.audio.finishFiller();
+      await pumpEvents();
+      expect(states().last, 'thinking');
+      await tickAt(6500);
+      expect(f.audio.fillerPlays, [2400, 2400]);
+    });
+
+    test('a gateway disconnect stops a playing filler and leaves thinking', () async {
+      await reachFiller();
+      f.client.emitStatus(GatewayStatus.reconnecting);
+      await pumpEvents();
+      expect(f.audio.fillerStops, [false]);
+      expect(states().last, 'idle');
+    });
+  });
+
+  test('without a thinking config, speaking still follows the first audio frame', () async {
+    final f = SessionFakes();
+    final c = f.controller();
+    await c.start();
+    f.client.emit(const ResponseStart(3, 'reply'));
+    await pumpEvents();
+    expect(f.events.whereType<UiState>().map((e) => e.state), isNot(contains('speaking')));
+    f.client.emitAudio(3, Int16List(2400));
+    await pumpEvents();
+    expect(f.events.whereType<UiState>().last.state, 'speaking');
+  });
 }
 
 class SessionFakes {
@@ -416,7 +592,12 @@ class SessionFakes {
   final client = FakeClient();
   final events = <NativeUiEvent>[];
 
-  NativeSessionController controller({DiagSink? diag, int Function()? now}) =>
+  NativeSessionController controller({
+    DiagSink? diag,
+    int Function()? now,
+    ThinkingConfig? thinking,
+    Map<String, Int16List> fillerPcm = const {},
+  }) =>
       NativeSessionController(
         audio: audio,
         detector: detector,
@@ -424,6 +605,9 @@ class SessionFakes {
         emit: events.add,
         diag: diag ?? (_) {},
         now: now,
+        thinking: thinking,
+        fillerPcm: fillerPcm,
+        autoTick: false,
       );
 }
 
@@ -442,6 +626,7 @@ class FakeAudio implements NativeAudioIO {
   int? activeSeq;
   final fillerPlays = <int>[];
   final fillerStops = <bool>[];
+  Object? playFillerError;
   void Function()? _fillerDone;
 
   @override
@@ -449,6 +634,9 @@ class FakeAudio implements NativeAudioIO {
 
   @override
   Future<void> playFiller(Int16List clip, {required void Function() onDone}) async {
+    final error = playFillerError;
+    if (error != null) throw error;
+    operationOrder.add('filler-play');
     fillerPlays.add(clip.length);
     fillerActive = true;
     _fillerDone = onDone;
@@ -456,6 +644,7 @@ class FakeAudio implements NativeAudioIO {
 
   @override
   Future<void> stopFiller({required bool fade}) async {
+    operationOrder.add('filler-stop');
     fillerStops.add(fade);
     finishFiller();
   }
@@ -581,6 +770,7 @@ class FakeDetector implements NativeSpeechDetector {
 class FakeClient implements GatewayClientLike {
   GatewayClientEvents? events;
   final sent = <ClientMessage>[];
+  final audioFrames = <Int16List>[];
   int failNextStarts = 0;
   int startCalls = 0;
   int closeCalls = 0;
@@ -601,7 +791,7 @@ class FakeClient implements GatewayClientLike {
   void send(ClientMessage message) => sent.add(message);
 
   @override
-  void sendAudio(Int16List pcm16k) {}
+  void sendAudio(Int16List pcm16k) => audioFrames.add(pcm16k);
 
   @override
   Future<void> close() async => closeCalls++;

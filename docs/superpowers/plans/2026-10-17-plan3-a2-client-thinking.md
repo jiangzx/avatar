@@ -1759,7 +1759,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces (`NativeSessionController` constructor, optional additions): `ThinkingConfig? thinking`, `Map<String, Int16List> fillerPcm = const {}`, `bool autoTick = true`; public `void tickThinking()` (driven by a periodic timer at `thinking.tickMs`; tests call it directly with `autoTick: false`).
 - Behavior: emits `UiState` from thinking commands; `UiState('speaking')` only on the first accepted audio chunk (also when `thinking` is null); `UiSubtitle(role:'assistant', text: <filler text>, isFinal:false)` when a filler starts; `UiAvatarAction(action:'nod', source:'backchannel')` for listening nods; zero frames uplink while `zeroUplink`; speech while `guardsSpeech` sends `vad speaking` but does not stop playback; `playedMs==0` ended emits no `idle`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `app/test/native_session_controller_test.dart`:
 - add imports:
@@ -1904,12 +1904,12 @@ In `app/test/native_session_controller_test.dart`:
   });
   ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `cd app && flutter test test/native_session_controller_test.dart`
 Expected: FAIL — `thinking`, `fillerPcm`, `autoTick`, `tickThinking` do not exist; no `speaking` state is emitted.
 
-- [ ] **Step 3: Implement the wiring**
+- [x] **Step 3: Implement the wiring**
 
 In `app/lib/native_session/session_controller.dart`:
 - imports:
@@ -2090,12 +2090,12 @@ In `app/lib/native_session/session_controller.dart`:
       if (thinking != null) await _apply(thinking.onCancelled(_now()));
   ```
 
-- [ ] **Step 4: Run tests and analyze**
+- [x] **Step 4: Run tests and analyze**
 
 Run: `cd app && flutter test && flutter analyze`
 Expected: all PASS (existing controller tests unchanged: they run without a thinking config); no issues.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/lib/native_session/session_controller.dart app/test/native_session_controller_test.dart

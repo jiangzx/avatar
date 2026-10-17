@@ -7,6 +7,8 @@ import '../native_audio/speech_detector.dart';
 import '../native_gateway/gateway_client.dart';
 import '../native_gateway/protocol.dart';
 import 'events.dart';
+import 'thinking_config.dart';
+import 'thinking_controller.dart';
 
 const int nativeBridgeLevelIntervalMs = 30; // TUNABLE
 
@@ -20,7 +22,12 @@ class NativeSessionController implements GatewayClientEvents {
     required this.emit,
     this.diag = logcatDiagSink,
     int Function()? now,
-  }) : _now = now ?? _wallClockMs {
+    ThinkingConfig? thinking,
+    this.fillerPcm = const {},
+    this.autoTick = true,
+  })  : _now = now ?? _wallClockMs,
+        _thinkingCfg = thinking,
+        _thinking = thinking == null ? null : ThinkingController(thinking, vadReleaseMs: defaultVadReleaseMs) {
     client.attachEvents(this);
   }
 
@@ -30,6 +37,11 @@ class NativeSessionController implements GatewayClientEvents {
   final void Function(NativeUiEvent event) emit;
   final DiagSink diag;
   final int Function() _now;
+  final ThinkingConfig? _thinkingCfg;
+  final ThinkingController? _thinking;
+  final Map<String, Int16List> fillerPcm;
+  final bool autoTick;
+  Timer? _tickTimer;
   final _responseKinds = <int, String>{};
 
   /// Estimated end of the user's last speech segment; consumed by the first reply audio.
@@ -87,6 +99,7 @@ class NativeSessionController implements GatewayClientEvents {
       stage = 'gateway';
       await client.start();
       _started = true;
+      _startTicker();
     } catch (error) {
       _started = false;
       await audio.stop().catchError((_) {});
@@ -111,9 +124,12 @@ class NativeSessionController implements GatewayClientEvents {
   Future<void> stop() async {
     if (_ended) return;
     _ended = true;
+    _tickTimer?.cancel();
+    _tickTimer = null;
     _speechOpen = false;
     detector.reset();
     await _interruptActive(sendStopped: false);
+    await audio.stopFiller(fade: false).catchError((_) {});
     await audio.stop();
     await client.close();
     _started = false;
@@ -137,7 +153,10 @@ class NativeSessionController implements GatewayClientEvents {
 
   void _stopForDisconnect() {
     _enqueue(() async {
-      if (_ended || _activeSeq == null) return;
+      if (_ended) return;
+      final thinking = _thinking;
+      if (thinking != null) await _apply(thinking.onCancelled(_now()));
+      if (_activeSeq == null) return;
       await audio.stopResponse(reason: StopReason.reset);
       _activeSeq = null;
       detector.aiPlaying = false;
@@ -165,7 +184,15 @@ class NativeSessionController implements GatewayClientEvents {
       _audioReceivedMs[frame.responseSeq] =
           (_audioReceivedMs[frame.responseSeq] ?? 0) +
           ((frame.pcm.length * 1000) ~/ aiSampleRate);
-      if (firstForSequence) _reportPerceivedLatency(frame.responseSeq);
+      if (firstForSequence) {
+        _reportPerceivedLatency(frame.responseSeq);
+        final thinking = _thinking;
+        if (thinking != null) {
+          await _apply(thinking.onFirstAudio(_now())); // fades the filler before the reply is fed
+        } else {
+          emit(const UiState('speaking'));
+        }
+      }
       await audio.pushResponse(frame.responseSeq, frame.pcm);
       if (firstForSequence) {
         _emitAudioDiag('chunk.accepted');
@@ -242,6 +269,8 @@ class NativeSessionController implements GatewayClientEvents {
           return;
         }
         detector.aiPlaying = true;
+        final thinking = _thinking;
+        if (thinking != null) await _apply(thinking.onResponseStart(_now(), reply: kind == 'reply'));
         emit(UiResponseStart(responseSeq: responseSeq, kind: kind));
         _emitAudioDiag('response.start');
       case ResponseEnd(:final responseSeq):
@@ -258,7 +287,10 @@ class NativeSessionController implements GatewayClientEvents {
           ),
         );
         _emitAudioDiag('response.cancelled');
+        final thinking = _thinking;
+        if (thinking != null) await _apply(thinking.onCancelled(_now()));
       case TranscriptUser(:final text, :final isFinal):
+        _thinking?.onUserTranscript();
         emit(UiSubtitle(role: 'user', text: text, isFinal: isFinal));
       case TranscriptAssistant(:final responseSeq, :final text):
         if (responseSeq <= _seqFloor) return;
@@ -273,6 +305,7 @@ class NativeSessionController implements GatewayClientEvents {
         emit(UiMetric(name: name, ms: ms.round()));
       case GatewayError(:final code, :final retryable):
         if (code == 'model_reconnecting' || retryable) {
+          _thinking?.onModelReconnecting();
           emit(UiStatus('model_reconnecting'));
         } else {
           emit(UiError(code));
@@ -284,22 +317,88 @@ class NativeSessionController implements GatewayClientEvents {
     if (_ended) return;
     final now = _now();
     final edge = detector.push(frame, timestampMs: now);
-    if (!_muted) client.sendAudio(frame);
+    final thinking = _thinking;
+    if (!_muted) {
+      // During a filler and its tail the server must hear silence, not the filler's echo.
+      client.sendAudio(thinking != null && thinking.zeroUplink(now) ? Int16List(frame.length) : frame);
+    }
     switch (edge) {
       case SpeechEdge.speaking:
+        final guarded = thinking != null && thinking.guardsSpeech(now);
         _speechOpen = true;
         _speechEndAt = null;
         _vadSpeakingCount++;
         _emitAudioDiag('vad.speaking');
-        unawaited(_interruptThenReportSpeech());
+        if (thinking != null) _applyLater(thinking.onVadSpeaking(now));
+        if (guarded) {
+          // Filler echo or the user talking over it: stop the filler only, never cancel the reply.
+          client.send(VadMessage('speaking', now));
+        } else {
+          unawaited(_interruptThenReportSpeech());
+        }
       case SpeechEdge.silent:
         _speechOpen = false;
         _speechEndAt = now - defaultVadReleaseMs;
         _vadSilentCount++;
+        thinking?.onVadSilent(now);
         client.send(VadMessage('silent', now));
         _emitAudioDiag('vad.silent');
       case SpeechEdge.none:
         break;
+    }
+  }
+
+  void _startTicker() {
+    final cfg = _thinkingCfg;
+    if (cfg == null || !autoTick) return;
+    _tickTimer?.cancel();
+    _tickTimer = Timer.periodic(Duration(milliseconds: cfg.tickMs), (_) => tickThinking());
+  }
+
+  /// Advances thinking timers (called by the periodic ticker; tests call it directly).
+  void tickThinking() {
+    final thinking = _thinking;
+    if (thinking == null || _ended) return;
+    _applyLater(thinking.tick(_now()));
+  }
+
+  /// State changes happen at call time; their effects run on the serialized event queue.
+  void _applyLater(List<ThinkCommand> commands) {
+    if (commands.isNotEmpty) _enqueue(() => _apply(commands));
+  }
+
+  Future<void> _apply(List<ThinkCommand> commands) async {
+    for (final command in commands) {
+      switch (command) {
+        case SetAvatarState(:final state):
+          emit(UiState(state));
+        case PlayFiller(:final clip):
+          await _playFiller(clip);
+        case StopFiller(:final fade):
+          await audio.stopFiller(fade: fade);
+        case Backchannel():
+          emit(const UiAvatarAction(action: 'nod', source: 'backchannel'));
+        case ThinkDiag(:final event, :final fields):
+          diag(formatDiag(event, fields));
+      }
+    }
+  }
+
+  Future<void> _playFiller(FillerClip clip) async {
+    final thinking = _thinking!;
+    final pcm = fillerPcm[clip.id];
+    if (pcm == null) {
+      diag(formatDiag('filler_missing', {'id': clip.id}));
+      thinking.onFillerDone(_now());
+      return;
+    }
+    emit(UiSubtitle(role: 'assistant', text: clip.text, isFinal: false));
+    try {
+      // onDone may fire synchronously inside the audio layer; hop onto the serial queue.
+      await audio.playFiller(pcm, onDone: () => _enqueue(() async => thinking.onFillerDone(_now())));
+    } catch (_) {
+      diag(formatDiag('filler_play_failed', {'id': clip.id}));
+      thinking.onFillerDone(_now()); // never leave fillerPlaying stuck
     }
   }
 
@@ -373,7 +472,12 @@ class NativeSessionController implements GatewayClientEvents {
     emit(
       UiResponseEnd(responseSeq: played.responseSeq, playedMs: played.playedMs),
     );
-    emit(const UiState('idle'));
+    final thinking = _thinking;
+    if (thinking != null) {
+      await _apply(thinking.onPlaybackEnded(_now(), playedMs: played.playedMs));
+    } else {
+      emit(const UiState('idle'));
+    }
     _emitAudioDiag('playback.ended');
   }
 
@@ -401,6 +505,8 @@ class NativeSessionController implements GatewayClientEvents {
     );
     emit(const UiState('idle'));
     emit(const UiError('audio_playback_failed'));
+    final thinking = _thinking;
+    if (thinking != null) await _apply(thinking.onCancelled(_now()));
     _emitAudioDiag('playback.error');
   }
 
@@ -408,16 +514,17 @@ class NativeSessionController implements GatewayClientEvents {
     if (!_speechOpen) return;
     _speechOpen = false;
     _speechEndAt ??= _now();
+    _thinking?.onVadSilent(_now());
     detector.reset();
     _vadSilentCount++;
-    client.send(VadMessage('silent', DateTime.now().millisecondsSinceEpoch));
+    client.send(VadMessage('silent', _now()));
     _emitAudioDiag('vad.segment.reset');
   }
 
   Future<void> _interruptThenReportSpeech() async {
     await _interruptActive();
     if (_ended) return;
-    client.send(VadMessage('speaking', DateTime.now().millisecondsSinceEpoch));
+    client.send(VadMessage('speaking', _now()));
   }
 
   Future<void> _interruptActive({bool sendStopped = true}) =>
@@ -441,6 +548,8 @@ class NativeSessionController implements GatewayClientEvents {
         emit(UiResponseCancelled(responseSeq: seq, playedMs: played.playedMs));
       }
       emit(const UiState('listening'));
+      final thinking = _thinking;
+      if (thinking != null) await _apply(thinking.onCancelled(_now()));
       _emitPlaybackDiag();
       _emitAudioDiag(
         sendStopped ? 'local.cancel' : 'session.stop',
