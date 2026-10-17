@@ -14,6 +14,7 @@ import type { RoleCatalog } from '../roles/catalog.ts';
 import { devContext, type SessionContext } from './context.ts';
 import { Director } from './director.ts';
 import { InterruptCoordinator } from './interrupt.ts';
+import { buildInstructions, historyBudget, type InstructionBudget } from './instructions.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
 
@@ -37,6 +38,10 @@ export interface SessionDeps {
   /** Receives each finalized reply's metrics (eval harness). Production only logs them. */
   onReplyMetrics?: (m: ReplyMetrics) => void;
   summarizePolicy?: PolicySpec;
+  /** Instruction size budget (gateway/config/memory.json); undefined = unbounded (tests). */
+  budget?: InstructionBudget;
+  /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
+  rebuildTriggerRatio?: number;
 }
 
 interface ResponseState {
@@ -71,6 +76,8 @@ export class Session {
   private keepalive: NodeJS.Timeout | null = null;
   private turnsSinceRebuild = 0;
   private charsSinceRebuild = 0;
+  /** Length of the instructions the live model session currently holds. */
+  private lastInstructionsChars = 0;
   private rebuilding = false;
   private ended = false;
   private rebuildTimer: NodeJS.Timeout | null = null;
@@ -86,7 +93,10 @@ export class Session {
   constructor(private readonly deps: SessionDeps, ctx: SessionContext = devContext(deps.roles)) {
     this.context = ctx;
     this.persona = deps.roles.buildPersona(ctx.roleId, ctx.styleId);
-    this.ledger = new ConversationLedger(deps.ledger ?? DEFAULT_LEDGER_OPTIONS);
+    const ledgerOpts = deps.ledger ?? DEFAULT_LEDGER_OPTIONS;
+    // Summarize before the instruction budget would have to drop unsummarized turns.
+    const history = deps.budget ? historyBudget(this.persona, deps.budget) : Number.POSITIVE_INFINITY;
+    this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
     this.director = new Director(deps.roles.director(ctx.roleId), { requestResponse: (kind, request) => this.requestResponse(kind, request) });
     this.interrupt = new InterruptCoordinator({
       confirmWindowMs: deps.confirmWindowMs ?? 300,
@@ -219,11 +229,23 @@ export class Session {
   }
 
   private instructions(): string {
-    return this.ledger.buildInstructions(this.persona);
+    return buildInstructions(
+      { persona: this.persona, memorySnapshot: this.context.memorySnapshot, summary: this.ledger.summary, recent: this.ledger.recent },
+      this.deps.budget,
+    );
   }
 
   private sessionConfig(): SessionConfig {
-    return { instructions: this.instructions(), tools: [PERFORM_ACTION_TOOL], voice: this.context.voice };
+    const instructions = this.instructions();
+    this.lastInstructionsChars = instructions.length;
+    return { instructions, tools: [PERFORM_ACTION_TOOL], voice: this.context.voice };
+  }
+
+  /** Sends fresh instructions to the live model session and remembers their size. */
+  private pushInstructions(): void {
+    const instructions = this.instructions();
+    this.lastInstructionsChars = instructions.length;
+    this.adapter.updateInstructions(instructions);
   }
 
   private requestResponse(kind: ResponseKind, request: ProactiveRequest): void {
@@ -387,7 +409,7 @@ export class Session {
       if (r.ok) {
         this.summarizeRetryAt = 0;
         this.summarizeBackoffMs = 1_000;
-        if (r.value && !this.ended) this.adapter.updateInstructions(this.instructions());
+        if (r.value && !this.ended) this.pushInstructions();
         return;
       }
       // The policy already logged policy_failed with the code; keep the cross-call cool-down.
@@ -398,8 +420,9 @@ export class Session {
   }
 
   private maybeSlimContext(): void {
-    const limit = (this.deps.modelContextTokenLimit ?? 12_000) * 0.8;
-    const estimate = this.charsSinceRebuild + this.instructions().length;
+    const limit = (this.deps.modelContextTokenLimit ?? 12_000) * (this.deps.rebuildTriggerRatio ?? 0.8);
+    // The model holds the instructions it was last given plus everything said since the rebuild.
+    const estimate = this.charsSinceRebuild + this.lastInstructionsChars;
     if (estimate > limit || this.turnsSinceRebuild >= (this.deps.rebuildAfterTurns ?? 30)) void this.rebuild('slim');
   }
 

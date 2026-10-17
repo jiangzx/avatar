@@ -416,4 +416,28 @@ describe('Session', () => {
       spy.mockRestore();
     }
   });
+  it('does not count recent turns twice when deciding to slim the context', async () => {
+    // Old estimate (chars since rebuild + current instructions incl. recent turns) ≈ 150 > 120 → rebuild.
+    // Correct estimate (chars since rebuild + instructions last sent, 31 chars) ≈ 87 → no rebuild.
+    const s = setup({ modelContextTokenLimit: 120, rebuildTriggerRatio: 1 });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '好'.repeat(50) });
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(s.mocks).toHaveLength(1);
+  });
+
+  it('keeps instructions within the budget and summarizes before history is truncated', async () => {
+    const budget = { totalChars: 200, snapshotMaxChars: 0, summaryMaxChars: 60 };
+    const s = setup({ budget, ledger: { keepRecentTurns: 1, summarizeAfterTurns: 100, summarizeAfterTokens: 10_000 } });
+    await greetAndFinish(s);
+    // History room = 200 - 31 (persona 'P' + empty sections) = 169 chars; two 90-char turns exceed it.
+    for (const text of ['甲'.repeat(90), '乙'.repeat(90)]) {
+      s.session.handleClientMessage({ type: 'debug.userText', text });
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(s.session.ledger.summary).not.toBe('');
+    expect(s.mocks[0].instructions.length).toBeLessThanOrEqual(200 + 4);
+  });
 });

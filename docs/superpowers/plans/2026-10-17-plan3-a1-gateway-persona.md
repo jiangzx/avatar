@@ -1927,7 +1927,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 - Produces (`SessionDeps`): `budget?: InstructionBudget; rebuildTriggerRatio?: number` (existing `modelContextTokenLimit` and `rebuildAfterTurns` now come from `pacing.json`). Session caps the ledger's `summarizeAfterTokens` at `historyBudget(persona, budget)` and counts rebuild size as `charsSinceRebuild + <length of the instructions last sent>`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/instructions.test.ts`:
 
@@ -2049,12 +2049,12 @@ Append to `describe('Session', ...)` in `gateway/test/session.test.ts`:
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/instructions.test.ts test/pacing.test.ts test/session.test.ts`
 Expected: FAIL — modules not found; `rebuildTriggerRatio`/`budget` unknown in `SessionDeps`; the double-count test sees 2 adapters.
 
-- [ ] **Step 3: Implement the builder**
+- [x] **Step 3: Implement the builder**
 
 Create `gateway/src/session/instructions.ts`:
 
@@ -2119,7 +2119,7 @@ export function historyBudget(persona: string, budget: InstructionBudget): numbe
 }
 ```
 
-- [ ] **Step 4: Implement config loading and the cross-check**
+- [x] **Step 4: Implement config loading and the cross-check**
 
 Create `gateway/config/pacing.json` (set `output.maxTokens` per `docs/research/qwen-plan-a-validation.md` §3 decision; `null` = no cap):
 
@@ -2211,7 +2211,7 @@ export function validateBudgets(pacing: PacingConfig, memory: MemoryBudgetConfig
 }
 ```
 
-- [ ] **Step 5: Use the builder in Session and fix rebuild accounting**
+- [x] **Step 5: Use the builder in Session and fix rebuild accounting**
 
 In `gateway/src/session/session.ts`:
 - imports:
@@ -2271,7 +2271,7 @@ In `gateway/src/session/session.ts`:
   }
   ```
 
-- [ ] **Step 6: Wire configs in `index.ts` (add-only)**
+- [x] **Step 6: Wire configs in `index.ts` (add-only)**
 
 In `gateway/src/index.ts` add the import
 
@@ -2297,12 +2297,12 @@ Inside the `new Session({ ... }, ctx)` deps literal, after the `modelOwnsTurns: 
       summarizePolicy: pacing.policies.summarize,
 ```
 
-- [ ] **Step 7: Run tests and typecheck**
+- [x] **Step 7: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gateway/src/session/instructions.ts gateway/src/session/pacing.ts gateway/config/pacing.json gateway/config/memory.json gateway/src/session/session.ts gateway/src/index.ts gateway/test/instructions.test.ts gateway/test/pacing.test.ts gateway/test/session.test.ts

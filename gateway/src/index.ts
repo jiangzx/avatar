@@ -5,6 +5,7 @@ import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts'
 import { loadConfig, makeOriginCheck } from './config.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
 import { log } from './log.ts';
+import { loadMemoryBudget, loadPacing, validateBudgets } from './session/pacing.ts';
 import { devContextResolver } from './session/context.ts';
 import { MockSummarizer } from './session/ledger.ts';
 import { QwenSummarizer } from './session/qwenSummarizer.ts';
@@ -16,6 +17,9 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
 // File-backed roles (Plan A): gateway/roles/<role>/ + gateway/roles/_shared/.
 const roles = loadRoleCatalog(`${root}roles`);
+const pacing = loadPacing(`${root}config/pacing.json`);
+const budgetReport = validateBudgets(pacing, loadMemoryBudget(`${root}config/memory.json`), config.ledger, roles.pairs().map((p) => roles.buildPersona(p.roleId, p.styleId)));
+log('instruction_budget', { totalChars: budgetReport.budget.totalChars, minHistoryChars: budgetReport.minHistoryChars, ledgerCapped: budgetReport.ledgerCapped });
 const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
@@ -36,6 +40,11 @@ const manager = new SessionManager(
       rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,
       rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
       modelOwnsTurns: config.adapter === 'qwen',
+      budget: budgetReport.budget,
+      modelContextTokenLimit: pacing.rebuild.contextChars,
+      rebuildTriggerRatio: pacing.rebuild.triggerRatio,
+      rebuildAfterTurns: pacing.rebuild.afterTurns,
+      summarizePolicy: pacing.policies.summarize,
     }, ctx),
   config.sessionGraceMs,
   config.sessionUnclaimedMs,
