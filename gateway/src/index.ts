@@ -2,8 +2,8 @@ import { fileURLToPath } from 'node:url';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
-import { loadConfig, loadDirectorConfig, loadPersona, makeOriginCheck } from './config.ts';
-import { fixedRoleCatalog } from './roles/catalog.ts';
+import { loadConfig, makeOriginCheck } from './config.ts';
+import { loadRoleCatalog } from './roles/fileCatalog.ts';
 import { log } from './log.ts';
 import { devContextResolver } from './session/context.ts';
 import { MockSummarizer } from './session/ledger.ts';
@@ -14,8 +14,8 @@ import { createGatewayServer } from './server/server.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
-// Stub until Plan A ships file-backed roles under gateway/roles/.
-const roles = fixedRoleCatalog(loadPersona(`${root}prompts/persona.md`), loadDirectorConfig(`${root}config/director.json`));
+// File-backed roles (Plan A): gateway/roles/<role>/ + gateway/roles/_shared/.
+const roles = loadRoleCatalog(`${root}roles`);
 const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });

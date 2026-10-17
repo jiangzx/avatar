@@ -1,22 +1,8 @@
 import type { ResponseKind } from '@anyidea/protocol';
 import type { ProactiveCue, ProactiveRequest } from '../adapters/types.ts';
+import type { DirectorConfig } from '../roles/types.ts';
 
-export interface DirectorConfig {
-  followupAfterMs: number;
-  idleNoticeAfterMs: number;
-  maxConsecutive: number;
-  maxPerWindow: number;
-  windowMs: number;
-  quietPhrases: string[];
-  greetingInstruction: string;
-  greetingText: string;
-  followupInstruction: string;
-  followupText: string;
-  idleNoticeInstruction: string;
-  idleNoticeText: string;
-  resumeInstruction: string;
-  resumeText: string;
-}
+export type { DirectorConfig, TopicCard } from '../roles/types.ts';
 
 export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, loadDirectorConfig, loadPersona, makeOriginCheck } from '../src/config.ts';
+import { loadConfig, loadDirectorConfig, makeOriginCheck } from '../src/config.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -87,10 +87,9 @@ describe('config', () => {
     expect(ok('https://example.com')).toBe(false);
   });
 
-  it('loads the shipped director config and persona', () => {
-    const d = loadDirectorConfig(`${root}config/director.json`);
+  it('loads the shipped role director config through the shared schema', () => {
+    const d = loadDirectorConfig(`${root}roles/elder-companion/director.json`);
     expect(d.maxConsecutive).toBe(2);
-    expect(loadPersona(`${root}prompts/persona.md`)).toContain('perform_action');
   });
 
   it('rejects an invalid director config', () => {

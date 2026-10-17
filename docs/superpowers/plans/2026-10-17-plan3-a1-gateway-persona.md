@@ -1363,9 +1363,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   `buildPersona(roleId, styleId)` = `safety + "\n\n" + style + "\n\n" + actions + "\n\n" + activity directory`. `voiceFor` returns `undefined` for `"voice": null`. Unknown role/style throws `unknown_role:<id>` / `unknown_style:<role>/<style>` (callers validate with `hasStyle` first).
 
-> **Hotline check (user decision 2026-10-17):** before committing `gateway/roles/_shared/safety.md`, verify from an official source (National Health Commission announcement) that 12356 is the nationwide psychological assistance hotline. Record the source URL in the commit body. If it cannot be verified, remove the number and keep "心理援助热线" without digits.
+> **Hotline check (user decision 2026-10-17):** before committing `gateway/roles/_shared/safety.md`, verify from an official source (National Health Commission announcement) that 12356 is the nationwide psychological assistance hotline. Record the source URL in the commit body. If it cannot be verified, remove the number and keep "心理援助热线" without digits. (Not verified online per instruction: number removed, wording "心理援助热线" kept without digits.)
 
-- [ ] **Step 1: Create the test fixture role**
+- [x] **Step 1: Create the test fixture role**
 
 `gateway/test/fixtures/roles/_shared/safety.md`:
 
@@ -1418,7 +1418,7 @@ FIXTURE ACTIONS
 [{ "id": "t1", "prompt": "天气", "fallbackText": "今天天气不错。" }]
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `gateway/test/fileCatalog.test.ts`:
 
@@ -1519,12 +1519,12 @@ In `gateway/test/config.test.ts`, replace the test `'loads the shipped director 
 
 and remove `loadPersona` from that file's import list.
 
-- [ ] **Step 3: Run them to verify they fail**
+- [x] **Step 3: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/fileCatalog.test.ts test/config.test.ts`
 Expected: FAIL — `fileCatalog.ts` not found; `roles/elder-companion/director.json` does not exist.
 
-- [ ] **Step 4: Move the existing persona and Director files**
+- [x] **Step 4: Move the existing persona and Director files**
 
 ```bash
 mkdir -p gateway/roles/_shared gateway/roles/elder-companion/styles gateway/roles/elder-companion/activities
@@ -1532,7 +1532,7 @@ git mv gateway/prompts/persona.md gateway/roles/elder-companion/styles/old-frien
 git mv gateway/config/director.json gateway/roles/elder-companion/director.json
 ```
 
-- [ ] **Step 5: Write the role content**
+- [x] **Step 5: Write the role content**
 
 `gateway/roles/_shared/safety.md`:
 
@@ -1716,7 +1716,7 @@ Overwrite `gateway/roles/elder-companion/director.json` (moved file) with:
 ]
 ```
 
-- [ ] **Step 6: Implement the catalog**
+- [x] **Step 6: Implement the catalog**
 
 In `gateway/src/session/director.ts`, add above `export interface DirectorConfig`:
 
@@ -1860,7 +1860,7 @@ function readJson(path: string): unknown {
 }
 ```
 
-- [ ] **Step 7: Replace the stub at the `index.ts` wiring point**
+- [x] **Step 7: Replace the stub at the `index.ts` wiring point**
 
 In `gateway/src/index.ts`, replace the two lines
 
@@ -1878,12 +1878,12 @@ const roles = loadRoleCatalog(`${root}roles`);
 
 add `import { loadRoleCatalog } from './roles/fileCatalog.ts';`, and remove `fixedRoleCatalog`, `loadDirectorConfig`, `loadPersona` from their import lines (keep every other imported name).
 
-- [ ] **Step 8: Run tests and typecheck**
+- [x] **Step 8: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add gateway/roles gateway/test/fixtures/roles gateway/src/roles/fileCatalog.ts gateway/src/session/director.ts gateway/src/config.ts gateway/src/index.ts gateway/test/fileCatalog.test.ts gateway/test/config.test.ts gateway/prompts/persona.md gateway/config/director.json

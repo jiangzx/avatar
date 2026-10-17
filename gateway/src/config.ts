@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
-import type { DirectorConfig } from './session/director.ts';
+import type { DirectorConfig } from './roles/types.ts';
 import type { LedgerOptions } from './session/ledger.ts';
 
 export interface GatewayConfig {
@@ -154,3 +154,5 @@ export function loadDirectorConfig(path: string): DirectorConfig {
 export function loadPersona(path: string): string {
   return readFileSync(path, 'utf8');
 }
+
+export { DirectorSchema };

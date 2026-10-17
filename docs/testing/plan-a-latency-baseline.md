@@ -4,7 +4,7 @@
 
 Status: **NOT RUN.** Reason: user instruction for this execution was Mock only (no gateway process, no real Qwen call, no Xiaomi/adb). See `docs/blockers.md` #13. No numbers below were measured; the tables are intentionally empty.
 
-Date: NOT RUN. Commit: `<commit before A1 Task 4 — filled in by Task 4>`. The baseline must be measured on the plan3-a commit immediately before A1 Task 4 (the first task that changes gateway behavior), so that later Plan A work is compared against unchanged behavior. Adapter: qwen (QWEN_MODEL: not recorded). Device: Xiaomi 22101317C via adb reverse. 20 spoken sentences (list in plan A1 Task 2 Step 7).
+Date: NOT RUN. Commit: `33dfbf4`. The baseline must be measured on the plan3-a commit immediately before A1 Task 4 (the first task that changes gateway behavior), so that later Plan A work is compared against unchanged behavior. Adapter: qwen (QWEN_MODEL: not recorded). Device: Xiaomi 22101317C via adb reverse. 20 spoken sentences (list in plan A1 Task 2 Step 7).
 
 | field | n | p50 | p90 |
 |---|---|---|---|
