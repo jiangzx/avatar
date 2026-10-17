@@ -702,7 +702,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   Times are epoch milliseconds (INTEGER). Plan C appends migration steps for `messages`, `messages_fts`, `user_facts`, `relationship_notes`, `episodes`, `followups`, `memory_changes`, each with `owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE` so `deleteOwner` stays a complete delete, and extends `MemoryStore` with owner-scoped methods.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/memory-store.test.ts`:
 
@@ -888,12 +888,12 @@ describe('SqliteMemoryStore', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/memory-store.test.ts`
 Expected: FAIL with `Failed to load url ../src/memory/db.ts` (module not found).
 
-- [ ] **Step 3: Implement migrations**
+- [x] **Step 3: Implement migrations**
 
 Create `gateway/src/memory/migrations.ts`:
 
@@ -964,7 +964,7 @@ export function migrate(db: DatabaseSync, steps: readonly string[] = MIGRATIONS)
 
 (Probed: `PRAGMA user_version` set inside a rolled-back transaction keeps the old value; `STRICT`, `CHECK`, and `ON DELETE CASCADE` behave as the tests expect on SQLite 3.53.4.)
 
-- [ ] **Step 4: Implement `openDatabase`**
+- [x] **Step 4: Implement `openDatabase`**
 
 Create `gateway/src/memory/db.ts`:
 
@@ -1005,7 +1005,7 @@ export function openDatabase(path: string, opts: OpenDatabaseOptions): DatabaseS
 }
 ```
 
-- [ ] **Step 5: Implement the store**
+- [x] **Step 5: Implement the store**
 
 Create `gateway/src/memory/store.ts`:
 
@@ -1190,12 +1190,12 @@ export class SqliteMemoryStore implements MemoryStore {
 }
 ```
 
-- [ ] **Step 6: Run tests and typecheck**
+- [x] **Step 6: Run tests and typecheck**
 
 Run: `npm test -w gateway -- test/memory-store.test.ts && npm run typecheck -w gateway`
 Expected: all `memory-store` tests PASS; typecheck clean. Then `git status --short` must show no new files outside `gateway/src/memory/` and the test (tests wrote only to the OS temp dir).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gateway/src/memory/db.ts gateway/src/memory/migrations.ts gateway/src/memory/store.ts gateway/test/memory-store.test.ts
