@@ -5,6 +5,7 @@ import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts'
 import { loadConfig, loadDirectorConfig, loadPersona, makeOriginCheck } from './config.ts';
 import { fixedRoleCatalog } from './roles/catalog.ts';
 import { log } from './log.ts';
+import { devContextResolver } from './session/context.ts';
 import { MockSummarizer } from './session/ledger.ts';
 import { QwenSummarizer } from './session/qwenSummarizer.ts';
 import { SessionManager } from './session/manager.ts';
@@ -19,7 +20,7 @@ const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
 const manager = new SessionManager(
-  () =>
+  (ctx) =>
     new Session({
       adapterFactory: () => config.adapter === 'seeduplex'
         ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
@@ -35,7 +36,7 @@ const manager = new SessionManager(
       rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,
       rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
       modelOwnsTurns: config.adapter === 'qwen',
-    }),
+    }, ctx),
   config.sessionGraceMs,
   config.sessionUnclaimedMs,
   config.sessionStartTimeoutMs,
@@ -43,6 +44,8 @@ const manager = new SessionManager(
 const server = createGatewayServer({
   manager,
   appSecret: config.appSecret,
+  // Wiring point: Plan B swaps in the MemoryStore-backed resolver here.
+  contextResolver: devContextResolver(roles),
   allowedOrigin: makeOriginCheck(config.devOrigins),
   allowDebugText: config.allowDebugText,
   heartbeatMs: config.wsHeartbeatMs,

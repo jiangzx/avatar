@@ -6,6 +6,7 @@ import { FRAME_AI, decodeAudioFrame } from '@anyidea/protocol';
 import { SeeduplexAdapter } from '../src/adapters/seeduplex.ts';
 import { fixedRoleCatalog } from '../src/roles/catalog.ts';
 import { makeOriginCheck } from '../src/config.ts';
+import { devContextResolver } from '../src/session/context.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { Session } from '../src/session/session.ts';
 import { SessionManager } from '../src/session/manager.ts';
@@ -53,13 +54,14 @@ describe('Seeduplex gateway integration', () => {
       idleNoticeInstruction: 'idle-instruction', idleNoticeText: 'idle-text',
       resumeInstruction: 'resume-instruction', resumeText: 'resume-text',
     };
-    manager = new SessionManager(() => new Session({
+    const roles = fixedRoleCatalog('P', director);
+    manager = new SessionManager((ctx) => new Session({
       adapterFactory: () => new SeeduplexAdapter({
         apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${upstreamPort}`, voice: 'fixture',
       }),
-      summarizer: new MockSummarizer(), roles: fixedRoleCatalog('P', director),
-    }));
-    gateway = createGatewayServer({ manager, appSecret: SECRET, allowedOrigin: makeOriginCheck([]), allowDebugText: false });
+      summarizer: new MockSummarizer(), roles,
+    }, ctx));
+    gateway = createGatewayServer({ manager, appSecret: SECRET, contextResolver: devContextResolver(roles), allowedOrigin: makeOriginCheck([]), allowDebugText: false });
     await new Promise<void>((resolve) => gateway!.listen(0, '127.0.0.1', resolve));
     const port = (gateway.address() as AddressInfo).port;
     const created = await fetch(`http://127.0.0.1:${port}/session`, { method: 'POST', headers: { 'x-app-secret': SECRET, 'content-type': 'application/json' }, body: '{}' });

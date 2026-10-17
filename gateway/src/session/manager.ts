@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { SessionTokens } from '@anyidea/protocol';
 import { log } from '../log.ts';
+import type { SessionContext } from './context.ts';
 import type { Session, Transport } from './session.ts';
 import { TokenStore } from './tokens.ts';
 
@@ -21,7 +22,7 @@ export class SessionManager {
   private nextConnId = 0;
 
   constructor(
-    private readonly makeSession: () => Session,
+    private readonly makeSession: (ctx: SessionContext) => Session,
     private readonly graceMs = 60_000,
     /** Matches the connect token TTL: a session nobody connects to is dropped. */
     private readonly unclaimedMs = 5 * 60_000,
@@ -32,11 +33,11 @@ export class SessionManager {
     return this.sessions.size;
   }
 
-  create(): SessionTokens {
+  create(ctx: SessionContext): SessionTokens {
     const sessionId = randomUUID();
     // claim() clears this timer, like the disconnect grace timer.
     const grace = setTimeout(() => this.destroy(sessionId, 'unclaimed'), this.unclaimedMs);
-    this.sessions.set(sessionId, { session: this.makeSession(), started: false, starting: false, connId: 0, terminate: null, grace });
+    this.sessions.set(sessionId, { session: this.makeSession(ctx), started: false, starting: false, connId: 0, terminate: null, grace });
     log('session_created', { sessions: this.sessions.size });
     return this.tokens.issue(sessionId);
   }

@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import { FRAME_AI, FRAME_MIC, MIC_FRAME_SAMPLES, decodeAudioFrame, encodeAudioFrame } from '@anyidea/protocol';
 import { log } from '../log.ts';
+import type { ContextResolver } from '../session/context.ts';
 import type { SessionManager } from '../session/manager.ts';
 import type { Transport } from '../session/session.ts';
 import { safeEqual } from '../session/tokens.ts';
@@ -10,6 +11,8 @@ import { ResumeRequestSchema, parseClientMessage } from './schemas.ts';
 export interface GatewayServerOptions {
   manager: SessionManager;
   appSecret: string;
+  /** Resolves the optional device bearer on POST /session into a session context. */
+  contextResolver: ContextResolver;
   allowedOrigin: (origin: string) => boolean;
   allowDebugText: boolean;
   /** Uplink frames are 20 ms (50/s); allow bursts up to 2x. */
@@ -18,6 +21,15 @@ export interface GatewayServerOptions {
   heartbeatMs?: number;
   maxSessions?: number;
   sessionRateLimit?: { max: number; windowMs: number };
+}
+
+const BEARER = /^Bearer ([A-Za-z0-9_-]{16,128})$/;
+
+/** undefined = no Authorization header; null = present but malformed. */
+function bearerToken(req: IncomingMessage): string | undefined | null {
+  const header = req.headers.authorization;
+  if (header === undefined) return undefined;
+  return BEARER.exec(header)?.[1] ?? null;
 }
 
 export function createGatewayServer(opts: GatewayServerOptions): Server {
@@ -64,7 +76,7 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
   if (typeof origin === 'string' && opts.allowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Headers', 'content-type, x-app-secret');
+    res.setHeader('Access-Control-Allow-Headers', 'content-type, x-app-secret, authorization');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   }
   res.setHeader('Cache-Control', 'no-store');
@@ -96,7 +108,13 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
       json(res, 429, { error: 'rate_limited' });
       return;
     }
-    json(res, 200, opts.manager.create());
+    const bearer = bearerToken(req);
+    const resolved = bearer === null ? null : opts.contextResolver.resolve(bearer);
+    if (!resolved?.ok) {
+      json(res, 401, { error: 'unauthorized' });
+      return;
+    }
+    json(res, 200, opts.manager.create(resolved.ctx));
     return;
   }
   if (path === '/session/resume') {

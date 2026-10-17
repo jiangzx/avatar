@@ -7,6 +7,7 @@ import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
 import { fixedRoleCatalog } from '../src/roles/catalog.ts';
 import { makeOriginCheck } from '../src/config.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
+import { devContextResolver, type ContextResolver, type SessionContext } from '../src/session/context.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { SessionManager } from '../src/session/manager.ts';
 import { Session } from '../src/session/session.ts';
@@ -24,18 +25,22 @@ let server: Server | null = null;
 let manager: SessionManager | null = null;
 const sockets: WebSocket[] = [];
 
-async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugText?: boolean; heartbeatMs?: number; startTimeoutMs?: number; adapterConnect?: 'fail' | 'hang'; maxSessions?: number; sessionRateLimit?: { max: number; windowMs: number } } = {}) {
+async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugText?: boolean; heartbeatMs?: number; startTimeoutMs?: number; adapterConnect?: 'fail' | 'hang'; maxSessions?: number; sessionRateLimit?: { max: number; windowMs: number }; contextResolver?: ContextResolver; onContext?: (ctx: SessionContext) => void } = {}) {
+  const roles = fixedRoleCatalog('P', director);
   manager = new SessionManager(
-    () => new Session({
-      adapterFactory: () => {
-        const adapter = new MockAdapter({ script, replyDelayMs: 10, charMs: 20, chunkMs: 20, paceFactor: 1 });
-        if (opts.adapterConnect === 'fail') vi.spyOn(adapter, 'connect').mockRejectedValue(new Error('connect failed'));
-        if (opts.adapterConnect === 'hang') vi.spyOn(adapter, 'connect').mockImplementation(() => new Promise<void>(() => {}));
-        return adapter;
-      },
-      summarizer: new MockSummarizer(),
-      roles: fixedRoleCatalog('P', director),
-    }),
+    (ctx) => {
+      opts.onContext?.(ctx);
+      return new Session({
+        adapterFactory: () => {
+          const adapter = new MockAdapter({ script, replyDelayMs: 10, charMs: 20, chunkMs: 20, paceFactor: 1 });
+          if (opts.adapterConnect === 'fail') vi.spyOn(adapter, 'connect').mockRejectedValue(new Error('connect failed'));
+          if (opts.adapterConnect === 'hang') vi.spyOn(adapter, 'connect').mockImplementation(() => new Promise<void>(() => {}));
+          return adapter;
+        },
+        summarizer: new MockSummarizer(),
+        roles,
+      }, ctx);
+    },
     opts.graceMs ?? 60_000,
     opts.unclaimedMs,
     opts.startTimeoutMs,
@@ -43,6 +48,7 @@ async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugTe
   server = createGatewayServer({
     manager,
     appSecret: SECRET,
+    contextResolver: opts.contextResolver ?? devContextResolver(roles),
     allowedOrigin: makeOriginCheck([]),
     allowDebugText: opts.allowDebugText ?? true,
     heartbeatMs: opts.heartbeatMs,
@@ -121,6 +127,32 @@ describe('gateway server', () => {
     const ok = await post(base, '/session');
     expect(ok.status).toBe(200);
     expect(Object.keys(ok.json).sort()).toEqual(['connectToken', 'resumeToken', 'sessionId']);
+  });
+
+  it('rejects malformed or unknown bearer tokens on /session', async () => {
+    const base = await boot();
+    for (const authorization of ['Bearer short', 'Basic abcdefghijklmnopqrstu', 'Bearer abcdefghijklmnopqrstuvwxyz012345']) {
+      const res = await fetch(base + '/session', { method: 'POST', headers: { 'content-type': 'application/json', 'x-app-secret': SECRET, authorization }, body: '{}' });
+      expect(res.status).toBe(401);
+    }
+  });
+
+  it('hands the resolved context to the session factory', async () => {
+    const seen: SessionContext[] = [];
+    const ctx: SessionContext = { ownerId: 'o1', agentId: 'a1', roleId: 'elder-companion', styleId: 'old-friend', voice: 'voice-old' };
+    const base = await boot({
+      contextResolver: { resolve: (b) => (b === 'device-token-0123456789' ? { ok: true, ctx } : { ok: false }) },
+      onContext: (c) => seen.push(c),
+    });
+    const res = await fetch(base + '/session', { method: 'POST', headers: { 'content-type': 'application/json', 'x-app-secret': SECRET, authorization: 'Bearer device-token-0123456789' }, body: '{}' });
+    expect(res.status).toBe(200);
+    expect(seen).toEqual([ctx]);
+  });
+
+  it('allows the authorization header in CORS preflight for loopback origins', async () => {
+    const base = await boot();
+    const res = await fetch(base + '/session', { method: 'OPTIONS', headers: { origin: 'http://127.0.0.1:39123' } });
+    expect(res.headers.get('access-control-allow-headers')).toContain('authorization');
   });
 
   it('answers CORS preflight only for loopback origins', async () => {

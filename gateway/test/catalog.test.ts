@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ROLE, fixedRoleCatalog } from '../src/roles/catalog.ts';
-import { devContext } from '../src/session/context.ts';
+import { devContext, devContextResolver } from '../src/session/context.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 
 const director = {
@@ -24,5 +24,13 @@ describe('fixedRoleCatalog', () => {
 
   it('builds a dev context from the catalog defaults', () => {
     expect(devContext(fixedRoleCatalog('P', director))).toEqual({ roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined });
+  });
+});
+
+describe('devContextResolver', () => {
+  it('accepts requests without a bearer and rejects any bearer until identity exists', () => {
+    const resolver = devContextResolver(fixedRoleCatalog('P', director));
+    expect(resolver.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined } });
+    expect(resolver.resolve('device-token-0123456789')).toEqual({ ok: false });
   });
 });
