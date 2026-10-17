@@ -31,3 +31,17 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   const result = ClientMessageSchema.safeParse(value);
   return result.success ? (result.data as ClientMessage) : null;
 }
+
+const styleId = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
+
+/** POST /device/register. clientInfo is validated but not stored (data minimization). */
+export const RegisterRequestSchema = z.object({
+  clientInfo: z.object({ platform: z.string().min(1).max(32) }),
+  style: styleId.optional(),
+});
+
+/** PATCH /agent/style. */
+export const StyleRequestSchema = z.object({ style: styleId });
+
+/** DELETE /dev/owner/:id. */
+export const OwnerIdSchema = z.uuid();

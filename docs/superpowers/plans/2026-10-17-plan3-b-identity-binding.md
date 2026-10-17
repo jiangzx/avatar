@@ -91,7 +91,7 @@ Task order: 1 (validation, device) → 2 → 3 → 4 → 5 → 6 → 7 (gateway)
 
 This is a validation task, not TDD: the behavior under test is the device Keystore. Time-box 20 minutes for the device part (AGENTS.md §7).
 
-- [ ] **Step 1: Add the dependency**
+- [x] **Step 1: Add the dependency**
 
 In `app/pubspec.yaml`, under `dependencies:` after `flutter_pcm_sound: 3.3.3`, add:
 
@@ -102,7 +102,7 @@ In `app/pubspec.yaml`, under `dependencies:` after `flutter_pcm_sound: 3.3.3`, a
 Run: `cd app && flutter pub get`
 Expected: exits 0, `flutter_secure_storage 11.2.0` (plus its federated `flutter_secure_storage_*` packages) listed as added.
 
-- [ ] **Step 2: Add the probe page**
+- [x] **Step 2: Add the probe page**
 
 Create `app/lib/spike/secure_storage_spike.dart`:
 
@@ -175,7 +175,7 @@ class _SecureStorageSpikePageState extends State<SecureStorageSpikePage> {
 }
 ```
 
-- [ ] **Step 3: Route `SPIKE=secure_storage` to the probe**
+- [x] **Step 3: Route `SPIKE=secure_storage` to the probe**
 
 In `app/lib/main.dart`, add `import 'spike/secure_storage_spike.dart';` and replace the `home:` expression with:
 
@@ -189,7 +189,7 @@ In `app/lib/main.dart`, add `import 'spike/secure_storage_spike.dart';` and repl
       },
 ```
 
-- [ ] **Step 4: Keep the credential out of cloud backups**
+- [x] **Step 4: Keep the credential out of cloud backups**
 
 In `app/android/app/src/main/AndroidManifest.xml`, add `android:allowBackup="false"` to the `<application` element (next to `android:networkSecurityConfig`):
 
@@ -201,6 +201,8 @@ In `app/android/app/src/main/AndroidManifest.xml`, add `android:allowBackup="fal
 
 - [ ] **Step 5: Static checks and build**
 
+Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #30
+
 Run: `cd app && flutter analyze && flutter test`
 Expected: `No issues found!`; all existing tests pass.
 
@@ -208,7 +210,7 @@ Run (if `app/assets/web/` is missing, first run `./scripts/build-web.sh` from th
 `cd app && flutter build apk --debug --dart-define=SPIKE=secure_storage`
 Expected: `✓ Built build/app/outputs/flutter-apk/app-debug.apk`. A Gradle/manifest error here is a FAIL of the "builds with this app" half of assumption 9: record it and go to Task 1b.
 
-- [ ] **Step 6: On-device check (Xiaomi, USB)**
+- [ ] **Step 6: On-device check (Xiaomi, USB)** — Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #30
 
 ```bash
 cd app
@@ -237,7 +239,7 @@ adb shell run-as com.anyidea.avatar_app sh -c 'grep -rl V shared_prefs || echo N
 
 PASS = all three expectations hold. Tap 清除 afterwards.
 
-- [ ] **Step 7: Record the result**
+- [x] **Step 7: Record the result**
 
 PASS: add one line to the Plan 3 row notes in `docs/project/roadmap.md`: "Plan B Task 1: flutter_secure_storage 11.2.0 verified on Xiaomi <model> (write/readback, force-stop, reinstall-in-place, not plaintext) on <date>."
 
@@ -250,7 +252,7 @@ FAIL or no device within 20 minutes: append to `docs/blockers.md`:
 - Impact: credential storage. FAIL → run Task 1b (platform-channel Keystore). NOT RUN → continue; re-run Step 6 before Task 11 device acceptance.
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app/pubspec.yaml app/pubspec.lock app/lib/spike/secure_storage_spike.dart app/lib/main.dart app/android/app/src/main/AndroidManifest.xml docs/project/roadmap.md
@@ -482,12 +484,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   export function loadIdentityConfig(env: Record<string, string | undefined>, repoRoot: string): IdentityConfig;
   ```
 
-- [ ] **Step 0: Confirm Task 0 is in place**
+- [x] **Step 0: Confirm Task 0 is in place**
 
 Run: `grep -n "Wiring point: Plan B" gateway/src/index.ts && grep -n "export function devContextResolver" gateway/src/session/context.ts && npm test -w gateway`
 Expected: both greps print one line; all gateway tests PASS. If not, stop: Task 0 is a prerequisite.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `gateway/test/config.test.ts`, change the imports to:
 
@@ -553,12 +555,12 @@ describe('identity config', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/config.test.ts`
 Expected: FAIL; `loadIdentityConfig` is not exported (`TypeError: loadIdentityConfig is not a function` / TS error).
 
-- [ ] **Step 3: Implement (append to `config.ts`)**
+- [x] **Step 3: Implement (append to `config.ts`)**
 
 Add one import line at the top of `gateway/src/config.ts` (below the existing `node:fs` import):
 
@@ -640,12 +642,12 @@ export function loadIdentityConfig(env: Record<string, string | undefined>, repo
 
 (Probed with zod 4.6.5: `z.coerce.number().default(n)` returns `n` for a missing key; `'abc'` fails with `expected number, received NaN`; enum failures do not echo the input.)
 
-- [ ] **Step 4: Run tests and typecheck**
+- [x] **Step 4: Run tests and typecheck**
 
 Run: `npm test -w gateway -- test/config.test.ts && npm run typecheck -w gateway`
 Expected: PASS (existing config tests unchanged, including the whole-object `loadConfig` `toEqual`); typecheck clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gateway/src/config.ts gateway/test/config.test.ts
@@ -700,7 +702,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   Times are epoch milliseconds (INTEGER). Plan C appends migration steps for `messages`, `messages_fts`, `user_facts`, `relationship_notes`, `episodes`, `followups`, `memory_changes`, each with `owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE` so `deleteOwner` stays a complete delete, and extends `MemoryStore` with owner-scoped methods.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/memory-store.test.ts`:
 
@@ -886,12 +888,12 @@ describe('SqliteMemoryStore', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/memory-store.test.ts`
 Expected: FAIL with `Failed to load url ../src/memory/db.ts` (module not found).
 
-- [ ] **Step 3: Implement migrations**
+- [x] **Step 3: Implement migrations**
 
 Create `gateway/src/memory/migrations.ts`:
 
@@ -962,7 +964,7 @@ export function migrate(db: DatabaseSync, steps: readonly string[] = MIGRATIONS)
 
 (Probed: `PRAGMA user_version` set inside a rolled-back transaction keeps the old value; `STRICT`, `CHECK`, and `ON DELETE CASCADE` behave as the tests expect on SQLite 3.53.4.)
 
-- [ ] **Step 4: Implement `openDatabase`**
+- [x] **Step 4: Implement `openDatabase`**
 
 Create `gateway/src/memory/db.ts`:
 
@@ -1003,7 +1005,7 @@ export function openDatabase(path: string, opts: OpenDatabaseOptions): DatabaseS
 }
 ```
 
-- [ ] **Step 5: Implement the store**
+- [x] **Step 5: Implement the store**
 
 Create `gateway/src/memory/store.ts`:
 
@@ -1188,12 +1190,12 @@ export class SqliteMemoryStore implements MemoryStore {
 }
 ```
 
-- [ ] **Step 6: Run tests and typecheck**
+- [x] **Step 6: Run tests and typecheck**
 
 Run: `npm test -w gateway -- test/memory-store.test.ts && npm run typecheck -w gateway`
 Expected: all `memory-store` tests PASS; typecheck clean. Then `git status --short` must show no new files outside `gateway/src/memory/` and the test (tests wrote only to the OS temp dir).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gateway/src/memory/db.ts gateway/src/memory/migrations.ts gateway/src/memory/store.ts gateway/test/memory-store.test.ts
@@ -1223,7 +1225,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   `ended` reasons: `client_end`, `grace_expired`, `owner_replaced`, `owner_deleted`, `shutdown`, `unclaimed` (never for unstarted sessions, so `unclaimed`/`start_failed` never reach `ended`). Hook exceptions are caught and logged as `session_lifecycle_failed`. Plan C attaches end-of-session work to `ended`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/manager.test.ts`:
 
@@ -1351,12 +1353,12 @@ describe('SessionManager lifecycle hook', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/manager.test.ts`
 Expected: FAIL. TypeScript/runtime: `SessionLifecycle` is not exported, `endOwner` is not a function, and the owner tests see `size` 2 (no replacement).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Replace `gateway/src/session/manager.ts` with (unchanged logic is kept verbatim; new parts: `SessionLifecycle`, `Entry.ctx`, the `create` replacement, `endOwner`, the two `notify` calls):
 
@@ -1563,12 +1565,12 @@ export class SessionManager {
 
 (Before replacing, diff the Task 0 version of `manager.ts` against the "unchanged" parts above; if Task 0 changed anything else, keep Task 0's version of that part.)
 
-- [ ] **Step 4: Run the full gateway suite and typecheck**
+- [x] **Step 4: Run the full gateway suite and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS (server/session tests unchanged: dev contexts have no `ownerId`, so nothing is replaced); typecheck clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gateway/src/session/manager.ts gateway/test/manager.test.ts
@@ -1613,7 +1615,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   Layering: `identity` imports only types from `session/context.ts` and `session/manager.ts` (plus `devContext`); `session` never imports `identity`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/identity.test.ts`:
 
@@ -1795,12 +1797,12 @@ describe('DeviceRegistry', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/identity.test.ts`
 Expected: FAIL with `Failed to load url ../src/identity/registry.ts`.
 
-- [ ] **Step 3: Implement the token helpers**
+- [x] **Step 3: Implement the token helpers**
 
 Create `gateway/src/identity/tokens.ts`:
 
@@ -1823,7 +1825,7 @@ export function shortHash(id: string): string {
 }
 ```
 
-- [ ] **Step 4: Implement the registry**
+- [x] **Step 4: Implement the registry**
 
 Create `gateway/src/identity/registry.ts`:
 
@@ -1958,12 +1960,12 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
 }
 ```
 
-- [ ] **Step 5: Run tests and typecheck**
+- [x] **Step 5: Run tests and typecheck**
 
 Run: `npm test -w gateway -- test/identity.test.ts && npm run typecheck -w gateway`
 Expected: PASS; typecheck clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gateway/src/identity/tokens.ts gateway/src/identity/registry.ts gateway/test/identity.test.ts
@@ -1992,7 +1994,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   When `identity` is absent, the three new routes answer 404 (dev mode). CORS: `Access-Control-Allow-Methods: POST, PATCH, DELETE, OPTIONS`, `Access-Control-Allow-Headers: content-type, x-app-secret, authorization`.
 - Produces (`GatewayServerOptions` additions): `identity?: IdentityService`, `registerRateLimit?: { max: number; windowMs: number }`, `devToken?: string`.
 
-- [ ] **Step 1: Write the failing HTTP tests**
+- [x] **Step 1: Write the failing HTTP tests**
 
 Create `gateway/test/identity-http.test.ts`:
 
@@ -2250,12 +2252,12 @@ describe('dev owner deletion', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/identity-http.test.ts`
 Expected: FAIL. TypeScript rejects `identity`/`registerRateLimit`/`devToken` options; at runtime `/device/register` returns 404 and preflight methods are `POST, OPTIONS`.
 
-- [ ] **Step 3: Add the request schemas**
+- [x] **Step 3: Add the request schemas**
 
 Append to `gateway/src/server/schemas.ts`:
 
@@ -2275,7 +2277,7 @@ export const StyleRequestSchema = z.object({ style: styleId });
 export const OwnerIdSchema = z.uuid();
 ```
 
-- [ ] **Step 4: Update `server.ts`**
+- [x] **Step 4: Update `server.ts`**
 
 1. Replace the import block at the top of `gateway/src/server/server.ts` with (keep any Task 0 import that is not listed here):
 
@@ -2511,12 +2513,12 @@ class RateLimiter {
 
 (Rate limits count per source address; behind `adb reverse` every request comes from 127.0.0.1, so in practice each bucket is global. That is acceptable for the POC and documented here.)
 
-- [ ] **Step 5: Run the full gateway suite and typecheck**
+- [x] **Step 5: Run the full gateway suite and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, including the existing `server.test.ts` (Task 0's CORS test only checks that `authorization` is contained); typecheck clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gateway/src/server/schemas.ts gateway/src/server/server.ts gateway/test/identity-http.test.ts
@@ -2538,7 +2540,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 No unit test (index.ts is composition only, as before); verification is typecheck plus the live smoke below.
 
-- [ ] **Step 1: Add the imports**
+- [x] **Step 1: Add the imports**
 
 Append below the existing imports in `gateway/src/index.ts` (separate lines keep the shared file append-only):
 
@@ -2549,7 +2551,7 @@ import { openDatabase } from './memory/db.ts';
 import { SqliteMemoryStore } from './memory/store.ts';
 ```
 
-- [ ] **Step 2: Build the store and registry before the manager**
+- [x] **Step 2: Build the store and registry before the manager**
 
 Insert directly after the Task 0 line that defines `const roles = ...` (and before `const manager = new SessionManager(`):
 
@@ -2572,7 +2574,7 @@ const registry = memoryDb
 log('identity_mode', { enabled: registry !== null, devEndpoints: identityConfig.enableDevEndpoints });
 ```
 
-- [ ] **Step 3: The two edits to existing lines**
+- [x] **Step 3: The two edits to existing lines**
 
 a) In the `new SessionManager(` call, add a fifth argument after `config.sessionStartTimeoutMs,`:
 
@@ -2597,7 +2599,7 @@ with:
 
 (keep Task 0's comment line `// Wiring point: Plan B swaps in the MemoryStore-backed resolver here.` above it).
 
-- [ ] **Step 4: Append orphan cleanup and DB close at the end of the file**
+- [x] **Step 4: Append orphan cleanup and DB close at the end of the file**
 
 ```ts
 // Orphan owners (registered, never connected, older than ORPHAN_OWNER_DAYS): at startup, then daily.
@@ -2614,7 +2616,7 @@ process.on('SIGINT', closeMemoryDb);
 process.on('SIGTERM', closeMemoryDb);
 ```
 
-- [ ] **Step 5: Document the env vars**
+- [x] **Step 5: Document the env vars**
 
 Append to `gateway/.env.example`:
 
@@ -2634,12 +2636,13 @@ Append to `gateway/.env.example`:
 # DEV_TOKEN=
 ```
 
-- [ ] **Step 6: Tests and typecheck**
+- [x] **Step 6: Tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS; typecheck clean.
 
 - [ ] **Step 7: Live smoke on Mock (port 8797; do not touch the user's 8787 gateway)**
+  Not run (user instruction: Mock only, no services); see docs/blockers.md #31
 
 Terminal 1:
 
@@ -2671,7 +2674,7 @@ Stop the gateway with Ctrl-C and confirm the log ends with `session_destroyed` l
 
 If any expectation differs, fix before committing; record the real outputs in the commit body.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gateway/src/index.ts gateway/.env.example
@@ -2710,7 +2713,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   `/session/resume` never sends the bearer (the resume token is bound to the session).
 
-- [ ] **Step 1: Write the failing transport test**
+- [x] **Step 1: Write the failing transport test**
 
 Create `app/test/native_gateway_transport_test.dart`:
 
@@ -2785,7 +2788,7 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Update the fake transport and add failing client tests**
+- [x] **Step 2: Update the fake transport and add failing client tests**
 
 In `app/test/native_gateway_client_test.dart`, replace the `FakeGatewayTransport` class with:
 
@@ -2919,12 +2922,12 @@ and add inside `main()` (after the existing tests):
   });
 ```
 
-- [ ] **Step 3: Run them to verify they fail**
+- [x] **Step 3: Run them to verify they fail**
 
 Run: `cd app && flutter test test/native_gateway_transport_test.dart test/native_gateway_client_test.dart`
 Expected: FAIL at compile time: `No named parameter with the name 'bearer'`, `The method 'patch' isn't defined`, `Undefined class 'DeviceTokenProvider'`, `No named parameter with the name 'identity'`.
 
-- [ ] **Step 4: Implement the transport**
+- [x] **Step 4: Implement the transport**
 
 Replace `app/lib/native_gateway/transports.dart` with:
 
@@ -3036,7 +3039,7 @@ class _IoNativeSocket implements NativeSocket {
 }
 ```
 
-- [ ] **Step 5: Implement the client change**
+- [x] **Step 5: Implement the client change**
 
 In `app/lib/native_gateway/gateway_client.dart`:
 
@@ -3098,12 +3101,12 @@ abstract interface class DeviceTokenProvider {
 
 (`_tryResume` keeps calling `_post('/session/resume', {...})` without a bearer.)
 
-- [ ] **Step 6: Run tests and analyze**
+- [x] **Step 6: Run tests and analyze**
 
 Run: `cd app && flutter test test/native_gateway_transport_test.dart test/native_gateway_client_test.dart && flutter analyze && flutter test`
 Expected: all PASS (existing client tests unchanged); `No issues found!`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/lib/native_gateway/transports.dart app/lib/native_gateway/gateway_client.dart app/test/native_gateway_transport_test.dart app/test/native_gateway_client_test.dart
@@ -3149,7 +3152,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   }
   ```
 
-- [ ] **Step 1: Write the shared fakes**
+- [x] **Step 1: Write the shared fakes**
 
 Create `app/test/support/identity_fakes.dart`:
 
@@ -3196,7 +3199,7 @@ class ThrowingCredentialStore implements CredentialStore {
 }
 ```
 
-- [ ] **Step 2: Write the failing API test**
+- [x] **Step 2: Write the failing API test**
 
 Create `app/test/identity_api_test.dart`:
 
@@ -3266,7 +3269,7 @@ void main() {
 }
 ```
 
-- [ ] **Step 3: Write the failing identity and storage tests**
+- [x] **Step 3: Write the failing identity and storage tests**
 
 Create `app/test/device_identity_test.dart`:
 
@@ -3387,12 +3390,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 4: Run them to verify they fail**
+- [x] **Step 4: Run them to verify they fail**
 
 Run: `cd app && flutter test test/identity_api_test.dart test/device_identity_test.dart test/secure_credential_store_test.dart`
 Expected: FAIL at compile time: the `package:avatar_app/identity/...` files do not exist.
 
-- [ ] **Step 5: Implement the credential stores**
+- [x] **Step 5: Implement the credential stores**
 
 Create `app/lib/identity/credential_store.dart`:
 
@@ -3441,7 +3444,7 @@ class SecureCredentialStore implements CredentialStore {
 }
 ```
 
-- [ ] **Step 6: Implement the API client**
+- [x] **Step 6: Implement the API client**
 
 Create `app/lib/identity/identity_api.dart`:
 
@@ -3524,7 +3527,7 @@ class IdentityApi implements IdentityBackend {
 }
 ```
 
-- [ ] **Step 7: Implement `DeviceIdentity`**
+- [x] **Step 7: Implement `DeviceIdentity`**
 
 Create `app/lib/identity/device_identity.dart`:
 
@@ -3623,12 +3626,12 @@ class DeviceIdentity implements DeviceTokenProvider {
 }
 ```
 
-- [ ] **Step 8: Run tests and analyze**
+- [x] **Step 8: Run tests and analyze**
 
 Run: `cd app && flutter test test/identity_api_test.dart test/device_identity_test.dart test/secure_credential_store_test.dart && flutter analyze`
 Expected: PASS; `No issues found!`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add app/lib/identity/credential_store.dart app/lib/identity/secure_credential_store.dart app/lib/identity/identity_api.dart app/lib/identity/device_identity.dart app/test/support/identity_fakes.dart app/test/identity_api_test.dart app/test/device_identity_test.dart app/test/secure_credential_store_test.dart
@@ -3668,7 +3671,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   Widget keys used by tests and later plans: `style-grandchild`, `style-old-friend`, `style-confirm`, `style-cancel`, `settings`. Sample voice: `StyleOption.sampleAsset` is `null` for both; Plan A adds clips and a 试听 button.
 
-- [ ] **Step 1: Write the failing picker test**
+- [x] **Step 1: Write the failing picker test**
 
 Create `app/test/style_picker_test.dart`:
 
@@ -3727,7 +3730,7 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Write the failing shell test**
+- [x] **Step 2: Write the failing shell test**
 
 Create `app/test/app_shell_test.dart`:
 
@@ -3830,12 +3833,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 3: Run them to verify they fail**
+- [x] **Step 3: Run them to verify they fail**
 
 Run: `cd app && flutter test test/style_picker_test.dart test/app_shell_test.dart`
 Expected: FAIL at compile time: `style_picker_page.dart` and `app_shell.dart` do not exist.
 
-- [ ] **Step 4: Implement the style options (app-side config)**
+- [x] **Step 4: Implement the style options (app-side config)**
 
 Create `app/lib/identity/styles.dart`:
 
@@ -3860,7 +3863,7 @@ const styleOptions = <StyleOption>[
 ];
 ```
 
-- [ ] **Step 5: Implement the picker and settings pages**
+- [x] **Step 5: Implement the picker and settings pages**
 
 Create `app/lib/identity/style_picker_page.dart`:
 
@@ -4058,7 +4061,7 @@ class _StyleSettingsPageState extends State<StyleSettingsPage> {
 }
 ```
 
-- [ ] **Step 6: Implement the shell**
+- [x] **Step 6: Implement the shell**
 
 Create `app/lib/identity/app_shell.dart`:
 
@@ -4190,12 +4193,12 @@ class _SettingsButton extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 7: Run the widget tests**
+- [x] **Step 7: Run the widget tests**
 
 Run: `cd app && flutter test test/style_picker_test.dart test/app_shell_test.dart`
 Expected: PASS.
 
-- [ ] **Step 8: Pass the bearer source into `AvatarPage` (Plan A's file, 3 lines)**
+- [x] **Step 8: Pass the bearer source into `AvatarPage` (Plan A's file, 3 lines)**
 
 In `app/lib/avatar_page.dart`:
 
@@ -4215,7 +4218,7 @@ and in `_startNativeSession`, add one named argument to the `NativeGatewayClient
 
 (`DeviceTokenProvider` comes from the already imported `native_gateway/gateway_client.dart`.) Make no other change to this file; mention it in the commit body so the A/B merge keeps it.
 
-- [ ] **Step 9: Wire `main.dart`**
+- [x] **Step 9: Wire `main.dart`**
 
 Replace `app/lib/main.dart` with:
 
@@ -4291,13 +4294,15 @@ class _HomeState extends State<_Home> {
 
 - [ ] **Step 10: Analyze, full test run, debug build**
 
+  Analyze and full test run done (analyze clean, 90 tests pass). The `flutter build apk --debug` part is Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #30 (`app/dev.json` does not exist). Step left unticked.
+
 Run: `cd app && flutter analyze && flutter test`
 Expected: `No issues found!`; all tests PASS.
 
 Run: `cd app && flutter build apk --debug --dart-define-from-file=dev.json`
 Expected: `✓ Built build/app/outputs/flutter-apk/app-debug.apk`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add app/lib/identity/styles.dart app/lib/identity/style_picker_page.dart app/lib/identity/app_shell.dart app/lib/main.dart app/lib/avatar_page.dart app/test/style_picker_test.dart app/test/app_shell_test.dart
@@ -4322,7 +4327,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: everything above.
 - Produces: recorded evidence for the Plan B gate.
 
-- [ ] **Step 1: Full automated run**
+- [x] **Step 1: Full automated run**
 
 Run: `npm test && npm run typecheck`
 Expected: protocol, gateway, avatar-core PASS; typecheck clean. Record the exact counts.
@@ -4330,7 +4335,7 @@ Expected: protocol, gateway, avatar-core PASS; typecheck clean. Record the exact
 Run: `cd app && flutter analyze && flutter test`
 Expected: `No issues found!`; all PASS. Record the count.
 
-- [ ] **Step 2: Map the Plan B gate to evidence**
+- [x] **Step 2: Map the Plan B gate to evidence**
 
 | Gate item (spec "各计划门槛 → B") | Evidence |
 |---|---|
@@ -4343,6 +4348,7 @@ Expected: `No issues found!`; all PASS. Record the count.
 Confirm each named test appears as passed in the Step 1 output.
 
 - [ ] **Step 3: Device acceptance (Xiaomi, USB)**
+  Not run (user instruction: Mock only, no services/device/real model); every gate item is NOT RUN, see docs/blockers.md #30, #32-#37
 
 Ask the user before stopping the live 8787 Qwen gateway. With approval, restart it with identity enabled (keep their adapter settings; add only):
 
@@ -4362,11 +4368,11 @@ Check, recording each result:
 
 If no device is available: time-box 20 minutes, record each unrun item in `docs/blockers.md` (status NOT RUN, impact, next step) and say so in the report. Never mark these as passed.
 
-- [ ] **Step 4: Update the roadmap**
+- [x] **Step 4: Update the roadmap**
 
 In `docs/project/roadmap.md`: set the Plan 3 row to "Task 0 done; Plan B (identity & binding) complete: <counts from Step 1>; device acceptance <PASS / partial, see blockers>"; add to Next steps "A+B merge gate: after style switch, the next session's voice and persona change together"; link this plan.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/project/roadmap.md docs/superpowers/plans/2026-10-17-plan3-b-identity-binding.md

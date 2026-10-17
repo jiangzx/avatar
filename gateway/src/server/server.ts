@@ -1,12 +1,13 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import { FRAME_AI, FRAME_MIC, MIC_FRAME_SAMPLES, decodeAudioFrame, encodeAudioFrame } from '@anyidea/protocol';
+import type { IdentityService } from '../identity/registry.ts';
 import { log } from '../log.ts';
 import type { ContextResolver } from '../session/context.ts';
 import type { SessionManager } from '../session/manager.ts';
 import type { Transport } from '../session/session.ts';
 import { safeEqual } from '../session/tokens.ts';
-import { ResumeRequestSchema, parseClientMessage } from './schemas.ts';
+import { OwnerIdSchema, RegisterRequestSchema, ResumeRequestSchema, StyleRequestSchema, parseClientMessage } from './schemas.ts';
 
 export interface GatewayServerOptions {
   manager: SessionManager;
@@ -21,6 +22,12 @@ export interface GatewayServerOptions {
   heartbeatMs?: number;
   maxSessions?: number;
   sessionRateLimit?: { max: number; windowMs: number };
+  /** Device registration and agent settings. Absent = identity disabled: the identity routes answer 404. */
+  identity?: IdentityService;
+  /** Separate bucket from sessionRateLimit. */
+  registerRateLimit?: { max: number; windowMs: number };
+  /** Set only when ENABLE_DEV_ENDPOINTS=1; DELETE /dev/owner/:id must carry it in x-dev-token. */
+  devToken?: string;
 }
 
 const BEARER = /^Bearer ([A-Za-z0-9_-]{16,128})$/;
@@ -33,9 +40,13 @@ function bearerToken(req: IncomingMessage): string | undefined | null {
 }
 
 export function createGatewayServer(opts: GatewayServerOptions): Server {
-  const rateLimiter = opts.sessionRateLimit ? new SessionRateLimiter(opts.sessionRateLimit) : null;
+  const limiters: Limiters = {
+    session: opts.sessionRateLimit ? new RateLimiter(opts.sessionRateLimit) : null,
+    register: opts.registerRateLimit ? new RateLimiter(opts.registerRateLimit) : null,
+  };
   const server = createServer((req, res) => {
-    handleHttp(req, res, opts, rateLimiter).catch(() => {
+    handleHttp(req, res, opts, limiters).catch(() => {
+      log('http_internal_error', {});
       if (!res.headersSent) json(res, 500, { error: 'internal' });
     });
   });
@@ -71,13 +82,40 @@ export function createGatewayServer(opts: GatewayServerOptions): Server {
   return server;
 }
 
-async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions, rateLimiter: SessionRateLimiter | null): Promise<void> {
+interface Limiters {
+  session: RateLimiter | null;
+  register: RateLimiter | null;
+}
+
+type Route =
+  | { kind: 'session' }
+  | { kind: 'resume' }
+  | { kind: 'register'; identity: IdentityService }
+  | { kind: 'style'; identity: IdentityService }
+  | { kind: 'deleteOwner'; identity: IdentityService; devToken: string; ownerId: string };
+
+const DEV_OWNER_PATH = /^\/dev\/owner\/([^/]+)$/;
+
+/** Unknown, disabled (identity off) and dev-only (dev endpoints off) routes all resolve to null → 404. */
+function matchRoute(method: string | undefined, path: string, opts: GatewayServerOptions): Route | null {
+  if (method === 'POST' && path === '/session') return { kind: 'session' };
+  if (method === 'POST' && path === '/session/resume') return { kind: 'resume' };
+  const identity = opts.identity;
+  if (!identity) return null;
+  if (method === 'POST' && path === '/device/register') return { kind: 'register', identity };
+  if (method === 'PATCH' && path === '/agent/style') return { kind: 'style', identity };
+  const dev = DEV_OWNER_PATH.exec(path);
+  if (method === 'DELETE' && dev && opts.devToken) return { kind: 'deleteOwner', identity, devToken: opts.devToken, ownerId: dev[1]! };
+  return null;
+}
+
+async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions, limiters: Limiters): Promise<void> {
   const origin = req.headers.origin;
   if (typeof origin === 'string' && opts.allowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Headers', 'content-type, x-app-secret, authorization');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, PATCH, DELETE, OPTIONS');
   }
   res.setHeader('Cache-Control', 'no-store');
   const path = new URL(req.url ?? '/', 'http://localhost').pathname;
@@ -89,7 +127,8 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
     json(res, 200, { ok: true });
     return;
   }
-  if (req.method !== 'POST') {
+  const route = matchRoute(req.method, path, opts);
+  if (!route) {
     json(res, 404, { error: 'not_found' });
     return;
   }
@@ -98,43 +137,121 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
     json(res, 401, { error: 'unauthorized' });
     return;
   }
-  if (path === '/session') {
-    if (opts.maxSessions !== undefined && opts.manager.size >= opts.maxSessions) {
-      json(res, 503, { error: 'session_capacity' });
+  switch (route.kind) {
+    case 'session':
+      createSession(req, res, opts, limiters.session);
       return;
-    }
-    const source = req.socket.remoteAddress ?? 'unknown';
-    if (rateLimiter && !rateLimiter.allow(source)) {
-      json(res, 429, { error: 'rate_limited' });
+    case 'resume':
+      await resumeSession(req, res, opts);
       return;
-    }
-    const bearer = bearerToken(req);
-    const resolved = bearer === null ? null : opts.contextResolver.resolve(bearer);
-    if (!resolved?.ok) {
-      json(res, 401, { error: 'unauthorized' });
+    case 'register':
+      await registerDevice(req, res, route.identity, limiters.register);
       return;
-    }
-    json(res, 200, opts.manager.create(resolved.ctx));
-    return;
+    case 'style':
+      await changeStyle(req, res, route.identity);
+      return;
+    case 'deleteOwner':
+      deleteOwner(req, res, opts.manager, route);
+      return;
   }
-  if (path === '/session/resume') {
-    const parsed = ResumeRequestSchema.safeParse(await readJson(req, 4096));
-    if (!parsed.success) {
-      json(res, 400, { error: 'bad_request' });
-      return;
-    }
-    const tokens = opts.manager.resume(parsed.data.sessionId, parsed.data.resumeToken);
-    if (!tokens) {
-      json(res, 404, { error: 'session_gone' });
-      return;
-    }
-    json(res, 200, tokens);
-    return;
-  }
-  json(res, 404, { error: 'not_found' });
 }
 
-class SessionRateLimiter {
+function createSession(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions, limiter: RateLimiter | null): void {
+  if (opts.maxSessions !== undefined && opts.manager.size >= opts.maxSessions) {
+    json(res, 503, { error: 'session_capacity' });
+    return;
+  }
+  if (limiter && !limiter.allow(req.socket.remoteAddress ?? 'unknown')) {
+    json(res, 429, { error: 'rate_limited' });
+    return;
+  }
+  // Owner and agent come only from the bearer; any ids in the body are ignored.
+  const bearer = bearerToken(req);
+  const resolved = bearer === null ? null : opts.contextResolver.resolve(bearer);
+  if (!resolved?.ok) {
+    json(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  json(res, 200, opts.manager.create(resolved.ctx));
+}
+
+async function resumeSession(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions): Promise<void> {
+  const parsed = ResumeRequestSchema.safeParse(await readJson(req, 4096));
+  if (!parsed.success) {
+    json(res, 400, { error: 'bad_request' });
+    return;
+  }
+  const tokens = opts.manager.resume(parsed.data.sessionId, parsed.data.resumeToken);
+  if (!tokens) {
+    json(res, 404, { error: 'session_gone' });
+    return;
+  }
+  json(res, 200, tokens);
+}
+
+const REGISTER_ERROR_STATUS = { unknown_style: 400, owner_capacity: 503, register_daily_cap: 429 } as const;
+
+async function registerDevice(req: IncomingMessage, res: ServerResponse, identity: IdentityService, limiter: RateLimiter | null): Promise<void> {
+  if (limiter && !limiter.allow(req.socket.remoteAddress ?? 'unknown')) {
+    json(res, 429, { error: 'rate_limited' });
+    return;
+  }
+  const parsed = RegisterRequestSchema.safeParse(await readJson(req, 1024));
+  if (!parsed.success) {
+    json(res, 400, { error: 'bad_request' });
+    return;
+  }
+  const result = identity.register(parsed.data.style);
+  if (!result.ok) {
+    json(res, REGISTER_ERROR_STATUS[result.error], { error: result.error });
+    return;
+  }
+  json(res, 200, { deviceToken: result.deviceToken });
+}
+
+async function changeStyle(req: IncomingMessage, res: ServerResponse, identity: IdentityService): Promise<void> {
+  const bearer = bearerToken(req);
+  if (typeof bearer !== 'string') {
+    json(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  const parsed = StyleRequestSchema.safeParse(await readJson(req, 1024));
+  if (!parsed.success) {
+    json(res, 400, { error: 'bad_request' });
+    return;
+  }
+  const result = identity.setStyle(bearer, parsed.data.style);
+  if (result === 'unauthorized') {
+    json(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  if (result === 'unknown_style') {
+    json(res, 400, { error: 'unknown_style' });
+    return;
+  }
+  json(res, 200, { style: parsed.data.style }); // takes effect from the next session
+}
+
+function deleteOwner(req: IncomingMessage, res: ServerResponse, manager: SessionManager, route: Extract<Route, { kind: 'deleteOwner' }>): void {
+  const devToken = req.headers['x-dev-token'];
+  if (typeof devToken !== 'string' || !safeEqual(devToken, route.devToken)) {
+    json(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  const id = OwnerIdSchema.safeParse(route.ownerId);
+  if (!id.success) {
+    json(res, 400, { error: 'bad_request' });
+    return;
+  }
+  manager.endOwner(id.data, 'owner_deleted'); // first, so the session end is recorded before the cascade
+  if (!route.identity.deleteOwner(id.data)) {
+    json(res, 404, { error: 'owner_not_found' });
+    return;
+  }
+  res.writeHead(204).end();
+}
+
+class RateLimiter {
   private readonly attempts = new Map<string, number[]>();
 
   constructor(private readonly opts: { max: number; windowMs: number }, private readonly now = Date.now) {}
