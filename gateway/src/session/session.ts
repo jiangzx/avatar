@@ -38,6 +38,7 @@ export interface SessionDeps {
   /** Receives each finalized reply's metrics (eval harness). Production only logs them. */
   onReplyMetrics?: (m: ReplyMetrics) => void;
   summarizePolicy?: PolicySpec;
+  maxOutputTokens?: number;
   /** Instruction size budget (gateway/config/memory.json); undefined = unbounded (tests). */
   budget?: InstructionBudget;
   /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
@@ -238,7 +239,7 @@ export class Session {
   private sessionConfig(): SessionConfig {
     const instructions = this.instructions();
     this.lastInstructionsChars = instructions.length;
-    return { instructions, tools: [PERFORM_ACTION_TOOL], voice: this.context.voice };
+    return { instructions, tools: [PERFORM_ACTION_TOOL], voice: this.context.voice, ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
   }
 
   /** Sends fresh instructions to the live model session and remembers their size. */
@@ -385,6 +386,8 @@ export class Session {
     // Skip the note when nothing was played: an empty quote would mislead the model.
     if (interrupted && text.length > 0 && !this.adapter.supportsPlaybackTruncate) {
       this.adapter.injectContextNote(`助手上一句只说到：「${text}」，被用户打断。`);
+      // The ledger line now ends with （被用户打断）: send it as instructions, no extra user item or reply.
+      this.pushInstructions();
     }
     this.maybeSummarize();
   }

@@ -12,6 +12,8 @@ export interface SessionConfig {
   tools: ToolSpec[];
   /** Per-session voice; undefined = the adapter's configured default. */
   voice?: string;
+  /** Per-response output token cap; undefined = no cap (see docs/research/qwen-plan-a-validation.md §3). */
+  maxOutputTokens?: number;
 }
 
 /** What the Director wants said. Qwen speaks from `instruction`; adapters that cannot prompt the model speak `fallbackText`. */

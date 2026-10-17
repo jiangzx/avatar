@@ -2335,7 +2335,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   `injectContextNote()` no longer writes a user item; Session pushes instructions that carry the ledger's "（被用户打断）" mark.
 - Produces (`SessionDeps`): `maxOutputTokens?: number`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `gateway/test/qwen.test.ts`, change the import to
 
@@ -2428,12 +2428,12 @@ Append these two tests to `describe('Session', ...)` in `gateway/test/session.te
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/qwen.test.ts test/session.test.ts`
 Expected: FAIL — `proactiveEvents`/`RESPONSE_INSTRUCTIONS` not exported; `maxOutputTokens` not in `SessionConfig`/`SessionDeps`; Mock instructions lack the interruption mark.
 
-- [ ] **Step 3: Implement the adapter changes**
+- [x] **Step 3: Implement the adapter changes**
 
 `gateway/src/adapters/types.ts`, inside `SessionConfig` after `voice?: string;`:
 
@@ -2499,7 +2499,7 @@ Expected: FAIL — `proactiveEvents`/`RESPONSE_INSTRUCTIONS` not exported; `maxO
   injectContextNote(_text: string): void {}
   ```
 
-- [ ] **Step 4: Implement the Session changes**
+- [x] **Step 4: Implement the Session changes**
 
 In `gateway/src/session/session.ts`:
 - `SessionDeps`, add:
@@ -2525,7 +2525,7 @@ In `gateway/src/session/session.ts`:
     }
   ```
 
-- [ ] **Step 5: Wire the cap in `index.ts` (add-only)**
+- [x] **Step 5: Wire the cap in `index.ts` (add-only)**
 
 Inside the `new Session({ ... }, ctx)` deps literal, after `summarizePolicy: pacing.policies.summarize,` insert:
 
@@ -2533,12 +2533,12 @@ Inside the `new Session({ ... }, ctx)` deps literal, after `summarizePolicy: pac
       ...(pacing.output.maxTokens !== null ? { maxOutputTokens: pacing.output.maxTokens } : {}),
 ```
 
-- [ ] **Step 6: Run tests and typecheck**
+- [x] **Step 6: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean. The existing `'client interruption cancels the reply…'` test still sees one Mock note.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gateway/src/adapters/types.ts gateway/src/adapters/qwen.ts gateway/src/session/session.ts gateway/src/index.ts gateway/test/qwen.test.ts gateway/test/session.test.ts

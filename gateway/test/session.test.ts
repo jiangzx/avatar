@@ -440,4 +440,43 @@ describe('Session', () => {
     expect(s.session.ledger.summary).not.toBe('');
     expect(s.mocks[0].instructions.length).toBeLessThanOrEqual(200 + 4);
   });
+
+  it('carries the interruption into the model instructions', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(150);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
+    expect(s.mocks[0].instructions).toContain('（被用户打断）');
+  });
+
+  it('passes the configured output cap to the adapter', async () => {
+    const seen: Array<number | undefined> = [];
+    const s = setup({
+      maxOutputTokens: 150,
+      adapterFactory: () => {
+        const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+        const connect = m.connect.bind(m);
+        vi.spyOn(m, 'connect').mockImplementation((c) => { seen.push(c.maxOutputTokens); return connect(c); });
+        return m;
+      },
+    });
+    await s.session.start(s.transport);
+    expect(seen).toEqual([150]);
+  });
+
+  it('omits the output cap when none is configured', async () => {
+    const seen: Array<SessionConfig> = [];
+    const s = setup({
+      adapterFactory: () => {
+        const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+        const connect = m.connect.bind(m);
+        vi.spyOn(m, 'connect').mockImplementation((c) => { seen.push(c); return connect(c); });
+        return m;
+      },
+    });
+    await s.session.start(s.transport);
+    expect(seen).toHaveLength(1);
+    expect('maxOutputTokens' in seen[0]!).toBe(false);
+  });
 });
