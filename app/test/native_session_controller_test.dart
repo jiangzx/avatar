@@ -507,6 +507,48 @@ void main() {
       expect([nod.action, nod.source], ['nod', 'backchannel']);
     });
 
+    int nods() => f.events.whereType<UiAvatarAction>().length;
+
+    Future<void> expectNoEndlessNods() async {
+      await tickAt(1000 + 1500);
+      final before = nods();
+      await tickAt(1000 + 1500 + 20000);
+      await tickAt(1000 + 1500 + 40000);
+      expect(nods(), before);
+      expect(states().last, isNot('listening'));
+    }
+
+    test('muting mid-speech closes the open speech so nods stop', () async {
+      f.detector.queued.add(SpeechEdge.speaking);
+      f.audio.emitFrame(Int16List(320));
+      await pumpEvents();
+      now = 1000;
+      c.setMuted(true);
+      await pumpEvents();
+      expect(f.client.sent.whereType<VadMessage>().last.state, 'silent');
+      await expectNoEndlessNods();
+    });
+
+    test('SessionResumed mid-speech resets thinking so nods stop', () async {
+      f.detector.queued.add(SpeechEdge.speaking);
+      f.audio.emitFrame(Int16List(320));
+      now = 1000;
+      f.client.emit(const SessionResumed(0));
+      await pumpEvents();
+      expect(states().last, 'idle');
+      await expectNoEndlessNods();
+    });
+
+    test('SessionReady mid-speech resets thinking so nods stop', () async {
+      f.detector.queued.add(SpeechEdge.speaking);
+      f.audio.emitFrame(Int16List(320));
+      now = 1000;
+      f.client.emit(const SessionReady('s1'));
+      await pumpEvents();
+      expect(states().last, 'idle');
+      await expectNoEndlessNods();
+    });
+
     test('first reply audio fades the filler before the reply chunk is fed', () async {
       await reachFiller();
       f.client.emit(const ResponseStart(8, 'reply'));

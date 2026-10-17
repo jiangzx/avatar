@@ -117,6 +117,8 @@ class NativeSessionController implements GatewayClientEvents {
 
   void setMuted(bool muted) {
     _muted = muted;
+    // Muting stops mic frames, so the silent edge would never arrive; close the open segment now.
+    if (muted && !_ended) _closeOpenSpeech();
     unawaited(audio.setInputEnabled(!muted));
     client.send(ClientMute(muted));
   }
@@ -235,7 +237,7 @@ class NativeSessionController implements GatewayClientEvents {
         detector.reset();
         await audio.resetResponsesBelow(0);
         client.send(ClientMute(_muted));
-        emit(const UiState('idle'));
+        await _resetThinkingTurn();
       case SessionResumed(:final lastResponseSeq):
         _seqFloor = lastResponseSeq;
         _activeSeq = null;
@@ -247,7 +249,7 @@ class NativeSessionController implements GatewayClientEvents {
         detector.reset();
         await audio.resetResponsesBelow(lastResponseSeq);
         client.send(ClientMute(_muted));
-        emit(const UiState('idle'));
+        await _resetThinkingTurn();
       case ResponseStart(:final responseSeq, :final kind):
         if (responseSeq <= _seqFloor) return;
         _closeOpenSpeech();
@@ -340,7 +342,7 @@ class NativeSessionController implements GatewayClientEvents {
         _speechOpen = false;
         _speechEndAt = now - defaultVadReleaseMs;
         _vadSilentCount++;
-        thinking?.onVadSilent(now);
+        if (thinking != null) _applyLater(thinking.onVadSilent(now));
         client.send(VadMessage('silent', now));
         _emitAudioDiag('vad.silent');
       case SpeechEdge.none:
@@ -382,6 +384,20 @@ class NativeSessionController implements GatewayClientEvents {
           diag(formatDiag(event, fields));
       }
     }
+  }
+
+  /// A session boundary discards any open speech without a silent edge; it is not a user turn,
+  /// so end the turn quietly (close listening, then cancel to idle) instead of starting thinking.
+  Future<void> _resetThinkingTurn() async {
+    final thinking = _thinking;
+    if (thinking == null) {
+      emit(const UiState('idle'));
+      return;
+    }
+    final now = _now();
+    thinking.onVadSilent(now);
+    await _apply(thinking.onCancelled(now));
+    emit(const UiState('idle'));
   }
 
   Future<void> _playFiller(FillerClip clip) async {
@@ -514,7 +530,8 @@ class NativeSessionController implements GatewayClientEvents {
     if (!_speechOpen) return;
     _speechOpen = false;
     _speechEndAt ??= _now();
-    _thinking?.onVadSilent(_now());
+    final thinking = _thinking;
+    if (thinking != null) _applyLater(thinking.onVadSilent(_now()));
     detector.reset();
     _vadSilentCount++;
     client.send(VadMessage('silent', _now()));
