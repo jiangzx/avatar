@@ -2894,7 +2894,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 - Produces (`SessionDeps`): `emotion?: EmotionConfig`. Session sends `{ type: 'avatar.emotion', emotion }` (existing protocol message; avatar supports exactly these four).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/emotion.test.ts`:
 
@@ -2989,12 +2989,12 @@ Append to `describe('Session', ...)` in `gateway/test/session.test.ts`:
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/emotion.test.ts test/session.test.ts`
 Expected: FAIL — `emotion.ts` and `config/emotion.json` not found; `emotion` unknown in `SessionDeps`.
 
-- [ ] **Step 3: Implement the config and tagger**
+- [x] **Step 3: Implement the config and tagger**
 
 Create `gateway/config/emotion.json`:
 
@@ -3118,7 +3118,7 @@ export class EmotionTagger {
 }
 ```
 
-- [ ] **Step 4: Wire it into Session**
+- [x] **Step 4: Wire it into Session**
 
 In `gateway/src/session/session.ts`:
 - imports:
@@ -3143,7 +3143,7 @@ In `gateway/src/session/session.ts`:
 - in `onUserFinal()`, after `this.director.onUserFinal(text);`: `this.emotion?.onUserFinal(text);`
 - in `end()`, after `this.director.stop();`: `this.emotion?.dispose();`
 
-- [ ] **Step 5: Wire config in `index.ts` (add-only)**
+- [x] **Step 5: Wire config in `index.ts` (add-only)**
 
 Add `import { loadEmotionConfig } from './session/emotion.ts';`, below the `log('instruction_budget', ...)` line insert `const emotion = loadEmotionConfig(`${root}config/emotion.json`);`, and inside the deps literal after `tailGuardMs: pacing.tailGuardMs,` insert:
 
@@ -3151,12 +3151,12 @@ Add `import { loadEmotionConfig } from './session/emotion.ts';`, below the `log(
       emotion,
 ```
 
-- [ ] **Step 6: Run tests and typecheck**
+- [x] **Step 6: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gateway/config/emotion.json gateway/src/session/emotion.ts gateway/src/session/session.ts gateway/src/index.ts gateway/test/emotion.test.ts gateway/test/session.test.ts

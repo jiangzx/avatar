@@ -13,6 +13,7 @@ import { ActionRouter } from './actions.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { devContext, type SessionContext } from './context.ts';
 import { Director } from './director.ts';
+import { EmotionTagger, type EmotionConfig } from './emotion.ts';
 import { InterruptCoordinator } from './interrupt.ts';
 import { buildInstructions, historyBudget, type InstructionBudget } from './instructions.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
@@ -45,6 +46,8 @@ export interface SessionDeps {
   budget?: InstructionBudget;
   /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
   rebuildTriggerRatio?: number;
+  /** Emotion lexicon (gateway/config/emotion.json); undefined = no avatar.emotion messages. */
+  emotion?: EmotionConfig;
 }
 
 interface ResponseState {
@@ -68,6 +71,7 @@ export class Session {
   private adapter: RealtimeAdapter;
   private transport: Transport | null = null;
   private readonly director: Director;
+  private readonly emotion: EmotionTagger | null;
   private readonly interrupt: InterruptCoordinator;
   private readonly actions = new ActionRouter();
   private readonly metrics = new ReplyMetricsTracker();
@@ -102,6 +106,7 @@ export class Session {
     const history = deps.budget ? historyBudget(this.persona, deps.budget) : Number.POSITIVE_INFINITY;
     this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
     this.director = new Director(deps.roles.director(ctx.roleId), { requestResponse: (kind, request) => this.requestResponse(kind, request) });
+    this.emotion = deps.emotion ? new EmotionTagger(deps.emotion, (emotion) => this.send({ type: 'avatar.emotion', emotion })) : null;
     this.interrupt = new InterruptCoordinator({
       confirmWindowMs: deps.confirmWindowMs ?? 300,
       cancel: (seq, source) => this.cancel(seq, source),
@@ -224,6 +229,7 @@ export class Session {
     this.rebuildMicBuffer.length = 0;
     this.stopKeepalive();
     this.director.stop();
+    this.emotion?.dispose();
     this.interrupt.dispose();
     this.adapter.removeAllListeners();
     this.adapter.close();
@@ -291,6 +297,7 @@ export class Session {
       this.bySeq.set(s.seq, s);
       log('response_start', { seq: s.seq, kind: s.kind });
       this.metrics.onResponseStarted(s.seq, s.kind);
+      this.emotion?.onResponseStart(s.seq);
       this.modelGenerating = true;
       this.director.onAiTurnStarted();
       const superseded = this.interrupt.onResponseStart(s.seq);
@@ -315,6 +322,7 @@ export class Session {
       if (!s) return;
       s.text += text;
       this.metrics.onText(s.seq, text.length);
+      this.emotion?.onAssistantDelta(s.seq, text);
       this.charsSinceRebuild += text.length;
       this.send({ type: 'transcript.assistant', responseSeq: s.seq, text });
     });
@@ -404,6 +412,7 @@ export class Session {
     this.turnsSinceRebuild++;
     this.charsSinceRebuild += text.length;
     this.director.onUserFinal(text);
+    this.emotion?.onUserFinal(text);
     const action = this.actions.fromKeyword(text);
     if (action) this.send({ type: 'avatar.action', action, source: 'keyword' });
     this.maybeSummarize();

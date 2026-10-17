@@ -544,4 +544,13 @@ describe('Session', () => {
     expect(seen).toHaveLength(1);
     expect('maxOutputTokens' in seen[0]!).toBe(false);
   });
+
+  it('sends avatar emotions from user and assistant text when configured', async () => {
+    const s = setup({ emotion: { defaultEmotion: 'happy', debounceMs: 0, revertAfterMs: 6000, firstSentenceMaxChars: 20, priority: ['sad', 'love', 'happy'], lexicon: { neutral: [], happy: ['你好'], sad: ['难过'], love: [] } } });
+    await greetAndFinish(s); // greeting '你好呀' has no sentence end yet; happy is already the default anyway
+    s.session.handleClientMessage({ type: 'debug.userText', text: '我今天很难过' });
+    expect(of(s.sent, 'avatar.emotion').map((m) => m.emotion)).toEqual(['sad']);
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(of(s.sent, 'avatar.emotion').map((m) => m.emotion)).toEqual(['sad', 'happy']);
+  });
 });

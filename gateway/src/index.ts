@@ -12,6 +12,7 @@ import { QwenSummarizer } from './session/qwenSummarizer.ts';
 import { SessionManager } from './session/manager.ts';
 import { Session } from './session/session.ts';
 import { createGatewayServer } from './server/server.ts';
+import { loadEmotionConfig } from './session/emotion.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
@@ -20,6 +21,7 @@ const roles = loadRoleCatalog(`${root}roles`);
 const pacing = loadPacing(`${root}config/pacing.json`);
 const budgetReport = validateBudgets(pacing, loadMemoryBudget(`${root}config/memory.json`), config.ledger, roles.pairs().map((p) => roles.buildPersona(p.roleId, p.styleId)));
 log('instruction_budget', { totalChars: budgetReport.budget.totalChars, minHistoryChars: budgetReport.minHistoryChars, ledgerCapped: budgetReport.ledgerCapped });
+const emotion = loadEmotionConfig(`${root}config/emotion.json`);
 const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
@@ -47,6 +49,7 @@ const manager = new SessionManager(
       summarizePolicy: pacing.policies.summarize,
       ...(pacing.output.maxTokens !== null ? { maxOutputTokens: pacing.output.maxTokens } : {}),
       tailGuardMs: pacing.tailGuardMs,
+      emotion,
     }, ctx),
   config.sessionGraceMs,
   config.sessionUnclaimedMs,
