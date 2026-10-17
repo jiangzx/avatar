@@ -114,7 +114,7 @@ All other A2 tasks touch only `app/` and `avatar-core/` and can run in any order
   ```
 - Produces (decisions consumed later): `RESPONSE_INSTRUCTIONS` mode (Task 6), output-cap field and `pacing.json output.maxTokens` (Tasks 5–6), voices in `role.json` (Task 4), `fillerEvidence` (A2 Task 2), zero-frame safety (A2 Task 6).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `gateway/test/qwenProbe.test.ts`:
 
@@ -150,12 +150,12 @@ describe('qwen probe helpers', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npm test -w gateway -- test/qwenProbe.test.ts`
 Expected: FAIL with "Failed to load url ../scripts/lib/qwen-raw.ts".
 
-- [ ] **Step 3: Implement the probe library and include `scripts/` in typecheck**
+- [x] **Step 3: Implement the probe library and include `scripts/` in typecheck**
 
 `gateway/tsconfig.json`:
 
@@ -379,12 +379,12 @@ function concat(chunks: Int16Array[]): Int16Array {
 }
 ```
 
-- [ ] **Step 4: Run the test and typecheck**
+- [x] **Step 4: Run the test and typecheck**
 
 Run: `npm test -w gateway -- test/qwenProbe.test.ts && npm run typecheck -w gateway`
 Expected: 4 tests PASS; typecheck clean.
 
-- [ ] **Step 5: Write the probe CLI**
+- [x] **Step 5: Write the probe CLI**
 
 Create `gateway/scripts/qwen-probe.ts`:
 
@@ -508,7 +508,7 @@ await run();
 Run: `npm run typecheck -w gateway`
 Expected: clean.
 
-- [ ] **Step 6: Run the probes against real Qwen (manual, needs the local key)**
+- [ ] **Step 6: Run the probes against real Qwen (manual, needs the local key)** — Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #12
 
 From `gateway/` (the key comes from the git-ignored `gateway/.env`):
 
@@ -540,7 +540,7 @@ Blocker row template (append to the table in `docs/blockers.md`):
 | 11 | 2026-10-1x | Plan A A1 Task 1 Step 6 | <symptom, e.g. Qwen probe HTTP 401> | <one manual check and its result> | <which assumption stays unverified; fallback used> | <what unblocks it> | 未解除 |
 ```
 
-- [ ] **Step 7: Record the results**
+- [ ] **Step 7: Record the results** — Doc created with every result marked NOT RUN; see docs/blockers.md #12
 
 Create `docs/research/qwen-plan-a-validation.md` with the measured values (copy numbers from the `/tmp/probe-*.jsonl` files; no keys, no endpoint workspace id):
 
@@ -582,7 +582,7 @@ Partial deltas: <count>. Completed minus response.created: <ms> (negative = befo
 Phase 2 speech_started after zeros: <yes/no>. Second response: <yes/no>. Errors: <n>. Decision: zero frames during filler are <safe | unsafe → A2 sends real frames with filler muted instead (record blocker)>.
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gateway/tsconfig.json gateway/scripts/lib/qwen-raw.ts gateway/scripts/qwen-probe.ts gateway/test/qwenProbe.test.ts docs/research/qwen-plan-a-validation.md
