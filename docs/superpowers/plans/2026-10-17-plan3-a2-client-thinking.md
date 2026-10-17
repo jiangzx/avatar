@@ -2549,12 +2549,14 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 All steps are manual on Xiaomi 22101317C with the Plan A worktree (A1 + A2 merged in it). No item is "passed" unless observed and recorded; skipped items are listed as skipped.
 
-- [ ] **Step 1: Full automated verification**
+- [x] **Step 1: Full automated verification**
 
 Run: `npm test && npm run typecheck && cd app && flutter test && flutter analyze`
 Expected: protocol, gateway, avatar-core PASS; typecheck clean; Flutter tests PASS; no analyzer issues. Record the exact counts.
 
 - [ ] **Step 2: Build, install, start, capture**
+
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #21
 
 ```bash
 ./scripts/build-web.sh
@@ -2571,6 +2573,8 @@ Second terminal: `adb logcat -c && adb logcat -s flutter:I | grep --line-buffere
 Confirm `/tmp/gw-plan-a.log` has one `instruction_budget` line and `ADAPTER=qwen` in `gateway_listening`.
 
 - [ ] **Step 3: 20 spoken turns (latency, thinking, filler, no blank)**
+
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #22
 
 Speak the 20 sentences from A1 Task 2 Step 7, then 5 that tend to take longer: 你给我挥挥手 / 给我讲个短故事吧 / 你给我比个心 / 你说说秋天该吃点什么 / 我想听你猜个谜语. For each turn the tester records in a table: did the avatar show either the thinking pose (eyes up, slight tilt, "…" subtitle) or speech within about half a second of stopping? (Y/N); was a filler heard; did it sound like the reply voice; did the filler cut off cleanly when the reply began.
 
@@ -2598,9 +2602,13 @@ Gate checks to record:
 
 - [ ] **Step 4: Emotion and backchannel**
 
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #23
+
 Say: "我今天特别开心" → happy face; wait 7 s. Say: "我心里有点难过" → the resting smile disappears and a sad face is visible; it returns to the default after about 6 s. While speaking a long sentence (> 2 s), the avatar nods subtly at least once. Record each as observed / not observed.
 
 - [ ] **Step 5: 10-minute silence**
+
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #24
 
 Restart the gateway with a fresh log (`| tee /tmp/gw-silence.log`), open the app, let the greeting finish, put the phone on the table, nobody speaks for 10 minutes (keep the room quiet; note any noise). Then:
 
@@ -2612,6 +2620,8 @@ Gate: `unprompted` = 0 (replies without a local `vad_edge speaking`, excluding g
 
 - [ ] **Step 6: Both styles (persona and voice)**
 
+  Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #25
+
 Default run above is grandchild. For old-friend, locally edit (do not commit) `gateway/roles/elder-companion/role.json` `"defaultStyle": "old-friend"` and `app/assets/config/thinking.json` `"defaultStyle": "old-friend"`, rebuild/install the APK (Step 2 commands), restart the gateway, talk for 3 turns. Record: persona wording matches the style (steady, fewer 撒娇 particles), reply voice is the old-friend voice, filler voice matches. Then revert both files:
 
 ```bash
@@ -2620,7 +2630,7 @@ git checkout -- gateway/roles/elder-companion/role.json app/assets/config/thinki
 
 and rebuild/install the default APK. (Style switching through the app belongs to the A+B merge gate.)
 
-- [ ] **Step 7: Write the report, update roadmap and blockers, commit**
+- [x] **Step 7: Write the report, update roadmap and blockers, commit**
 
 Create `docs/testing/2026-10-1x-plan-a-device-report.md`:
 
