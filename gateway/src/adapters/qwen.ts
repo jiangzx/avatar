@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import { AI_SAMPLE_RATE, MIC_SAMPLE_RATE } from '@anyidea/protocol';
-import type { AdapterEvents, RealtimeAdapter, SessionConfig, ToolSpec } from './types.ts';
+import type { AdapterEvents, ProactiveRequest, RealtimeAdapter, SessionConfig, ToolSpec } from './types.ts';
 
 export interface QwenOptions { apiKey: string; endpoint: string; model?: string; voice: string; connectTimeoutMs?: number; }
 type Json = Record<string, unknown>;
@@ -59,9 +59,9 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     this.createResponse();
   }
   updateInstructions(text: string): void { if (this.connected) this.send({ type: 'session.update', session: { instructions: text } }); }
-  createResponse(instructions?: string): void {
+  createResponse(request?: ProactiveRequest): void {
     if (!this.connected) return;
-    if (instructions) this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: instructions }] } });
+    if (request) this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: request.instruction }] } });
     this.send({ type: 'response.create' });
   }
   cancelResponse(): void { if (this.connected) this.send({ type: 'response.cancel' }); }

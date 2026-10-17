@@ -55,7 +55,6 @@ describe('Seeduplex gateway integration', () => {
     manager = new SessionManager(() => new Session({
       adapterFactory: () => new SeeduplexAdapter({
         apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${upstreamPort}`, voice: 'fixture',
-        proactiveTexts: new Map([[director.greetingInstruction, director.greetingText]]),
       }),
       summarizer: new MockSummarizer(), persona: 'persona', director,
     }));

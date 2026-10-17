@@ -17,28 +17,14 @@ const persona = loadPersona(`${root}prompts/persona.md`);
 const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
-// Lets the mock answer each Director instruction with the matching scripted line (idle notice, resume line, ...).
-const instructionReplies = new Map([
-  [director.greetingInstruction, script.greeting],
-  [director.followupInstruction, script.followup],
-  [director.idleNoticeInstruction, script.idleNotice ?? script.followup],
-  [director.resumeInstruction, script.resume ?? script.followup],
-]);
-const proactiveTexts = new Map([
-  [director.greetingInstruction, director.greetingText],
-  [director.followupInstruction, director.followupText],
-  [director.idleNoticeInstruction, director.idleNoticeText],
-  [director.resumeInstruction, director.resumeText],
-]);
-
 const manager = new SessionManager(
   () =>
     new Session({
       adapterFactory: () => config.adapter === 'seeduplex'
-        ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice, proactiveTexts })
+        ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
         : config.adapter === 'qwen'
           ? new QwenAdapter({ apiKey: config.qwenApiKey!, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice })
-          : new MockAdapter({ script, speech, instructionReplies, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor }),
+          : new MockAdapter({ script, speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor }),
       summarizer: config.summarizer === 'qwen'
         ? new QwenSummarizer({ apiKey: config.qwenApiKey!, endpoint: config.summarizerEndpoint, model: config.summarizerModel })
         : new MockSummarizer(),

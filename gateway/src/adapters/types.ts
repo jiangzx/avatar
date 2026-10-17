@@ -12,6 +12,15 @@ export interface SessionConfig {
   tools: ToolSpec[];
 }
 
+/** What the Director wants said. Qwen speaks from `instruction`; adapters that cannot prompt the model speak `fallbackText`. */
+export type ProactiveCue = 'greeting' | 'followup' | 'idleNotice' | 'resume';
+
+export interface ProactiveRequest {
+  cue: ProactiveCue;
+  instruction: string;
+  fallbackText: string;
+}
+
 export type AdapterEvents = {
   userSpeechStarted: [];
   userTranscript: [text: string, final: boolean];
@@ -34,7 +43,7 @@ export interface RealtimeAdapter extends EventEmitter<AdapterEvents> {
   /** Debug path: treat text as a finished user turn and reply to it. */
   sendUserText(text: string): void;
   updateInstructions(text: string): void;
-  createResponse(instructions?: string): void;
+  createResponse(request?: ProactiveRequest): void;
   cancelResponse(): void;
   sendToolResult(callId: string, result: unknown): void;
   injectContextNote(text: string): void;

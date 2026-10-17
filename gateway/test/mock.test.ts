@@ -100,29 +100,26 @@ describe('MockAdapter', () => {
     expect(c.text()).toBe('好呀');
   });
 
-  it('answers the first createResponse with the greeting, later ones with the follow-up', async () => {
+  it('answers bare createResponse calls with the greeting first, then the follow-up', async () => {
     const m = make();
     const c = collect(m);
-    m.createResponse('greet');
+    m.createResponse();
     await vi.advanceTimersByTimeAsync(2000);
     expect(c.text()).toBe('你好');
-    m.createResponse('follow');
+    m.createResponse();
     await vi.advanceTimersByTimeAsync(2000);
     expect(c.text()).toBe('你好还在吗');
   });
 
-  it('uses the scripted line mapped to a known Director instruction', async () => {
-    const m = new MockAdapter({
-      script, replyDelayMs: 100, charMs: 200, chunkMs: 100, paceFactor: 1,
-      instructionReplies: new Map([['IDLE', '我在呢']]),
-    });
+  it('speaks the scripted line for each Director cue', async () => {
+    const m = new MockAdapter({ script: { ...script, idleNotice: '我在呢' }, replyDelayMs: 100, charMs: 200, chunkMs: 100, paceFactor: 1 });
     const c = collect(m);
-    m.createResponse('IDLE');
+    m.createResponse({ cue: 'idleNotice', instruction: 'IDLE', fallbackText: 'unused' });
     await vi.advanceTimersByTimeAsync(2000);
     expect(c.text()).toBe('我在呢');
-    m.createResponse('unknown');
+    m.createResponse({ cue: 'resume', instruction: 'R', fallbackText: 'unused' });
     await vi.advanceTimersByTimeAsync(2000);
-    expect(c.text()).toBe('我在呢还在吗'); // a mapped reply still counts as the first response
+    expect(c.text()).toBe('我在呢还在吗'); // no scripted resume line: falls back to the follow-up
   });
 
   it('records context notes, instructions and tool results', async () => {

@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
 import { AI_SAMPLE_RATE, MIC_SAMPLE_RATE } from '@anyidea/protocol';
 import { rmsInt16 } from '../audio.ts';
-import type { AdapterEvents, RealtimeAdapter, SessionConfig } from './types.ts';
+import type { AdapterEvents, ProactiveCue, ProactiveRequest, RealtimeAdapter, SessionConfig } from './types.ts';
 
 export interface MockTurn {
   /** If set, `sendUserText` picks this turn when the text contains it. */
@@ -16,7 +16,7 @@ export interface MockTurn {
 export interface MockScript {
   greeting: string;
   followup: string;
-  /** Optional lines for the Director's idle notice and resume instructions (see instructionReplies). */
+  /** Optional lines for the Director's idle notice and resume cues. */
   idleNotice?: string;
   resume?: string;
   fallbackReply: string;
@@ -25,8 +25,6 @@ export interface MockScript {
 
 export interface MockOptions {
   script: MockScript;
-  /** Exact Director instruction text → scripted reply; unmatched instructions fall back to greeting/followup. */
-  instructionReplies?: ReadonlyMap<string, string>;
   /** 24 kHz PCM16 played back as reply audio; synthetic tone if absent. */
   speech?: Int16Array;
   speechThreshold?: number;
@@ -103,9 +101,15 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
     this.instructions = text;
   }
 
-  createResponse(instructions?: string): void {
-    const mapped = instructions === undefined ? undefined : this.opts.instructionReplies?.get(instructions);
-    const text = mapped ?? (this.createCount === 0 ? this.opts.script.greeting : this.opts.script.followup);
+  createResponse(request?: ProactiveRequest): void {
+    const s = this.opts.script;
+    const byCue: Record<ProactiveCue, string> = {
+      greeting: s.greeting,
+      followup: s.followup,
+      idleNotice: s.idleNotice ?? s.followup,
+      resume: s.resume ?? s.followup,
+    };
+    const text = request ? byCue[request.cue] : this.createCount === 0 ? s.greeting : s.followup;
     this.createCount++;
     this.scheduleReply(text);
   }

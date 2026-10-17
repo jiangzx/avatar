@@ -6,7 +6,7 @@ import {
   type ResponseKind,
   type ServerMessage,
 } from '@anyidea/protocol';
-import { PERFORM_ACTION_TOOL, type AdapterFactory, type RealtimeAdapter, type SessionConfig } from '../adapters/types.ts';
+import { PERFORM_ACTION_TOOL, type AdapterFactory, type ProactiveRequest, type RealtimeAdapter, type SessionConfig } from '../adapters/types.ts';
 import { log } from '../log.ts';
 import { ActionRouter } from './actions.ts';
 import { Director, type DirectorConfig } from './director.ts';
@@ -72,7 +72,7 @@ export class Session {
 
   constructor(private readonly deps: SessionDeps) {
     this.ledger = new ConversationLedger(deps.ledger ?? DEFAULT_LEDGER_OPTIONS);
-    this.director = new Director(deps.director, { requestResponse: (kind, text) => this.requestResponse(kind, text) });
+    this.director = new Director(deps.director, { requestResponse: (kind, request) => this.requestResponse(kind, request) });
     this.interrupt = new InterruptCoordinator({
       confirmWindowMs: deps.confirmWindowMs ?? 300,
       cancel: (seq, source) => this.cancel(seq, source),
@@ -210,10 +210,10 @@ export class Session {
     return { instructions: this.instructions(), tools: [PERFORM_ACTION_TOOL] };
   }
 
-  private requestResponse(kind: ResponseKind, instructions: string): void {
+  private requestResponse(kind: ResponseKind, request: ProactiveRequest): void {
     if (this.ended || this.interrupt.active !== null) return; // never talk over an active response
     this.pendingKind = kind;
-    this.adapter.createResponse(instructions);
+    this.adapter.createResponse(request);
   }
 
   private createAdapter(): RealtimeAdapter {

@@ -1,4 +1,5 @@
 import type { ResponseKind } from '@anyidea/protocol';
+import type { ProactiveCue, ProactiveRequest } from '../adapters/types.ts';
 
 export interface DirectorConfig {
   followupAfterMs: number;
@@ -18,7 +19,7 @@ export interface DirectorConfig {
 }
 
 export interface DirectorDeps {
-  requestResponse(kind: ResponseKind, instructions: string): void;
+  requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
 }
 
 /** Controls proactive speech: greeting, silence follow-ups, and how often the assistant may speak first. */
@@ -38,7 +39,7 @@ export class Director {
   ) {}
 
   onSessionStart(): void {
-    this.deps.requestResponse('greeting', this.cfg.greetingInstruction);
+    this.deps.requestResponse('greeting', this.request('greeting'));
   }
 
   /** Local VAD state from the client. */
@@ -82,7 +83,7 @@ export class Director {
   resume(): void {
     this.paused = false;
     this.consecutive = 0;
-    if (!this.blocked() && this.takeSpeechSlot()) this.deps.requestResponse('followup', this.cfg.resumeInstruction);
+    if (!this.blocked() && this.takeSpeechSlot()) this.deps.requestResponse('followup', this.request('resume'));
   }
 
   stop(): void {
@@ -96,20 +97,30 @@ export class Director {
     if (this.blocked() || this.consecutive >= this.cfg.maxConsecutive) return;
     const isLast = this.consecutive === this.cfg.maxConsecutive - 1;
     const delay = this.consecutive === 0 ? this.cfg.followupAfterMs : this.cfg.idleNoticeAfterMs;
-    const instruction = isLast ? this.cfg.idleNoticeInstruction : this.cfg.followupInstruction;
-    this.timer = setTimeout(() => this.fire(instruction), delay);
+    const cue: ProactiveCue = isLast ? 'idleNotice' : 'followup';
+    this.timer = setTimeout(() => this.fire(cue), delay);
   }
 
   private blocked(): boolean {
     return this.stopped || this.quiet || this.muted || this.paused || this.userSpeaking;
   }
 
-  private fire(instruction: string): void {
+  private fire(cue: ProactiveCue): void {
     this.timer = null;
     if (this.blocked()) return;
     if (!this.takeSpeechSlot()) return;
     this.consecutive++;
-    this.deps.requestResponse('followup', instruction);
+    this.deps.requestResponse('followup', this.request(cue));
+  }
+
+  private request(cue: ProactiveCue): ProactiveRequest {
+    const c = this.cfg;
+    switch (cue) {
+      case 'greeting': return { cue, instruction: c.greetingInstruction, fallbackText: c.greetingText };
+      case 'followup': return { cue, instruction: c.followupInstruction, fallbackText: c.followupText };
+      case 'idleNotice': return { cue, instruction: c.idleNoticeInstruction, fallbackText: c.idleNoticeText };
+      case 'resume': return { cue, instruction: c.resumeInstruction, fallbackText: c.resumeText };
+    }
   }
 
   private takeSpeechSlot(): boolean {

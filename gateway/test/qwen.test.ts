@@ -123,7 +123,7 @@ describe('QwenAdapter', () => {
     }));
     const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture-voice' });
     await a.connect({ instructions: 'fixture', tools: [] });
-    a.createResponse('fixture instruction');
+    a.createResponse({ cue: 'greeting', instruction: 'fixture instruction', fallbackText: 'unused' });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(session?.turn_detection).toEqual({ type: 'semantic_vad', silence_duration_ms: 800 });
     expect(session?.input_audio_transcription).toEqual({ model: 'qwen3-asr-flash-realtime' });

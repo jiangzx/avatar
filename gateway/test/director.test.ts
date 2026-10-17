@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResponseKind } from '@anyidea/protocol';
+import type { ProactiveRequest } from '../src/adapters/types.ts';
 import { Director, type DirectorConfig } from '../src/session/director.ts';
 
 const cfg: DirectorConfig = {
@@ -21,13 +22,30 @@ const cfg: DirectorConfig = {
 
 function make(c: DirectorConfig = cfg) {
   const calls: Array<[ResponseKind, string]> = [];
-  const d = new Director(c, { requestResponse: (k, i) => calls.push([k, i]) });
+  const d = new Director(c, { requestResponse: (k, r) => calls.push([k, r.instruction]) });
   return { d, calls };
 }
 
 describe('Director', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
+
+  it('passes cue and fallback text with each request', () => {
+    const reqs: ProactiveRequest[] = [];
+    const d = new Director(cfg, { requestResponse: (_k, r) => reqs.push(r) });
+    d.onSessionStart();
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(8000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(25000);
+    d.resume();
+    expect(reqs).toEqual([
+      { cue: 'greeting', instruction: 'G', fallbackText: 'greeting' },
+      { cue: 'followup', instruction: 'F', fallbackText: 'followup' },
+      { cue: 'idleNotice', instruction: 'I', fallbackText: 'idle' },
+      { cue: 'resume', instruction: 'R', fallbackText: 'resume' }, // greeting takes no speech slot, so the third slot is free
+    ]);
+  });
 
   it('greets on session start', () => {
     const { d, calls } = make();
