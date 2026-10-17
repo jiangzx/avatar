@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { isAbsolute, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import type { DirectorConfig } from './session/director.ts';
 import type { LedgerOptions } from './session/ledger.ts';
@@ -153,4 +154,72 @@ export function loadDirectorConfig(path: string): DirectorConfig {
 
 export function loadPersona(path: string): string {
   return readFileSync(path, 'utf8');
+}
+
+/** Device identity and memory store settings (Plan 3 B). Env only; never in files. */
+export interface IdentityConfig {
+  /** Absolute path outside the repo, or ':memory:'. Undefined = identity disabled (dev mode). */
+  memoryDbPath?: string;
+  busyTimeoutMs: number;
+  maxOwners: number;
+  /** Rolling 24 h cap on new owners. */
+  registerDailyCap: number;
+  registerRateLimitMax: number;
+  registerRateLimitWindowMs: number;
+  /** Owners that registered but never started a session are deleted after this many days. */
+  orphanOwnerDays: number;
+  orphanCleanupBatch: number;
+  enableDevEndpoints: boolean;
+  /** Present only when enableDevEndpoints. */
+  devToken?: string;
+}
+
+const envInt = (min: number, max: number, fallback: number) => z.coerce.number().int().min(min).max(max).default(fallback);
+
+const IdentityEnvSchema = z.object({
+  MEMORY_DB_PATH: z.string().min(1).optional(),
+  MEMORY_DB_BUSY_TIMEOUT_MS: envInt(100, 60_000, 5_000),
+  MAX_OWNERS: envInt(1, 100_000, 100),
+  REGISTER_DAILY_CAP: envInt(1, 10_000, 20),
+  REGISTER_RATE_LIMIT_MAX: envInt(1, 1_000, 5),
+  REGISTER_RATE_LIMIT_WINDOW_MS: envInt(1_000, 24 * 3_600_000, 3_600_000),
+  ORPHAN_OWNER_DAYS: envInt(1, 365, 7),
+  ORPHAN_CLEANUP_BATCH: envInt(1, 10_000, 200),
+  ENABLE_DEV_ENDPOINTS: z.enum(['0', '1']).default('0'),
+  DEV_TOKEN: z.string().optional(),
+});
+
+export function loadIdentityConfig(env: Record<string, string | undefined>, repoRoot: string): IdentityConfig {
+  const parsed = IdentityEnvSchema.safeParse(env);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]!;
+    throw new Error(`${issue.path.join('.')}: ${issue.message}`); // zod messages do not echo input values
+  }
+  const e = parsed.data;
+  const memoryDbPath = e.MEMORY_DB_PATH;
+  if (memoryDbPath !== undefined && memoryDbPath !== ':memory:') {
+    if (!isAbsolute(memoryDbPath)) throw new Error('MEMORY_DB_PATH must be an absolute path');
+    const root = resolve(repoRoot);
+    const target = resolve(memoryDbPath);
+    if (target === root || target.startsWith(root + sep)) throw new Error('MEMORY_DB_PATH must be outside the repository');
+  }
+  const enableDevEndpoints = e.ENABLE_DEV_ENDPOINTS === '1';
+  const devToken = e.DEV_TOKEN;
+  if (enableDevEndpoints) {
+    if (!devToken || devToken.length < 24) throw new Error('DEV_TOKEN must be set (at least 24 characters) when ENABLE_DEV_ENDPOINTS=1');
+    if (/^(change-me|same-as-)/i.test(devToken)) throw new Error('DEV_TOKEN must be replaced (template placeholder)');
+    if (devToken === env.APP_SECRET) throw new Error('DEV_TOKEN must differ from APP_SECRET');
+  }
+  return {
+    ...(memoryDbPath ? { memoryDbPath } : {}),
+    busyTimeoutMs: e.MEMORY_DB_BUSY_TIMEOUT_MS,
+    maxOwners: e.MAX_OWNERS,
+    registerDailyCap: e.REGISTER_DAILY_CAP,
+    registerRateLimitMax: e.REGISTER_RATE_LIMIT_MAX,
+    registerRateLimitWindowMs: e.REGISTER_RATE_LIMIT_WINDOW_MS,
+    orphanOwnerDays: e.ORPHAN_OWNER_DAYS,
+    orphanCleanupBatch: e.ORPHAN_CLEANUP_BATCH,
+    enableDevEndpoints,
+    ...(enableDevEndpoints && devToken ? { devToken } : {}),
+  };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, loadDirectorConfig, loadPersona, makeOriginCheck } from '../src/config.ts';
+import { loadConfig, loadDirectorConfig, loadIdentityConfig, loadPersona, makeOriginCheck } from '../src/config.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -95,5 +96,56 @@ describe('config', () => {
 
   it('rejects an invalid director config', () => {
     expect(() => loadDirectorConfig(`${root}package.json`)).toThrow();
+  });
+});
+
+describe('identity config', () => {
+  const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+  const base = { APP_SECRET: 'x'.repeat(16) };
+
+  it('defaults to dev mode with conservative limits', () => {
+    expect(loadIdentityConfig(base, repoRoot)).toEqual({
+      busyTimeoutMs: 5000, maxOwners: 100, registerDailyCap: 20, registerRateLimitMax: 5, registerRateLimitWindowMs: 3_600_000,
+      orphanOwnerDays: 7, orphanCleanupBatch: 200, enableDevEndpoints: false,
+    });
+  });
+
+  it('accepts an absolute database path outside the repository, or :memory:', () => {
+    expect(loadIdentityConfig({ ...base, MEMORY_DB_PATH: '/tmp/avatar-memory/memory.db' }, repoRoot).memoryDbPath).toBe('/tmp/avatar-memory/memory.db');
+    expect(loadIdentityConfig({ ...base, MEMORY_DB_PATH: ':memory:' }, repoRoot).memoryDbPath).toBe(':memory:');
+  });
+
+  it('rejects relative or in-repo database paths', () => {
+    for (const p of ['memory.db', join(repoRoot, 'gateway', 'memory.db'), repoRoot]) {
+      expect(() => loadIdentityConfig({ ...base, MEMORY_DB_PATH: p }, repoRoot)).toThrow(/MEMORY_DB_PATH/);
+    }
+  });
+
+  it('parses identity limits', () => {
+    const c = loadIdentityConfig({ ...base, MEMORY_DB_BUSY_TIMEOUT_MS: '2000', MAX_OWNERS: '3', REGISTER_DAILY_CAP: '2', REGISTER_RATE_LIMIT_MAX: '4', REGISTER_RATE_LIMIT_WINDOW_MS: '60000', ORPHAN_OWNER_DAYS: '30', ORPHAN_CLEANUP_BATCH: '50' }, repoRoot);
+    expect([c.busyTimeoutMs, c.maxOwners, c.registerDailyCap, c.registerRateLimitMax, c.registerRateLimitWindowMs, c.orphanOwnerDays, c.orphanCleanupBatch]).toEqual([2000, 3, 2, 4, 60000, 30, 50]);
+  });
+
+  it('rejects invalid identity limits naming the variable', () => {
+    for (const [key, value] of [['MAX_OWNERS', '0'], ['REGISTER_DAILY_CAP', 'x'], ['REGISTER_RATE_LIMIT_MAX', '0'], ['REGISTER_RATE_LIMIT_WINDOW_MS', '99'], ['ORPHAN_OWNER_DAYS', '0'], ['ORPHAN_CLEANUP_BATCH', '0'], ['MEMORY_DB_BUSY_TIMEOUT_MS', '99'], ['ENABLE_DEV_ENDPOINTS', 'yes']] as const) {
+      expect(() => loadIdentityConfig({ ...base, [key]: value }, repoRoot)).toThrow(key);
+    }
+  });
+
+  it('requires a strong, distinct DEV_TOKEN only when dev endpoints are enabled, without echoing it', () => {
+    expect(loadIdentityConfig({ ...base, DEV_TOKEN: 'ignored-when-disabled' }, repoRoot).devToken).toBeUndefined();
+    const shared = 'a-shared-secret-0123456789ab';
+    for (const env of <Array<Record<string, string>>>[
+      { ...base, ENABLE_DEV_ENDPOINTS: '1' },
+      { ...base, ENABLE_DEV_ENDPOINTS: '1', DEV_TOKEN: 'short-dev-token' },
+      { ...base, ENABLE_DEV_ENDPOINTS: '1', DEV_TOKEN: 'change-me-0123456789abcdefgh' },
+      { APP_SECRET: shared, ENABLE_DEV_ENDPOINTS: '1', DEV_TOKEN: shared },
+    ]) {
+      expect(() => loadIdentityConfig(env, repoRoot)).toThrow(/DEV_TOKEN/);
+      try { loadIdentityConfig(env, repoRoot); } catch (e) { if (env.DEV_TOKEN) expect((e as Error).message).not.toContain(env.DEV_TOKEN); }
+    }
+    const ok = loadIdentityConfig({ ...base, ENABLE_DEV_ENDPOINTS: '1', DEV_TOKEN: 'dev-token-0123456789abcdef' }, repoRoot);
+    expect(ok.enableDevEndpoints).toBe(true);
+    expect(ok.devToken).toBe('dev-token-0123456789abcdef');
   });
 });

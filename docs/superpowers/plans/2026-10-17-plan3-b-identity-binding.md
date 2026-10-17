@@ -199,7 +199,9 @@ In `app/android/app/src/main/AndroidManifest.xml`, add `android:allowBackup="fal
         android:networkSecurityConfig="@xml/network_security_config"
 ```
 
-- [x] **Step 5: Static checks and build** (analyze + test run; APK build not run, user instruction: Mock only, no device/real model; see docs/blockers.md #30)
+- [ ] **Step 5: Static checks and build**
+
+Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #30
 
 Run: `cd app && flutter analyze && flutter test`
 Expected: `No issues found!`; all existing tests pass.
@@ -482,12 +484,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   export function loadIdentityConfig(env: Record<string, string | undefined>, repoRoot: string): IdentityConfig;
   ```
 
-- [ ] **Step 0: Confirm Task 0 is in place**
+- [x] **Step 0: Confirm Task 0 is in place**
 
 Run: `grep -n "Wiring point: Plan B" gateway/src/index.ts && grep -n "export function devContextResolver" gateway/src/session/context.ts && npm test -w gateway`
 Expected: both greps print one line; all gateway tests PASS. If not, stop: Task 0 is a prerequisite.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `gateway/test/config.test.ts`, change the imports to:
 
@@ -553,12 +555,12 @@ describe('identity config', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/config.test.ts`
 Expected: FAIL; `loadIdentityConfig` is not exported (`TypeError: loadIdentityConfig is not a function` / TS error).
 
-- [ ] **Step 3: Implement (append to `config.ts`)**
+- [x] **Step 3: Implement (append to `config.ts`)**
 
 Add one import line at the top of `gateway/src/config.ts` (below the existing `node:fs` import):
 
@@ -640,12 +642,12 @@ export function loadIdentityConfig(env: Record<string, string | undefined>, repo
 
 (Probed with zod 4.6.5: `z.coerce.number().default(n)` returns `n` for a missing key; `'abc'` fails with `expected number, received NaN`; enum failures do not echo the input.)
 
-- [ ] **Step 4: Run tests and typecheck**
+- [x] **Step 4: Run tests and typecheck**
 
 Run: `npm test -w gateway -- test/config.test.ts && npm run typecheck -w gateway`
 Expected: PASS (existing config tests unchanged, including the whole-object `loadConfig` `toEqual`); typecheck clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gateway/src/config.ts gateway/test/config.test.ts
