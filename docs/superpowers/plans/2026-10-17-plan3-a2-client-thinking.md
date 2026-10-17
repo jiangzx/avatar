@@ -326,7 +326,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 - Produces (test support): `Map<String, Object?> thinkingMap({List<String> evidence})`, `ThinkingConfig testThinking({List<String> evidence})` in `app/test/support/thinking_fixture.dart`.
 
-- [ ] **Step 1: Write the failing test and fixture**
+- [x] **Step 1: Write the failing test and fixture**
 
 Create `app/test/support/thinking_fixture.dart`:
 
@@ -413,12 +413,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && flutter test test/thinking_config_test.dart`
 Expected: FAIL — `thinking_config.dart` not found.
 
-- [ ] **Step 3: Implement the config and asset**
+- [x] **Step 3: Implement the config and asset**
 
 Create `app/assets/config/thinking.json` (set `fillerEvidence` from `docs/research/qwen-plan-a-validation.md` §4a: `["transcript"]` if a user transcript arrives before `response.created`, else `["transcript","responseStart"]`):
 
@@ -627,12 +627,12 @@ List<FillerClip> _clips(Map<String, Object?> m, String key) {
 }
 ```
 
-- [ ] **Step 4: Run tests and analyze**
+- [x] **Step 4: Run tests and analyze**
 
 Run: `cd app && flutter test test/thinking_config_test.dart && flutter analyze`
 Expected: 5 tests PASS; no issues.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/lib/native_session/thinking_config.dart app/assets/config/thinking.json app/pubspec.yaml app/test/support/thinking_fixture.dart app/test/thinking_config_test.dart

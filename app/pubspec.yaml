@@ -65,3 +65,4 @@ flutter:
     - assets/web/avatars/
     - assets/web/animations/
     - assets/web/spike/
+    - assets/config/
