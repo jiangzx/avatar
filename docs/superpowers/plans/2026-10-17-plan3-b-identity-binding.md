@@ -4327,7 +4327,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: everything above.
 - Produces: recorded evidence for the Plan B gate.
 
-- [ ] **Step 1: Full automated run**
+- [x] **Step 1: Full automated run**
 
 Run: `npm test && npm run typecheck`
 Expected: protocol, gateway, avatar-core PASS; typecheck clean. Record the exact counts.
@@ -4335,7 +4335,7 @@ Expected: protocol, gateway, avatar-core PASS; typecheck clean. Record the exact
 Run: `cd app && flutter analyze && flutter test`
 Expected: `No issues found!`; all PASS. Record the count.
 
-- [ ] **Step 2: Map the Plan B gate to evidence**
+- [x] **Step 2: Map the Plan B gate to evidence**
 
 | Gate item (spec "各计划门槛 → B") | Evidence |
 |---|---|
@@ -4348,6 +4348,7 @@ Expected: `No issues found!`; all PASS. Record the count.
 Confirm each named test appears as passed in the Step 1 output.
 
 - [ ] **Step 3: Device acceptance (Xiaomi, USB)**
+  Not run (user instruction: Mock only, no services/device/real model); every gate item is NOT RUN, see docs/blockers.md #30, #32-#37
 
 Ask the user before stopping the live 8787 Qwen gateway. With approval, restart it with identity enabled (keep their adapter settings; add only):
 
@@ -4367,11 +4368,11 @@ Check, recording each result:
 
 If no device is available: time-box 20 minutes, record each unrun item in `docs/blockers.md` (status NOT RUN, impact, next step) and say so in the report. Never mark these as passed.
 
-- [ ] **Step 4: Update the roadmap**
+- [x] **Step 4: Update the roadmap**
 
 In `docs/project/roadmap.md`: set the Plan 3 row to "Task 0 done; Plan B (identity & binding) complete: <counts from Step 1>; device acceptance <PASS / partial, see blockers>"; add to Next steps "A+B merge gate: after style switch, the next session's voice and persona change together"; link this plan.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/project/roadmap.md docs/superpowers/plans/2026-10-17-plan3-b-identity-binding.md
