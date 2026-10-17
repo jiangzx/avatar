@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerMessage } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
+import type { SessionConfig } from '../src/adapters/types.ts';
+import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { Session, type SessionDeps, type Transport } from '../src/session/session.ts';
@@ -27,6 +29,31 @@ function collector() {
   return { sent, audio, transport };
 }
 
+describe('Session context', () => {
+  it('builds instructions and voice from the session context', async () => {
+    const configs: SessionConfig[] = [];
+    const roles: RoleCatalog = { ...fixedRoleCatalog('P', director), buildPersona: (_r, s) => `persona:${s}` };
+    const session = new Session(
+      {
+        adapterFactory: () => {
+          const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+          const connect = m.connect.bind(m);
+          vi.spyOn(m, 'connect').mockImplementation((c) => { configs.push(c); return connect(c); });
+          return m;
+        },
+        summarizer: new MockSummarizer(),
+        roles,
+      },
+      { roleId: 'elder-companion', styleId: 'old-friend', voice: 'voice-old' },
+    );
+    await session.start(collector().transport);
+    expect(configs[0]?.voice).toBe('voice-old');
+    expect(configs[0]?.instructions).toContain('persona:old-friend');
+    expect(session.context.styleId).toBe('old-friend');
+    session.end();
+  });
+});
+
 function setup(overrides: Partial<SessionDeps> = {}) {
   const mocks: MockAdapter[] = [];
   const session = new Session({
@@ -36,8 +63,7 @@ function setup(overrides: Partial<SessionDeps> = {}) {
       return m;
     },
     summarizer: new MockSummarizer(),
-    persona: 'P',
-    director,
+    roles: fixedRoleCatalog('P', director),
     ...overrides,
   });
   return { session, mocks, ...collector() };

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket, { WebSocketServer } from 'ws';
 import { FRAME_AI, decodeAudioFrame } from '@anyidea/protocol';
 import { SeeduplexAdapter } from '../src/adapters/seeduplex.ts';
+import { fixedRoleCatalog } from '../src/roles/catalog.ts';
 import { makeOriginCheck } from '../src/config.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { Session } from '../src/session/session.ts';
@@ -56,7 +57,7 @@ describe('Seeduplex gateway integration', () => {
       adapterFactory: () => new SeeduplexAdapter({
         apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${upstreamPort}`, voice: 'fixture',
       }),
-      summarizer: new MockSummarizer(), persona: 'persona', director,
+      summarizer: new MockSummarizer(), roles: fixedRoleCatalog('P', director),
     }));
     gateway = createGatewayServer({ manager, appSecret: SECRET, allowedOrigin: makeOriginCheck([]), allowDebugText: false });
     await new Promise<void>((resolve) => gateway!.listen(0, '127.0.0.1', resolve));

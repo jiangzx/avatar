@@ -9,7 +9,9 @@ import {
 import { PERFORM_ACTION_TOOL, type AdapterFactory, type ProactiveRequest, type RealtimeAdapter, type SessionConfig } from '../adapters/types.ts';
 import { log } from '../log.ts';
 import { ActionRouter } from './actions.ts';
-import { Director, type DirectorConfig } from './director.ts';
+import type { RoleCatalog } from '../roles/catalog.ts';
+import { devContext, type SessionContext } from './context.ts';
+import { Director } from './director.ts';
 import { InterruptCoordinator } from './interrupt.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
 
@@ -21,8 +23,7 @@ export interface Transport {
 export interface SessionDeps {
   adapterFactory: AdapterFactory;
   summarizer: Summarizer;
-  persona: string;
-  director: DirectorConfig;
+  roles: RoleCatalog;
   ledger?: LedgerOptions;
   confirmWindowMs?: number;
   modelContextTokenLimit?: number;
@@ -46,6 +47,8 @@ const MAX_REBUILD_MIC_FRAMES = 25;
 
 export class Session {
   readonly ledger: ConversationLedger;
+  readonly context: SessionContext;
+  private readonly persona: string;
   private adapter: RealtimeAdapter;
   private transport: Transport | null = null;
   private readonly director: Director;
@@ -70,9 +73,11 @@ export class Session {
   private vadSilentCount = 0;
   private modelGenerating = false;
 
-  constructor(private readonly deps: SessionDeps) {
+  constructor(private readonly deps: SessionDeps, ctx: SessionContext = devContext(deps.roles)) {
+    this.context = ctx;
+    this.persona = deps.roles.buildPersona(ctx.roleId, ctx.styleId);
     this.ledger = new ConversationLedger(deps.ledger ?? DEFAULT_LEDGER_OPTIONS);
-    this.director = new Director(deps.director, { requestResponse: (kind, request) => this.requestResponse(kind, request) });
+    this.director = new Director(deps.roles.director(ctx.roleId), { requestResponse: (kind, request) => this.requestResponse(kind, request) });
     this.interrupt = new InterruptCoordinator({
       confirmWindowMs: deps.confirmWindowMs ?? 300,
       cancel: (seq, source) => this.cancel(seq, source),
@@ -203,11 +208,11 @@ export class Session {
   }
 
   private instructions(): string {
-    return this.ledger.buildInstructions(this.deps.persona);
+    return this.ledger.buildInstructions(this.persona);
   }
 
   private sessionConfig(): SessionConfig {
-    return { instructions: this.instructions(), tools: [PERFORM_ACTION_TOOL] };
+    return { instructions: this.instructions(), tools: [PERFORM_ACTION_TOOL], voice: this.context.voice };
   }
 
   private requestResponse(kind: ResponseKind, request: ProactiveRequest): void {

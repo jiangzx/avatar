@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { FRAME_AI, decodeAudioFrame, type ServerMessage, type SessionTokens } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
+import { fixedRoleCatalog } from '../src/roles/catalog.ts';
 import { makeOriginCheck } from '../src/config.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
@@ -33,8 +34,7 @@ async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugTe
         return adapter;
       },
       summarizer: new MockSummarizer(),
-      persona: 'P',
-      director,
+      roles: fixedRoleCatalog('P', director),
     }),
     opts.graceMs ?? 60_000,
     opts.unclaimedMs,

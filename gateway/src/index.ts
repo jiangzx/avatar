@@ -3,6 +3,7 @@ import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
 import { loadConfig, loadDirectorConfig, loadPersona, makeOriginCheck } from './config.ts';
+import { fixedRoleCatalog } from './roles/catalog.ts';
 import { log } from './log.ts';
 import { MockSummarizer } from './session/ledger.ts';
 import { QwenSummarizer } from './session/qwenSummarizer.ts';
@@ -12,8 +13,8 @@ import { createGatewayServer } from './server/server.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
-const director = loadDirectorConfig(`${root}config/director.json`);
-const persona = loadPersona(`${root}prompts/persona.md`);
+// Stub until Plan A ships file-backed roles under gateway/roles/.
+const roles = fixedRoleCatalog(loadPersona(`${root}prompts/persona.md`), loadDirectorConfig(`${root}config/director.json`));
 const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
@@ -28,8 +29,7 @@ const manager = new SessionManager(
       summarizer: config.summarizer === 'qwen'
         ? new QwenSummarizer({ apiKey: config.qwenApiKey!, endpoint: config.summarizerEndpoint, model: config.summarizerModel })
         : new MockSummarizer(),
-      persona,
-      director,
+      roles,
       ledger: config.ledger,
       confirmWindowMs: config.confirmWindowMs,
       rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,

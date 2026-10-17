@@ -1,0 +1,28 @@
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_ROLE, fixedRoleCatalog } from '../src/roles/catalog.ts';
+import { devContext } from '../src/session/context.ts';
+import type { DirectorConfig } from '../src/session/director.ts';
+
+const director = {
+  followupAfterMs: 8000, idleNoticeAfterMs: 25000, maxConsecutive: 2, maxPerWindow: 3, windowMs: 300000,
+  quietPhrases: [], greetingInstruction: 'G', greetingText: 'greeting', followupInstruction: 'F', followupText: 'followup', idleNoticeInstruction: 'I', idleNoticeText: 'idle', resumeInstruction: 'R', resumeText: 'resume',
+} satisfies DirectorConfig;
+
+describe('fixedRoleCatalog', () => {
+  it('exposes the default role with both stub styles sharing one persona', () => {
+    const roles = fixedRoleCatalog('P', director);
+    expect(roles.defaultRole()).toBe(DEFAULT_ROLE);
+    expect(roles.defaultStyle(DEFAULT_ROLE)).toBe('grandchild');
+    expect(roles.hasStyle(DEFAULT_ROLE, 'grandchild')).toBe(true);
+    expect(roles.hasStyle(DEFAULT_ROLE, 'old-friend')).toBe(true);
+    expect(roles.hasStyle(DEFAULT_ROLE, 'pirate')).toBe(false);
+    expect(roles.hasStyle('other-role', 'grandchild')).toBe(false);
+    expect(roles.buildPersona(DEFAULT_ROLE, 'old-friend')).toBe('P');
+    expect(roles.voiceFor(DEFAULT_ROLE, 'grandchild')).toBeUndefined();
+    expect(roles.director(DEFAULT_ROLE)).toBe(director);
+  });
+
+  it('builds a dev context from the catalog defaults', () => {
+    expect(devContext(fixedRoleCatalog('P', director))).toEqual({ roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined });
+  });
+});
