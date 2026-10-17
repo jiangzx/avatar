@@ -389,19 +389,31 @@ describe('Session', () => {
 
   it('times out a hanging summarizer through the policy and retries after backoff', async () => {
     let calls = 0;
-    const s = setup({
-      ledger: { keepRecentTurns: 1, summarizeAfterTurns: 1, summarizeAfterTokens: 10_000 },
-      summarizer: { summarize: () => { calls++; return new Promise<string>(() => {}); } },
-      summarizePolicy: { timeoutMs: 500, retries: 0, backoffMs: 100, maxBackoffMs: 100 },
-    });
-    await greetAndFinish(s);
-    s.session.handleClientMessage({ type: 'debug.userText', text: '第一句' });
-    s.session.handleClientMessage({ type: 'debug.userText', text: '第二句' }); // > 1 user turn: summarize starts
-    expect(calls).toBe(1);
-    s.session.handleClientMessage({ type: 'debug.userText', text: '第三句' });
-    expect(calls).toBe(1); // one summarization in flight at a time
-    await vi.advanceTimersByTimeAsync(600); // policy timeout (500 ms) fires
-    s.session.handleClientMessage({ type: 'debug.userText', text: '第四句' });
-    expect(calls).toBe(1); // still inside the failure backoff window (1 s)
+    const writes: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => { writes.push(String(chunk)); return true; }) as typeof process.stdout.write);
+    try {
+      const s = setup({
+        ledger: { keepRecentTurns: 1, summarizeAfterTurns: 1, summarizeAfterTokens: 10_000 },
+        // Settles (rejects) at 1000 ms, after the 500 ms policy timeout, so the ledger flag clears by then.
+        summarizer: { summarize: () => { calls++; return new Promise<string>((_, reject) => setTimeout(() => reject(new Error('slow_summarizer')), 1000)); } },
+        summarizePolicy: { timeoutMs: 500, retries: 0, backoffMs: 100, maxBackoffMs: 100 },
+      });
+      await greetAndFinish(s);
+      s.session.handleClientMessage({ type: 'debug.userText', text: '第一句' });
+      s.session.handleClientMessage({ type: 'debug.userText', text: '第二句' }); // > 1 user turn: summarize starts
+      expect(calls).toBe(1);
+      await vi.advanceTimersByTimeAsync(600); // policy timeout fires at 500 ms; cooldown (1 s) runs to ~1500 ms
+      const failed = writes.filter((w) => w.includes('"policy_failed"')).join('');
+      expect(failed).toContain('"summarize_timeout"');
+      expect(failed).not.toMatch(/第一句|第二句/);
+      await vi.advanceTimersByTimeAsync(500); // t~1100: late rejection settled, still inside the cooldown
+      s.session.handleClientMessage({ type: 'debug.userText', text: '第三句' });
+      expect(calls).toBe(1);
+      await vi.advanceTimersByTimeAsync(600); // past the cooldown
+      s.session.handleClientMessage({ type: 'debug.userText', text: '第四句' });
+      expect(calls).toBe(2);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

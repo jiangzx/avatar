@@ -396,7 +396,6 @@ export class Session {
       log('summarize_failed', { code: r.code });
     });
   }
-  
 
   private maybeSlimContext(): void {
     const limit = (this.deps.modelContextTokenLimit ?? 12_000) * 0.8;

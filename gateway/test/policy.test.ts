@@ -27,6 +27,18 @@ describe('runWithPolicy', () => {
     expect(logs).toEqual(['policy_failed:summarize_timeout']);
   });
 
+  it('ends with policy_failed once retries are exhausted, logging only content-free fields', async () => {
+    const logs: Array<[string, Record<string, unknown>]> = [];
+    let n = 0;
+    const r = await runWithPolicy('t', { ...spec, retries: 1 }, async () => { n++; throw new Error('用户说了一句话'); }, { sleep: async () => {}, log: (e, f) => logs.push([e, f]) });
+    expect(n).toBe(2);
+    expect(r).toEqual({ ok: false, code: 'error', errorClass: 'retryable', attempts: 2 });
+    expect(logs).toEqual([
+      ['policy_retry', { name: 't', code: 'error', attempt: 1 }],
+      ['policy_failed', { name: 't', code: 'error', class: 'retryable', attempts: 2 }],
+    ]);
+  });
+
   it('aborts the task signal on timeout', async () => {
     let aborted = false;
     const p = runWithPolicy('t', { ...spec, retries: 0 }, (signal) => new Promise<void>(() => { signal.addEventListener('abort', () => { aborted = true; }); }), { log: () => {} });
