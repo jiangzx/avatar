@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter_pcm_sound/flutter_pcm_sound.dart';
 import 'package:record/record.dart';
 
+import '../diag_log.dart';
 import '../native_session/thinking_config.dart';
 import 'audio_types.dart';
 import 'filler_player.dart';
@@ -24,7 +25,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
   final FillerAudioConfig? _fillerCfg;
   late final FillerPlayer? _filler = _fillerCfg == null
       ? null
-      : FillerPlayer(sink: _FillerSink(this), cfg: _fillerCfg, sampleRate: nativePlaybackSampleRate);
+      : FillerPlayer(sink: _FillerSink(this), cfg: _fillerCfg, sampleRate: nativePlaybackSampleRate, onError: _onFillerError);
   Timer? _fillerTimer;
   final PlaybackQueue _queue = PlaybackQueue(
     sampleRate: nativePlaybackSampleRate,
@@ -110,7 +111,13 @@ class PluginNativeAudioIO implements NativeAudioIO {
     }
     _acceptedChunks++;
     // Safety net: the reply must never queue behind more than a short faded filler tail.
-    if (_filler?.active ?? false) await _filler!.fadeOut();
+    if (_filler?.active ?? false) {
+      try {
+        await _filler!.fadeOut();
+      } catch (_) {
+        _filler?.stop(); // best effort: the reply chunk below must still be fed
+      }
+    }
     _pending.add(_PendingChunk(responseSeq, Int16List.fromList(pcm24k)));
     await _drainPending();
     FlutterPcmSound.start();
@@ -184,6 +191,8 @@ class PluginNativeAudioIO implements NativeAudioIO {
       filler.stop();
     }
   }
+
+  void _onFillerError(String code) => logcatDiagSink(formatDiag('filler_error', {'code': code}));
 
   Future<void> _feedFiller(Int16List pcm) async {
     await FlutterPcmSound.feed(PcmArrayInt16(bytes: ByteData.sublistView(pcm)));

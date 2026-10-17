@@ -15,13 +15,16 @@ int _wallClockMs() => DateTime.now().millisecondsSinceEpoch;
 /// Plays one short filler clip in gain-scaled chunks of at most `chunkMs`, keeping at most
 /// `maxBufferedMs` queued in the native player so it can stop or fade quickly.
 class FillerPlayer {
-  FillerPlayer({required this.sink, required this.cfg, this.sampleRate = 24000, int Function()? now})
+  FillerPlayer({required this.sink, required this.cfg, this.sampleRate = 24000, int Function()? now, this.onError})
       : _now = now ?? _wallClockMs;
 
   final PcmSink sink;
   final FillerAudioConfig cfg;
   final int sampleRate;
   final int Function() _now;
+
+  /// Content-free error code (never audio); the filler has already stopped when this runs.
+  final void Function(String code)? onError;
 
   Int16List _clip = Int16List(0);
   int _offset = 0;
@@ -105,10 +108,16 @@ class FillerPlayer {
     stop();
   }
 
-  Future<void> _feed(Int16List pcm) {
+  /// A failed feed must not strand the filler: stop it (fires onDone once) and report.
+  Future<void> _feed(Int16List pcm) async {
     _anchorAt ??= _now();
     _fed += pcm.length;
-    return sink.feed(pcm);
+    try {
+      await sink.feed(pcm);
+    } catch (_) {
+      stop();
+      onError?.call('filler_feed_failed');
+    }
   }
 
   Int16List _scaled(int start, int end, double Function(int i) gainAt) {

@@ -13,6 +13,11 @@ class FakeSink implements PcmSink {
   Future<void> feed(Int16List pcm) async => fed.add(pcm);
 }
 
+class ThrowingSink extends FakeSink {
+  @override
+  Future<void> feed(Int16List pcm) async => throw StateError('feed failed');
+}
+
 const audio = FillerAudioConfig(chunkMs: 20, maxBufferedMs: 100, fadeMs: 40, gain: 0.5, pumpMs: 10);
 
 Int16List tone(int ms, [int value = 10000]) => Int16List(24 * ms)..fillRange(0, 24 * ms, value);
@@ -83,5 +88,33 @@ void main() {
     final fedBefore = sink.fed.length;
     await p.pump();
     expect(sink.fed.length, fedBefore);
+  });
+
+  test('a failing feed stops the filler, fires onDone once and reports a content-free error', () async {
+    final errors = <String>[];
+    var done = 0;
+    final p = FillerPlayer(sink: ThrowingSink(), cfg: audio, now: () => 0, onError: errors.add)
+      ..play(tone(500), onDone: () => done++);
+    await p.pump();
+    await p.pump();
+    expect(p.active, isFalse);
+    expect(done, 1);
+    expect(errors, ['filler_feed_failed']);
+  });
+
+  test('a failing fade still stops the filler and does not throw', () async {
+    final sink = FakeSink();
+    final errors = <String>[];
+    var done = 0;
+    final p = FillerPlayer(sink: sink, cfg: audio, now: () => 0, onError: errors.add)
+      ..play(tone(500), onDone: () => done++);
+    await p.pump();
+    final bad = FillerPlayer(sink: ThrowingSink(), cfg: audio, now: () => 0, onError: errors.add)
+      ..play(tone(500), onDone: () => done++);
+    await bad.fadeOut();
+    expect(bad.active, isFalse);
+    expect(done, 1);
+    expect(errors, ['filler_feed_failed']);
+    expect(p.active, isTrue);
   });
 }
