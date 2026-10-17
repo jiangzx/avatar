@@ -40,6 +40,7 @@ dependencies:
   wakelock_plus: 1.8.1
   record: 7.1.2
   flutter_pcm_sound: 3.3.3
+  flutter_secure_storage: 11.2.0
 
 dev_dependencies:
   flutter_test:

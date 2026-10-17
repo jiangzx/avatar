@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'avatar_page.dart';
 import 'config.dart';
 import 'spike/native_audio_spike.dart';
+import 'spike/secure_storage_spike.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,11 +23,13 @@ class AvatarApp extends StatelessWidget {
       title: '小柔',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: Colors.teal, brightness: Brightness.dark),
-      home: AppConfig.spike == 'native_audio'
-          ? const NativeAudioSpikePage()
-          : problem == null
-              ? const AvatarPage()
-              : Scaffold(body: Center(child: Text('配置错误：$problem', style: const TextStyle(fontSize: 20)))),
+      home: switch (AppConfig.spike) {
+        'native_audio' => const NativeAudioSpikePage(),
+        'secure_storage' => const SecureStorageSpikePage(),
+        _ => problem == null
+            ? const AvatarPage()
+            : Scaffold(body: Center(child: Text('配置错误：$problem', style: const TextStyle(fontSize: 20)))),
+      },
     );
   }
 }

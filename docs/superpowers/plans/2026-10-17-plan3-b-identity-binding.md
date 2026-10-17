@@ -91,7 +91,7 @@ Task order: 1 (validation, device) → 2 → 3 → 4 → 5 → 6 → 7 (gateway)
 
 This is a validation task, not TDD: the behavior under test is the device Keystore. Time-box 20 minutes for the device part (AGENTS.md §7).
 
-- [ ] **Step 1: Add the dependency**
+- [x] **Step 1: Add the dependency**
 
 In `app/pubspec.yaml`, under `dependencies:` after `flutter_pcm_sound: 3.3.3`, add:
 
@@ -102,7 +102,7 @@ In `app/pubspec.yaml`, under `dependencies:` after `flutter_pcm_sound: 3.3.3`, a
 Run: `cd app && flutter pub get`
 Expected: exits 0, `flutter_secure_storage 11.2.0` (plus its federated `flutter_secure_storage_*` packages) listed as added.
 
-- [ ] **Step 2: Add the probe page**
+- [x] **Step 2: Add the probe page**
 
 Create `app/lib/spike/secure_storage_spike.dart`:
 
@@ -175,7 +175,7 @@ class _SecureStorageSpikePageState extends State<SecureStorageSpikePage> {
 }
 ```
 
-- [ ] **Step 3: Route `SPIKE=secure_storage` to the probe**
+- [x] **Step 3: Route `SPIKE=secure_storage` to the probe**
 
 In `app/lib/main.dart`, add `import 'spike/secure_storage_spike.dart';` and replace the `home:` expression with:
 
@@ -189,7 +189,7 @@ In `app/lib/main.dart`, add `import 'spike/secure_storage_spike.dart';` and repl
       },
 ```
 
-- [ ] **Step 4: Keep the credential out of cloud backups**
+- [x] **Step 4: Keep the credential out of cloud backups**
 
 In `app/android/app/src/main/AndroidManifest.xml`, add `android:allowBackup="false"` to the `<application` element (next to `android:networkSecurityConfig`):
 
@@ -199,7 +199,7 @@ In `app/android/app/src/main/AndroidManifest.xml`, add `android:allowBackup="fal
         android:networkSecurityConfig="@xml/network_security_config"
 ```
 
-- [ ] **Step 5: Static checks and build**
+- [x] **Step 5: Static checks and build** (analyze + test run; APK build not run, user instruction: Mock only, no device/real model; see docs/blockers.md #30)
 
 Run: `cd app && flutter analyze && flutter test`
 Expected: `No issues found!`; all existing tests pass.
@@ -208,7 +208,7 @@ Run (if `app/assets/web/` is missing, first run `./scripts/build-web.sh` from th
 `cd app && flutter build apk --debug --dart-define=SPIKE=secure_storage`
 Expected: `✓ Built build/app/outputs/flutter-apk/app-debug.apk`. A Gradle/manifest error here is a FAIL of the "builds with this app" half of assumption 9: record it and go to Task 1b.
 
-- [ ] **Step 6: On-device check (Xiaomi, USB)**
+- [ ] **Step 6: On-device check (Xiaomi, USB)** — Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #30
 
 ```bash
 cd app
@@ -237,7 +237,7 @@ adb shell run-as com.anyidea.avatar_app sh -c 'grep -rl V shared_prefs || echo N
 
 PASS = all three expectations hold. Tap 清除 afterwards.
 
-- [ ] **Step 7: Record the result**
+- [x] **Step 7: Record the result**
 
 PASS: add one line to the Plan 3 row notes in `docs/project/roadmap.md`: "Plan B Task 1: flutter_secure_storage 11.2.0 verified on Xiaomi <model> (write/readback, force-stop, reinstall-in-place, not plaintext) on <date>."
 
@@ -250,7 +250,7 @@ FAIL or no device within 20 minutes: append to `docs/blockers.md`:
 - Impact: credential storage. FAIL → run Task 1b (platform-channel Keystore). NOT RUN → continue; re-run Step 6 before Task 11 device acceptance.
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app/pubspec.yaml app/pubspec.lock app/lib/spike/secure_storage_spike.dart app/lib/main.dart app/android/app/src/main/AndroidManifest.xml docs/project/roadmap.md
