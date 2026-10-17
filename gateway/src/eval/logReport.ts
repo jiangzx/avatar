@@ -38,3 +38,29 @@ export function summarizeReplyMetrics(lines: LogLine[]): Record<string, { n: num
   }
   return out;
 }
+
+/**
+ * Silence gate: a 'reply' without a local `vad_edge speaking` since the previous response is unprompted
+ * (speaker echo or noise). 'followup' responses are proactive; greeting is excluded.
+ */
+export function analyzeSilence(lines: LogLine[], windowMs = 300_000): { replies: number; unprompted: number; proactive: number; maxProactivePerWindow: number } {
+  let sawSpeech = false;
+  let replies = 0;
+  let unprompted = 0;
+  const proactiveAt: number[] = [];
+  for (const l of lines) {
+    if (l.event === 'vad_edge' && l.state === 'speaking') sawSpeech = true;
+    if (l.event !== 'response_start') continue;
+    if (l.kind === 'reply') {
+      replies++;
+      if (!sawSpeech) unprompted++;
+    } else if (l.kind === 'followup') proactiveAt.push(Date.parse(l.t));
+    sawSpeech = false;
+  }
+  let maxProactivePerWindow = 0;
+  for (let i = 0; i < proactiveAt.length; i++) {
+    const inWindow = proactiveAt.filter((t) => t >= proactiveAt[i]! && t < proactiveAt[i]! + windowMs).length;
+    maxProactivePerWindow = Math.max(maxProactivePerWindow, inWindow);
+  }
+  return { replies, unprompted, proactive: proactiveAt.length, maxProactivePerWindow };
+}

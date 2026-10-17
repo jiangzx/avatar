@@ -1,0 +1,11 @@
+{
+  "question": {
+    "endMarks": ["？", "?"],
+    "finalParticles": ["吗", "么"],
+    "neParticle": "呢",
+    "interrogatives": ["什么", "怎么", "哪", "谁", "几", "多少", "为什么", "是不是", "有没有", "好不好", "要不要", "对不对", "冷不冷", "累不累"],
+    "quotePairs": [["「", "」"], ["“", "”"], ["『", "』"], ["\"", "\""]]
+  },
+  "gate": { "maxQuestionRatio": 0.3334, "maxAvgReplyChars": 45 },
+  "run": { "playbackSpeed": 2, "settleMs": 1500, "replyTimeoutMs": 20000, "progressEveryMs": 500 }
+}

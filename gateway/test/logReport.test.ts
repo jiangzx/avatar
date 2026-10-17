@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLogLines, percentile, summarizeReplyMetrics } from '../src/eval/logReport.ts';
+import { analyzeSilence, parseLogLines, percentile, summarizeReplyMetrics } from '../src/eval/logReport.ts';
 
 describe('logReport', () => {
   it('uses nearest-rank percentiles', () => {
@@ -19,5 +19,18 @@ describe('logReport', () => {
     expect(s.speech_to_first_audio_ms).toEqual({ n: 2, p50: 800, p90: 1200 });
     expect(s.output_tokens).toEqual({ n: 1, p50: 50, p90: 50 });
     expect(s.input_tokens).toEqual({ n: 0, p50: 0, p90: 0 });
+  });
+  it('counts replies without preceding local speech and proactive replies per window', () => {
+    const at = (s: number) => new Date(Date.UTC(2026, 9, 17, 0, 0, s)).toISOString();
+    const lines = parseLogLines([
+      { t: at(0), event: 'response_start', kind: 'greeting' },
+      { t: at(10), event: 'vad_edge', state: 'speaking' },
+      { t: at(12), event: 'response_start', kind: 'reply' },
+      { t: at(30), event: 'response_start', kind: 'reply' },
+      { t: at(40), event: 'response_start', kind: 'followup' },
+      { t: at(70), event: 'response_start', kind: 'followup' },
+      { t: at(400), event: 'response_start', kind: 'followup' },
+    ].map((l) => JSON.stringify(l)).join('\n'));
+    expect(analyzeSilence(lines)).toEqual({ replies: 2, unprompted: 1, proactive: 3, maxProactivePerWindow: 2 });
   });
 });

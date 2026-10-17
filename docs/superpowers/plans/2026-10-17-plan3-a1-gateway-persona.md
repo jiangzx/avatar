@@ -2989,7 +2989,7 @@ Append to `describe('Session', ...)` in `gateway/test/session.test.ts`:
   });
 ```
 
-- [x] **Step 2: Run them to verify they fail**
+- [ ] **Step 2: Run them to verify they fail** — Not run: tests and implementation were written together; reviewer confirmed the tests fail without the implementation.
 
 Run: `npm test -w gateway -- test/emotion.test.ts test/session.test.ts`
 Expected: FAIL — `emotion.ts` and `config/emotion.json` not found; `emotion` unknown in `SessionDeps`.
@@ -3203,7 +3203,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 - Produces (`logReport.ts`): `analyzeSilence(lines: LogLine[], windowMs?: number): { replies: number; unprompted: number; proactive: number; maxProactivePerWindow: number }`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/questions.test.ts`:
 
@@ -3312,12 +3312,12 @@ Append to `gateway/test/logReport.test.ts` (extend the import with `analyzeSilen
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/questions.test.ts test/harness.test.ts test/logReport.test.ts`
 Expected: FAIL — modules, config, and scenarios not found; `analyzeSilence` not exported.
 
-- [ ] **Step 3: Write config and scenarios**
+- [x] **Step 3: Write config and scenarios**
 
 Create `gateway/config/eval.json`:
 
@@ -3362,7 +3362,7 @@ Create `docs/testing/plan-a-eval/scenarios.json` (synthetic, hand-written):
 ]
 ```
 
-- [ ] **Step 4: Implement the question rule**
+- [x] **Step 4: Implement the question rule**
 
 Create `gateway/src/eval/questions.ts`:
 
@@ -3407,7 +3407,7 @@ export function countQuestions(text: string, rule: QuestionRule): { sentences: n
 }
 ```
 
-- [ ] **Step 5: Implement the harness**
+- [x] **Step 5: Implement the harness**
 
 Create `gateway/src/eval/harness.ts`:
 
@@ -3622,7 +3622,7 @@ export function renderReport(summary: EvalSummary, records: ReplyRecord[], meta:
 }
 ```
 
-- [ ] **Step 6: Add the silence report**
+- [x] **Step 6: Add the silence report**
 
 Append to `gateway/src/eval/logReport.ts`:
 
@@ -3671,12 +3671,12 @@ else {
 }
 ```
 
-- [ ] **Step 7: Run tests and typecheck**
+- [x] **Step 7: Run tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS, typecheck clean.
 
-- [ ] **Step 8: Add the eval CLI**
+- [x] **Step 8: Add the eval CLI**
 
 Create `gateway/scripts/eval.ts`:
 
@@ -3755,7 +3755,7 @@ Expected: stderr lists `scenario actions`, `scenario quiet`; stdout prints one s
 Run: `npm run typecheck -w gateway`
 Expected: clean.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add gateway/config/eval.json gateway/src/eval/questions.ts gateway/src/eval/harness.ts gateway/src/eval/logReport.ts gateway/scripts/log-report.ts gateway/scripts/eval.ts docs/testing/plan-a-eval/scenarios.json gateway/test/questions.test.ts gateway/test/harness.test.ts gateway/test/logReport.test.ts
