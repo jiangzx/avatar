@@ -1101,7 +1101,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
 - Produces (`SessionDeps`): `summarizePolicy?: PolicySpec` (wired from `gateway/config/pacing.json` in Task 5). Plan C wraps tool handlers and the extraction client with the same helper.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/policy.test.ts`:
 
@@ -1184,12 +1184,12 @@ Append to `describe('Session', ...)` in `gateway/test/session.test.ts`:
   });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/policy.test.ts test/session.test.ts`
 Expected: FAIL — `policy.ts` not found; `summarizePolicy` unknown in `SessionDeps`.
 
-- [ ] **Step 3: Implement the helper**
+- [x] **Step 3: Implement the helper**
 
 Create `gateway/src/reliability/policy.ts`:
 
@@ -1269,7 +1269,7 @@ export async function runWithPolicy<T>(
 }
 ```
 
-- [ ] **Step 4: Route summarization through the policy**
+- [x] **Step 4: Route summarization through the policy**
 
 In `gateway/src/session/session.ts`:
 - imports:
@@ -1311,14 +1311,14 @@ In `gateway/src/session/session.ts`:
   }
   ```
 
-- [ ] **Step 5: Run the tests and typecheck**
+- [x] **Step 5: Run the tests and typecheck**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: all PASS (including the existing "backs off repeated summarizer failures"), typecheck clean.
 
 Known limit (document in the commit body): the policy timeout cannot cancel `ledger.summarize()` (the `Summarizer` interface takes no signal), so a summarizer that never settles keeps the ledger's own in-flight flag set. `QwenSummarizer` has a 10 s internal timeout, below the 15 s policy timeout in `pacing.json`, so production calls always settle.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gateway/src/reliability/policy.ts gateway/src/session/session.ts gateway/test/policy.test.ts gateway/test/session.test.ts

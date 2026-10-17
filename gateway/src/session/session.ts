@@ -8,6 +8,7 @@ import {
 } from '@anyidea/protocol';
 import { PERFORM_ACTION_TOOL, type AdapterFactory, type ProactiveRequest, type RealtimeAdapter, type SessionConfig } from '../adapters/types.ts';
 import { log } from '../log.ts';
+import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { devContext, type SessionContext } from './context.ts';
@@ -35,6 +36,7 @@ export interface SessionDeps {
   modelOwnsTurns?: boolean;
   /** Receives each finalized reply's metrics (eval harness). Production only logs them. */
   onReplyMetrics?: (m: ReplyMetrics) => void;
+  summarizePolicy?: PolicySpec;
 }
 
 interface ResponseState {
@@ -47,6 +49,9 @@ interface ResponseState {
 }
 
 const MAX_REBUILD_MIC_FRAMES = 25;
+
+/** Used only when no policy is injected (tests); production reads gateway/config/pacing.json. */
+const DEFAULT_SUMMARIZE_POLICY: PolicySpec = { timeoutMs: 15_000, retries: 0, backoffMs: 1_000, maxBackoffMs: 1_000 };
 
 export class Session {
   readonly ledger: ConversationLedger;
@@ -73,6 +78,7 @@ export class Session {
   private readonly rebuildMicBuffer: Int16Array[] = [];
   private summarizeRetryAt = 0;
   private summarizeBackoffMs = 1_000;
+  private summarizeInFlight = false;
   private vadSpeakingCount = 0;
   private vadSilentCount = 0;
   private modelGenerating = false;
@@ -373,21 +379,24 @@ export class Session {
   }
 
   private maybeSummarize(): void {
-    if (!this.ledger.needsSummary()) return;
+    if (!this.ledger.needsSummary() || this.summarizeInFlight) return;
     if (Date.now() < this.summarizeRetryAt) return;
-    this.ledger
-      .summarize(this.deps.summarizer)
-      .then((applied) => {
+    this.summarizeInFlight = true;
+    void runWithPolicy('summarize', this.deps.summarizePolicy ?? DEFAULT_SUMMARIZE_POLICY, () => this.ledger.summarize(this.deps.summarizer)).then((r) => {
+      this.summarizeInFlight = false;
+      if (r.ok) {
         this.summarizeRetryAt = 0;
         this.summarizeBackoffMs = 1_000;
-        if (applied && !this.ended) this.adapter.updateInstructions(this.instructions());
-      })
-      .catch(() => {
-        this.summarizeRetryAt = Date.now() + this.summarizeBackoffMs;
-        this.summarizeBackoffMs = Math.min(this.summarizeBackoffMs * 2, 30_000);
-        log('summarize_failed');
-      });
+        if (r.value && !this.ended) this.adapter.updateInstructions(this.instructions());
+        return;
+      }
+      // The policy already logged policy_failed with the code; keep the cross-call cool-down.
+      this.summarizeRetryAt = Date.now() + this.summarizeBackoffMs;
+      this.summarizeBackoffMs = Math.min(this.summarizeBackoffMs * 2, 30_000);
+      log('summarize_failed', { code: r.code });
+    });
   }
+  
 
   private maybeSlimContext(): void {
     const limit = (this.deps.modelContextTokenLimit ?? 12_000) * 0.8;

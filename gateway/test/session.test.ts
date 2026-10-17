@@ -386,4 +386,22 @@ describe('Session', () => {
     expect(lines).toHaveLength(2);
     expect(lines.join('')).not.toMatch(/你好呀|好呀|挥挥手/);
   });
+
+  it('times out a hanging summarizer through the policy and retries after backoff', async () => {
+    let calls = 0;
+    const s = setup({
+      ledger: { keepRecentTurns: 1, summarizeAfterTurns: 1, summarizeAfterTokens: 10_000 },
+      summarizer: { summarize: () => { calls++; return new Promise<string>(() => {}); } },
+      summarizePolicy: { timeoutMs: 500, retries: 0, backoffMs: 100, maxBackoffMs: 100 },
+    });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第一句' });
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第二句' }); // > 1 user turn: summarize starts
+    expect(calls).toBe(1);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第三句' });
+    expect(calls).toBe(1); // one summarization in flight at a time
+    await vi.advanceTimersByTimeAsync(600); // policy timeout (500 ms) fires
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第四句' });
+    expect(calls).toBe(1); // still inside the failure backoff window (1 s)
+  });
 });
