@@ -2126,7 +2126,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   `enterState` applies `poseFor` through `setBaselineValue('eyesLookUp' | 'headRotateZ', …)` (both keys exist in TalkingHead 1.7.0's `mtAvatar`; visual check in Task 9); `setEmotion` sets the mood and `setFixedValue('mouthSmile', smileFor(emotion))` so the resting smile no longer masks `sad`. `THINK_LOOK_AHEAD_MS` is removed (thinking no longer calls `lookAhead`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `describe('NativeAvatarController', ...)` in `avatar-core/test/nativeAvatar.test.ts`:
 
@@ -2215,12 +2215,12 @@ describe('poses and expressions', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w avatar-core -- test/nativeAvatar.test.ts test/avatarView.test.ts`
 Expected: FAIL — mic level switches to speaking; empty reply goes idle; backchannel plays the full nod; `poseFor`/`smileFor` not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `avatar-core/src/nativeAvatar.ts`:
 - below the imports add:
@@ -2311,12 +2311,12 @@ Expected: FAIL — mic level switches to speaking; empty reply goes idle; backch
   }
   ```
 
-- [ ] **Step 4: Run tests and typecheck**
+- [x] **Step 4: Run tests and typecheck**
 
 Run: `npm test -w avatar-core && npm run typecheck -w avatar-core`
 Expected: all PASS; typecheck clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add avatar-core/src/nativeAvatar.ts avatar-core/src/avatar/avatarView.ts avatar-core/test/nativeAvatar.test.ts avatar-core/test/avatarView.test.ts

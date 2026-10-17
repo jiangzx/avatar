@@ -25,6 +25,48 @@ function nativeAvatarFakes(): { deps: NativeAvatarDeps; avatar: { mouthCalls: un
 }
 
 describe('NativeAvatarController', () => {
+  const lastState = (posts: unknown[]) => posts.filter((p) => (p as { type: string }).type === 'state').at(-1);
+
+  it('stays thinking on microphone levels and speaks only on the state message', async () => {
+    const f = nativeAvatarFakes();
+    const c = new NativeAvatarController({} as HTMLElement, f.deps);
+    await c.start();
+    c.handleNativeEvent({ type: 'response.start', responseSeq: 1, kind: 'reply' });
+    c.handleNativeEvent({ type: 'audio.level', rms: 9000, zcr: 0.2, dtMs: 20 });
+    expect(lastState(f.posts)).toEqual({ type: 'state', state: 'thinking' });
+    c.handleNativeEvent({ type: 'state', state: 'speaking' });
+    expect(lastState(f.posts)).toEqual({ type: 'state', state: 'speaking' });
+  });
+
+  it('keeps the thinking pose after an empty reply ends', async () => {
+    const f = nativeAvatarFakes();
+    const c = new NativeAvatarController({} as HTMLElement, f.deps);
+    await c.start();
+    c.handleNativeEvent({ type: 'response.start', responseSeq: 1, kind: 'reply' });
+    c.handleNativeEvent({ type: 'response.end', responseSeq: 1, playedMs: 0 });
+    expect(lastState(f.posts)).toEqual({ type: 'state', state: 'thinking' });
+    c.handleNativeEvent({ type: 'response.start', responseSeq: 2, kind: 'reply' });
+    c.handleNativeEvent({ type: 'response.end', responseSeq: 2, playedMs: 900 });
+    expect(lastState(f.posts)).toEqual({ type: 'state', state: 'idle' });
+  });
+
+  it('plays a subtle nod for backchannel actions and the full action otherwise', async () => {
+    const f = nativeAvatarFakes();
+    const nods: boolean[] = [];
+    const plays: string[] = [];
+    f.deps.createActions = () => ({
+      play(action: string) { plays.push(action); },
+      stopAll() {},
+      nod(subtle?: boolean) { nods.push(subtle === true); },
+    });
+    const c = new NativeAvatarController({} as HTMLElement, f.deps);
+    await c.start();
+    c.handleNativeEvent({ type: 'avatar.action', action: 'nod', source: 'backchannel' });
+    c.handleNativeEvent({ type: 'avatar.action', action: 'nod', source: 'tool' });
+    expect(nods).toEqual([true]);
+    expect(plays).toEqual(['nod']);
+  });
+
   it('moves the mouth with assistant subtitle characters and ignores the microphone', async () => {
     vi.useFakeTimers();
     const f = nativeAvatarFakes();
