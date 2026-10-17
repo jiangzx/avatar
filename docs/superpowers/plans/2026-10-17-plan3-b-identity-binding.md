@@ -1615,7 +1615,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```
   Layering: `identity` imports only types from `session/context.ts` and `session/manager.ts` (plus `devContext`); `session` never imports `identity`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/identity.test.ts`:
 
@@ -1797,12 +1797,12 @@ describe('DeviceRegistry', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/identity.test.ts`
 Expected: FAIL with `Failed to load url ../src/identity/registry.ts`.
 
-- [ ] **Step 3: Implement the token helpers**
+- [x] **Step 3: Implement the token helpers**
 
 Create `gateway/src/identity/tokens.ts`:
 
@@ -1825,7 +1825,7 @@ export function shortHash(id: string): string {
 }
 ```
 
-- [ ] **Step 4: Implement the registry**
+- [x] **Step 4: Implement the registry**
 
 Create `gateway/src/identity/registry.ts`:
 
@@ -1960,12 +1960,12 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
 }
 ```
 
-- [ ] **Step 5: Run tests and typecheck**
+- [x] **Step 5: Run tests and typecheck**
 
 Run: `npm test -w gateway -- test/identity.test.ts && npm run typecheck -w gateway`
 Expected: PASS; typecheck clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gateway/src/identity/tokens.ts gateway/src/identity/registry.ts gateway/test/identity.test.ts
