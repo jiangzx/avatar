@@ -41,3 +41,20 @@ Partial deltas: NOT RUN. Completed minus response.created: NOT RUN. Fallback cho
 ## 5. Zero frames
 
 Phase 2 speech_started after zeros: NOT RUN. Second response: NOT RUN. Errors: NOT RUN. Fallback chosen: keep zero-value frames during filler; verify on device in A2 Task 9.
+
+## 4. Filler clip generation
+
+Method used: macOS say fallback (voice Tingting). The Qwen recorder (`gateway/scripts/make-filler-clips.ts`) is written and its PCM tools are unit-tested, but it was not run (user instruction: Mock only, no key, no real model). Both styles use the same placeholder clips.
+
+| style | clip | attempts | matched | ms | listener verdict |
+|---|---|---|---|---|---|
+| grandchild | think-1 | 0 (Qwen not run) | n/a | 1317 | NOT RUN |
+| grandchild | think-2 | 0 (Qwen not run) | n/a | 1735 | NOT RUN |
+| grandchild | wait-1 | 0 (Qwen not run) | n/a | 1255 | NOT RUN |
+| old-friend | think-1 | 0 (Qwen not run) | n/a | 1317 | NOT RUN |
+| old-friend | think-2 | 0 (Qwen not run) | n/a | 1735 | NOT RUN |
+| old-friend | wait-1 | 0 (Qwen not run) | n/a | 1255 | NOT RUN |
+
+The filler voice differs from the reply voice.
+
+Decision: fallback in use, blocker #19.

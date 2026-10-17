@@ -658,7 +658,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces (`pcm-tools.ts`): `rms(pcm, start, end): number`, `trimSilence(pcm, threshold, windowSamples, padSamples): Int16Array`, `normalizePeak(pcm, targetPeak): Int16Array`, `sameText(a, b): boolean`.
 - Produces: one 24 kHz mono s16le raw PCM file per clip id per style, 0.3–2.5 s long.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `gateway/test/pcmTools.test.ts`:
 
@@ -715,12 +715,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `npm test -w gateway -- test/pcmTools.test.ts` and `cd app && flutter test test/filler_assets_test.dart`
 Expected: FAIL — `pcm-tools.ts` not found; clip files missing.
 
-- [ ] **Step 3: Implement the PCM tools and the recorder**
+- [x] **Step 3: Implement the PCM tools and the recorder**
 
 Create `gateway/scripts/lib/pcm-tools.ts`:
 
@@ -813,6 +813,8 @@ Expected: 4 tests PASS; typecheck clean.
 
 - [ ] **Step 4: Record the clips (manual, needs the key)**
 
+Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #19. Qwen recording skipped; macOS `say -v Tingting` placeholders written for both styles.
+
 Use each style's voice from `gateway/roles/elder-companion/role.json` (omit `--voice` when it is `null`):
 
 ```bash
@@ -851,7 +853,7 @@ Method used: <realtime model + text prompt (make-filler-clips.ts) | macOS say fa
 Decision: <clips accepted | fallback in use, blocker #n>.
 ```
 
-- [ ] **Step 5: Register the clip directories**
+- [x] **Step 5: Register the clip directories**
 
 In `app/pubspec.yaml`, append under `flutter: assets:` (after `- assets/config/`):
 
@@ -863,7 +865,7 @@ In `app/pubspec.yaml`, append under `flutter: assets:` (after `- assets/config/`
 Run: `cd app && flutter test test/filler_assets_test.dart && flutter analyze`
 Expected: PASS; no issues.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gateway/scripts/lib/pcm-tools.ts gateway/scripts/make-filler-clips.ts gateway/test/pcmTools.test.ts app/assets/filler app/pubspec.yaml app/test/filler_assets_test.dart docs/research/qwen-plan-a-validation.md
