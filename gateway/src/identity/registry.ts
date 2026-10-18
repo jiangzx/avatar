@@ -1,8 +1,11 @@
+import { fileURLToPath } from 'node:url';
 import { log } from '../log.ts';
+import { renderSnapshot } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
-import { devContext, type ContextResolver, type ResolveResult } from '../session/context.ts';
+import { devContext, type ContextResolver, type ResolveResult, type SessionContext } from '../session/context.ts';
 import type { SessionLifecycle } from '../session/manager.ts';
+import { loadMemoryBudget } from '../session/pacing.ts';
 import { hashToken, newDeviceToken, shortHash } from './tokens.ts';
 
 const DAY_MS = 24 * 60 * 60_000;
@@ -35,6 +38,8 @@ export interface DeviceRegistryDeps {
   roles: RoleCatalog;
   limits: IdentityLimits;
   now?: () => number;
+  /** Defaults to instructions.snapshotMaxChars in gateway/config/memory.json. */
+  snapshotMaxChars?: number;
 }
 
 /** Device registration and bearer → owner/agent resolution. Only token hashes are stored. */
@@ -42,9 +47,11 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
   /** Persists session start/end so orphan cleanup can spot never-connected owners. */
   readonly lifecycle: SessionLifecycle;
   private readonly now: () => number;
+  private readonly snapshotMaxChars: number;
 
   constructor(private readonly deps: DeviceRegistryDeps) {
     this.now = deps.now ?? Date.now;
+    this.snapshotMaxChars = deps.snapshotMaxChars ?? loadMemoryBudget(fileURLToPath(new URL('../../config/memory.json', import.meta.url))).instructions.snapshotMaxChars;
     this.lifecycle = {
       started: (sessionId, ctx) => {
         if (ctx.agentId !== undefined) deps.store.recordSessionStart(sessionId, ctx.agentId, this.now());
@@ -86,9 +93,18 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     store.touchDevice(device.ownerId, device.deviceId, now);
     log('device_resolved', { agent: shortHash(agent.id), style: styleId });
     const owner = store.getOwner(device.ownerId);
+    const ctx: SessionContext = { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: roles.voiceFor(roleId, styleId) };
+    // Read the store, not the live Session. The server flushes the previous owner before this resolve is used.
+    const snapshot = renderSnapshot({
+      facts: store.listFacts(device.ownerId),
+      notes: store.listNotes(device.ownerId, agent.id),
+      tail: store.snapshotRows(device.ownerId, agent.id),
+      maxChars: this.snapshotMaxChars,
+    });
+    if (snapshot) ctx.memorySnapshot = snapshot;
     return {
       ok: true,
-      ctx: { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: roles.voiceFor(roleId, styleId) },
+      ctx,
       noticePending: owner !== undefined && owner.notifiedAt === null,
     };
   }

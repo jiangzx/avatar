@@ -50,6 +50,15 @@ export interface MemoryStore {
   bumpEpoch(ownerId: string): number;
   /** Inserts one message when that owner row exists. */
   insertMessage(row: { id: string; sessionId: string; ownerId: string; role: 'user' | 'assistant'; text: string; bigrams: string; now: number }): void;
+  /** Owner facts, addressing and otherwise. Caller reorders addressing to the front. */
+  listFacts(ownerId: string): { category: string; text: string }[];
+  /** Notes for one agent. A different agent's notes are not returned. */
+  listNotes(ownerId: string, agentId: string): { text: string }[];
+  /**
+   * Unextracted tail for the owner. No cap: the previous session already flushed,
+   * and extraction later marks these rows extracted. `agentId` is unused; messages are owner-scoped.
+   */
+  snapshotRows(ownerId: string, agentId: string): { role: 'user' | 'assistant'; text: string }[];
 }
 
 type Row = Record<string, unknown>;
@@ -82,6 +91,11 @@ function prepareStatements(db: DatabaseSync) {
     insertMessage: p(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, created_at)
       SELECT ?, ?, ?, ?, ?, ?, ?
       WHERE EXISTS (SELECT 1 FROM owners WHERE id = ?)`),
+    listFacts: p('SELECT category, text FROM user_facts WHERE owner_id = ? ORDER BY updated_at, id'),
+    listNotes: p('SELECT text FROM relationship_notes WHERE owner_id = ? AND agent_id = ? ORDER BY updated_at, id'),
+    snapshotRows: p(`SELECT role, text FROM messages
+      WHERE owner_id = ? AND extracted = 0 AND excluded = 0
+      ORDER BY created_at, rowid`),
   };
 }
 
@@ -193,6 +207,18 @@ export class SqliteMemoryStore implements MemoryStore {
 
   insertMessage(row: { id: string; sessionId: string; ownerId: string; role: 'user' | 'assistant'; text: string; bigrams: string; now: number }): void {
     this.q.insertMessage.run(row.id, row.sessionId, row.ownerId, row.role, row.text, row.bigrams, row.now, row.ownerId);
+  }
+
+  listFacts(ownerId: string): { category: string; text: string }[] {
+    return this.q.listFacts.all(ownerId).map((r) => ({ category: r.category as string, text: r.text as string }));
+  }
+
+  listNotes(ownerId: string, agentId: string): { text: string }[] {
+    return this.q.listNotes.all(ownerId, agentId).map((r) => ({ text: r.text as string }));
+  }
+
+  snapshotRows(ownerId: string, _agentId: string): { role: 'user' | 'assistant'; text: string }[] {
+    return this.q.snapshotRows.all(ownerId).map((r) => ({ role: r.role as 'user' | 'assistant', text: r.text as string }));
   }
 
   private tx<T>(body: () => T): T {

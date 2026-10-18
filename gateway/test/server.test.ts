@@ -137,6 +137,35 @@ describe('gateway server', () => {
     }
   });
 
+  it('flushes the previous owner before the snapshot used for the next session', async () => {
+    const events: string[] = [];
+    const seen: Array<string | undefined> = [];
+    const ctx: SessionContext = { ownerId: 'o1', agentId: 'a1', roleId: 'elder-companion', styleId: 'grandchild' };
+    const spy = vi.spyOn(Session.prototype, 'flush').mockImplementation(() => {
+      events.push('flush');
+    });
+    try {
+      const base = await boot({
+        contextResolver: {
+          resolve: () => {
+            const flushed = events.includes('flush');
+            events.push(flushed ? 'resolve-after-flush' : 'resolve-before-flush');
+            return { ok: true, ctx: flushed ? { ...ctx, memorySnapshot: '称呼：王叔' } : ctx, noticePending: false };
+          },
+        },
+        onContext: (c) => seen.push(c.memorySnapshot),
+      });
+      const headers = { 'content-type': 'application/json', 'x-app-secret': SECRET, authorization: 'Bearer device-token-0123456789' };
+      expect((await fetch(base + '/session', { method: 'POST', headers, body: '{}' })).status).toBe(200);
+      expect((await fetch(base + '/session', { method: 'POST', headers, body: '{}' })).status).toBe(200);
+      expect(seen).toEqual([undefined, '称呼：王叔']);
+      expect(events.indexOf('flush')).toBeGreaterThanOrEqual(0);
+      expect(events.indexOf('resolve-after-flush')).toBeGreaterThan(events.indexOf('flush'));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('hands the resolved context to the session factory', async () => {
     const seen: SessionContext[] = [];
     const ctx: SessionContext = { ownerId: 'o1', agentId: 'a1', roleId: 'elder-companion', styleId: 'old-friend', voice: 'voice-old' };

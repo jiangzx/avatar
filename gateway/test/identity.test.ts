@@ -163,6 +163,50 @@ describe('DeviceRegistry', () => {
     expect(registry.resolve(fresh).ok).toBe(true);
   });
 
+  it('includes this owner’s fact and unextracted tail on the second resolve', () => {
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const { db, registry } = setup();
+    const token = register(registry);
+    const otherToken = register(registry);
+    const first = ctxOf(registry, token);
+    const other = ctxOf(registry, otherToken);
+    if (!first.ownerId || !first.agentId || !other.ownerId || !other.agentId) throw new Error('unresolved');
+    expect(first.memorySnapshot).toBeUndefined();
+    expect(registry.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined }, noticePending: false });
+
+    db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'preference', '喜欢喝茶', 0.8, 1)`).run(`pref-${first.ownerId}`, first.ownerId);
+    db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'addressing', '称呼：王叔', 0.9, 2)`).run(`addr-${first.ownerId}`, first.ownerId);
+    db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'addressing', '称呼：李姨', 0.9, 1)`).run(`addr-${other.ownerId}`, other.ownerId);
+    db.prepare(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, created_at) VALUES ('m-tail', 's1', ?, 'user', '昨天去了公园', '', 10)`).run(first.ownerId);
+    db.prepare(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, extracted, created_at) VALUES ('m-done', 's1', ?, 'assistant', '已经抽过', '', 1, 11)`).run(first.ownerId);
+    db.prepare(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, excluded, created_at) VALUES ('m-drop', 's1', ?, 'user', '不要这条', '', 1, 12)`).run(first.ownerId);
+    db.prepare(`INSERT INTO relationship_notes (id, agent_id, owner_id, kind, text, updated_at) VALUES ('note-a', ?, ?, 'tone', '说话慢一点', 3)`).run(first.agentId, first.ownerId);
+    db.prepare(`INSERT INTO relationship_notes (id, agent_id, owner_id, kind, text, updated_at) VALUES ('note-b', ?, ?, 'tone', '别人的备注', 3)`).run(other.agentId, other.ownerId);
+
+    const second = ctxOf(registry, token);
+    expect(second.memorySnapshot).toContain('称呼：王叔');
+    expect(second.memorySnapshot).toContain('喜欢喝茶');
+    expect(second.memorySnapshot).toContain('说话慢一点');
+    expect(second.memorySnapshot).toContain('用户：昨天去了公园');
+    expect(second.memorySnapshot).not.toContain('称呼：李姨');
+    expect(second.memorySnapshot).not.toContain('别人的备注');
+    expect(second.memorySnapshot).not.toContain('已经抽过');
+    expect(second.memorySnapshot).not.toContain('不要这条');
+    expect(second.memorySnapshot!.indexOf('称呼：王叔')).toBeLessThan(second.memorySnapshot!.indexOf('喜欢喝茶'));
+    expect(second.memorySnapshot!.indexOf('喜欢喝茶')).toBeLessThan(second.memorySnapshot!.indexOf('用户：昨天去了公园'));
+
+    const otherSnapshot = ctxOf(registry, otherToken).memorySnapshot;
+    expect(otherSnapshot).toContain('称呼：李姨');
+    expect(otherSnapshot).not.toContain('王叔');
+    expect(otherSnapshot).not.toContain('昨天去了公园');
+    expect(otherSnapshot).not.toContain('说话慢一点');
+
+    const out = write.mock.calls.map((c) => String(c[0])).join('');
+    expect(out).not.toContain('王叔');
+    expect(out).not.toContain('昨天去了公园');
+    expect(out).not.toContain('喜欢喝茶');
+  });
+
   it('never logs tokens, token hashes, owner ids or full agent ids', () => {
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const { registry } = setup();

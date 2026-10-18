@@ -172,7 +172,21 @@ function createSession(req: IncomingMessage, res: ServerResponse, opts: GatewayS
     json(res, 401, { error: 'unauthorized' });
     return;
   }
-  json(res, 200, opts.manager.create(resolved.ctx, resolved.noticePending));
+  // create() flushes the previous owner, but only after this function returns a context.
+  // Flush first, then resolve again so the snapshot includes the last turn. Dev has no owner.
+  let ctx = resolved.ctx;
+  let noticePending = resolved.noticePending;
+  if (ctx.ownerId !== undefined && typeof bearer === 'string') {
+    opts.manager.endOwner(ctx.ownerId, 'owner_replaced');
+    const again = opts.contextResolver.resolve(bearer);
+    if (!again.ok) {
+      json(res, 401, { error: 'unauthorized' });
+      return;
+    }
+    ctx = again.ctx;
+    noticePending = again.noticePending;
+  }
+  json(res, 200, opts.manager.create(ctx, noticePending));
 }
 
 async function resumeSession(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions): Promise<void> {

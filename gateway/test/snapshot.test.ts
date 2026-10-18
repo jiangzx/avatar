@@ -1,0 +1,68 @@
+import { describe, expect, it } from 'vitest';
+import { buildInstructions } from '../src/session/instructions.ts';
+import { renderSnapshot } from '../src/memory/snapshot.ts';
+
+describe('renderSnapshot', () => {
+  it('puts the addressing name ahead of a preference, a note, and the tail', () => {
+    const text = renderSnapshot({
+      facts: [
+        { category: 'preference', text: '喜欢喝茶' },
+        { category: 'addressing', text: '称呼：王叔' },
+      ],
+      notes: [{ text: '说话慢一点' }],
+      tail: [{ role: 'user', text: '昨天去了公园' }, { role: 'assistant', text: '公园空气好' }],
+      maxChars: 200,
+    });
+    expect(text).toBe('称呼：王叔\n喜欢喝茶\n说话慢一点\n用户：昨天去了公园\n助手：公园空气好');
+  });
+
+  it('clips at line boundaries and keeps the name whole when the budget fits the name', () => {
+    const name = '称呼：王叔';
+    const text = renderSnapshot({
+      facts: [
+        { category: 'preference', text: '喜欢喝茶' },
+        { category: 'addressing', text: name },
+      ],
+      notes: [],
+      tail: [{ role: 'user', text: '昨天去了公园' }],
+      maxChars: name.length + 2,
+    });
+    expect(text).toBe(name);
+    expect(text.length).toBeLessThanOrEqual(name.length + 2);
+  });
+
+  it('keeps every addressing fact when they exceed the budget', () => {
+    const text = renderSnapshot({
+      facts: [
+        { category: 'preference', text: '喜欢喝茶' },
+        { category: 'addressing', text: '称呼：王叔' },
+        { category: 'addressing', text: '也叫王先生' },
+      ],
+      notes: [],
+      tail: [{ role: 'user', text: '昨天去了公园' }],
+      maxChars: 2,
+    });
+    expect(text).toBe('称呼：王叔\n也叫王先生');
+  });
+
+  it('returns an empty string when there is nothing to remember', () => {
+    expect(renderSnapshot({ facts: [], notes: [], tail: [], maxChars: 600 })).toBe('');
+  });
+
+  it('starts the instructions memory section with the name', () => {
+    const snapshot = renderSnapshot({
+      facts: [
+        { category: 'preference', text: '喜欢喝茶' },
+        { category: 'addressing', text: '称呼：王叔' },
+      ],
+      notes: [],
+      tail: [{ role: 'user', text: '昨天去了公园' }],
+      maxChars: 600,
+    });
+    const text = buildInstructions(
+      { persona: 'P', memorySnapshot: snapshot, summary: 'S', recent: [] },
+      { totalChars: 1000, snapshotMaxChars: 600, summaryMaxChars: 100 },
+    );
+    expect(text.split('## 关于用户（记忆）\n\n')[1]?.startsWith('称呼：王叔')).toBe(true);
+  });
+});
