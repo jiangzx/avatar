@@ -110,8 +110,9 @@ describe('SessionManager owner invariant', () => {
     const first = manager.create(owned('o1'));
     manager.create(owned('o1'));
     const previous = made[0]!;
-    expect(previous.flush).toHaveBeenCalledOnce();
+    expect(previous.flush).toHaveBeenCalledTimes(2);
     expect(previous.flush.mock.invocationCallOrder[0]).toBeLessThan(previous.end.mock.invocationCallOrder[0]!);
+    expect(previous.flush.mock.invocationCallOrder[1]).toBeLessThan(previous.end.mock.invocationCallOrder[0]!);
     expect(writer.append).toHaveBeenCalledWith({
       ownerId: 'o1',
       sessionId: first.sessionId,
@@ -120,6 +121,15 @@ describe('SessionManager owner invariant', () => {
       now: 1,
     });
     expect(made[1]!.flush).not.toHaveBeenCalled();
+  });
+
+  it('flushes before destroy when the client ends the session', async () => {
+    const { manager: m, made } = setup();
+    const started = await startNew(m, owned('o1'));
+    m.end(started.t.sessionId);
+    const session = made[0]!;
+    expect(session.flush).toHaveBeenCalledOnce();
+    expect(session.flush.mock.invocationCallOrder[0]).toBeLessThan(session.end.mock.invocationCallOrder[0]!);
   });
 
   it('endOwner ends every session of that owner and returns the count', async () => {

@@ -167,6 +167,7 @@ export class SessionManager {
     const entry = this.sessions.get(sessionId);
     if (!entry) return;
     if (entry.grace) clearTimeout(entry.grace);
+    entry.session.flush();
     entry.session.end();
     this.tokens.revoke(sessionId);
     this.sessions.delete(sessionId);

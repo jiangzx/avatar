@@ -670,6 +670,19 @@ describe('Session', () => {
     expect(append).toHaveBeenCalledTimes(2);
   });
 
+  it('flushes the playback slice of an interrupted reply', async () => {
+    const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
+    const s = setup({ writer: { append } }, ownedCtx, 'session-cut');
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(assistantText(s.sent, 2)).toBe('我在听');
+    // 3×100ms chunks at 24 kHz. Half of that audio is the first two characters.
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 150, reason: 'interrupted' });
+    s.session.flush();
+    expect(append.mock.calls.map((c) => c[0].text)).toEqual(['你好呀', '我在']);
+  });
+
   it('writes nothing when the writer or the owner is missing', async () => {
     const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
     const noOwner = setup({ writer: { append } }, undefined, 'session-no-owner');

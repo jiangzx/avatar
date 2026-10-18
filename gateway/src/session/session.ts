@@ -521,6 +521,7 @@ export class Session {
       this.deps.onReplyMetrics?.(m);
     }
     const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
+    s.text = text;
     this.ledger.addAssistant(text, Date.now(), interrupted);
     // Do not session.update here. An instructions refresh in the middle of a barge-in
     // drops the audio the server is still hearing, so the next question never lands.
