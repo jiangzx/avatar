@@ -14,7 +14,11 @@ import { Session } from './session/session.ts';
 import { createGatewayServer } from './server/server.ts';
 import { DeviceRegistry, ORPHAN_CLEANUP_INTERVAL_MS } from './identity/registry.ts';
 import { openDatabase } from './memory/db.ts';
+import { loadExtractPrompt } from './memory/extract.ts';
 import { SqliteMemoryStore } from './memory/store.ts';
+import { QwenTextClient } from './memory/textClient.ts';
+import { MemoryWorker, withExtraction } from './memory/worker.ts';
+import { SqliteTranscriptWriter } from './memory/writer.ts';
 import { loadEmotionConfig } from './session/emotion.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -39,9 +43,10 @@ if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh
 // Device identity (Plan B). MEMORY_DB_PATH unset = dev mode: no registration, no memory, bearers rejected.
 const identityConfig = loadIdentityConfig(process.env, fileURLToPath(new URL('../..', import.meta.url)));
 const memoryDb = identityConfig.memoryDbPath ? openDatabase(identityConfig.memoryDbPath, { busyTimeoutMs: identityConfig.busyTimeoutMs }) : null;
-const registry = memoryDb
+const store = memoryDb ? new SqliteMemoryStore(memoryDb) : null;
+const registry = store
   ? new DeviceRegistry({
-      store: new SqliteMemoryStore(memoryDb),
+      store,
       roles,
       limits: {
         maxOwners: identityConfig.maxOwners,
@@ -52,6 +57,26 @@ const registry = memoryDb
     })
   : null;
 log('identity_mode', { enabled: registry !== null, devEndpoints: identityConfig.enableDevEndpoints });
+const writer = store ? new SqliteTranscriptWriter(store) : undefined;
+const textClient = config.qwenApiKey && config.summarizerEndpoint
+  ? new QwenTextClient({
+      apiKey: config.qwenApiKey,
+      endpoint: config.summarizerEndpoint,
+      model: memory.extractModel ?? 'qwen-plus',
+    })
+  : null;
+const worker = store && textClient
+  ? new MemoryWorker({
+      store,
+      client: textClient,
+      systemPrompt: loadExtractPrompt(),
+      maxTokens: memory.extractMaxTokens ?? 800,
+      policy: memory.extractPolicy ?? pacing.policies.summarize,
+      transcriptMaxChars: memory.extractTranscriptMaxChars ?? 6_000,
+      contextMaxChars: memory.extractContextMaxChars ?? 4_000,
+    })
+  : null;
+if (store && !textClient) log('memory_extract_unconfigured', {});
 const manager = new SessionManager(
   (ctx, sessionId, noticePending = false) =>
     new Session({
@@ -78,11 +103,17 @@ const manager = new SessionManager(
       tailGuardMs: pacing.tailGuardMs,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
       emotion,
+      ...(writer ? { writer } : {}),
+      ...(worker ? {
+        worker,
+        extractEveryUserTurns: memory.extractEveryUserTurns ?? 10,
+        extractSilenceMs: memory.extractSilenceMs ?? 180_000,
+      } : {}),
     }, ctx, sessionId, noticePending),
   config.sessionGraceMs,
   config.sessionUnclaimedMs,
   config.sessionStartTimeoutMs,
-  registry?.lifecycle,
+  registry ? (worker ? withExtraction(registry.lifecycle, worker) : registry.lifecycle) : undefined,
 );
 const server = createGatewayServer({
   manager,
@@ -102,9 +133,21 @@ const server = createGatewayServer({
 
 server.listen(config.port, '0.0.0.0', () => log('gateway_listening', { port: config.port, adapter: config.adapter }));
 
+let stopping = false;
 const shutdown = () => {
+  if (stopping) return;
+  stopping = true;
   manager.shutdown();
-  server.close(() => process.exit(0));
+  void (async () => {
+    try {
+      if (worker) await worker.drain(memory.extractDrainMs ?? 8_000);
+    } finally {
+      server.close(() => {
+        if (memoryDb?.isOpen) memoryDb.close();
+        process.exit(0);
+      });
+    }
+  })();
 };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
@@ -115,9 +158,6 @@ if (registry) {
   void runCleanup();
   setInterval(runCleanup, ORPHAN_CLEANUP_INTERVAL_MS).unref();
 }
-// Registered after `shutdown`, so it runs after manager.shutdown() wrote the session end times.
-const closeMemoryDb = () => {
-  if (memoryDb?.isOpen) memoryDb.close();
-};
-process.on('SIGINT', closeMemoryDb);
-process.on('SIGTERM', closeMemoryDb);
+if (worker && store) {
+  for (const ownerId of store.ownersPendingExtraction()) void worker.extractOwner(ownerId, 'startup');
+}

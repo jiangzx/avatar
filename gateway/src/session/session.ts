@@ -12,6 +12,7 @@ import { PERFORM_ACTION_TOOL, type AdapterFactory, type ProactiveRequest, type R
 import { log } from '../log.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
+import type { MemoryExtractor } from '../memory/worker.ts';
 import type { TranscriptWriter } from '../memory/writer.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { devContext, type SessionContext } from './context.ts';
@@ -59,6 +60,12 @@ export interface SessionDeps {
   emotion?: EmotionConfig;
   /** Optional. flush() returns immediately when this is absent. */
   writer?: TranscriptWriter;
+  /** Optional. Dev sessions omit this, so turns and silence do not enqueue extraction. */
+  worker?: MemoryExtractor;
+  /** User finals between extracts. Defaults to 10, matching gateway/config/memory.json. */
+  extractEveryUserTurns?: number;
+  /** Rest delay used when a worker is injected. Matches extractSilenceMs. */
+  extractSilenceMs?: number;
 }
 
 interface ResponseState {
@@ -131,6 +138,8 @@ export class Session {
   private originForcedEnd = false;
   /** Seq of the in-flight memory notice. Set when that cue is requested. */
   private noticeSeq: number | null = null;
+  /** User finals since the session started. Every Nth one enqueues extraction. */
+  private userTurns = 0;
 
   constructor(
     private readonly deps: SessionDeps,
@@ -145,7 +154,17 @@ export class Session {
     // Summarize before the instruction budget would have to drop unsummarized turns.
     const history = deps.budget ? historyBudget(this.persona, deps.budget) : Number.POSITIVE_INFINITY;
     this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
-    this.director = new Director(deps.roles.director(ctx.roleId), { requestResponse: (kind, request) => this.requestResponse(kind, request) }, this.noticePending);
+    const extractor = deps.worker;
+    const ownerId = ctx.ownerId;
+    this.director = new Director(
+      deps.roles.director(ctx.roleId),
+      {
+        requestResponse: (kind, request) => this.requestResponse(kind, request),
+        ...(extractor && ownerId ? { onQuietRest: () => { void extractor.extractOwner(ownerId, 'silence'); } } : {}),
+      },
+      this.noticePending,
+      extractor ? deps.extractSilenceMs : undefined,
+    );
     this.emotion = deps.emotion ? new EmotionTagger(deps.emotion, (emotion) => this.send({ type: 'avatar.emotion', emotion })) : null;
     this.interrupt = new InterruptCoordinator({
       confirmWindowMs: deps.confirmWindowMs ?? 300,
@@ -567,6 +586,13 @@ export class Session {
     }
     this.turnsSinceRebuild++;
     this.charsSinceRebuild += text.length;
+    const extractor = this.deps.worker;
+    const ownerId = this.context.ownerId;
+    if (extractor && ownerId) {
+      this.userTurns += 1;
+      const every = this.deps.extractEveryUserTurns ?? 10;
+      if (this.userTurns % every === 0) void extractor.extractOwner(ownerId, 'turns');
+    }
     this.director.onUserFinal(text);
     this.emotion?.onUserFinal(text);
     const action = this.actions.fromKeyword(text);

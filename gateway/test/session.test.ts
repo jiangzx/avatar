@@ -764,6 +764,25 @@ describe('Session', () => {
     expect(markNotified).not.toHaveBeenCalled();
   });
 
+  it('enqueues extraction every configured number of user turns when a worker is injected', () => {
+    const reasons: string[] = [];
+    const s = setup({
+      worker: { extractOwner: async (_ownerId, reason) => { reasons.push(reason); } },
+      extractEveryUserTurns: 2,
+    }, ownedCtx, 'extract-turns');
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第一句' });
+    expect(reasons).toEqual([]);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第二句' });
+    expect(reasons).toEqual(['turns']);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第三句' });
+    expect(reasons).toEqual(['turns']);
+  });
+
+  it('does not enqueue extraction when no worker is injected', () => {
+    const s = setup({}, ownedCtx, 'extract-dev');
+    expect(() => s.session.handleClientMessage({ type: 'debug.userText', text: '第一句' })).not.toThrow();
+  });
+
   it('writes nothing when the writer or the owner is missing', async () => {
     const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
     const noOwner = setup({ writer: { append, markNotified: () => {} } }, undefined, 'session-no-owner');

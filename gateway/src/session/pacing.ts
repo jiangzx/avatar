@@ -33,7 +33,16 @@ const MemoryBudgetSchema = z.object({
     minHistoryChars: z.number().int().min(100).max(5_000),
   }).strict(),
   toolTurnTimeoutMs: z.number().int().min(3_000).max(30_000),
-}).loose(); // Plan C adds extraction settings next to `instructions`
+  // Extraction settings sit beside `instructions`. Optional so older fixtures still parse.
+  extractEveryUserTurns: z.number().int().min(1).max(100).optional(),
+  extractSilenceMs: z.number().int().min(1_000).max(1_800_000).optional(),
+  extractModel: z.string().min(1).max(64).optional(),
+  extractMaxTokens: z.number().int().min(32).max(4_096).optional(),
+  extractDrainMs: z.number().int().min(0).max(120_000).optional(),
+  extractTranscriptMaxChars: z.number().int().min(100).max(50_000).optional(),
+  extractContextMaxChars: z.number().int().min(100).max(20_000).optional(),
+  extractPolicy: PolicySchema.optional(),
+}).loose();
 
 export type PacingConfig = z.infer<typeof PacingSchema>;
 export type MemoryBudgetConfig = z.infer<typeof MemoryBudgetSchema>;

@@ -6,6 +6,8 @@ export type { DirectorConfig, TopicCard } from '../roles/types.ts';
 
 export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
+  /** Once per quiet stretch, when silence reaches the rest step. */
+  onQuietRest?(): void;
 }
 
 type SilenceStep = 'context' | 'check' | 'leave' | 'rest';
@@ -75,11 +77,14 @@ export class Director {
   private noticePending: boolean;
   /** The notice was cut off. Say it again at the next idle moment. */
   private noticeRetry = false;
+  /** The rest step already enqueued extraction for this quiet stretch. */
+  private restNoticed = false;
 
   constructor(
     private readonly cfg: DirectorConfig,
     private readonly deps: DirectorDeps,
     noticePending = false,
+    private readonly restAfterMs?: number,
   ) {
     this.noticePending = noticePending;
   }
@@ -151,6 +156,7 @@ export class Director {
     this.lightHold = false;
     this.left = false;
     this.eased = false;
+    this.restNoticed = false;
     this.next = 'context';
     if (this.bargeIn && !this.aiBusy) this.armBargeReplyWait();
   }
@@ -360,6 +366,10 @@ export class Director {
     this.timer = null;
     if (this.blocked() || this.left) return;
     this.pending = step;
+    if (step === 'rest' && !this.restNoticed) {
+      this.restNoticed = true;
+      this.deps.onQuietRest?.();
+    }
     this.deps.requestResponse('followup', this.silenceRequest(step));
   }
 
@@ -423,7 +433,7 @@ export class Director {
       checkMemoryText: c.checkMemoryText,
       leaveInstruction: c.leaveInstruction ?? c.idleNoticeInstruction,
       leaveText: c.leaveText ?? c.idleNoticeText,
-      restAfterMs: c.restAfterMs ?? DEFAULT_REST_AFTER_MS,
+      restAfterMs: this.restAfterMs ?? c.restAfterMs ?? DEFAULT_REST_AFTER_MS,
       restInstruction: c.restInstruction ?? DEFAULT_REST_INSTRUCTION,
       restText: c.restText ?? DEFAULT_REST_TEXT,
       lightPhrases: c.lightPhrases ?? DEFAULT_LIGHT,

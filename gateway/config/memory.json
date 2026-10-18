@@ -1,4 +1,12 @@
 {
   "instructions": { "budgetRatio": 0.4, "snapshotMaxChars": 600, "summaryMaxChars": 800, "minHistoryChars": 400 },
-  "toolTurnTimeoutMs": 15000
+  "toolTurnTimeoutMs": 15000,
+  "extractEveryUserTurns": 10,
+  "extractSilenceMs": 180000,
+  "extractModel": "qwen-plus",
+  "extractMaxTokens": 800,
+  "extractDrainMs": 8000,
+  "extractTranscriptMaxChars": 6000,
+  "extractContextMaxChars": 4000,
+  "extractPolicy": { "timeoutMs": 20000, "retries": 1, "backoffMs": 500, "maxBackoffMs": 4000 }
 }

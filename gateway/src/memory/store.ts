@@ -23,7 +23,8 @@ export interface NewOwner { ownerId: string; deviceId: string; agentId: string }
 /**
  * Persistent identity and (from Plan C) memory. Owner data is only read or written through
  * owner/agent-scoped methods. Unscoped exceptions: the credential lookup by token hash,
- * aggregate counts for registration caps, and the batched orphan-cleanup delete.
+ * aggregate counts for registration caps, the batched orphan-cleanup delete,
+ * and the startup list of owners that still have unextracted messages.
  */
 export interface MemoryStore {
   /** Owner + device + agent in one transaction. */
@@ -59,6 +60,62 @@ export interface MemoryStore {
    * and extraction later marks these rows extracted. `agentId` is unused; messages are owner-scoped.
    */
   snapshotRows(ownerId: string, agentId: string): { role: 'user' | 'assistant'; text: string }[];
+  /** Runs `body` inside one immediate write transaction. */
+  immediate<T>(body: () => T): T;
+  /** Current memory_epoch, or undefined when the owner is gone. Safe to call inside immediate(). */
+  memoryEpoch(ownerId: string): number | undefined;
+  /** Unextracted, non-excluded messages in watermark order. */
+  listPendingMessages(ownerId: string): PendingMessage[];
+  /** Current memory the extractor may update. Ids are included so ops can name rows. */
+  memoryForExtract(ownerId: string): ExtractMemory;
+  /** Owners with at least one unextracted message. Startup catch-up only. */
+  ownersPendingExtraction(): string[];
+  /**
+   * Applies one extraction inside the caller's transaction.
+   * Does not check memory_epoch; applyExtractOps does that in the same transaction.
+   */
+  writeExtraction(ownerId: string, change: ExtractionChange): void;
+}
+
+export interface PendingMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  sessionId: string;
+}
+
+export interface ExtractMemory {
+  agents: { id: string }[];
+  facts: { id: string; category: string; text: string; sensitive: number }[];
+  notes: { id: string; agentId: string; kind: string; text: string }[];
+  episodes: { id: string; summary: string; mood: string | null }[];
+  followups: { id: string; text: string; dueAt: number }[];
+}
+
+export type FactChange =
+  | { op: 'add'; category: string; text: string; sensitive?: boolean; confidence?: number }
+  | { op: 'update'; id: string; category?: string; text?: string; sensitive?: boolean; confidence?: number }
+  | { op: 'remove'; id: string };
+export type NoteChange =
+  | { op: 'add'; text: string; kind?: string; agentId?: string }
+  | { op: 'update'; id: string; text?: string; kind?: string }
+  | { op: 'remove'; id: string };
+export type EpisodeChange =
+  | { op: 'add'; summary: string; mood?: string }
+  | { op: 'update'; id: string; summary?: string; mood?: string | null }
+  | { op: 'remove'; id: string };
+export type FollowupChange =
+  | { op: 'add'; text: string; dueAt: number }
+  | { op: 'update'; id: string; text?: string; dueAt?: number }
+  | { op: 'remove'; id: string };
+
+export interface ExtractionChange {
+  now: number;
+  messageIds: readonly string[];
+  facts: readonly FactChange[];
+  notes: readonly NoteChange[];
+  episodes: readonly EpisodeChange[];
+  followups: readonly FollowupChange[];
 }
 
 type Row = Record<string, unknown>;
@@ -96,6 +153,40 @@ function prepareStatements(db: DatabaseSync) {
     snapshotRows: p(`SELECT role, text FROM messages
       WHERE owner_id = ? AND extracted = 0 AND excluded = 0
       ORDER BY created_at, rowid`),
+    memoryEpoch: p('SELECT memory_epoch FROM owners WHERE id = ?'),
+    listPending: p(`SELECT id, role, text, session_id FROM messages
+      WHERE owner_id = ? AND extracted = 0 AND excluded = 0
+      ORDER BY created_at, rowid`),
+    listFactRows: p('SELECT id, category, text, sensitive FROM user_facts WHERE owner_id = ? ORDER BY updated_at, id'),
+    listNoteRows: p('SELECT id, agent_id, kind, text FROM relationship_notes WHERE owner_id = ? ORDER BY updated_at, id'),
+    listEpisodeRows: p('SELECT id, summary, mood FROM episodes WHERE owner_id = ? ORDER BY created_at, id'),
+    listFollowups: p('SELECT id, text, due_at FROM followups WHERE owner_id = ? AND done_at IS NULL ORDER BY due_at, id'),
+    listAgentIds: p('SELECT id FROM agents WHERE owner_id = ?'),
+    ownersPending: p('SELECT DISTINCT owner_id AS id FROM messages WHERE extracted = 0 AND excluded = 0'),
+    agentOwned: p('SELECT 1 AS ok FROM agents WHERE owner_id = ? AND id = ?'),
+    messageSession: p('SELECT session_id FROM messages WHERE owner_id = ? AND id = ?'),
+    insertFact: p(`INSERT INTO user_facts (id, owner_id, category, text, sensitive, confidence, source_session_id, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
+    updateFact: p(`UPDATE user_facts SET category = COALESCE(?, category), text = COALESCE(?, text),
+      sensitive = COALESCE(?, sensitive), confidence = COALESCE(?, confidence), updated_at = ?
+      WHERE id = ? AND owner_id = ?`),
+    deleteFact: p('DELETE FROM user_facts WHERE id = ? AND owner_id = ?'),
+    insertNote: p(`INSERT INTO relationship_notes (id, agent_id, owner_id, kind, text, source_session_id, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`),
+    updateNote: p(`UPDATE relationship_notes SET kind = COALESCE(?, kind), text = COALESCE(?, text), updated_at = ?
+      WHERE id = ? AND owner_id = ?`),
+    deleteNote: p('DELETE FROM relationship_notes WHERE id = ? AND owner_id = ?'),
+    insertEpisode: p('INSERT INTO episodes (id, session_id, owner_id, summary, mood, created_at) VALUES (?, ?, ?, ?, ?, ?)'),
+    updateEpisode: p(`UPDATE episodes SET summary = COALESCE(?, summary), mood = COALESCE(?, mood)
+      WHERE id = ? AND owner_id = ?`),
+    deleteEpisode: p('DELETE FROM episodes WHERE id = ? AND owner_id = ?'),
+    insertFollowup: p('INSERT INTO followups (id, owner_id, text, due_at, done_at, source_session_id) VALUES (?, ?, ?, ?, NULL, ?)'),
+    updateFollowup: p(`UPDATE followups SET text = COALESCE(?, text), due_at = COALESCE(?, due_at)
+      WHERE id = ? AND owner_id = ?`),
+    deleteFollowup: p('DELETE FROM followups WHERE id = ? AND owner_id = ?'),
+    markExtracted: p('UPDATE messages SET extracted = 1 WHERE owner_id = ? AND id = ?'),
+    insertChange: p(`INSERT INTO memory_changes (id, owner_id, table_name, row_id, op, diff, actor, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'extract', ?)`),
   };
 }
 
@@ -219,6 +310,143 @@ export class SqliteMemoryStore implements MemoryStore {
 
   snapshotRows(ownerId: string, _agentId: string): { role: 'user' | 'assistant'; text: string }[] {
     return this.q.snapshotRows.all(ownerId).map((r) => ({ role: r.role as 'user' | 'assistant', text: r.text as string }));
+  }
+
+  immediate<T>(body: () => T): T {
+    return this.tx(body);
+  }
+
+  memoryEpoch(ownerId: string): number | undefined {
+    const row = this.q.memoryEpoch.get(ownerId) as { memory_epoch: number } | undefined;
+    return row?.memory_epoch;
+  }
+
+  listPendingMessages(ownerId: string): PendingMessage[] {
+    return this.q.listPending.all(ownerId).map((r) => ({
+      id: r.id as string,
+      role: r.role as 'user' | 'assistant',
+      text: r.text as string,
+      sessionId: r.session_id as string,
+    }));
+  }
+
+  memoryForExtract(ownerId: string): ExtractMemory {
+    return {
+      agents: this.q.listAgentIds.all(ownerId).map((r) => ({ id: r.id as string })),
+      facts: this.q.listFactRows.all(ownerId).map((r) => ({
+        id: r.id as string, category: r.category as string, text: r.text as string, sensitive: r.sensitive as number,
+      })),
+      notes: this.q.listNoteRows.all(ownerId).map((r) => ({
+        id: r.id as string, agentId: r.agent_id as string, kind: r.kind as string, text: r.text as string,
+      })),
+      episodes: this.q.listEpisodeRows.all(ownerId).map((r) => ({
+        id: r.id as string, summary: r.summary as string, mood: (r.mood as string | null) ?? null,
+      })),
+      followups: this.q.listFollowups.all(ownerId).map((r) => ({
+        id: r.id as string, text: r.text as string, dueAt: r.due_at as number,
+      })),
+    };
+  }
+
+  ownersPendingExtraction(): string[] {
+    return this.q.ownersPending.all().map((r) => r.id as string);
+  }
+
+  writeExtraction(ownerId: string, change: ExtractionChange): void {
+    const sessionId = this.sessionIdFor(ownerId, change.messageIds);
+    for (const op of change.facts) this.writeFact(ownerId, op, sessionId, change.now);
+    for (const op of change.notes) this.writeNote(ownerId, op, sessionId, change.now);
+    for (const op of change.episodes) this.writeEpisode(ownerId, op, sessionId, change.now);
+    for (const op of change.followups) this.writeFollowup(ownerId, op, sessionId, change.now);
+    for (const id of change.messageIds) this.q.markExtracted.run(ownerId, id);
+  }
+
+  private writeFact(ownerId: string, op: FactChange, sessionId: string | null, now: number): void {
+    if (op.op === 'add') {
+      const id = randomUUID();
+      const sensitive = op.category === 'health' || op.sensitive ? 1 : 0;
+      this.q.insertFact.run(id, ownerId, op.category, op.text, sensitive, op.confidence ?? 1, sessionId, now);
+      this.audit(ownerId, 'user_facts', id, 'add', op.text, now);
+      return;
+    }
+    if (op.op === 'remove') {
+      if (this.q.deleteFact.run(op.id, ownerId).changes === 1) this.audit(ownerId, 'user_facts', op.id, 'remove', '', now);
+      return;
+    }
+    const sensitive = op.category === 'health' ? 1 : op.sensitive === undefined ? null : (op.sensitive ? 1 : 0);
+    if (this.q.updateFact.run(op.category ?? null, op.text ?? null, sensitive, op.confidence ?? null, now, op.id, ownerId).changes === 1) {
+      this.audit(ownerId, 'user_facts', op.id, 'update', op.text ?? '', now);
+    }
+  }
+
+  private writeNote(ownerId: string, op: NoteChange, sessionId: string | null, now: number): void {
+    if (op.op === 'add') {
+      const agentId = this.resolveAgent(ownerId, op.agentId);
+      if (!agentId) return;
+      const id = randomUUID();
+      const kind = op.kind ?? 'tone';
+      this.q.insertNote.run(id, agentId, ownerId, kind, op.text, sessionId, now);
+      this.audit(ownerId, 'relationship_notes', id, 'add', op.text, now);
+      return;
+    }
+    if (op.op === 'remove') {
+      if (this.q.deleteNote.run(op.id, ownerId).changes === 1) this.audit(ownerId, 'relationship_notes', op.id, 'remove', '', now);
+      return;
+    }
+    if (this.q.updateNote.run(op.kind ?? null, op.text ?? null, now, op.id, ownerId).changes === 1) {
+      this.audit(ownerId, 'relationship_notes', op.id, 'update', op.text ?? '', now);
+    }
+  }
+
+  private writeEpisode(ownerId: string, op: EpisodeChange, sessionId: string | null, now: number): void {
+    if (op.op === 'add') {
+      if (!sessionId) return;
+      const id = randomUUID();
+      this.q.insertEpisode.run(id, sessionId, ownerId, op.summary, op.mood ?? null, now);
+      this.audit(ownerId, 'episodes', id, 'add', op.summary, now);
+      return;
+    }
+    if (op.op === 'remove') {
+      if (this.q.deleteEpisode.run(op.id, ownerId).changes === 1) this.audit(ownerId, 'episodes', op.id, 'remove', '', now);
+      return;
+    }
+    if (this.q.updateEpisode.run(op.summary ?? null, op.mood ?? null, op.id, ownerId).changes === 1) {
+      this.audit(ownerId, 'episodes', op.id, 'update', op.summary ?? '', now);
+    }
+  }
+
+  private writeFollowup(ownerId: string, op: FollowupChange, sessionId: string | null, now: number): void {
+    if (op.op === 'add') {
+      const id = randomUUID();
+      this.q.insertFollowup.run(id, ownerId, op.text, op.dueAt, sessionId);
+      this.audit(ownerId, 'followups', id, 'add', op.text, now);
+      return;
+    }
+    if (op.op === 'remove') {
+      if (this.q.deleteFollowup.run(op.id, ownerId).changes === 1) this.audit(ownerId, 'followups', op.id, 'remove', '', now);
+      return;
+    }
+    if (this.q.updateFollowup.run(op.text ?? null, op.dueAt ?? null, op.id, ownerId).changes === 1) {
+      this.audit(ownerId, 'followups', op.id, 'update', op.text ?? '', now);
+    }
+  }
+
+  private audit(ownerId: string, table: string, rowId: string, op: string, diff: string, now: number): void {
+    this.q.insertChange.run(randomUUID(), ownerId, table, rowId, op, diff, now);
+  }
+
+  private resolveAgent(ownerId: string, agentId: string | undefined): string | null {
+    if (agentId) return this.q.agentOwned.get(ownerId, agentId) ? agentId : null;
+    const agents = this.q.listAgentIds.all(ownerId);
+    return agents.length === 1 ? agents[0]!.id as string : null;
+  }
+
+  private sessionIdFor(ownerId: string, messageIds: readonly string[]): string | null {
+    for (let i = messageIds.length - 1; i >= 0; i--) {
+      const row = this.q.messageSession.get(ownerId, messageIds[i]) as { session_id: string } | undefined;
+      if (row) return row.session_id;
+    }
+    return null;
   }
 
   private tx<T>(body: () => T): T {

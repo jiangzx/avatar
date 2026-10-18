@@ -14,6 +14,10 @@ export interface SessionLifecycle {
   started(sessionId: string, ctx: SessionContext): void;
   /** A started session was destroyed: client_end | grace_expired | owner_replaced | owner_deleted | shutdown. */
   ended(sessionId: string, ctx: SessionContext, reason: string): void;
+  /**
+   * After `ended`. Must not be awaited: extraction is queued so the next resolve can read the tail.
+   */
+  extract?(sessionId: string, ctx: SessionContext, reason: string): void;
 }
 
 interface Entry {
@@ -171,7 +175,10 @@ export class SessionManager {
     entry.session.end();
     this.tokens.revoke(sessionId);
     this.sessions.delete(sessionId);
-    if (entry.started) this.notify(() => this.lifecycle?.ended(sessionId, entry.ctx, reason));
+    if (entry.started) {
+      this.notify(() => this.lifecycle?.ended(sessionId, entry.ctx, reason));
+      this.notify(() => this.lifecycle?.extract?.(sessionId, entry.ctx, reason));
+    }
     log('session_destroyed', { reason, sessions: this.sessions.size });
   }
 

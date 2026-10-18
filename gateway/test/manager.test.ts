@@ -154,6 +154,26 @@ describe('SessionManager lifecycle hook', () => {
     expect(m.size).toBe(0);
   });
 
+  it('calls extract on end without waiting for it', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const events: string[] = [];
+    const { manager: m } = setup({
+      started: () => events.push('started'),
+      ended: () => events.push('ended'),
+      extract: () => {
+        events.push('extract');
+        void gate.then(() => events.push('done'));
+      },
+    });
+    const started = await startNew(m, owned('o1'));
+    m.end(started.t.sessionId);
+    expect(events).toEqual(['started', 'ended', 'extract']);
+    release();
+    await Promise.resolve();
+    expect(events).toEqual(['started', 'ended', 'extract', 'done']);
+  });
+
   it('keeps sessions working when the hook throws', async () => {
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const { manager: m } = setup({

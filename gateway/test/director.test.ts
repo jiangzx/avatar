@@ -228,6 +228,38 @@ describe('Director', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('fires the quiet-rest hook once per stretch when silence reaches rest', () => {
+    const rests: number[] = [];
+    const d = new Director(cfg, {
+      requestResponse: () => {},
+      onQuietRest: () => rests.push(Date.now()),
+    }, false, 1_000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(999);
+    expect(rests).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(rests).toHaveLength(1);
+    d.onAssistantInterrupted();
+    vi.advanceTimersByTime(1_000);
+    expect(rests).toHaveLength(1);
+    d.onUserFinal('今天去公园了');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(1_000);
+    expect(rests).toHaveLength(2);
+  });
+
   it('after the short leave, a few quiet minutes gets one looser line and then stops', () => {
     const reqs: ProactiveRequest[] = [];
     const d = new Director({ ...cfg, restAfterMs: 180000, restInstruction: 'REST', restText: '放空' }, {
