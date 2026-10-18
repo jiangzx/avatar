@@ -30,6 +30,8 @@ export class ToolTurn {
   }
 
   start(originSeq: number): void {
+    // A nested call keeps the first deadline.
+    if (this.turnActive) return;
     this.reset();
     this.turnActive = true;
     this.originSeq = originSeq;

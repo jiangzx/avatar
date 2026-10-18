@@ -49,6 +49,37 @@ describe('renderSnapshot', () => {
     expect(renderSnapshot({ facts: [], notes: [], tail: [], maxChars: 600 })).toBe('');
   });
 
+  it('keeps the newest tail line and drops the oldest when the tail exceeds the budget', () => {
+    const addressing = '称呼：王叔';
+    const newest = '用户：刚刚说的';
+    const text = renderSnapshot({
+      facts: [{ category: 'addressing', text: addressing }],
+      notes: [],
+      tail: [
+        { role: 'user', text: '很久以前的那句话呀' },
+        { role: 'user', text: '刚刚说的' },
+      ],
+      maxChars: addressing.length + 1 + newest.length,
+    });
+    expect(text).toBe(`${addressing}\n${newest}`);
+  });
+
+  it('keeps facts and notes ahead of the newest tail that still fits', () => {
+    const text = renderSnapshot({
+      facts: [
+        { category: 'addressing', text: '称呼：王叔' },
+        { category: 'preference', text: '喜欢喝茶' },
+      ],
+      notes: [{ text: '说话慢一点' }],
+      tail: [
+        { role: 'user', text: '很久以前的那句话呀' },
+        { role: 'assistant', text: '刚刚这句' },
+      ],
+      maxChars: '称呼：王叔\n喜欢喝茶\n说话慢一点\n助手：刚刚这句'.length,
+    });
+    expect(text).toBe('称呼：王叔\n喜欢喝茶\n说话慢一点\n助手：刚刚这句');
+  });
+
   it('starts the instructions memory section with the name', () => {
     const snapshot = renderSnapshot({
       facts: [

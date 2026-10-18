@@ -796,4 +796,90 @@ describe('Session', () => {
     expect(() => noWriter.session.handleClientMessage({ type: 'debug.userText', text: '我叫老王' })).not.toThrow();
     expect(() => noWriter.session.flush()).not.toThrow();
   });
+
+  it('continues after an unknown tool once the origin is ready', async () => {
+    const calls: Array<{ cue?: string; instruction?: string; fallbackText?: string }> = [];
+    const mocks: MockAdapter[] = [];
+    const s = setup({
+      adapterFactory: () => {
+        const mock = new MockAdapter({
+          script: {
+            ...script,
+            turns: [{ match: '未知', user: '未知工具', reply: '好呀', tool: { name: 'not_a_tool', args: {} } }],
+          },
+          replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+        });
+        const create = mock.createResponse.bind(mock);
+        mock.createResponse = (request) => {
+          if (request) calls.push(request);
+          return create(request);
+        };
+        mocks.push(mock);
+        return mock;
+      },
+    });
+    await greetAndFinish(s);
+    calls.length = 0;
+    s.session.handleClientMessage({ type: 'debug.userText', text: '未知工具' });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(mocks[0]!.toolResults).toEqual([{ callId: 'call-mock-2', result: { ok: false, error: 'unknown_tool' } }]);
+    expect(calls).toContainEqual({
+      cue: 'toolContinue',
+      instruction: director.toolContinueInstruction,
+      fallbackText: director.toolContinueText,
+    });
+  });
+
+  it('does not cancel the adapter when the user speaks before a continuation is requested', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
+    const cancel = vi.spyOn(s.mocks[0]!, 'cancelResponse');
+    s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
+    await vi.advanceTimersByTimeAsync(60);
+    s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 1 });
+    expect(cancel).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(creates).toHaveBeenCalledWith({
+      cue: 'toolContinue',
+      instruction: director.toolContinueInstruction,
+      fallbackText: director.toolContinueText,
+    });
+  });
+
+  it('cancels a continuation that was already requested when the user speaks', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
+    s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
+    await vi.advanceTimersByTimeAsync(260);
+    expect(creates).toHaveBeenCalledTimes(1);
+    const cancel = vi.spyOn(s.mocks[0]!, 'cancelResponse');
+    s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 2 });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    const uplink = vi.spyOn(s.mocks[0]!, 'sendAudio');
+    s.session.handleMicAudio(loud());
+    expect(uplink).toHaveBeenCalled();
+  });
+
+  it('continues after playback when the origin finished before the tool call', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
+    s.mocks[0]!.emit('responseStarted', 'early-done');
+    s.mocks[0]!.emit('audioDelta', 'early-done', new Int16Array(480));
+    s.mocks[0]!.emit('responseDone', 'early-done');
+    const seq = s.session.lastResponseSeq;
+    s.mocks[0]!.emit('toolCall', 'early-done', 'call-early', 'perform_action', { action: 'wave' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(creates).not.toHaveBeenCalled();
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: seq, playedMs: 20, reason: 'ended' });
+    expect(creates).toHaveBeenCalledTimes(1);
+    expect(creates).toHaveBeenCalledWith({
+      cue: 'toolContinue',
+      instruction: director.toolContinueInstruction,
+      fallbackText: director.toolContinueText,
+    });
+  });
 });

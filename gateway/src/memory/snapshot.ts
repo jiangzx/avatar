@@ -11,20 +11,22 @@ export function renderSnapshot(input: {
   const head = addressing.join('\n');
   // Names stay whole even when the addressing block itself exceeds the budget.
   if (head.length > input.maxChars) return head;
-  const body = [...(head ? [head] : []), ...other, ...notes, ...tail].join('\n');
-  return clipToFit(body, input.maxChars);
+  const kept: string[] = [];
+  for (const line of [...addressing, ...other, ...notes]) {
+    if (joinedLength([...kept, line]) > input.maxChars) break;
+    kept.push(line);
+  }
+  // Older tail lines drop first. A line that does not fit ends the suffix.
+  let start = tail.length;
+  for (let i = tail.length - 1; i >= 0; i--) {
+    if (joinedLength([...kept, ...tail.slice(i)]) > input.maxChars) break;
+    start = i;
+  }
+  return [...kept, ...tail.slice(start)].join('\n');
 }
 
-/** Keeps a prefix of whole lines. Never splits a fact. */
-export function clipToFit(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  const kept: string[] = [];
+function joinedLength(lines: readonly string[]): number {
   let used = 0;
-  for (const line of text.split('\n')) {
-    const next = kept.length === 0 ? line.length : used + 1 + line.length;
-    if (next > maxChars) break;
-    kept.push(line);
-    used = next;
-  }
-  return kept.join('\n');
+  for (const line of lines) used = used === 0 ? line.length : used + 1 + line.length;
+  return used;
 }

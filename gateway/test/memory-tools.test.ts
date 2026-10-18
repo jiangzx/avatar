@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerMessage } from '@anyidea/protocol';
 import { MockAdapter } from '../src/adapters/mock.ts';
+import type { SessionConfig } from '../src/adapters/types.ts';
 import { bigrams } from '../src/memory/bigram.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import type { TextModelClient } from '../src/memory/extract.ts';
@@ -523,6 +524,7 @@ describe('session memory tools', () => {
     say(store, a.ownerId, 'name', '我叫王叔', 11);
     store.forgetMatches = () => { throw new Error('forget_failed'); };
     const calls: Array<{ cue?: string; instruction?: string; fallbackText?: string }> = [];
+    const order: string[] = [];
     const mocks: MockAdapter[] = [];
     const session = new Session({
       adapterFactory: () => {
@@ -533,9 +535,17 @@ describe('session memory tools', () => {
           },
           replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
         });
+        const send = mock.sendToolResult.bind(mock);
+        mock.sendToolResult = (callId, result) => {
+          order.push('tool');
+          send(callId, result);
+        };
         const create = mock.createResponse.bind(mock);
         mock.createResponse = (request) => {
-          if (request) calls.push(request);
+          if (request) {
+            calls.push(request);
+            if (request.cue === 'toolContinue') order.push('continue');
+          }
           return create(request);
         };
         mocks.push(mock);
@@ -556,6 +566,12 @@ describe('session memory tools', () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(calls.some((call) => call.fallbackText === memory.forgetConfirmText)).toBe(false);
+    expect(calls).toContainEqual({
+      cue: 'toolContinue',
+      instruction: director.toolContinueInstruction,
+      fallbackText: director.toolContinueText,
+    });
+    expect(order).toEqual(['tool', 'continue']);
     expect(mocks[0]!.toolResults.some((row) => {
       const result = row.result as { ok?: boolean };
       return result.ok === false;
@@ -563,4 +579,143 @@ describe('session memory tools', () => {
     expect(store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text)).toContain('我叫王叔');
     session.end();
   });
+
+  it('refreshes the snapshot on forget so the replacement instructions drop that preference', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'h-snap');
+    store.markNotified(a.ownerId, 2);
+    insertFact(db, a.ownerId, 'addr', 'addressing', '称呼：王叔');
+    insertFact(db, a.ownerId, 'pref', 'preference', '喜欢喝茶');
+    const live = sessionWithSnapshot({
+      store,
+      who: a,
+      sessionId: 'snap-forget',
+      memorySnapshot: '称呼：王叔\n喜欢喝茶',
+      turns: [{ match: '喝茶', user: '忘掉喝茶', reply: '好呀', tool: { name: 'forget_memory', args: { query: '喝茶' } } }],
+    });
+    const { transport } = collector();
+
+    await live.session.start(transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    live.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    live.session.handleClientMessage({ type: 'debug.userText', text: '忘掉喝茶' });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(live.configs.length).toBeGreaterThan(1);
+    expect(live.configs[0]!.instructions).toContain('喜欢喝茶');
+    const rebuilt = live.configs.at(-1)!.instructions;
+    expect(rebuilt).not.toContain('喜欢喝茶');
+    expect(rebuilt).toContain('称呼：王叔');
+    live.session.end();
+  });
+
+  it('drops the memory section after a confirmed decline rebuild', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'h-decline');
+    store.markNotified(a.ownerId, 2);
+    insertFact(db, a.ownerId, 'addr', 'addressing', '称呼：王叔');
+    insertFact(db, a.ownerId, 'pref', 'preference', '喜欢喝茶');
+    const live = sessionWithSnapshot({
+      store,
+      who: a,
+      sessionId: 'snap-decline',
+      memorySnapshot: '称呼：王叔\n喜欢喝茶',
+      turns: [{ match: '确定', user: '确定都删掉', reply: '好呀', tool: { name: 'set_memory_consent', args: { granted: 'declined', confirmed: true } } }],
+    });
+    const { transport } = collector();
+
+    await live.session.start(transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    live.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    live.session.handleClientMessage({ type: 'debug.userText', text: '确定都删掉' });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(live.configs.length).toBeGreaterThan(1);
+    expect(live.configs[0]!.instructions).toContain('## 关于用户（记忆）');
+    expect(live.configs.at(-1)!.instructions).not.toContain('## 关于用户（记忆）');
+    expect(live.session.context.memorySnapshot).toBeUndefined();
+    live.session.end();
+  });
+
+  it('does not refresh the snapshot on a slim rebuild', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'h-slim');
+    store.markNotified(a.ownerId, 2);
+    insertFact(db, a.ownerId, 'pref', 'preference', '喜欢喝茶');
+    const live = sessionWithSnapshot({
+      store,
+      who: a,
+      sessionId: 'snap-slim',
+      memorySnapshot: '喜欢喝茶',
+      turns: [],
+      rebuildAfterTurns: 1,
+    });
+    const { transport } = collector();
+
+    await live.session.start(transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    live.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    db.prepare('DELETE FROM user_facts WHERE owner_id = ?').run(a.ownerId);
+    live.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(1000);
+    live.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(live.configs.length).toBeGreaterThan(1);
+    expect(live.configs.at(-1)!.instructions).toContain('喜欢喝茶');
+    live.session.end();
+  });
 });
+
+function insertFact(db: DatabaseSync, ownerId: string, id: string, category: string, text: string): void {
+  db.prepare(
+    `INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, ?, ?, 1, 20)`,
+  ).run(id, ownerId, category, text);
+}
+
+function sessionWithSnapshot(input: {
+  store: SqliteMemoryStore;
+  who: { ownerId: string; agentId: string };
+  turns: Array<{ match?: string; user: string; reply: string; tool?: { name: string; args: unknown } }>;
+  memorySnapshot: string;
+  sessionId: string;
+  rebuildAfterTurns?: number;
+}) {
+  const configs: SessionConfig[] = [];
+  const mocks: MockAdapter[] = [];
+  const session = new Session({
+    adapterFactory: () => {
+      const mock = new MockAdapter({
+        script: {
+          greeting: '你好呀', followup: '还在吗', fallbackReply: '我在听',
+          turns: input.turns,
+        },
+        replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+      });
+      const connect = mock.connect.bind(mock);
+      mock.connect = (config) => {
+        configs.push(config);
+        return connect(config);
+      };
+      mocks.push(mock);
+      return mock;
+    },
+    summarizer: new MockSummarizer(),
+    roles: fixedRoleCatalog('P', director),
+    writer: new SqliteTranscriptWriter(input.store),
+    worker: worker(input.store),
+    store: input.store,
+    budget: { totalChars: 8_000, snapshotMaxChars: 600, summaryMaxChars: 800 },
+    ...(input.rebuildAfterTurns !== undefined ? { rebuildAfterTurns: input.rebuildAfterTurns } : {}),
+  }, {
+    ownerId: input.who.ownerId,
+    agentId: input.who.agentId,
+    roleId: 'elder-companion',
+    styleId: 'grandchild',
+    memorySnapshot: input.memorySnapshot,
+  } satisfies SessionContext, input.sessionId);
+  return { session, configs, mocks };
+}

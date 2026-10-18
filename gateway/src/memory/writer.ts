@@ -1,12 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadSafetyConfig } from '../config.ts';
+import { log } from '../log.ts';
 import { bigrams } from './bigram.ts';
 import { redact } from './redact.ts';
 import { scanText } from './scan.ts';
 import type { MemoryStore } from './store.ts';
 
 const rules = loadSafetyConfig(fileURLToPath(new URL('../../config/safety.json', import.meta.url)));
+const digitChars = new Set(Object.keys(rules.chineseDigits));
+
+/** Removes ASCII digits and the Chinese digits listed in safety.json. */
+function stripDigits(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    if ((ch >= '0' && ch <= '9') || digitChars.has(ch)) continue;
+    out += ch;
+  }
+  return out;
+}
 
 /** Persists one transcript turn. Implementations must not log the text. */
 export interface TranscriptWriter {
@@ -35,9 +47,14 @@ export class SqliteTranscriptWriter implements TranscriptWriter {
   }): 'stored' | 'skipped' | 'rejected' {
     const owner = this.store.getOwner(input.ownerId);
     if (!owner || owner.notifiedAt == null || owner.memoryConsent === 'declined') return 'skipped';
-    if (scanText(input.text, rules) === 'reject') return 'rejected';
+    const verdict = scanText(input.text, rules);
+    if (verdict === 'reject') return 'rejected';
     // Caller already truncated an interrupted reply. Index the redacted text only.
-    const text = redact(input.text);
+    let text = redact(input.text);
+    if (verdict === 'degrade') {
+      text = stripDigits(text);
+      log('safety_event', { code: 'degrade' });
+    }
     this.store.insertMessage({
       id: randomUUID(),
       sessionId: input.sessionId,
@@ -47,6 +64,16 @@ export class SqliteTranscriptWriter implements TranscriptWriter {
       bigrams: bigrams(text),
       now: input.now,
     });
+    if (verdict === 'degrade') {
+      this.store.writeExtraction(input.ownerId, {
+        now: input.now,
+        messageIds: [],
+        facts: [{ op: 'add', category: 'safety', text, sensitive: true }],
+        notes: [],
+        episodes: [],
+        followups: [],
+      });
+    }
     return 'stored';
   }
 

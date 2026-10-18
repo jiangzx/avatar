@@ -10,6 +10,7 @@ import {
 import { classifyAdapterError } from '../adapters/errorClass.ts';
 import type { AdapterFactory, ProactiveRequest, RealtimeAdapter, SessionConfig } from '../adapters/types.ts';
 import { log } from '../log.ts';
+import { renderSnapshot } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
 import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
@@ -102,6 +103,8 @@ interface ResponseState {
   finalized: boolean;
   /** Set once flush() has handed this reply to the writer. */
   flushed: boolean;
+  /** Set when responseDone arrives, including before the tool call. */
+  responseDone: boolean;
 }
 
 const MAX_REBUILD_MIC_FRAMES = 25;
@@ -295,9 +298,11 @@ export class Session {
     switch (msg.type) {
       case 'vad': {
         const speaking = msg.state === 'speaking';
-        if (speaking && this.toolTurn.active) {
-          const end = this.toolTurn.onUserSpeaking();
-          if (end) this.releaseToolTurn(false);
+        // Cancel only a continuation that was already requested. The origin ends on the client path.
+        if (speaking && this.toolTurn.active && this.continuationAsked) {
+          this.adapter.cancelResponse();
+          this.toolTurn.onUserSpeaking();
+          this.releaseToolTurn(false);
         }
         if (speaking) this.vadSpeakingCount++;
         else this.vadSilentCount++;
@@ -484,7 +489,7 @@ export class Session {
     });
     a.on('responseStarted', (id) => {
       if (!current()) return;
-      const s: ResponseState = { seq: ++this.seqCounter, kind: this.pendingKind ?? 'reply', text: '', audioMs: 0, playedMs: 0, finalized: false, flushed: false };
+      const s: ResponseState = { seq: ++this.seqCounter, kind: this.pendingKind ?? 'reply', text: '', audioMs: 0, playedMs: 0, finalized: false, flushed: false, responseDone: false };
       this.pendingKind = null;
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
@@ -528,6 +533,7 @@ export class Session {
     a.on('responseDone', (id) => {
       const s = this.live(a, id);
       if (s) {
+        s.responseDone = true;
         log('response_end', { seq: s.seq });
         this.metrics.onDone(s.seq);
         this.send({ type: 'response.end', responseSeq: s.seq });
@@ -641,8 +647,14 @@ export class Session {
 
   /** Clears a still-playing origin so the later continuation is not judged superseded. */
   private beginToolTurn(s: ResponseState): void {
+    if (this.toolTurn.active) {
+      this.toolTurn.start(s.seq);
+      return;
+    }
     const active = this.interrupt.active;
-    if (active !== null) {
+    const alreadyDone = s.responseDone;
+    // A finished origin keeps playing until the client reports playback.stopped.
+    if (active !== null && !alreadyDone) {
       this.missNotice(active);
       this.interrupt.onResponseFinished(active);
       this.send({ type: 'response.cancelled', responseSeq: active });
@@ -653,10 +665,11 @@ export class Session {
     this.toolTurn.start(s.seq);
     if (s.audioMs > 0) this.toolTurn.onOriginAudio();
     // Only the seq we just cancelled. A different active seq still needs a real playback.stopped.
-    if (active === s.seq) {
+    if (!alreadyDone && active === s.seq) {
       this.toolTurn.onOriginPlaybackEnded();
       this.originForcedEnd = true;
     }
+    if (alreadyDone) this.toolTurn.onOriginDone();
     this.armToolTimer();
     this.director.pause();
   }
@@ -698,15 +711,19 @@ export class Session {
     });
     this.memoryToolWaiting = false;
     if (a !== this.adapter || this.ended) return;
-    if (!outcome.ok && outcome.error === 'unknown_tool') {
-      a.sendToolResult(callId, { ok: false, error: 'unknown_tool' });
-      return;
-    }
     a.sendToolResult(callId, toolPayload(outcome));
     if (s) this.metrics.onToolCall(s.seq);
-    if (outcome.action && !cancelled) this.send({ type: 'avatar.action', action: outcome.action, source: 'tool' });
+    if (outcome.ok && outcome.action && !cancelled) this.send({ type: 'avatar.action', action: outcome.action, source: 'tool' });
     if (!outcome.ok) {
-      if (slow && this.toolTurn.active) this.releaseToolTurn(false);
+      // A failure still continues. It does not speak the success line.
+      if (slow) {
+        this.maybeContinue();
+        return;
+      }
+      if (s && !cancelled) {
+        this.beginToolTurn(s);
+        this.maybeContinue();
+      }
       return;
     }
     if (slow && !this.toolTurn.active) return;
@@ -719,7 +736,10 @@ export class Session {
       this.maybeContinue();
       return;
     }
-    if (s && !cancelled) this.beginToolTurn(s);
+    if (s && !cancelled) {
+      this.beginToolTurn(s);
+      this.maybeContinue();
+    }
   }
 
   private maybeContinue(): void {
@@ -844,6 +864,7 @@ export class Session {
     old.close();
     let connected = false;
     try {
+      if (reason === 'forget' || reason === 'decline') this.refreshMemorySnapshot();
       await this.adapter.connect(this.sessionConfig());
       connected = true;
       this.syncInputMute();
@@ -863,6 +884,22 @@ export class Session {
       if (again && !this.ended) await this.rebuild(again, true);
       else if (connected) this.speakConfirm();
     }
+  }
+
+  /** Re-reads the store. An empty render removes the snapshot. Slim rebuilds skip this. */
+  private refreshMemorySnapshot(): void {
+    const store = this.deps.store;
+    const ownerId = this.context.ownerId;
+    const maxChars = this.deps.budget?.snapshotMaxChars;
+    if (!store || !ownerId || maxChars === undefined) return;
+    const text = renderSnapshot({
+      facts: store.listFacts(ownerId),
+      notes: store.listNotes(ownerId, this.context.agentId ?? ''),
+      tail: store.snapshotRows(ownerId, this.context.agentId ?? ''),
+      maxChars,
+    });
+    if (text) this.context.memorySnapshot = text;
+    else delete this.context.memorySnapshot;
   }
 
   private scheduleRebuild(reason: RebuildReason): void {

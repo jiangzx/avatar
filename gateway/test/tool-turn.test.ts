@@ -109,6 +109,18 @@ describe('ToolTurn', () => {
     expect(turn.tick()).toBeNull();
   });
 
+  it('keeps the first deadline when start is called again', () => {
+    const { turn, advance } = makeTurn();
+    turn.start(1);
+    advance(TIMEOUT_MS - 1);
+    turn.start(2);
+    expect(turn.tick()).toBeNull();
+    expect(turn.active).toBe(true);
+    advance(1);
+    expect(turn.tick()).toBe('timeout');
+    expect(turn.active).toBe(false);
+  });
+
   it('ends the turn on cancel and rebuild', () => {
     const cancelled = makeTurn().turn;
     cancelled.start(6);
