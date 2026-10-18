@@ -32,21 +32,27 @@ describe('substantive conversation silence', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
-  it.each(['missing', 'skip'] as const)('never requests speech after a %s decision, but still extracts at rest', async mode => {
+  it.each(['missing', 'skip'] as const)('keeps the three-step ladder after a %s decision', async mode => {
     const s = setup(mode === 'skip' ? () => null : undefined);
     s.answer();
-    await vi.advanceTimersByTimeAsync(182999);
-    expect(s.requests).toEqual([]);
-    expect(s.restCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(s.restCount()).toBe(1);
-    await vi.advanceTimersByTimeAsync(600000);
-    expect(s.requests).toEqual([]);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(s.requests).toHaveLength(1);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('我在');
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(s.requests).toHaveLength(2);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('还在吗，刚才那件事先放着，不急着回。');
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(s.requests).toHaveLength(3);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('我先安静一会儿，想聊随时喊我。');
+    await vi.advanceTimersByTimeAsync(180000);
     expect(s.restCount()).toBe(1);
     s.d.stop();
   });
 
-  it('uses the actual last exchange and speaks one approved continuation without a generic ladder', async () => {
+  it('uses the actual last exchange and then continues the configured ladder', async () => {
     const contexts: unknown[] = [];
     const s = setup(context => { contexts.push(context); return '走累了，脚酸着也不好受。'; });
     s.answer();
@@ -59,8 +65,15 @@ describe('substantive conversation silence', () => {
     }]);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('走累了，脚酸着也不好受。');
-    await vi.advanceTimersByTimeAsync(600000);
-    expect(s.requests).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(s.requests).toHaveLength(2);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('还在吗，刚才那件事先放着，不急着回。');
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(s.requests).toHaveLength(3);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('我先安静一会儿，想聊随时喊我。');
+    await vi.advanceTimersByTimeAsync(180000);
     expect(s.restCount()).toBe(1);
     s.d.stop();
   });
@@ -89,11 +102,15 @@ describe('substantive conversation silence', () => {
     },
   );
 
-  it('does not treat a rejected optional decision as a reason to speak', async () => {
+  it('keeps the proactive ladder when the optional decision rejects', async () => {
     const s = setup(async () => { throw new Error('synthetic_failure'); });
     s.answer();
-    await vi.advanceTimersByTimeAsync(600000);
-    expect(s.requests).toEqual([]);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(s.requests).toHaveLength(1);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('我在');
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(s.requests).toHaveLength(2);
     s.d.stop();
   });
 
@@ -134,6 +151,28 @@ describe('substantive conversation silence', () => {
     await vi.advanceTimersByTimeAsync(600000);
     expect(contexts).toEqual([]);
     expect(s.requests).toHaveLength(1);
+    s.d.stop();
+  });
+
+  // Regression: a substantive reply must keep the configured three-step proactive ladder.
+  it('continues context into check and leave after an approved context continuation', async () => {
+    const s = setup(() => '走累了，脚酸着也不好受。');
+    s.answer();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(s.requests).toHaveLength(1);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('走累了，脚酸着也不好受。');
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(s.requests).toHaveLength(2);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('还在吗，刚才那件事先放着，不急着回。');
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(s.requests).toHaveLength(3);
+    expect(s.requests.map((request) => request.fallbackText)).toEqual([
+      '走累了，脚酸着也不好受。',
+      '还在吗，刚才那件事先放着，不急着回。',
+      '我先安静一会儿，想聊随时喊我。',
+    ]);
     s.d.stop();
   });
 

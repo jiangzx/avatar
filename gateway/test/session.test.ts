@@ -122,7 +122,7 @@ describe('Session', () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect(inputs).toEqual([{ userText: '我叫老王', assistantText: '王叔好' }]);
     await vi.advanceTimersByTimeAsync(600000);
-    expect(of(s.sent, 'response.start')).toHaveLength(3);
+    expect(of(s.sent, 'response.start')).toHaveLength(4);
     s.session.end();
   });
 
@@ -147,7 +147,7 @@ describe('Session', () => {
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(600000);
     expect(inputs).toHaveLength(1);
-    expect(of(s.sent, 'response.start')).toHaveLength(2);
+    expect(of(s.sent, 'response.start')).toHaveLength(3);
     s.session.end();
   });
 

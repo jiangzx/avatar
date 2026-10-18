@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-18. User-trial build. The approved #43 silence correction is implemented and synthetically evaluated; phone listening acceptance remains open. Barge-in is usable, and a non-utterance interrupt says 没听清 instead of 我在. Silence waits are 3s, 6s, 6s, then one looser line after 3 quiet minutes on the opening-only path. Read the pitfalls section before touching silence or barge-in. Formal line-by-line device acceptance is still open.
+Last updated: 2026-10-18. User-trial build. The #43 silence correction is implemented and synthetically evaluated; phone listening acceptance remains open. The three-step proactive ladder now continues after substantive replies and falls back to the configured context line when the optional planner declines or fails. Barge-in is usable, and a non-utterance interrupt says 没听清 instead of 我在. Silence waits are 3s, 6s, 6s, then one looser line after 3 quiet minutes. Read the pitfalls section before touching silence or barge-in. Formal line-by-line device acceptance is still open.
 
 ## 打断与沉默：已踩过的坑
 
@@ -70,7 +70,7 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 ## Next steps
 
-0. Plan 3: Task 0、A1、B 的 8797 Mock 进程冒烟已通过（#11、#14、#31 已解除）；Plan C 的本地记忆门控、持久化快照、Mock 工具续答及 qwen-plus 真实提取（假设 7）已验证，记录见下文。2026-10-18 用户同意后，手机启动前置完成（#41 已解除）：保留原身份库，补齐文本端点并重启 8787，手机已解析原身份并收到开场。用户已确认真实第二次通话能记住称呼，但近期话题接续失败且接话重复。用户已批准 Plan C Task 12 的定向修正（#42）；最近会话摘要、OR 回忆检索和防重复接话指令已实现，单元回归、四场景合成真实模型逐句复核与独立审查已通过，用户随后已确认重启；8787 新版 Qwen 网关与原身份手机会话已启动，用户随后确认不再重复，但沉默主动话语缺少上下文；流程诊断已完成，下一步先确认 #43 的沉默行为修正，再按批准计划实施。近期话题接续仍未获用户确认；假设 8 仍无真机工具调用证据。后续重启 8787 仍须先征得用户同意。Plan A/B/A+B 的其他设备项仍未完成（#12–#25，排除已解除的 #14；#30、#32–#39）；本次启动不替代它们的完整清单。A+B 新音色门槛依赖 #17 和 #19；Plan D/S 尚无已批准实施计划。
+0. Plan 3: Task 0、A1、B 的 8797 Mock 进程冒烟已通过（#11、#14、#31 已解除）；Plan C 的本地记忆门控、持久化快照、Mock 工具续答及 qwen-plus 真实提取（假设 7）已验证，记录见下文。2026-10-18 用户同意后，手机启动前置完成（#41 已解除）：保留原身份库，补齐文本端点并重启 8787，手机已解析原身份并收到开场。用户已确认真实第二次通话能记住称呼，但近期话题接续失败且接话重复。用户已批准 Plan C Task 12 的定向修正（#42）；最近会话摘要、OR 回忆检索和防重复接话指令已实现，单元回归、四场景合成真实模型逐句复核与独立审查已通过，用户随后已确认重启；8787 新版 Qwen 网关与原身份手机会话已启动，用户随后确认不再重复，但沉默主动话语缺少上下文。#43 已完成定向修正：三步主动链在有内容回复后继续，沉默判断不可用时回退到 context 话术；gateway 与全 JS 回归通过，待手机听感复验。近期话题接续仍未获用户确认；假设 8 仍无真机工具调用证据。后续重启 8787 仍须先征得用户同意。Plan A/B/A+B 的其他设备项仍未完成（#12–#25，排除已解除的 #14；#30、#32–#39）；本次启动不替代它们的完整清单。A+B 新音色门槛依赖 #17 和 #19；Plan D/S 尚无已批准实施计划。
 1. Keep the local Qwen gateway running for phone debugging (`ADAPTER=qwen` on port 8787, phone `APP_SECRET` from `app/dev.json`, `adb reverse tcp:8787`). Once local VAD says the user is barging in, mic audio streams while the reply is still open; do not restore the old full-playback drop. See the pitfalls section above. Silence follow-ups stay paused while the user is actually speaking. Local barge-in uses RMS 200 after 400 ms of playback; idle speech stays at RMS 1200. At 20:04 the user confirmed the conversation was fluent. At 20:08 avatar actions worked after gestures were no longer cancelled on `response.end`. Do not restart it as Mock. Do not resume interruption latency percentiles or multi-attempt interruption counts: the user skipped both on 2026-10-16, and that skip is not a pass. The 10-minute silence sample stays skipped as well. The latest interrupt rebuild is installed, but the user has not yet confirmed that a live shout stops playback.
 2. Continue the remaining Xiaomi/desktop checks that were not skipped: active-response stale-audio listening, network cases beyond the 2026-10-16 short resume and grace expiry, subtitle finalization once, remaining Task 18 checks, ADR-001, and desktop Chrome E2E. Five actions were already observed with Chinese keywords. Cloud WSS stays deferred.
 3. Seeduplex protocol docs and successful key validation are recorded in `docs/research/seeduplex-protocol-validation.md`; `ADAPTER=mock` remains the default, while `ADAPTER=seeduplex` requires an explicit environment key. Complete ADR-001 A/B measurement as a tracked follow-up.
@@ -240,15 +240,22 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 
 本轮实际运行：`npm test -w gateway -- test/director.test.ts test/session.test.ts test/qwen.test.ts`，3 文件、101 测试通过；上述 8 场景基线探针成立。只更新诊断记录，没有产品代码变更、没有新增真实模型请求、没有更改 `.env` 或读取真实记忆正文，没有重启 8787 或操作手机。按 AGENTS §7，先报告原设计缺口并确认修正行为，再开始受影响的实施。
 
+## 三步主动链回归修正（2026-10-18）
+
+- 根因：`Director.onAiTurnEnded` 在有内容会话完成 `context` 后直接进入 `waitQuietly`，因此 `check → leave` 永远不会排队；`planContext` 返回空值或失败时也直接静默，真实模型返回 `speak:false` 时整条主动链被截断。
+- 修正：context 播放结束恢复原有 `check → leave → rest` 转移；可选 planner 未配置、拒绝或失败时回退到 context 话术并继续三步链。取消、打断、用户新发言和 quiet 状态仍会清理计时器，不改变工具轮门控。
+- TDD 回归：新增“approved context continuation 继续到 check/leave”测试，并覆盖 planner 缺失、返回空值、拒绝异常的三步回退；更新 session 事件链断言。
+- 验证：`npm test -w gateway` → 39 files / 435 tests passed；`npm test` → protocol 6、gateway 435、avatar-core 96 passed；`npm run typecheck` 及 `git diff --check` 通过。手机听感和 8787 重启尚未执行。
+
 ## 沉默流程修正执行（2026-10-18）
 
-- 用户已确认 #43 的修正规则，按既有 Task 12 补入 S1–S3，沿用 `executing-plans` 在当前功能分支顺序执行；不再重复请求同一行为的批准。规格 §2 已记录批准内容，具体任务、接口和检查见计划。
-- 下一步 S1：Director 的发言前判断、取消和状态恢复；前置为已批准的流程核查，均已具备。S2 复用文本客户端做结构化判断及生产接线；S3 做两种风格多轮评测和独立审查。判断失败安静，不采用提示词要求语音模型输出空音频。
-- #43 实施中，尚未声明修复或测试通过；#42 的话题接续、真机听感及假设 8 仍待验。8787 当前进程不随代码编辑重启。原有暂存文档与 `.gitignore` 改动保留。
+- 用户已确认 #43 的初版修正规则，按既有 Task 12 补入 S1–S3，沿用 `executing-plans` 在当前功能分支顺序执行；后续回归修正见本节末尾。
+- 初版任务覆盖 S1 Director 发言前判断、取消和状态恢复，S2 文本客户端结构化判断及生产接线，S3 两种风格多轮评测和独立审查。该初版曾把判断失败统一处理为静默，后来证实会截断用户要求的主动三步链。
+- 初版实现已完成；本轮已补回归修正并通过 gateway/全 JS 验证。#42 的话题接续、真机听感及假设 8 仍待验。8787 当前进程不随代码编辑重启。原有暂存文档与 `.gitignore` 改动保留。
 
-- S1 已实现并验证：新增 15 项回归先失败（缺少判断门控、取消、quiet 复位与听辨修复阶段），修复后 `npm test -w gateway -- test/director.test.ts test/director-silence.test.ts` 48/48 通过。实质对话最多一句批准的承接、轻声不重启链，跳过语音仍保留静默提取钩子。开场未聊起来的阶梯不变。S2 的实际回答传入和生产文本判断尚待接线，当前不声明整个修复完成。
+- 初版 S1 已实现并验证：新增 15 项回归先失败（缺少判断门控、取消、quiet 复位与听辨修复阶段），修复后 `npm test -w gateway -- test/director.test.ts test/director-silence.test.ts` 48/48 通过。初版实质对话最多一句批准承接的规则已被本轮三步主动链回归修正覆盖，开场未聊起来的阶梯保持不变。
 
-- S2 已完成生产接线：复用 `TextModelClient`，结构化结果在 zod 边界验证；未配置、失败、超时或过期时跳过发言，诊断不含正文。Session 只在有效播放完成时传入实际回答；决策只用该次用户话和回答，不把主动系统提示当成用户话。模型重建会暂停并取消判断，恢复后不自动重启语音链。
+- S2 已完成生产接线：复用 `TextModelClient`，结构化结果在 zod 边界验证；未配置、失败、超时或过期时 planner 返回空值，Director 现在回退到 context 话术并继续三步主动链，诊断不含正文。Session 只在有效播放完成时传入实际回答；决策只用该次用户话和回答，不把主动系统提示当成用户话。模型重建会暂停并取消判断，恢复后不自动重启语音链。
 - S2 验证：新增 Session 播完/重复回执断言先失败，重建取消断言先失败；配置校验去掉新 schema 时拒绝断言失败，恢复后通过。`npm test -w gateway -- test/director.test.ts test/director-silence.test.ts test/silence.test.ts test/session.test.ts test/config.test.ts test/fileCatalog.test.ts`：145 通过；`npm run typecheck -w gateway`：通过。
-- S3 已完成合成评测和独立审查：真实 Qwen 文本判断覆盖两种风格、16 个语义场景，机械检查 16/16；两种风格各一组三轮 Session 均无已答复后的主动语音。唯一获准的遗漏情绪承接，使用 Qwen realtime 两种风格实际渲染，均只收到批准短句的文本和音频。报告见 `docs/testing/plan3-silence-flow-latest.json`，旧失败基线保留在 `plan3-silence-flow-before.json`；两份报告均区分人工判读与机械检查。
-- 独立审查发现并修复一个 P2：记忆告知完成回执不能提前清掉 `pending`，否则告知文案会覆盖上一轮实际回答；断线恢复提示也标记为独立 cue，播完后不再拿旧话题重新判断。新增交错回归后，`npm test`：protocol 6、gateway 434、avatar-core 96 全通过；`npm run typecheck`、Mock 8797 冒烟、两个探针 `node --check` 均通过。8787 未重启，手机听感和 #42 话题接续仍待用户复验。
+- S3 的初版合成评测和独立审查已完成：真实 Qwen 文本判断覆盖两种风格、16 个语义场景，机械检查 16/16；该报告验证了判断器语义，却没有覆盖三步主动链回归。报告见 `docs/testing/plan3-silence-flow-latest.json`，旧失败基线保留在 `plan3-silence-flow-before.json`；两份报告均区分人工判读与机械检查。
+- 独立审查发现并修复一个 P2：记忆告知完成回执不能提前清掉 `pending`，否则告知文案会覆盖上一轮实际回答；断线恢复提示也标记为独立 cue，播完后不再拿旧话题重新判断。初版交错回归后，`npm test`：protocol 6、gateway 434、avatar-core 96 全通过；本轮三步主动链回归后 gateway 为 435。`npm run typecheck`、Mock 8797 冒烟、两个探针 `node --check` 均通过。8787 未重启，手机听感和 #42 话题接续仍待用户复验。

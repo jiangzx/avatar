@@ -161,7 +161,7 @@ describe('Director', () => {
     expect(calls).toEqual([['followup', 'CTX']]);
   });
 
-  it('keeps opening checks contextual and skips them after a substantive continuation', () => {
+  it('keeps opening checks contextual after a substantive continuation', () => {
     const openReqs: ProactiveRequest[] = [];
     const open = new Director({
       ...cfg,
@@ -204,7 +204,14 @@ describe('Director', () => {
     vi.advanceTimersByTime(5000);
     d.onAiTurnEnded();
     vi.advanceTimersByTime(10000);
-    expect(talked).toEqual([{ cue: 'followup', instruction: 'CTX', fallbackText: '承接' }]);
+    expect(talked).toEqual([
+      { cue: 'followup', instruction: 'CTX', fallbackText: '承接' },
+      {
+        cue: 'followup',
+        instruction: '点到「孙子周末来看我」，可以不回',
+        fallbackText: '还在吗，刚才那件事先放着',
+      },
+    ]);
   });
 
   it('a light reply after content waits quietly instead of starting another ladder', () => {

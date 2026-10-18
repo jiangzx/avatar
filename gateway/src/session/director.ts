@@ -249,7 +249,7 @@ export class Director {
       return;
     }
     if (this.quiet || this.left) return;
-    if (done === 'repair' || (done === 'resume' && this.hadContent) || (done === 'context' && this.hadContent) || this.silentStretch) {
+    if (done === 'repair' || (done === 'resume' && this.hadContent) || this.silentStretch) {
       this.waitQuietly();
       return;
     }
@@ -415,7 +415,9 @@ export class Director {
       if (this.decision !== controller || controller.signal.aborted || this.blocked() || this.left) return;
       this.decision = null;
       if (!text?.trim()) {
-        this.waitQuietly();
+        // Keep the proactive ladder alive when the optional planner is unavailable or declines.
+        this.pending = 'context';
+        this.deps.requestResponse('followup', this.silenceRequest('context'));
         return;
       }
       this.pending = 'context';
@@ -460,7 +462,13 @@ export class Director {
   private silenceRequest(step: SilenceStep): ProactiveRequest {
     const s = this.silence();
     if (step === 'context' && this.hadContent) {
-      return { cue: 'followup', instruction: s.contextInstruction.replaceAll('{utterance}', this.lastContent), fallbackText: s.presenceText };
+      return {
+        cue: 'followup',
+        instruction: s.contextInstruction
+          .replaceAll('{utterance}', this.lastContent)
+          .replaceAll('{continuation}', s.presenceText),
+        fallbackText: s.presenceText,
+      };
     }
     if (step === 'context') return this.openingFollow(s);
     if (step === 'check') return this.checkRequest(s);
