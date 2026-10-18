@@ -986,7 +986,10 @@ User approved this bounded correction to existing Plan C memory reads and role c
    - [x] Real synthetic evaluation: old copy reproduced repetition; final four cases (both styles × known/empty history) passed mechanical checks plus recorded manual review in `docs/testing/plan3-topic-continuity-latest.json`. One sample per case, simulated playback; no phone or all-output guarantee. Probe exit code only covers mechanical checks; `passed` stays null until manual review.
    - [x] Independent review: P2 false-positive probe verdict fixed in d5a25e6 and re-reviewed; reviewer counterexample now rejected. No remaining substantive review findings.
    - [x] User confirmed restart; applied to 8787 with original DB/identity retained. Health/auth/DB metadata checks passed; ADB reverse restored and existing App restarted, original device resolution and greeting start/end observed. See roadmap application record.
-   - [ ] Complete user phone topic-continuity and non-repetition listening checks; assumption 8 remains separately open.
+   - [x] User reported that repetition stopped after the applied correction. This confirms only non-repetition; recent-topic recall still lacks phone confirmation.
+   - [x] Investigate new unrelated-silence-speech feedback: focused Director/Session/Qwen suite 101 passed; 8 synthetic baseline reproductions confirmed unconditional silence stages, sticky quiet state, and restart after a noise-hearing repair. See roadmap conversation-flow audit and blocker #43. No product changes or restart in this audit.
+   - [ ] Confirm revised silence behavior before affected implementation (AGENTS §7); the fixed ladder currently forces speech even after a settled reply. Prior synthetic manual acceptance did not cover normal multi-turn relevance.
+   - [ ] Complete user phone topic-continuity and revised conversation-flow listening checks after the approved correction; assumption 8 remains separately open.
 
 - [ ] **Step 1: Write the failing acceptance test**
 
