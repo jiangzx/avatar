@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../src/memory/db.ts';
 import { MIGRATIONS, migrate } from '../src/memory/migrations.ts';
@@ -175,5 +175,83 @@ describe('SqliteMemoryStore', () => {
     expect(old.map((o) => store.getOwner(o.ownerId))).toEqual([undefined, undefined, undefined]);
     expect(store.getOwner(connected.ownerId)).toBeDefined();
     expect(store.getOwner(fresh.ownerId)).toBeDefined();
+  });
+});
+
+describe('memory tables', () => {
+  it('reaches schema version 2, finds a message by bigram, and cascades with the owner', () => {
+    const db = open();
+    expect(MIGRATIONS).toHaveLength(2);
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 2 });
+    const created = owner(new SqliteMemoryStore(db), 'h-mem');
+
+    db.prepare(
+      `INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, created_at)
+       VALUES ('m1', 's1', ?, 'user', 'sample', '膝盖', 10)`,
+    ).run(created.ownerId);
+    expect(db.prepare(`SELECT id FROM messages WHERE rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH '膝盖')`).get())
+      .toEqual({ id: 'm1' });
+    db.prepare(`DELETE FROM messages WHERE id = 'm1'`).run();
+    expect(db.prepare('SELECT count(*) AS n FROM messages').get()).toEqual({ n: 0 });
+    expect(db.prepare(`SELECT rowid FROM messages_fts WHERE messages_fts MATCH '膝盖'`).all()).toEqual([]);
+
+    db.prepare(
+      `INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, created_at)
+       VALUES ('m2', 's1', ?, 'assistant', 'sample', '王叔', 11)`,
+    ).run(created.ownerId);
+    expect(db.prepare(`SELECT id FROM messages WHERE rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH '王叔')`).get())
+      .toEqual({ id: 'm2' });
+    db.prepare(`UPDATE messages SET text = '', bigrams = '', excluded = 1 WHERE id = 'm2'`).run();
+    expect(db.prepare(`SELECT text, bigrams, excluded FROM messages WHERE id = 'm2'`).get())
+      .toEqual({ text: '', bigrams: '', excluded: 1 });
+    expect(db.prepare(`SELECT rowid FROM messages_fts WHERE messages_fts MATCH '王叔'`).all()).toEqual([]);
+
+    db.prepare(
+      `INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, created_at)
+       VALUES ('m3', 's1', ?, 'user', 'sample', 'hello', 12)`,
+    ).run(created.ownerId);
+    db.prepare(
+      `INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at)
+       VALUES ('f1', ?, 'addressing', 'sample', 0.9, 12)`,
+    ).run(created.ownerId);
+    db.prepare(
+      `INSERT INTO relationship_notes (id, agent_id, owner_id, kind, text, updated_at)
+       VALUES ('n1', ?, ?, 'preference', 'sample', 12)`,
+    ).run(created.agentId, created.ownerId);
+    db.prepare(
+      `INSERT INTO episodes (id, session_id, owner_id, summary, created_at)
+       VALUES ('e1', 's1', ?, 'sample', 12)`,
+    ).run(created.ownerId);
+    db.prepare(
+      `INSERT INTO followups (id, owner_id, text, due_at) VALUES ('u1', ?, 'sample', 99)`,
+    ).run(created.ownerId);
+    db.prepare(
+      `INSERT INTO memory_changes (id, owner_id, table_name, row_id, op, diff, actor, created_at)
+       VALUES ('c1', ?, 'messages', 'm3', 'insert', '{}', 'system', 12)`,
+    ).run(created.ownerId);
+
+    db.prepare('DELETE FROM owners WHERE id = ?').run(created.ownerId);
+    expect(db.prepare(
+      `SELECT
+         (SELECT count(*) FROM messages) AS messages,
+         (SELECT count(*) FROM user_facts) AS facts,
+         (SELECT count(*) FROM relationship_notes) AS notes,
+         (SELECT count(*) FROM episodes) AS episodes,
+         (SELECT count(*) FROM followups) AS followups,
+         (SELECT count(*) FROM memory_changes) AS changes`,
+    ).get()).toEqual({ messages: 0, facts: 0, notes: 0, episodes: 0, followups: 0, changes: 0 });
+    expect(db.prepare(`SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'hello'`).all()).toEqual([]);
+  });
+
+  it('upgrades a version-1 database to version 2 without reapplying step 0', () => {
+    const db = new DatabaseSync(':memory:');
+    dbs.push(db);
+    db.exec('PRAGMA foreign_keys = ON');
+    expect(migrate(db, MIGRATIONS.slice(0, 1))).toBe(1);
+    db.prepare('INSERT INTO owners (id, created_at, last_seen_at) VALUES (?, ?, ?)').run('owner-v1', 1, 1);
+    expect(migrate(db)).toBe(2);
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 2 });
+    expect(db.prepare('SELECT id FROM owners WHERE id = ?').get('owner-v1')).toEqual({ id: 'owner-v1' });
+    expect(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'messages'").get()).toEqual({ n: 1 });
   });
 });

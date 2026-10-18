@@ -2,8 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 /**
  * Ordered schema steps; step i brings PRAGMA user_version to i + 1.
- * Append only: never edit a shipped step. Plan C appends the memory tables
- * (messages, messages_fts, user_facts, ...) with owner_id REFERENCES owners (id) ON DELETE CASCADE.
+ * Append only: never edit a shipped step. Plan C appends step 1 (memory tables); Plan D may append step 2 for activities.
  */
 export const MIGRATIONS: readonly string[] = [
   `
@@ -40,6 +39,82 @@ export const MIGRATIONS: readonly string[] = [
     ended_at INTEGER
   ) STRICT;
   CREATE INDEX sessions_agent ON sessions (agent_id);
+  `,
+  `
+  CREATE TABLE messages (
+    rowid INTEGER PRIMARY KEY,
+    id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    text TEXT NOT NULL,
+    bigrams TEXT NOT NULL,
+    extracted INTEGER NOT NULL DEFAULT 0,
+    excluded INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  );
+  CREATE VIRTUAL TABLE messages_fts USING fts5(
+    bigrams,
+    content='messages',
+    content_rowid='rowid',
+    tokenize='unicode61'
+  );
+  -- External content FTS does not sync itself.
+  CREATE TRIGGER messages_ai AFTER INSERT ON messages BEGIN
+    INSERT INTO messages_fts (rowid, bigrams) VALUES (new.rowid, new.bigrams);
+  END;
+  CREATE TRIGGER messages_ad AFTER DELETE ON messages BEGIN
+    INSERT INTO messages_fts (messages_fts, rowid, bigrams) VALUES ('delete', old.rowid, old.bigrams);
+  END;
+  CREATE TRIGGER messages_au AFTER UPDATE ON messages BEGIN
+    INSERT INTO messages_fts (messages_fts, rowid, bigrams) VALUES ('delete', old.rowid, old.bigrams);
+    INSERT INTO messages_fts (rowid, bigrams) VALUES (new.rowid, new.bigrams);
+  END;
+  CREATE TABLE user_facts (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    text TEXT NOT NULL,
+    sensitive INTEGER NOT NULL DEFAULT 0,
+    confidence REAL NOT NULL,
+    source_session_id TEXT,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE relationship_notes (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    text TEXT NOT NULL,
+    source_session_id TEXT,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE episodes (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    summary TEXT NOT NULL,
+    mood TEXT,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE followups (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    due_at INTEGER NOT NULL,
+    done_at INTEGER,
+    source_session_id TEXT
+  );
+  CREATE TABLE memory_changes (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    table_name TEXT NOT NULL,
+    row_id TEXT NOT NULL,
+    op TEXT NOT NULL,
+    diff TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
   `,
 ];
 
