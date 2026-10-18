@@ -129,11 +129,14 @@ export class Session {
   private continuationAsked = false;
   /** True when this turn's own cancel stands in for playback.stopped. */
   private originForcedEnd = false;
+  /** Seq of the in-flight memory notice. Set when that cue is requested. */
+  private noticeSeq: number | null = null;
 
   constructor(
     private readonly deps: SessionDeps,
     ctx: SessionContext = devContext(deps.roles),
     readonly sessionId: string = randomUUID(),
+    private readonly noticePending = false,
   ) {
     this.writer = deps.writer;
     this.context = ctx;
@@ -142,7 +145,7 @@ export class Session {
     // Summarize before the instruction budget would have to drop unsummarized turns.
     const history = deps.budget ? historyBudget(this.persona, deps.budget) : Number.POSITIVE_INFINITY;
     this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
-    this.director = new Director(deps.roles.director(ctx.roleId), { requestResponse: (kind, request) => this.requestResponse(kind, request) });
+    this.director = new Director(deps.roles.director(ctx.roleId), { requestResponse: (kind, request) => this.requestResponse(kind, request) }, this.noticePending);
     this.emotion = deps.emotion ? new EmotionTagger(deps.emotion, (emotion) => this.send({ type: 'avatar.emotion', emotion })) : null;
     this.interrupt = new InterruptCoordinator({
       confirmWindowMs: deps.confirmWindowMs ?? 300,
@@ -281,6 +284,7 @@ export class Session {
           this.finalize(s, false);
           this.interrupt.onResponseFinished(msg.responseSeq);
           this.uplinkResumeAt = Date.now() + (this.deps.tailGuardMs ?? 0);
+          this.finishNotice(msg.responseSeq);
           if (toolOrigin) {
             this.toolTurn.onOriginPlaybackEnded();
             this.maybeContinue();
@@ -368,8 +372,16 @@ export class Session {
   private requestResponse(kind: ResponseKind, request: ProactiveRequest): void {
     // Tool turns speak only through maybeContinue.
     if (this.toolTurn.active || this.ended || this.interrupt.active !== null || this.modelGenerating) return;
+    if (request.cue === 'memoryNotice') this.noticeSeq = this.seqCounter + 1;
     this.pendingKind = kind;
     this.adapter.createResponse(request);
+  }
+
+  /** Playback ended for the notice seq is the only completion signal. */
+  private finishNotice(seq: number): void {
+    if (seq !== this.noticeSeq || !this.writer || !this.context.ownerId) return;
+    this.writer.markNotified(this.context.ownerId, Date.now());
+    this.noticeSeq = null;
   }
 
   private createAdapter(): RealtimeAdapter {

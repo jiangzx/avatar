@@ -76,7 +76,7 @@ describe('FileRoleCatalog', () => {
 
   it('rejects a topic instruction without the {topic} placeholder', () => {
     const dir = copyFixtures();
-    const director = { followupAfterMs: 8000, idleNoticeAfterMs: 25000, maxConsecutive: 2, maxPerWindow: 3, windowMs: 300000, quietPhrases: [], greetingInstruction: 'G', greetingText: 'g', followupInstruction: 'F', followupText: 'f', idleNoticeInstruction: 'I', idleNoticeText: 'i', resumeInstruction: 'R', resumeText: 'r', toolContinueInstruction: 'C', toolContinueText: '好。', topicInstruction: 'no placeholder' };
+    const director = { followupAfterMs: 8000, idleNoticeAfterMs: 25000, maxConsecutive: 2, maxPerWindow: 3, windowMs: 300000, quietPhrases: [], greetingInstruction: 'G', greetingText: 'g', followupInstruction: 'F', followupText: 'f', idleNoticeInstruction: 'I', idleNoticeText: 'i', resumeInstruction: 'R', resumeText: 'r', toolContinueInstruction: 'C', toolContinueText: '好。', memoryNoticeInstruction: 'N', memoryNoticeText: '记着。', topicInstruction: 'no placeholder' };
     writeFileSync(join(dir, 'test-role', 'director.json'), JSON.stringify(director));
     expect(() => loadRoleCatalog(dir, 'test-role')).toThrow();
   });

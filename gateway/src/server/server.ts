@@ -172,7 +172,7 @@ function createSession(req: IncomingMessage, res: ServerResponse, opts: GatewayS
     json(res, 401, { error: 'unauthorized' });
     return;
   }
-  json(res, 200, opts.manager.create(resolved.ctx));
+  json(res, 200, opts.manager.create(resolved.ctx, resolved.noticePending));
 }
 
 async function resumeSession(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions): Promise<void> {

@@ -68,6 +68,9 @@ export interface DirectorConfig {
   /** Spoken after a tool action, once the origin reply has finished playing. */
   toolContinueInstruction: string;
   toolContinueText: string;
+  /** One-time memory notice after the opening, when the owner has not been told. */
+  memoryNoticeInstruction: string;
+  memoryNoticeText: string;
   /** Silence-topic template; `{topic}` is replaced by the card prompt. */
   topicInstruction?: string;
   topics?: readonly TopicCard[];

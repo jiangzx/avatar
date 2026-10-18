@@ -69,13 +69,20 @@ export class Director {
   private hasMemory = false;
   /** The user cut in. Do not resume the script until their reply has finished. */
   private bargeIn = false;
-  /** Silence step whose playback is in flight. Cleared when the user speaks. */
-  private pending: SilenceStep | null = null;
+  /** Silence step whose playback is in flight, or the memory notice. */
+  private pending: SilenceStep | 'notice' | null = null;
+  /** Still owe the one-time memory notice in this session. */
+  private noticePending: boolean;
+  /** The notice was cut off. Say it again at the next idle moment. */
+  private noticeRetry = false;
 
   constructor(
     private readonly cfg: DirectorConfig,
     private readonly deps: DirectorDeps,
-  ) {}
+    noticePending = false,
+  ) {
+    this.noticePending = noticePending;
+  }
 
   onSessionStart(hasMemory = false): void {
     this.hasMemory = hasMemory;
@@ -89,11 +96,15 @@ export class Director {
     if (speaking) {
       if (this.aiBusy || this.pending !== null) this.bargeIn = true;
       this.clear();
-      this.pending = null;
+      if (this.pending !== 'notice') this.pending = null;
     } else if (wasSpeaking) {
       if (this.bargeIn) {
         // The word often ends before playback has stopped. Keep the hold.
         if (!this.aiBusy) this.armBargeReplyWait();
+        return;
+      }
+      if (this.noticeRetry && !this.aiBusy) {
+        this.requestMemoryNotice();
         return;
       }
       if (this.opened) this.arm();
@@ -104,7 +115,7 @@ export class Director {
   /** Any sign of the user engaging (model-side speech, transcripts). */
   onUserActivity(): void {
     this.clear();
-    this.pending = null;
+    if (this.pending !== 'notice') this.pending = null;
     if (this.bargeIn && !this.aiBusy) this.armBargeReplyWait();
   }
 
@@ -112,13 +123,17 @@ export class Director {
     if (this.cfg.quietPhrases.some((p) => text.includes(p))) {
       this.quiet = true;
       this.clear();
-      this.pending = null;
+      if (this.pending !== 'notice') this.pending = null;
+      // A cut-off notice still has to be said. Quiet phrases do not cancel it.
+      if (this.noticeRetry && !this.aiBusy && !this.userSpeaking && !this.stopped && !this.muted && !this.paused) {
+        this.requestMemoryNotice();
+      }
       return;
     }
     const key = normalizeUtterance(text);
     if (!key) return;
     this.clear();
-    this.pending = null;
+    if (this.pending !== 'notice') this.pending = null;
     if (this.isLight(key)) {
       if (this.left) return;
       if (this.eased) {
@@ -150,8 +165,21 @@ export class Director {
   /** The line was cut off. A real barge-in waits for the reply; a false cut repeats the step. */
   onAssistantInterrupted(): void {
     this.aiBusy = false;
-    if (this.stopped || this.quiet || this.muted || this.paused || this.left) return;
+    if (this.pending === 'notice') {
+      this.pending = null;
+      this.noticeRetry = true;
+    }
+    if (this.stopped || this.muted || this.paused) return;
     if (this.userSpeaking) return;
+    if (this.noticeRetry) {
+      if (this.bargeIn) {
+        this.armBargeReplyWait();
+        return;
+      }
+      this.requestMemoryNotice();
+      return;
+    }
+    if (this.quiet || this.left) return;
     this.pending = null;
     if (this.bargeIn) {
       this.armBargeReplyWait();
@@ -166,11 +194,28 @@ export class Director {
 
   onAiTurnEnded(): void {
     this.aiBusy = false;
+    const openingJustFinished = !this.opened;
     this.opened = true;
     this.bargeIn = false;
-    if (this.blocked() || this.left) return;
+    const hardStop = this.stopped || this.muted || this.paused || this.userSpeaking;
+    if (hardStop) {
+      if (this.pending === 'notice') {
+        this.pending = null;
+        this.noticePending = false;
+        this.noticeRetry = false;
+      } else if (this.noticePending) this.noticeRetry = true;
+      return;
+    }
     const done = this.pending;
     this.pending = null;
+    if (done === 'notice') {
+      this.noticePending = false;
+      this.noticeRetry = false;
+    } else if (this.noticeRetry || (openingJustFinished && this.noticePending)) {
+      this.requestMemoryNotice();
+      return;
+    }
+    if (this.quiet || this.left) return;
     if (done === 'rest') {
       this.left = true;
       this.lightHold = false;
@@ -219,8 +264,26 @@ export class Director {
 
   resume(): void {
     this.paused = false;
+    if (this.pending === 'notice') this.noticeRetry = true;
     this.pending = null;
     if (!this.blocked() && this.takeSpeechSlot()) this.deps.requestResponse('followup', this.request('resume'));
+  }
+
+  /** One memory notice after the opening. Does not use the proactive frequency cap. */
+  requestMemoryNotice(): void {
+    if (this.stopped || this.muted || this.paused || this.userSpeaking) {
+      this.noticeRetry = true;
+      return;
+    }
+    this.clear();
+    this.noticeRetry = false;
+    this.pending = 'notice';
+    const c = this.cfg;
+    this.deps.requestResponse('followup', {
+      cue: 'memoryNotice',
+      instruction: c.memoryNoticeInstruction,
+      fallbackText: c.memoryNoticeText,
+    });
   }
 
   /** Unpause after a tool turn. Not the reconnect announcement. */
@@ -261,7 +324,12 @@ export class Director {
       this.timer = null;
       if (!this.bargeIn) return;
       this.bargeIn = false;
-      if (this.blocked() || this.left) return;
+      if (this.stopped || this.muted || this.paused || this.userSpeaking) return;
+      if (this.noticeRetry) {
+        this.requestMemoryNotice();
+        return;
+      }
+      if (this.quiet || this.left) return;
       const c = this.cfg;
       this.deps.requestResponse('followup', {
         cue: 'followup',
@@ -369,6 +437,7 @@ export class Director {
       case 'idleNotice': return { cue, instruction: c.idleNoticeInstruction, fallbackText: c.idleNoticeText };
       case 'resume': return { cue, instruction: c.resumeInstruction, fallbackText: c.resumeText };
       case 'toolContinue': return { cue, instruction: c.toolContinueInstruction, fallbackText: c.toolContinueText };
+      case 'memoryNotice': return { cue, instruction: c.memoryNoticeInstruction, fallbackText: c.memoryNoticeText };
     }
   }
 

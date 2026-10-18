@@ -72,7 +72,7 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
 
   resolve(bearer: string | undefined): ResolveResult {
     const { store, roles } = this.deps;
-    if (bearer === undefined) return { ok: true, ctx: devContext(roles) }; // dev / Mock: no owner, no memory
+    if (bearer === undefined) return { ok: true, ctx: devContext(roles), noticePending: false }; // dev / Mock: no owner, no memory
     const device = store.findDevice(hashToken(bearer));
     if (!device) {
       log('device_unknown', {});
@@ -85,7 +85,12 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     const styleId = roles.hasStyle(roleId, agent.styleId) ? agent.styleId : roles.defaultStyle(roleId);
     store.touchDevice(device.ownerId, device.deviceId, now);
     log('device_resolved', { agent: shortHash(agent.id), style: styleId });
-    return { ok: true, ctx: { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: roles.voiceFor(roleId, styleId) } };
+    const owner = store.getOwner(device.ownerId);
+    return {
+      ok: true,
+      ctx: { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: roles.voiceFor(roleId, styleId) },
+      noticePending: owner !== undefined && owner.notifiedAt === null,
+    };
   }
 
   setStyle(bearer: string, style: string): SetStyleResult {

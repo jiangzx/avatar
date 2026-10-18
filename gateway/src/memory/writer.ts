@@ -18,6 +18,8 @@ export interface TranscriptWriter {
     now: number;
     interrupted?: boolean;
   }): 'stored' | 'skipped' | 'rejected';
+  /** Records that the memory notice finished playing. */
+  markNotified(ownerId: string, now: number): void;
 }
 
 export class SqliteTranscriptWriter implements TranscriptWriter {
@@ -46,5 +48,9 @@ export class SqliteTranscriptWriter implements TranscriptWriter {
       now: input.now,
     });
     return 'stored';
+  }
+
+  markNotified(ownerId: string, now: number): void {
+    this.store.markNotified(ownerId, now);
   }
 }

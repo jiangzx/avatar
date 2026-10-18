@@ -24,6 +24,8 @@ const director: DirectorConfig = {
   followupAfterMs: 8000, idleNoticeAfterMs: 25000, maxConsecutive: 2, maxPerWindow: 3, windowMs: 300000,
   quietPhrases: [], greetingInstruction: 'G', greetingText: 'greeting', followupInstruction: 'F', followupText: 'followup', idleNoticeInstruction: 'I', idleNoticeText: 'idle', resumeInstruction: 'R', resumeText: 'resume',
   toolContinueInstruction: '用一句话接上刚才的动作。不要描述动作过程。', toolContinueText: '好。',
+  memoryNoticeInstruction: '用下面这句告诉对方，以后聊天的内容会记住，方便下次接着聊。不要加问题。',
+  memoryNoticeText: '之后咱们聊的事，我会记着，下次还能接着说。',
 };
 
 function collector() {
@@ -62,7 +64,7 @@ const ownedCtx: SessionContext = {
   ownerId: 'owner-1', agentId: 'agent-1', roleId: 'elder-companion', styleId: 'grandchild',
 };
 
-function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessionId?: string) {
+function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessionId?: string, noticePending = false) {
   const mocks: MockAdapter[] = [];
   const session = new Session({
     adapterFactory: () => {
@@ -73,7 +75,7 @@ function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessi
     summarizer: new MockSummarizer(),
     roles: fixedRoleCatalog('P', director),
     ...overrides,
-  }, ctx, sessionId);
+  }, ctx, sessionId, noticePending);
   return { session, mocks, ...collector() };
 }
 
@@ -648,7 +650,7 @@ describe('Session', () => {
 
   it('writes a user final when it arrives and flushes assistant replies once', async () => {
     const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
-    const s = setup({ writer: { append } }, ownedCtx, 'session-fixed');
+    const s = setup({ writer: { append, markNotified: () => {} } }, ownedCtx, 'session-fixed');
     await s.session.start(s.transport);
     await vi.advanceTimersByTimeAsync(1000);
     s.session.flush();
@@ -677,7 +679,7 @@ describe('Session', () => {
 
   it('flushes the playback slice of an interrupted reply', async () => {
     const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
-    const s = setup({ writer: { append } }, ownedCtx, 'session-cut');
+    const s = setup({ writer: { append, markNotified: () => {} } }, ownedCtx, 'session-cut');
     await greetAndFinish(s);
     s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
     await vi.advanceTimersByTimeAsync(1000);
@@ -688,9 +690,52 @@ describe('Session', () => {
     expect(append.mock.calls.map((c) => c[0].text)).toEqual(['随便聊聊', '你好呀', '我在']);
   });
 
+  it('marks notified only when the memory-notice seq plays to the end', async () => {
+    const markNotified = vi.fn();
+    const writer: TranscriptWriter = { append: () => 'stored', markNotified };
+    const s = setup({ writer }, ownedCtx, 'notice-session', true);
+    await greetAndFinish(s);
+    expect(markNotified).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    const notice = of(s.sent, 'response.start').at(-1);
+    expect(notice).toEqual({ type: 'response.start', responseSeq: 2, kind: 'followup' });
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: notice!.responseSeq, playedMs: 300, reason: 'ended' });
+    expect(markNotified).toHaveBeenCalledTimes(1);
+    expect(markNotified).toHaveBeenCalledWith('owner-1', expect.any(Number));
+    await vi.advanceTimersByTimeAsync(6000);
+    const later = of(s.sent, 'response.start').at(-1)!;
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: later.responseSeq, playedMs: 300, reason: 'ended' });
+    expect(markNotified).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not mark notified when the memory notice is interrupted', async () => {
+    const markNotified = vi.fn();
+    const writer: TranscriptWriter = { append: () => 'stored', markNotified };
+    const s = setup({ writer }, ownedCtx, 'notice-cut', true);
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(1000);
+    const noticeSeq = of(s.sent, 'response.start').at(-1)!.responseSeq;
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: noticeSeq, playedMs: 80, reason: 'interrupted' });
+    expect(markNotified).not.toHaveBeenCalled();
+  });
+
+  it('does not record a server-VAD reply as the memory notice', async () => {
+    const markNotified = vi.fn();
+    const writer: TranscriptWriter = { append: () => 'stored', markNotified };
+    const s = setup({ writer }, ownedCtx, 'notice-reply');
+    await greetAndFinish(s);
+    for (let i = 0; i < 10; i++) s.session.handleMicAudio(loud());
+    for (let i = 0; i < 40; i++) s.session.handleMicAudio(quiet());
+    await vi.advanceTimersByTimeAsync(1000);
+    const reply = of(s.sent, 'response.start').at(-1);
+    expect(reply).toEqual({ type: 'response.start', responseSeq: 2, kind: 'reply' });
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: reply!.responseSeq, playedMs: 300, reason: 'ended' });
+    expect(markNotified).not.toHaveBeenCalled();
+  });
+
   it('writes nothing when the writer or the owner is missing', async () => {
     const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
-    const noOwner = setup({ writer: { append } }, undefined, 'session-no-owner');
+    const noOwner = setup({ writer: { append, markNotified: () => {} } }, undefined, 'session-no-owner');
     await greetAndFinish(noOwner);
     noOwner.session.handleClientMessage({ type: 'debug.userText', text: '我叫老王' });
     noOwner.session.flush();

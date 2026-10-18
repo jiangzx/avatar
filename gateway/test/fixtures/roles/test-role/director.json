@@ -6,5 +6,6 @@
   "idleNoticeInstruction": "I", "idleNoticeText": "idle",
   "resumeInstruction": "R", "resumeText": "resume",
   "toolContinueInstruction": "C", "toolContinueText": "好。",
+  "memoryNoticeInstruction": "N", "memoryNoticeText": "记着。",
   "topicInstruction": "T {topic}"
 }

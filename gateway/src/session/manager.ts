@@ -34,7 +34,7 @@ export class SessionManager {
   private nextConnId = 0;
 
   constructor(
-    private readonly makeSession: (ctx: SessionContext, sessionId: string) => Session,
+    private readonly makeSession: (ctx: SessionContext, sessionId: string, noticePending?: boolean) => Session,
     private readonly graceMs = 60_000,
     /** Matches the connect token TTL: a session nobody connects to is dropped. */
     private readonly unclaimedMs = 5 * 60_000,
@@ -50,12 +50,12 @@ export class SessionManager {
    * Invariant: an owner has at most one session. A new one ends the owner's previous session
    * first, whether it is live, in its reconnect grace period, or never claimed.
    */
-  create(ctx: SessionContext): SessionTokens {
+  create(ctx: SessionContext, noticePending = false): SessionTokens {
     if (ctx.ownerId !== undefined) this.endOwner(ctx.ownerId, 'owner_replaced');
     const sessionId = randomUUID();
     // claim() clears this timer, like the disconnect grace timer.
     const grace = setTimeout(() => this.destroy(sessionId, 'unclaimed'), this.unclaimedMs);
-    this.sessions.set(sessionId, { session: this.makeSession(ctx, sessionId), ctx, started: false, starting: false, connId: 0, terminate: null, grace });
+    this.sessions.set(sessionId, { session: this.makeSession(ctx, sessionId, noticePending), ctx, started: false, starting: false, connId: 0, terminate: null, grace });
     log('session_created', { sessions: this.sessions.size });
     return this.tokens.issue(sessionId);
   }

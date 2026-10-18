@@ -177,6 +177,8 @@ const DirectorSchema = z.object({
   resumeText: z.string().min(1),
   toolContinueInstruction: z.string().min(1),
   toolContinueText: z.string().min(1),
+  memoryNoticeInstruction: z.string().min(1),
+  memoryNoticeText: z.string().min(1),
 });
 
 export function loadDirectorConfig(path: string): DirectorConfig {

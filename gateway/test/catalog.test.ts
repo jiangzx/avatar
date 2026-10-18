@@ -5,7 +5,7 @@ import type { DirectorConfig } from '../src/session/director.ts';
 
 const director = {
   followupAfterMs: 8000, idleNoticeAfterMs: 25000, maxConsecutive: 2, maxPerWindow: 3, windowMs: 300000,
-  quietPhrases: [], greetingInstruction: 'G', greetingText: 'greeting', followupInstruction: 'F', followupText: 'followup', idleNoticeInstruction: 'I', idleNoticeText: 'idle', resumeInstruction: 'R', resumeText: 'resume', toolContinueInstruction: 'C', toolContinueText: '好。',
+  quietPhrases: [], greetingInstruction: 'G', greetingText: 'greeting', followupInstruction: 'F', followupText: 'followup', idleNoticeInstruction: 'I', idleNoticeText: 'idle', resumeInstruction: 'R', resumeText: 'resume', toolContinueInstruction: 'C', toolContinueText: '好。', memoryNoticeInstruction: 'N', memoryNoticeText: '记着。',
 } satisfies DirectorConfig;
 
 describe('fixedRoleCatalog', () => {
@@ -30,7 +30,7 @@ describe('fixedRoleCatalog', () => {
 describe('devContextResolver', () => {
   it('accepts requests without a bearer and rejects any bearer until identity exists', () => {
     const resolver = devContextResolver(fixedRoleCatalog('P', director));
-    expect(resolver.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined } });
+    expect(resolver.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined }, noticePending: false });
     expect(resolver.resolve('device-token-0123456789')).toEqual({ ok: false });
   });
 });

@@ -19,7 +19,7 @@ export function devContext(roles: RoleCatalog): SessionContext {
   return { roleId, styleId, voice: roles.voiceFor(roleId, styleId) };
 }
 
-export type ResolveResult = { ok: true; ctx: SessionContext } | { ok: false };
+export type ResolveResult = { ok: true; ctx: SessionContext; noticePending: boolean } | { ok: false };
 
 /** Maps the optional device bearer token to a session context. DeviceRegistry implements this when MEMORY_DB_PATH is set. */
 export interface ContextResolver {
@@ -28,5 +28,5 @@ export interface ContextResolver {
 
 /** Dev / Mock resolver (identity disabled): any bearer is rejected. */
 export function devContextResolver(roles: RoleCatalog): ContextResolver {
-  return { resolve: (bearer) => (bearer === undefined ? { ok: true, ctx: devContext(roles) } : { ok: false }) };
+  return { resolve: (bearer) => (bearer === undefined ? { ok: true, ctx: devContext(roles), noticePending: false } : { ok: false }) };
 }

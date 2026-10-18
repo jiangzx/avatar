@@ -53,7 +53,7 @@ const registry = memoryDb
   : null;
 log('identity_mode', { enabled: registry !== null, devEndpoints: identityConfig.enableDevEndpoints });
 const manager = new SessionManager(
-  (ctx, sessionId) =>
+  (ctx, sessionId, noticePending = false) =>
     new Session({
       adapterFactory: () => config.adapter === 'seeduplex'
         ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
@@ -78,7 +78,7 @@ const manager = new SessionManager(
       tailGuardMs: pacing.tailGuardMs,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
       emotion,
-    }, ctx, sessionId),
+    }, ctx, sessionId, noticePending),
   config.sessionGraceMs,
   config.sessionUnclaimedMs,
   config.sessionStartTimeoutMs,

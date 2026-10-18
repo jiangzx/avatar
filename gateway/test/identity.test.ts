@@ -10,7 +10,7 @@ import type { DirectorConfig } from '../src/session/director.ts';
 
 const director = {
   followupAfterMs: 8000, idleNoticeAfterMs: 25000, maxConsecutive: 2, maxPerWindow: 3, windowMs: 300000,
-  quietPhrases: [], greetingInstruction: 'G', greetingText: 'greeting', followupInstruction: 'F', followupText: 'followup', idleNoticeInstruction: 'I', idleNoticeText: 'idle', resumeInstruction: 'R', resumeText: 'resume', toolContinueInstruction: 'C', toolContinueText: '好。',
+  quietPhrases: [], greetingInstruction: 'G', greetingText: 'greeting', followupInstruction: 'F', followupText: 'followup', idleNoticeInstruction: 'I', idleNoticeText: 'idle', resumeInstruction: 'R', resumeText: 'resume', toolContinueInstruction: 'C', toolContinueText: '好。', memoryNoticeInstruction: 'N', memoryNoticeText: '记着。',
 } satisfies DirectorConfig;
 
 const DAY = 86_400_000;
@@ -67,10 +67,14 @@ describe('DeviceRegistry', () => {
 
   it('resolves dev, unknown and registered bearers', () => {
     const { store, registry } = setup();
-    expect(registry.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined } });
+    expect(registry.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined }, noticePending: false });
     expect(registry.resolve(newDeviceToken())).toEqual({ ok: false });
     const token = register(registry, 'old-friend');
     const device = store.findDevice(hashToken(token))!;
+    const resolved = registry.resolve(token);
+    expect(resolved.ok && resolved.noticePending).toBe(true);
+    store.markNotified(device.ownerId, 2_000);
+    expect(registry.resolve(token)).toMatchObject({ ok: true, noticePending: false });
     const ctx = ctxOf(registry, token);
     expect(ctx).toEqual({ ownerId: device.ownerId, agentId: ctx.agentId, roleId: DEFAULT_ROLE, styleId: 'old-friend', voice: undefined });
     expect(ctx.agentId).toMatch(/^[0-9a-f-]{36}$/);

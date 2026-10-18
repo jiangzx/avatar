@@ -21,6 +21,8 @@ export interface MockScript {
   resume?: string;
   /** Optional line for a tool-turn continuation. Falls back to followup. */
   toolContinue?: string;
+  /** Optional line for the memory notice. Falls back to followup. */
+  memoryNotice?: string;
   fallbackReply: string;
   turns: MockTurn[];
 }
@@ -111,6 +113,7 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
       idleNotice: s.idleNotice ?? s.followup,
       resume: s.resume ?? s.followup,
       toolContinue: s.toolContinue ?? s.followup,
+      memoryNotice: s.memoryNotice ?? s.followup,
     };
     const text = request ? byCue[request.cue] : this.createCount === 0 ? s.greeting : s.followup;
     this.createCount++;

@@ -23,6 +23,8 @@ const cfg: DirectorConfig = {
   resumeText: 'resume',
   toolContinueInstruction: 'C',
   toolContinueText: '好。',
+  memoryNoticeInstruction: 'N',
+  memoryNoticeText: '记着。',
   contextInstruction: 'CTX',
   presenceInstruction: 'HERE',
   presenceText: '我在',
@@ -446,5 +448,55 @@ describe('Director', () => {
     d.stop();
     vi.advanceTimersByTime(60000);
     expect(calls).toEqual([]);
+  });
+
+  it('requests the memory notice after the opening when notice is pending', () => {
+    const reqs: ProactiveRequest[] = [];
+    const d = new Director({
+      ...cfg,
+      memoryNoticeInstruction: '用下面这句告诉对方，以后聊天的内容会记住，方便下次接着聊。不要加问题。',
+      memoryNoticeText: '之后咱们聊的事，我会记着，下次还能接着说。',
+    }, { requestResponse: (_k, r) => reqs.push(r) }, true);
+    d.onSessionStart();
+    d.onAiTurnEnded();
+    expect(reqs).toEqual([
+      { cue: 'greeting', instruction: 'G', fallbackText: 'greeting' },
+      {
+        cue: 'memoryNotice',
+        instruction: '用下面这句告诉对方，以后聊天的内容会记住，方便下次接着聊。不要加问题。',
+        fallbackText: '之后咱们聊的事，我会记着，下次还能接着说。',
+      },
+    ]);
+  });
+
+  it('retries a cancelled memory notice at the next idle, ignoring the cap and quiet phrases', () => {
+    const reqs: ProactiveRequest[] = [];
+    const d = new Director({
+      ...cfg,
+      maxPerWindow: 0,
+      memoryNoticeInstruction: '用下面这句告诉对方，以后聊天的内容会记住，方便下次接着聊。不要加问题。',
+      memoryNoticeText: '之后咱们聊的事，我会记着，下次还能接着说。',
+    }, { requestResponse: (_k, r) => reqs.push(r) }, true);
+    d.onSessionStart();
+    d.onAiTurnEnded();
+    d.onAiTurnStarted();
+    d.onUserSpeech(true);
+    d.onAssistantInterrupted();
+    expect(reqs.filter((r) => r.cue === 'memoryNotice')).toHaveLength(1);
+    d.onUserSpeech(false);
+    expect(reqs.filter((r) => r.cue === 'memoryNotice')).toHaveLength(1);
+    d.onUserFinal('别说了');
+    expect(reqs.filter((r) => r.cue === 'memoryNotice')).toEqual([
+      {
+        cue: 'memoryNotice',
+        instruction: '用下面这句告诉对方，以后聊天的内容会记住，方便下次接着聊。不要加问题。',
+        fallbackText: '之后咱们聊的事，我会记着，下次还能接着说。',
+      },
+      {
+        cue: 'memoryNotice',
+        instruction: '用下面这句告诉对方，以后聊天的内容会记住，方便下次接着聊。不要加问题。',
+        fallbackText: '之后咱们聊的事，我会记着，下次还能接着说。',
+      },
+    ]);
   });
 });

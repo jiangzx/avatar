@@ -18,7 +18,7 @@ const SECRET = 'test-secret-0123456789';
 const script: MockScript = { greeting: '你好', followup: '还在吗', fallbackReply: '我在听', turns: [] };
 const director: DirectorConfig = {
   followupAfterMs: 60000, idleNoticeAfterMs: 60000, maxConsecutive: 2, maxPerWindow: 3, windowMs: 300000,
-  quietPhrases: [], greetingInstruction: 'G', greetingText: 'greeting', followupInstruction: 'F', followupText: 'followup', idleNoticeInstruction: 'I', idleNoticeText: 'idle', resumeInstruction: 'R', resumeText: 'resume', toolContinueInstruction: 'C', toolContinueText: '好。',
+  quietPhrases: [], greetingInstruction: 'G', greetingText: 'greeting', followupInstruction: 'F', followupText: 'followup', idleNoticeInstruction: 'I', idleNoticeText: 'idle', resumeInstruction: 'R', resumeText: 'resume', toolContinueInstruction: 'C', toolContinueText: '好。', memoryNoticeInstruction: 'N', memoryNoticeText: '记着。',
 };
 
 let server: Server | null = null;
@@ -141,7 +141,7 @@ describe('gateway server', () => {
     const seen: SessionContext[] = [];
     const ctx: SessionContext = { ownerId: 'o1', agentId: 'a1', roleId: 'elder-companion', styleId: 'old-friend', voice: 'voice-old' };
     const base = await boot({
-      contextResolver: { resolve: (b) => (b === 'device-token-0123456789' ? { ok: true, ctx } : { ok: false }) },
+      contextResolver: { resolve: (b) => (b === 'device-token-0123456789' ? { ok: true, ctx, noticePending: false } : { ok: false }) },
       onContext: (c) => seen.push(c),
     });
     const res = await fetch(base + '/session', { method: 'POST', headers: { 'content-type': 'application/json', 'x-app-secret': SECRET, authorization: 'Bearer device-token-0123456789' }, body: '{}' });
