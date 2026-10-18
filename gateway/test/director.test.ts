@@ -421,6 +421,25 @@ describe('Director', () => {
     expect(calls).toEqual([['followup', 'R']]);
   });
 
+  it('releases a pause without the reconnect line and can rearm silence', () => {
+    const rearm = make();
+    rearm.d.pause();
+    rearm.d.onAiTurnStarted();
+    rearm.d.releasePause(true);
+    expect(rearm.calls).toEqual([]);
+    vi.advanceTimersByTime(4999);
+    expect(rearm.calls).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(rearm.calls).toEqual([['followup', 'HERE']]);
+
+    const held = make();
+    held.d.pause();
+    held.d.onAiTurnStarted();
+    held.d.releasePause(false);
+    vi.advanceTimersByTime(60000);
+    expect(held.calls).toEqual([]);
+  });
+
   it('does nothing after stop', () => {
     const { d, calls } = make();
     d.onAiTurnEnded();

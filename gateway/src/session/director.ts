@@ -223,6 +223,12 @@ export class Director {
     if (!this.blocked() && this.takeSpeechSlot()) this.deps.requestResponse('followup', this.request('resume'));
   }
 
+  /** Unpause after a tool turn. Not the reconnect announcement. */
+  releasePause(rearm: boolean): void {
+    this.paused = false;
+    if (rearm) this.onAiTurnEnded();
+  }
+
   stop(): void {
     this.stopped = true;
     this.clear();

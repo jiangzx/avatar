@@ -120,8 +120,6 @@ export class Session {
   private continuationAsked = false;
   /** True when this turn's own cancel stands in for playback.stopped. */
   private originForcedEnd = false;
-  /** director.resume() on a tool-turn end must not start another reply. */
-  private holdDirector = false;
 
   constructor(private readonly deps: SessionDeps, ctx: SessionContext = devContext(deps.roles)) {
     this.context = ctx;
@@ -338,8 +336,8 @@ export class Session {
   }
 
   private requestResponse(kind: ResponseKind, request: ProactiveRequest): void {
-    // Tool turns speak only through maybeContinue. Timeout and barge-in resume the director without a new reply.
-    if (this.holdDirector || this.toolTurn.active || this.ended || this.interrupt.active !== null || this.modelGenerating) return;
+    // Tool turns speak only through maybeContinue.
+    if (this.toolTurn.active || this.ended || this.interrupt.active !== null || this.modelGenerating) return;
     this.pendingKind = kind;
     this.adapter.createResponse(request);
   }
@@ -577,9 +575,8 @@ export class Session {
     this.originForcedEnd = false;
     this.toolOriginSeq = null;
     if (this.ended) return;
-    if (!allowSpeech) this.holdDirector = true;
-    this.director.resume();
-    this.holdDirector = false;
+    // Continuation playback rearms silence later. Timeout and barge-in rearm now.
+    this.director.releasePause(!allowSpeech);
   }
 
   private maybeSummarize(): void {
