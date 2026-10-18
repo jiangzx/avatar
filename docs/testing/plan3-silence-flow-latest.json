@@ -1,0 +1,386 @@
+{
+  "synthetic": true,
+  "simulatedPlayback": true,
+  "phoneAcceptance": false,
+  "requiresManualReview": true,
+  "cases": [
+    {
+      "style": "grandchild",
+      "id": "settled-fact",
+      "userText": "合肥属于哪个省？",
+      "assistantText": "合肥是安徽省的省会。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 527,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "recall-miss",
+      "userText": "上次我们聊到哪里了？",
+      "assistantText": "我暂时找不到上次的记录。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 879,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "acknowledged-emotion",
+      "userText": "今天一个人在家，有点孤单。",
+      "assistantText": "一个人在家冷清，难免觉得孤单。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 602,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "omitted-feeling",
+      "userText": "下午和老朋友散步，回家却有点失落。",
+      "assistantText": "今天下午和老朋友见了一面。",
+      "expectedSpeak": true,
+      "text": "和老朋友散步后，心里空落落的",
+      "elapsedMs": 774,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "goodbye",
+      "userText": "今天先聊到这里，再见。",
+      "assistantText": "好，再见。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 448,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "waiting-for-user",
+      "userText": "今天去了公园。",
+      "assistantText": "公园里有哪处景色让您印象深？",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 477,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "acknowledgement",
+      "userText": "我知道了，谢谢。",
+      "assistantText": "不客气。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 448,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "settled-action",
+      "userText": "帮我挥挥手。",
+      "assistantText": "好。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 424,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "settled-fact",
+      "userText": "合肥属于哪个省？",
+      "assistantText": "合肥是安徽省的省会。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 404,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "recall-miss",
+      "userText": "上次我们聊到哪里了？",
+      "assistantText": "我暂时找不到上次的记录。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 421,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "acknowledged-emotion",
+      "userText": "今天一个人在家，有点孤单。",
+      "assistantText": "一个人在家冷清，难免觉得孤单。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 440,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "omitted-feeling",
+      "userText": "下午和老朋友散步，回家却有点失落。",
+      "assistantText": "今天下午和老朋友见了一面。",
+      "expectedSpeak": true,
+      "text": "和老朋友散步后，心里空落落的",
+      "elapsedMs": 728,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "goodbye",
+      "userText": "今天先聊到这里，再见。",
+      "assistantText": "好，再见。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 487,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "waiting-for-user",
+      "userText": "今天去了公园。",
+      "assistantText": "公园里有哪处景色让您印象深？",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 409,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "acknowledgement",
+      "userText": "我知道了，谢谢。",
+      "assistantText": "不客气。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 386,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "settled-action",
+      "userText": "帮我挥挥手。",
+      "assistantText": "好。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 501,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    }
+  ],
+  "sessions": [
+    {
+      "style": "grandchild",
+      "turns": [
+        "我叫陈叔，叫我陈叔就好。",
+        "我今天去了公园，绕着湖走了一圈。",
+        "今天先聊到这里，再见。"
+      ],
+      "completed": [
+        {
+          "seq": 1,
+          "kind": "greeting",
+          "text": "我是小暖，想陪您说说话。怎么称呼您呀？",
+          "audioMs": 4100
+        },
+        {
+          "seq": 2,
+          "kind": "reply",
+          "text": "陈叔，这称呼听着真亲切。以后我就这么叫您啦，有啥想聊的随时喊我。",
+          "audioMs": 6580
+        },
+        {
+          "seq": 3,
+          "kind": "reply",
+          "text": "绕湖走一圈挺舒服的，空气也好。陈叔今天看着湖里的景色，心情是不是也跟着亮堂起来了？",
+          "audioMs": 7780
+        },
+        {
+          "seq": 4,
+          "kind": "reply",
+          "text": "陈叔再见，路上慢点走。",
+          "audioMs": 2290
+        }
+      ],
+      "decisions": [
+        {
+          "context": {
+            "userText": "我叫陈叔，叫我陈叔就好。",
+            "assistantText": "陈叔，这称呼听着真亲切。以后我就这么叫您啦，有啥想聊的随时喊我。"
+          },
+          "raw": "{\"speak\":false}"
+        },
+        {
+          "context": {
+            "userText": "我今天去了公园，绕着湖走了一圈。",
+            "assistantText": "绕湖走一圈挺舒服的，空气也好。陈叔今天看着湖里的景色，心情是不是也跟着亮堂起来了？"
+          },
+          "raw": "{\"speak\":false}"
+        },
+        {
+          "context": {
+            "userText": "今天先聊到这里，再见。",
+            "assistantText": "陈叔再见，路上慢点走。"
+          },
+          "raw": "{\"speak\":false}"
+        }
+      ],
+      "errors": [],
+      "checks": {
+        "threeReplies": true,
+        "noProactiveSpeech": true,
+        "decisionsAreSilent": true,
+        "noErrors": true
+      },
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "turns": [
+        "我叫陈叔，叫我陈叔就好。",
+        "我今天去了公园，绕着湖走了一圈。",
+        "今天先聊到这里，再见。"
+      ],
+      "completed": [
+        {
+          "seq": 1,
+          "kind": "greeting",
+          "text": "我是小暖，想陪您说说话。怎么称呼您？",
+          "audioMs": 3780
+        },
+        {
+          "seq": 2,
+          "kind": "reply",
+          "text": "陈叔好，很高兴认识您。以后我就陪您聊聊天，解解闷。",
+          "audioMs": 4820
+        },
+        {
+          "seq": 3,
+          "kind": "reply",
+          "text": "陈叔，绕湖走一圈挺舒服的，空气好还能看看水景。",
+          "audioMs": 4980
+        },
+        {
+          "seq": 4,
+          "kind": "reply",
+          "text": "陈叔，那您早点歇着，明天再聊。",
+          "audioMs": 3380
+        }
+      ],
+      "decisions": [
+        {
+          "context": {
+            "userText": "我叫陈叔，叫我陈叔就好。",
+            "assistantText": "陈叔好，很高兴认识您。以后我就陪您聊聊天，解解闷。"
+          },
+          "raw": "{\"speak\":false}"
+        },
+        {
+          "context": {
+            "userText": "我今天去了公园，绕着湖走了一圈。",
+            "assistantText": "陈叔，绕湖走一圈挺舒服的，空气好还能看看水景。"
+          },
+          "raw": "{\"speak\":false}"
+        },
+        {
+          "context": {
+            "userText": "今天先聊到这里，再见。",
+            "assistantText": "陈叔，那您早点歇着，明天再聊。"
+          },
+          "raw": "{\"speak\":false}"
+        }
+      ],
+      "errors": [],
+      "checks": {
+        "threeReplies": true,
+        "noProactiveSpeech": true,
+        "decisionsAreSilent": true,
+        "noErrors": true
+      },
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    }
+  ],
+  "manualReview": true,
+  "passed": true,
+  "renderings": [
+    {
+      "style": "grandchild",
+      "candidate": "和老朋友散步后，心里空落落的",
+      "text": "和老朋友散步后，心里空落落的。",
+      "audioMs": 2850.0000000000005,
+      "errors": [],
+      "checks": {
+        "approvedLineOnly": true,
+        "audioReceived": true,
+        "noErrors": true
+      },
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "candidate": "和老朋友散步后，心里空落落的",
+      "text": "和老朋友散步后，心里空落落的",
+      "audioMs": 3010,
+      "errors": [],
+      "checks": {
+        "approvedLineOnly": true,
+        "audioReceived": true,
+        "noErrors": true
+      },
+      "automatedPassed": true,
+      "manualReview": true,
+      "passed": true
+    }
+  ]
+}

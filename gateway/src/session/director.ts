@@ -82,7 +82,7 @@ export class Director {
   /** The user cut in. Do not resume the script until their reply has finished. */
   private bargeIn = false;
   /** Silence step whose playback is in flight, or the memory notice. */
-  private pending: SilenceStep | 'notice' | 'repair' | null = null;
+  private pending: SilenceStep | 'notice' | 'repair' | 'resume' | null = null;
   /** Still owe the one-time memory notice in this session. */
   private noticePending: boolean;
   /** The notice was cut off. Say it again at the next idle moment. */
@@ -219,7 +219,7 @@ export class Director {
   onNoticePlayed(): void {
     this.noticePending = false;
     this.noticeRetry = false;
-    if (this.pending === 'notice') this.pending = null;
+    // Keep playback ownership until onAiTurnEnded consumes it.
   }
 
   /** The notice was not started, or its seq was cancelled before playback ended. */
@@ -249,7 +249,7 @@ export class Director {
       return;
     }
     if (this.quiet || this.left) return;
-    if (done === 'repair' || (done === 'context' && this.hadContent) || this.silentStretch) {
+    if (done === 'repair' || (done === 'resume' && this.hadContent) || (done === 'context' && this.hadContent) || this.silentStretch) {
       this.waitQuietly();
       return;
     }
@@ -303,7 +303,10 @@ export class Director {
     this.paused = false;
     if (this.pending === 'notice') this.noticeRetry = true;
     this.pending = null;
-    if (!this.blocked() && this.takeSpeechSlot()) this.deps.requestResponse('followup', this.request('resume'));
+    if (!this.blocked() && this.takeSpeechSlot()) {
+      this.pending = 'resume';
+      this.deps.requestResponse('followup', this.request('resume'));
+    }
   }
 
   /** One memory notice after the opening. Does not use the proactive frequency cap. */

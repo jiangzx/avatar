@@ -1,0 +1,411 @@
+{
+  "synthetic": true,
+  "simulatedPlayback": true,
+  "phoneAcceptance": false,
+  "requiresManualReview": true,
+  "cases": [
+    {
+      "style": "grandchild",
+      "id": "settled-fact",
+      "userText": "合肥属于哪个省？",
+      "assistantText": "合肥是安徽省的省会。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 533,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "recall-miss",
+      "userText": "上次我们聊到哪里了？",
+      "assistantText": "我暂时找不到上次的记录。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 536,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "acknowledged-emotion",
+      "userText": "今天一个人在家，有点孤单。",
+      "assistantText": "一个人在家冷清，难免觉得孤单。",
+      "expectedSpeak": false,
+      "text": "您想聊点啥，我陪着呢。",
+      "elapsedMs": 849,
+      "decisionValid": true,
+      "automatedPassed": false,
+      "manualReview": {
+        "passed": false,
+        "note": "不通过：本应安静，仍生成了陪伴或重复动作话语。"
+      },
+      "passed": false
+    },
+    {
+      "style": "grandchild",
+      "id": "omitted-feeling",
+      "userText": "下午和老朋友散步，回家却有点失落。",
+      "assistantText": "今天下午和老朋友见了一面。",
+      "expectedSpeak": true,
+      "text": "和老朋友散完步，心里空落落的呀。",
+      "elapsedMs": 1444,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "goodbye",
+      "userText": "今天先聊到这里，再见。",
+      "assistantText": "好，再见。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 504,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "waiting-for-user",
+      "userText": "今天去了公园。",
+      "assistantText": "公园里有哪处景色让您印象深？",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 1495,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "acknowledgement",
+      "userText": "我知道了，谢谢。",
+      "assistantText": "不客气。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 428,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "grandchild",
+      "id": "settled-action",
+      "userText": "帮我挥挥手。",
+      "assistantText": "好。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 509,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "settled-fact",
+      "userText": "合肥属于哪个省？",
+      "assistantText": "合肥是安徽省的省会。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 457,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "recall-miss",
+      "userText": "上次我们聊到哪里了？",
+      "assistantText": "我暂时找不到上次的记录。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 409,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "acknowledged-emotion",
+      "userText": "今天一个人在家，有点孤单。",
+      "assistantText": "一个人在家冷清，难免觉得孤单。",
+      "expectedSpeak": false,
+      "text": "孤单的时候，心就特别想听见熟悉的声音。",
+      "elapsedMs": 714,
+      "decisionValid": true,
+      "automatedPassed": false,
+      "manualReview": {
+        "passed": false,
+        "note": "不通过：本应安静，仍生成了陪伴或重复动作话语。"
+      },
+      "passed": false
+    },
+    {
+      "style": "old-friend",
+      "id": "omitted-feeling",
+      "userText": "下午和老朋友散步，回家却有点失落。",
+      "assistantText": "今天下午和老朋友见了一面。",
+      "expectedSpeak": true,
+      "text": "和老朋友散完步，心里反而空落落的。",
+      "elapsedMs": 818,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "goodbye",
+      "userText": "今天先聊到这里，再见。",
+      "assistantText": "好，再见。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 1586,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "waiting-for-user",
+      "userText": "今天去了公园。",
+      "assistantText": "公园里有哪处景色让您印象深？",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 534,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "acknowledgement",
+      "userText": "我知道了，谢谢。",
+      "assistantText": "不客气。",
+      "expectedSpeak": false,
+      "text": null,
+      "elapsedMs": 425,
+      "decisionValid": true,
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "安静/遗漏感受承接符合预期。"
+      },
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "id": "settled-action",
+      "userText": "帮我挥挥手。",
+      "assistantText": "好。",
+      "expectedSpeak": false,
+      "text": "来，挥挥手。",
+      "elapsedMs": 603,
+      "decisionValid": true,
+      "automatedPassed": false,
+      "manualReview": {
+        "passed": false,
+        "note": "不通过：本应安静，仍生成了陪伴或重复动作话语。"
+      },
+      "passed": false
+    }
+  ],
+  "sessions": [
+    {
+      "style": "grandchild",
+      "turns": [
+        "我叫陈叔，叫我陈叔就好。",
+        "我今天去了公园，绕着湖走了一圈。",
+        "今天先聊到这里，再见。"
+      ],
+      "completed": [
+        {
+          "seq": 1,
+          "kind": "greeting",
+          "text": "您好，我是小暖，专门来陪您聊聊天解闷儿的。请问怎么称呼您呀？",
+          "audioMs": 5540
+        },
+        {
+          "seq": 2,
+          "kind": "reply",
+          "text": "陈叔好，这称呼听着真亲切。您今天想聊点啥呀？",
+          "audioMs": 5060
+        },
+        {
+          "seq": 3,
+          "kind": "reply",
+          "text": "绕湖走一圈肯定特别舒坦吧，空气好还能看看风景。",
+          "audioMs": 4770
+        },
+        {
+          "seq": 4,
+          "kind": "reply",
+          "text": "好嘞陈叔，那您先歇着，有空随时叫我。",
+          "audioMs": 3620
+        }
+      ],
+      "decisions": [
+        {
+          "context": {
+            "userText": "我叫陈叔，叫我陈叔就好。",
+            "assistantText": "陈叔好，这称呼听着真亲切。您今天想聊点啥呀？"
+          },
+          "raw": "{\"speak\":false}"
+        },
+        {
+          "context": {
+            "userText": "我今天去了公园，绕着湖走了一圈。",
+            "assistantText": "绕湖走一圈肯定特别舒坦吧，空气好还能看看风景。"
+          },
+          "raw": "{\"speak\":false}"
+        },
+        {
+          "context": {
+            "userText": "今天先聊到这里，再见。",
+            "assistantText": "好嘞陈叔，那您先歇着，有空随时叫我。"
+          },
+          "raw": "{\"speak\":false}"
+        }
+      ],
+      "errors": [],
+      "checks": {
+        "threeReplies": true,
+        "noProactiveSpeech": true,
+        "decisionsAreSilent": true,
+        "noErrors": true
+      },
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "三轮实际回答均已完成；每轮后无主动发言。非真机听感。"
+      },
+      "passed": true
+    },
+    {
+      "style": "old-friend",
+      "turns": [
+        "我叫陈叔，叫我陈叔就好。",
+        "我今天去了公园，绕着湖走了一圈。",
+        "今天先聊到这里，再见。"
+      ],
+      "completed": [
+        {
+          "seq": 1,
+          "kind": "greeting",
+          "text": "我是小暖，想陪您说说话。怎么称呼您？",
+          "audioMs": 3780
+        },
+        {
+          "seq": 2,
+          "kind": "reply",
+          "text": "陈叔，这称呼听着亲切。以后我就这么叫您了，咱们随便聊。",
+          "audioMs": 5700
+        },
+        {
+          "seq": 3,
+          "kind": "reply",
+          "text": "绕湖走一圈挺舒服的，空气好还能活动筋骨。陈叔今天心情不错吧？",
+          "audioMs": 6260
+        },
+        {
+          "seq": 4,
+          "kind": "reply",
+          "text": "行，陈叔您先忙，回头再聊。",
+          "audioMs": 2770
+        }
+      ],
+      "decisions": [
+        {
+          "context": {
+            "userText": "我叫陈叔，叫我陈叔就好。",
+            "assistantText": "陈叔，这称呼听着亲切。以后我就这么叫您了，咱们随便聊。"
+          },
+          "raw": "{\"speak\":false}"
+        },
+        {
+          "context": {
+            "userText": "我今天去了公园，绕着湖走了一圈。",
+            "assistantText": "绕湖走一圈挺舒服的，空气好还能活动筋骨。陈叔今天心情不错吧？"
+          },
+          "raw": "{\"speak\":false}"
+        },
+        {
+          "context": {
+            "userText": "今天先聊到这里，再见。",
+            "assistantText": "行，陈叔您先忙，回头再聊。"
+          },
+          "raw": "{\"speak\":false}"
+        }
+      ],
+      "errors": [],
+      "checks": {
+        "threeReplies": true,
+        "noProactiveSpeech": true,
+        "decisionsAreSilent": true,
+        "noErrors": true
+      },
+      "automatedPassed": true,
+      "manualReview": {
+        "passed": true,
+        "note": "三轮实际回答均已完成；每轮后无主动发言。非真机听感。"
+      },
+      "passed": true
+    }
+  ],
+  "manualReview": {
+    "passed": false,
+    "note": "首次完整评测：16 个判断场景有 3 个失败，两个三轮 Session 场景通过；不计整体通过。"
+  },
+  "passed": false
+}

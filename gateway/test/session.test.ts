@@ -96,6 +96,36 @@ describe('Session', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
+  it('keeps the substantive answer when a deferred memory notice plays after it', async () => {
+    const inputs: unknown[] = [];
+    const s = setup({
+      adapterFactory: () => new MockAdapter({
+        script: { ...script, memoryNotice: director.memoryNoticeText, turns: [{ match: '老王', user: '我叫老王', reply: '王叔好' }] },
+        replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+      }),
+      roles: fixedRoleCatalog('P', { ...director, contextAfterMs: 3000, silenceDecision: {
+        instruction: 'DECIDE', speakInstruction: 'READ {continuation}',
+        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60,
+        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
+      } }),
+      textClient: { complete: async input => { inputs.push(JSON.parse(input.user)); return '{"speak":false}'; } },
+    }, ownedCtx, 'deferred-notice', true);
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(150);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '我叫老王' });
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(assistantText(s.sent, 3)).toBe(director.memoryNoticeText);
+    expect(inputs).toEqual([]);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 3, playedMs: 5000, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(inputs).toEqual([{ userText: '我叫老王', assistantText: '王叔好' }]);
+    await vi.advanceTimersByTimeAsync(600000);
+    expect(of(s.sent, 'response.start')).toHaveLength(3);
+    s.session.end();
+  });
+
   it('decides from completed playback, skips speech, and ignores duplicate playback receipts', async () => {
     const inputs: unknown[] = [];
     const s = setup({

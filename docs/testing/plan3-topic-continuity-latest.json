@@ -14,40 +14,19 @@
           "stage": "greeting",
           "seq": 1,
           "kind": "greeting",
-          "text": "你好呀，我是小暖，专门陪您说说话解闷儿的。怎么称呼您呢？",
-          "audioMs": 5220
+          "text": "我是小暖，来陪您说说话。请问怎么称呼您？",
+          "audioMs": 4020
         },
         {
           "stage": "answer",
           "seq": 2,
           "kind": "reply",
           "text": "我这边暂时找不到上次的聊天记录，您想接着聊什么都可以。",
-          "audioMs": 5170
-        },
-        {
-          "stage": "context",
-          "seq": 3,
-          "kind": "followup",
-          "text": "我就在这儿陪着您，您想说话的时候随时开口就行。",
-          "audioMs": 4020
-        },
-        {
-          "stage": "check",
-          "seq": 4,
-          "kind": "followup",
-          "text": "还在呢，您不用特意回我。",
-          "audioMs": 2290
-        },
-        {
-          "stage": "leave",
-          "seq": 5,
-          "kind": "followup",
-          "text": "我先安静一会儿，想聊随时喊我。",
-          "audioMs": 3250
+          "audioMs": 5090
         },
         {
           "stage": "repeated-user-question",
-          "seq": 6,
+          "seq": 3,
           "kind": "reply",
           "text": "我这边暂时找不到上次的聊天记录，您想接着聊什么都可以。",
           "audioMs": 5170
@@ -59,8 +38,8 @@
         "missingHistoryAcknowledged": true,
         "noFalseFirstMeeting": true,
         "noRepeatedMiss": true,
-        "contextDoesNotAsk": true,
-        "distinctSilenceSteps": true,
+        "noProactiveAfterSettledAnswer": true,
+        "validSilentDecision": true,
         "repeatedUserQuestionAnswered": true,
         "greetingDoesNotClaimCurrentWeather": true,
         "noErrors": true
@@ -68,14 +47,7 @@
       "toolCalls": 0,
       "errors": [],
       "automatedPassed": true,
-      "manualReview": {
-        "passed": true,
-        "greetingGrounded": true,
-        "answerGrounded": true,
-        "silenceDoesNotRepeatAnswerOrMiss": true,
-        "repeatedQuestionAnsweredAppropriately": true,
-        "notes": "开场未编造旧话题；仅在用户明确询问时说明缺记录，后续沉默不重复、不追问；用户再问时正常说明记录缺失。"
-      },
+      "manualReview": true,
       "passed": true
     },
     {
@@ -88,43 +60,22 @@
           "stage": "greeting",
           "seq": 1,
           "kind": "greeting",
-          "text": "陈叔，上次咱们聊了青岛的天气，还提了去海边散步的事儿。",
-          "audioMs": 5780
+          "text": "陈叔，上次咱们聊了青岛的天气和去海边散步的事。",
+          "audioMs": 5220
         },
         {
           "stage": "answer",
           "seq": 2,
           "kind": "reply",
-          "text": "上次咱们聊了青岛的天气，还提了去海边散步的事儿。",
-          "audioMs": 4660
-        },
-        {
-          "stage": "context",
-          "seq": 3,
-          "kind": "followup",
-          "text": "我就在这儿陪着您。",
-          "audioMs": 1570.0000000000002
-        },
-        {
-          "stage": "check",
-          "seq": 4,
-          "kind": "followup",
-          "text": "陈叔，我还在。您不用回我，想说话时再喊我就行。",
-          "audioMs": 4900
-        },
-        {
-          "stage": "leave",
-          "seq": 5,
-          "kind": "followup",
-          "text": "我先安静一会儿，想聊随时喊我。",
-          "audioMs": 3170
+          "text": "上次咱们聊了青岛的天气，还有去海边散步的事。",
+          "audioMs": 4690
         },
         {
           "stage": "repeated-user-question",
-          "seq": 6,
+          "seq": 3,
           "kind": "reply",
-          "text": "上次咱们聊了青岛的天气，还提了去海边散步的事儿。",
-          "audioMs": 4660
+          "text": "上次咱们聊了青岛的天气，还有去海边散步的事。",
+          "audioMs": 4690
         }
       ],
       "checks": {
@@ -133,8 +84,8 @@
         "missingHistoryAcknowledged": true,
         "noFalseFirstMeeting": true,
         "noRepeatedMiss": true,
-        "contextDoesNotAsk": true,
-        "distinctSilenceSteps": true,
+        "noProactiveAfterSettledAnswer": true,
+        "validSilentDecision": true,
         "repeatedUserQuestionAnswered": true,
         "greetingDoesNotClaimCurrentWeather": true,
         "noErrors": true
@@ -142,14 +93,7 @@
       "toolCalls": 0,
       "errors": [],
       "automatedPassed": true,
-      "manualReview": {
-        "passed": true,
-        "greetingGrounded": true,
-        "answerGrounded": true,
-        "silenceDoesNotRepeatAnswerOrMiss": true,
-        "repeatedQuestionAnsweredAppropriately": true,
-        "notes": "开场与回答仅概括已存历史，沉默转为陪伴、确认在场和短离开；明确再问时重新概括历史。"
-      },
+      "manualReview": true,
       "passed": true
     },
     {
@@ -162,40 +106,19 @@
           "stage": "greeting",
           "seq": 1,
           "kind": "greeting",
-          "text": "我是小暖，专门陪您聊聊天、解解闷。您怎么称呼呀？",
-          "audioMs": 4580
+          "text": "我是小暖，专门来陪您聊聊天、解解闷。您怎么称呼呀？",
+          "audioMs": 4900
         },
         {
           "stage": "answer",
           "seq": 2,
           "kind": "reply",
           "text": "我这边暂时找不到上次的聊天记录，您想接着聊什么都可以。",
-          "audioMs": 5090
-        },
-        {
-          "stage": "context",
-          "seq": 3,
-          "kind": "followup",
-          "text": "我就在这儿安静陪着您。",
-          "audioMs": 1890
-        },
-        {
-          "stage": "check",
-          "seq": 4,
-          "kind": "followup",
-          "text": "还在呢。您不用急着回我，想说的时候再开口就行。",
-          "audioMs": 4660
-        },
-        {
-          "stage": "leave",
-          "seq": 5,
-          "kind": "followup",
-          "text": "我先安静一会儿，想聊随时喊我。",
-          "audioMs": 3250
+          "audioMs": 5170
         },
         {
           "stage": "repeated-user-question",
-          "seq": 6,
+          "seq": 3,
           "kind": "reply",
           "text": "我这边暂时找不到上次的聊天记录，您想接着聊什么都可以。",
           "audioMs": 5170
@@ -207,8 +130,8 @@
         "missingHistoryAcknowledged": true,
         "noFalseFirstMeeting": true,
         "noRepeatedMiss": true,
-        "contextDoesNotAsk": true,
-        "distinctSilenceSteps": true,
+        "noProactiveAfterSettledAnswer": true,
+        "validSilentDecision": true,
         "repeatedUserQuestionAnswered": true,
         "greetingDoesNotClaimCurrentWeather": true,
         "noErrors": true
@@ -216,14 +139,7 @@
       "toolCalls": 0,
       "errors": [],
       "automatedPassed": true,
-      "manualReview": {
-        "passed": true,
-        "greetingGrounded": true,
-        "answerGrounded": true,
-        "silenceDoesNotRepeatAnswerOrMiss": true,
-        "repeatedQuestionAnsweredAppropriately": true,
-        "notes": "开场未编造旧话题；仅在用户明确询问时说明缺记录，后续沉默不重复、不追问；用户再问时正常说明记录缺失。"
-      },
+      "manualReview": true,
       "passed": true
     },
     {
@@ -236,43 +152,22 @@
           "stage": "greeting",
           "seq": 1,
           "kind": "greeting",
-          "text": "陈叔，上次咱们聊了青岛的天气，还说了去海边散步的事。",
-          "audioMs": 5939.999999999999
+          "text": "陈叔，上次咱们聊了青岛的天气和去海边散步的事。",
+          "audioMs": 5220
         },
         {
           "stage": "answer",
           "seq": 2,
           "kind": "reply",
-          "text": "上次聊到青岛的天气，还有去海边散步的事。",
-          "audioMs": 4290
-        },
-        {
-          "stage": "context",
-          "seq": 3,
-          "kind": "followup",
-          "text": "我就在这儿，您慢慢说。",
-          "audioMs": 2290
-        },
-        {
-          "stage": "check",
-          "seq": 4,
-          "kind": "followup",
-          "text": "还在呢。您不用回我，我就安静陪着。",
-          "audioMs": 3700
-        },
-        {
-          "stage": "leave",
-          "seq": 5,
-          "kind": "followup",
-          "text": "我先安静一会儿，想聊随时喊我。",
-          "audioMs": 3250
+          "text": "上次咱们聊了青岛的天气，还说了去海边散步的事。",
+          "audioMs": 4610
         },
         {
           "stage": "repeated-user-question",
-          "seq": 6,
+          "seq": 3,
           "kind": "reply",
-          "text": "上次咱们聊了青岛的天气，还有去海边散步的事。",
-          "audioMs": 4690
+          "text": "咱们上次聊了青岛的天气，还有去海边散步的事。",
+          "audioMs": 4770
         }
       ],
       "checks": {
@@ -281,8 +176,8 @@
         "missingHistoryAcknowledged": true,
         "noFalseFirstMeeting": true,
         "noRepeatedMiss": true,
-        "contextDoesNotAsk": true,
-        "distinctSilenceSteps": true,
+        "noProactiveAfterSettledAnswer": true,
+        "validSilentDecision": true,
         "repeatedUserQuestionAnswered": true,
         "greetingDoesNotClaimCurrentWeather": true,
         "noErrors": true
@@ -290,17 +185,10 @@
       "toolCalls": 0,
       "errors": [],
       "automatedPassed": true,
-      "manualReview": {
-        "passed": true,
-        "greetingGrounded": true,
-        "answerGrounded": true,
-        "silenceDoesNotRepeatAnswerOrMiss": true,
-        "repeatedQuestionAnsweredAppropriately": true,
-        "notes": "开场与回答仅概括已存历史，沉默转为陪伴、确认在场和短离开；明确再问时重新概括历史。"
-      },
+      "manualReview": true,
       "passed": true
     }
   ],
-  "manualReviewRevision": "d5a25e6",
-  "sampleLimit": "One live sample per scenario, simulated playback; not phone acceptance or a guarantee for all model outputs."
+  "manualReview": true,
+  "passed": true
 }

@@ -121,6 +121,22 @@ describe('substantive conversation silence', () => {
     s.d.stop();
   });
 
+  it('does not pair a reconnect announcement with the previous user turn', async () => {
+    const contexts: unknown[] = [];
+    const s = setup(context => { contexts.push(context); return '走累了，脚酸着也不好受。'; });
+    s.answer();
+    s.d.pause();
+    s.d.resume();
+    expect(s.requests).toHaveLength(1);
+    expect(s.requests[0]?.cue).toBe('resume');
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('又连上了。');
+    await vi.advanceTimersByTimeAsync(600000);
+    expect(contexts).toEqual([]);
+    expect(s.requests).toHaveLength(1);
+    s.d.stop();
+  });
+
   it('does not restart the silence ladder after a noise-hearing repair', async () => {
     const s = setup();
     s.d.onAiTurnEnded();

@@ -18,7 +18,7 @@ describe('silence planner', () => {
   afterEach(() => { vi.useRealTimers(); });
 
   it('returns silence without manufacturing a presence line', async () => {
-    const plan = createSilencePlanner(client('{"speak":false}'), config, 'Persona');
+    const plan = createSilencePlanner(client('{"speak":false}'), config);
     expect(await plan(context, signal())).toBeNull();
   });
 
@@ -27,7 +27,7 @@ describe('silence planner', () => {
     const plan = createSilencePlanner({ complete: async data => {
       input = data;
       return '{"speak":true,"text":"走累了，脚酸着也不好受。"}';
-    } }, config, 'Persona');
+    } }, config);
     expect(await plan(context, signal())).toBe('走累了，脚酸着也不好受。');
     expect(JSON.parse(input.user)).toEqual(context);
     expect(input.maxTokens).toBe(128);
@@ -38,12 +38,12 @@ describe('silence planner', () => {
     '{"speak":true,"text":" "}', '{"speak":true,"text":123}',
     JSON.stringify({ speak: true, text: '长'.repeat(61) }),
   ])('stays quiet on an invalid model result: %s', async raw => {
-    expect(await createSilencePlanner(client(raw), config, 'Persona')(context, signal())).toBeNull();
+    expect(await createSilencePlanner(client(raw), config)(context, signal())).toBeNull();
   });
 
   it('does not send oversized or incomplete exchanges for optional speech', async () => {
     let calls = 0;
-    const plan = createSilencePlanner({ complete: async () => { calls++; return '{"speak":true,"text":"不应播放"}'; } }, config, 'Persona');
+    const plan = createSilencePlanner({ complete: async () => { calls++; return '{"speak":true,"text":"不应播放"}'; } }, config);
     expect(await plan({ userText: '长'.repeat(6001), assistantText: '好。' }, signal())).toBeNull();
     expect(await plan({ userText: '', assistantText: '好。' }, signal())).toBeNull();
     expect(await plan({ userText: '你好', assistantText: '' }, signal())).toBeNull();
@@ -55,7 +55,7 @@ describe('silence planner', () => {
     let taskSignal!: AbortSignal;
     const plan = createSilencePlanner({ complete: async input => {
       calls++; taskSignal = input.signal; return new Promise(() => {});
-    } }, config, 'Persona');
+    } }, config);
     const result = plan(context, signal());
     await vi.advanceTimersByTimeAsync(2000);
     expect(await result).toBeNull();
@@ -69,7 +69,7 @@ describe('silence planner', () => {
     const abort = new AbortController();
     const plan = createSilencePlanner({ complete: input => {
       taskSignal = input.signal; return new Promise(resolve => { finish = resolve; });
-    } }, config, 'Persona');
+    } }, config);
     const result = plan(context, abort.signal);
     abort.abort();
     expect(taskSignal.aborted).toBe(true);
@@ -80,7 +80,7 @@ describe('silence planner', () => {
   it('never calls an external service after prior cancellation', async () => {
     let calls = 0;
     const abort = new AbortController(); abort.abort();
-    const plan = createSilencePlanner({ complete: async () => { calls++; throw Error('unexpected_call'); } }, config, 'Persona');
+    const plan = createSilencePlanner({ complete: async () => { calls++; throw Error('unexpected_call'); } }, config);
     expect(await plan(context, abort.signal)).toBeNull();
     expect(calls).toBe(0);
   });

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { loadConfig } from '../../gateway/src/config.ts';
 import { QwenAdapter } from '../../gateway/src/adapters/qwen.ts';
+import { QwenTextClient } from '../../gateway/src/memory/textClient.ts';
 import { DeviceRegistry } from '../../gateway/src/identity/registry.ts';
 import { openDatabase } from '../../gateway/src/memory/db.ts';
 import { applyExtractOps } from '../../gateway/src/memory/extract.ts';
@@ -19,6 +20,19 @@ import { errorCodeOf } from '../../gateway/src/reliability/policy.ts';
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const config = loadConfig({ ...process.env, ADAPTER: 'qwen', APP_SECRET: 'synthetic-topic-probe-secret' });
 const roles = loadRoleCatalog(join(root, 'gateway/roles'));
+const hostname = new URL(config.qwenEndpoint).hostname;
+if (!config.summarizerEndpoint && !/^[a-z0-9-]+\.cn-beijing\.maas\.aliyuncs\.com$/.test(hostname)) throw new Error('probe_text_endpoint_unverified');
+const textClient = new QwenTextClient({
+  apiKey: config.qwenApiKey,
+  endpoint: config.summarizerEndpoint || `https://${hostname}/compatible-mode/v1/chat/completions`,
+  model: 'qwen-plus',
+});
+// Only accelerate silence waits; keep the production decision budget.
+const probeRoles = {
+  ...roles,
+  director: id => ({ ...roles.director(id), contextAfterMs: 100, checkAfterMs: 100, leaveAfterMs: 100, restAfterMs: 200 }),
+  buildPersona: (roleId, styleId) => roles.buildPersona(roleId, styleId),
+};
 const pacing = loadPacing(join(root, 'gateway/config/pacing.json'));
 const memory = loadMemoryBudget(join(root, 'gateway/config/memory.json'));
 const budget = validateBudgets(pacing, memory, config.ledger, roles.pairs().map(p => roles.buildPersona(p.roleId, p.styleId))).budget;
@@ -39,6 +53,7 @@ async function run(test) {
   const records = [];
   const metrics = [];
   const errors = [];
+  const decisions = [];
   try {
     const store = new SqliteMemoryStore(db);
     const registry = new DeviceRegistry({ store, roles, limits: { maxOwners: 2, dailyCap: 2, orphanOwnerDays: 7, orphanCleanupBatch: 2 } });
@@ -85,7 +100,8 @@ async function run(test) {
     };
     session = new Session({
       adapterFactory: () => new QwenAdapter({ apiKey: config.qwenApiKey, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice }),
-      summarizer: new MockSummarizer(), roles, store, budget,
+      summarizer: new MockSummarizer(), roles: probeRoles, store, budget,
+      textClient: { complete: async input => { const raw = await textClient.complete(input); decisions.push(raw); return raw; } },
       ledger: config.ledger, modelOwnsTurns: true,
       modelContextTokenLimit: pacing.rebuild.contextChars,
       rebuildTriggerRatio: pacing.rebuild.triggerRatio,
@@ -109,19 +125,23 @@ async function run(test) {
     await next('greeting');
     session.handleClientMessage({ type: 'debug.userText', text: question });
     const answer = await next('answer');
-    const followups = [];
-    for (const stage of ['context', 'check', 'leave']) followups.push(await next(stage));
+    await pause(2500);
+    const followups = completed.slice(cursor);
+    records.push(...followups.map(row => ({ stage: 'unexpected-silence-speech', ...row })));
+    cursor = completed.length;
+    const settledDecisions = decisions.slice();
     session.handleClientMessage({ type: 'debug.userText', text: question });
     const repeated = await next('repeated-user-question');
-    const normalized = followups.map(r => r.text.replace(/[\s\p{P}]/gu, ''));
     const checks = {
       questionAnswered: answer.kind === 'reply' && answer.text.length > 1,
       topicAnswered: !test.history || (/青岛|海边/.test(answer.text) && /天气|散步/.test(answer.text)),
       missingHistoryAcknowledged: test.history || missed.test(answer.text),
       noFalseFirstMeeting: test.history || !/没聊过|还没聊|第一次|头一回|才认识/.test(answer.text),
       noRepeatedMiss: followups.every(r => !missed.test(r.text)),
-      contextDoesNotAsk: !/[？?]/.test(followups[0].text),
-      distinctSilenceSteps: new Set(normalized).size === normalized.length,
+      noProactiveAfterSettledAnswer: followups.length === 0,
+      validSilentDecision: settledDecisions.length === 1 && settledDecisions.every(raw => {
+        try { const row = JSON.parse(raw); return row.speak === false && Object.keys(row).length === 1; } catch { return false; }
+      }),
       repeatedUserQuestionAnswered: repeated.kind === 'reply' && (test.history
         ? /青岛|海边/.test(repeated.text) && /天气|散步/.test(repeated.text)
         : missed.test(repeated.text)),

@@ -212,7 +212,7 @@ export class Session {
       {
         requestResponse: (kind, request) => this.requestResponse(kind, request),
         ...(deps.textClient && directorConfig.silenceDecision ? {
-          planContext: createSilencePlanner(deps.textClient, directorConfig.silenceDecision, this.persona),
+          planContext: createSilencePlanner(deps.textClient, directorConfig.silenceDecision),
         } : {}),
         ...(extractor && ownerId ? { onQuietRest: () => { void extractor.extractOwner(ownerId, 'silence'); } } : {}),
       },

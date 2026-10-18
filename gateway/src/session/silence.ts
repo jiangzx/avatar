@@ -6,7 +6,7 @@ import type { SilenceDecisionConfig } from '../roles/types.ts';
 import type { SilenceContext } from './director.ts';
 
 /** Optional speech earns a turn only after a validated, current decision. */
-export function createSilencePlanner(client: TextModelClient, config: SilenceDecisionConfig, persona: string) {
+export function createSilencePlanner(client: TextModelClient, config: SilenceDecisionConfig) {
   const decisionSchema = z.discriminatedUnion('speak', [
     z.object({ speak: z.literal(false) }).strict(),
     z.object({ speak: z.literal(true), text: z.string().trim().min(1).max(config.maxReplyChars) }).strict(),
@@ -23,7 +23,7 @@ export function createSilencePlanner(client: TextModelClient, config: SilenceDec
     }
     const result = await runWithPolicy('silence_decision', config.policy, async timeoutSignal => {
       const raw = await client.complete({
-        system: `${persona}\n\n${config.instruction}`,
+        system: config.instruction,
         user: JSON.stringify(context),
         maxTokens: config.maxTokens,
         signal: AbortSignal.any([signal, timeoutSignal]),
