@@ -574,6 +574,26 @@ describe('Session', () => {
     expect('maxOutputTokens' in seen[0]!).toBe(false);
   });
 
+  it('continues after a forced playback cancel when the client never reports playback.stopped', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    const creates = vi.spyOn(s.mocks[0], 'createResponse');
+    s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
+    await vi.advanceTimersByTimeAsync(60); // tool call and first audio; origin response.done is later
+    const originSeq = s.session.lastResponseSeq;
+    expect(s.audio.some((a) => a.seq === originSeq)).toBe(true);
+    expect(of(s.sent, 'response.cancelled')).toContainEqual({ type: 'response.cancelled', responseSeq: originSeq });
+    expect(creates).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(of(s.sent, 'response.end').some((m) => m.responseSeq === originSeq)).toBe(true);
+    expect(creates).toHaveBeenCalledTimes(1);
+    expect(creates).toHaveBeenCalledWith({
+      cue: 'toolContinue',
+      instruction: '用一句话接上刚才的动作。不要描述动作过程。',
+      fallbackText: '好。',
+    });
+  });
+
   it('continues after a tool action once playback ends and keeps the mic quiet', async () => {
     const s = setup();
     const finished = vi.spyOn(InterruptCoordinator.prototype, 'onResponseFinished');
@@ -582,7 +602,7 @@ describe('Session', () => {
       finished.mockClear();
       const creates = vi.spyOn(s.mocks[0], 'createResponse');
       s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(60); // tool call and first audio; origin response.done is later
       const originSeq = s.session.lastResponseSeq;
       expect(s.mocks[0].toolResults).toEqual([{ callId: 'call-mock-2', result: { ok: true } }]);
       expect(of(s.sent, 'avatar.action').some((m) => m.action === 'wave')).toBe(true);
@@ -597,7 +617,7 @@ describe('Session', () => {
       expect(of(s.sent, 'error')).toEqual([]);
       s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
       expect(creates).not.toHaveBeenCalled();
-      s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: originSeq, playedMs: 300, reason: 'ended' });
+      await vi.advanceTimersByTimeAsync(1000);
       expect(creates).toHaveBeenCalledTimes(1);
       expect(creates).toHaveBeenCalledWith({
         cue: 'toolContinue',

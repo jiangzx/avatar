@@ -118,6 +118,8 @@ export class Session {
   private toolOriginSeq: number | null = null;
   /** Set in the same breath as onContinuationRequested. readyForContinuation stays true after that. */
   private continuationAsked = false;
+  /** True when this turn's own cancel stands in for playback.stopped. */
+  private originForcedEnd = false;
   /** director.resume() on a tool-turn end must not start another reply. */
   private holdDirector = false;
 
@@ -427,6 +429,8 @@ export class Session {
         this.responseLive = false;
         if (this.toolTurn.active && s.seq === this.toolOriginSeq) {
           this.toolTurn.onOriginDone();
+          // The client does not report playback.stopped after response.cancelled.
+          if (this.originForcedEnd) this.finalize(s, false);
           this.maybeContinue();
         } else if (this.toolTurn.active && this.continuationAsked && s.seq !== this.toolOriginSeq) {
           this.toolTurn.onContinuationStarted();
@@ -514,8 +518,14 @@ export class Session {
     }
     this.toolOriginSeq = s.seq;
     this.continuationAsked = false;
+    this.originForcedEnd = false;
     this.toolTurn.start(s.seq);
     if (s.audioMs > 0) this.toolTurn.onOriginAudio();
+    // Only the seq we just cancelled. A different active seq still needs a real playback.stopped.
+    if (active === s.seq) {
+      this.toolTurn.onOriginPlaybackEnded();
+      this.originForcedEnd = true;
+    }
     this.armToolTimer();
     this.director.pause();
   }
@@ -564,6 +574,7 @@ export class Session {
   private releaseToolTurn(allowSpeech: boolean): void {
     this.clearToolTimer();
     this.continuationAsked = false;
+    this.originForcedEnd = false;
     this.toolOriginSeq = null;
     if (this.ended) return;
     if (!allowSpeech) this.holdDirector = true;
