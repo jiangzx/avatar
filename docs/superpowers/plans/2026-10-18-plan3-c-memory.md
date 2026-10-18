@@ -776,6 +776,8 @@ Triggers, all via `enqueue` so one owner cannot overlap:
 
 SIGINT calls `worker.drain` with the configured timeout, then closes the db.
 
+Assumption 7 verified on 2026-10-18: a manual curl reached qwen-plus (HTTP 200). The production-client probe first failed with `extract_parse`; the prompt omitted flat field definitions. After documenting the existing op contract and clarifying addressing vs person categories, `node --env-file-if-exists=gateway/.env --import tsx docs/testing/plan3-qwen-memory-probe.mjs` passed with 2/2 messages extracted and a persisted snapshot after closing/reopening SQLite. This live probe is the red/green regression for the prompt fix; it does not run by default in unit tests. Phone tool turns and spoken second-session recall remain NOT RUN. Runtime configuration prerequisites are tracked in `docs/blockers.md` #41.
+
 - [ ] **Step 1: Write the failing tests**
 
 `parseExtractOps` rejects a missing `op`. `applyExtractOps` inserts a fact and marks messages extracted. A bumped epoch yields `stale` and leaves the fact absent. `MemoryWorker` runs two jobs for one owner strictly in order (second starts after the first's deferred promise resolves).
@@ -785,7 +787,7 @@ SIGINT calls `worker.drain` with the configured timeout, then closes the db.
 Run: `npm test -w gateway -- test/extract.test.ts test/worker.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the client, the parser, the apply transaction, and the worker**
+- [x] **Step 3: Implement the client, the parser, the apply transaction, and the worker**
 
 Wire `index.ts` and the lifecycle hook. Session user-final and the director rest step call `enqueue` only when a writer/worker was injected (dev sessions pass neither).
 
@@ -793,12 +795,12 @@ After the manual `curl` probe, write the result to `docs/project/roadmap.md`:
 - **Success**: "Assumption 7 (qwen-plus) verified on [date]"
 - **Failure**: record in `docs/blockers.md` as a numbered blocker (#N), and note in roadmap: "Assumption 7 failed; extraction uses fake-client path only. Real qwen-plus extraction NOT VERIFIED."
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `npm test -w gateway -- test/extract.test.ts test/worker.test.ts && npm run typecheck -w gateway`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gateway/src/memory/textClient.ts gateway/src/memory/extract.ts gateway/src/memory/worker.ts gateway/src/index.ts gateway/src/session/manager.ts gateway/src/session/session.ts gateway/src/session/director.ts gateway/roles/_shared/extract.md gateway/config/memory.json gateway/test/extract.test.ts gateway/test/worker.test.ts
@@ -949,7 +951,7 @@ EOF
 **Interfaces:**
 - Consumes: Tasks 1–11.
 
-2026-10-18 recheck: `npm test` passed (protocol 6, gateway 394, avatar-core 96), `npm run typecheck` passed, and `npm test -w gateway -- test/memory-acceptance.test.ts` passed (2 tests). Process smoke: `node --import tsx docs/testing/plan3-mock-smoke.mjs` verifies the notice playback gate, persisted tail after owner replacement, and Mock tool continuation on 8797. Playback acknowledgements are simulated; snapshot content is checked through the store and renderer, not through a spoken model reply. Assumptions 7/8 and the real second phone conversation remain NOT RUN. Historical red-test steps are not retroactively marked as run.
+2026-10-18 recheck: `npm test` passed (protocol 6, gateway 394, avatar-core 96), `npm run typecheck` passed, and `npm test -w gateway -- test/memory-acceptance.test.ts` passed (2 tests). Process smoke: `node --import tsx docs/testing/plan3-mock-smoke.mjs` verifies the notice playback gate, persisted tail after owner replacement, and Mock tool continuation on 8797. Playback acknowledgements are simulated; snapshot content is checked through the store and renderer, not through a spoken model reply. This Mock smoke did not cover live assumptions. Assumption 7 was subsequently verified in Task 9; assumption 8 and the real second phone conversation remain NOT RUN. Historical red-test steps are not retroactively marked as run.
 
 - [ ] **Step 1: Write the failing acceptance test**
 
