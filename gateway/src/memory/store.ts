@@ -75,6 +75,15 @@ export interface MemoryStore {
    * Does not check memory_epoch; applyExtractOps does that in the same transaction.
    */
   writeExtraction(ownerId: string, change: ExtractionChange): void;
+  /** Owner-scoped FTS. `match` is an FTS5 expression. Empty when the expression is invalid. */
+  searchMessages(ownerId: string, match: string, limit: number): { text: string }[];
+  /**
+   * Deletes facts, notes, episodes, and followups whose text contains `query`.
+   * Blanks FTS hits and the latest user line of this session, and blanks related diffs.
+   */
+  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string): void;
+  /** Deletes this owner's messages, memory rows, and audit diffs, then marks consent declined. */
+  wipeOwnerMemory(ownerId: string): void;
 }
 
 export interface PendingMessage {
@@ -195,6 +204,29 @@ function prepareStatements(db: DatabaseSync) {
     markExtracted: p('UPDATE messages SET extracted = 1 WHERE owner_id = ? AND id = ?'),
     insertChange: p(`INSERT INTO memory_changes (id, owner_id, table_name, row_id, op, diff, actor, created_at)
       VALUES (?, ?, ?, ?, ?, ?, 'extract', ?)`),
+    searchMessages: p(`SELECT m.text AS text FROM messages_fts
+      JOIN messages m ON m.rowid = messages_fts.rowid
+      WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.excluded = 0
+      ORDER BY bm25(messages_fts)
+      LIMIT ?`),
+    matchRowids: p(`SELECT m.rowid AS rowid FROM messages_fts
+      JOIN messages m ON m.rowid = messages_fts.rowid
+      WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.excluded = 0`),
+    blankMessage: p(`UPDATE messages SET text = '', bigrams = '', excluded = 1 WHERE owner_id = ? AND rowid = ?`),
+    latestUser: p(`SELECT rowid FROM messages
+      WHERE owner_id = ? AND session_id = ? AND role = 'user' AND excluded = 0
+      ORDER BY created_at DESC, rowid DESC LIMIT 1`),
+    deleteFactsInstr: p('DELETE FROM user_facts WHERE owner_id = ? AND instr(text, ?) > 0'),
+    deleteNotesInstr: p('DELETE FROM relationship_notes WHERE owner_id = ? AND instr(text, ?) > 0'),
+    deleteEpisodesInstr: p('DELETE FROM episodes WHERE owner_id = ? AND instr(summary, ?) > 0'),
+    deleteFollowupsInstr: p('DELETE FROM followups WHERE owner_id = ? AND instr(text, ?) > 0'),
+    blankDiffs: p(`UPDATE memory_changes SET diff = '' WHERE owner_id = ? AND instr(diff, ?) > 0`),
+    deleteMessages: p('DELETE FROM messages WHERE owner_id = ?'),
+    deleteAllFacts: p('DELETE FROM user_facts WHERE owner_id = ?'),
+    deleteAllNotes: p('DELETE FROM relationship_notes WHERE owner_id = ?'),
+    deleteAllEpisodes: p('DELETE FROM episodes WHERE owner_id = ?'),
+    deleteAllFollowups: p('DELETE FROM followups WHERE owner_id = ?'),
+    deleteAllChanges: p('DELETE FROM memory_changes WHERE owner_id = ?'),
   };
 }
 
@@ -358,6 +390,49 @@ export class SqliteMemoryStore implements MemoryStore {
 
   ownersPendingExtraction(): string[] {
     return this.q.ownersPending.all().map((r) => r.id as string);
+  }
+
+  searchMessages(ownerId: string, match: string, limit: number): { text: string }[] {
+    try {
+      return this.q.searchMessages.all(match, ownerId, limit).map((row) => ({ text: row.text as string }));
+    } catch {
+      return [];
+    }
+  }
+
+  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string): void {
+    const rowids = match ? this.matchRowids(ownerId, match) : [];
+    this.tx(() => {
+      // The triggering line, captured before matches are blanked so an older line is kept.
+      const latest = this.q.latestUser.get(ownerId, sessionId) as { rowid: number } | undefined;
+      for (const rowid of rowids) this.q.blankMessage.run(ownerId, rowid);
+      if (latest) this.q.blankMessage.run(ownerId, latest.rowid);
+      this.q.deleteFactsInstr.run(ownerId, query);
+      this.q.deleteNotesInstr.run(ownerId, query);
+      this.q.deleteEpisodesInstr.run(ownerId, query);
+      this.q.deleteFollowupsInstr.run(ownerId, query);
+      this.q.blankDiffs.run(ownerId, query);
+    });
+  }
+
+  wipeOwnerMemory(ownerId: string): void {
+    this.tx(() => {
+      this.q.deleteMessages.run(ownerId);
+      this.q.deleteAllFacts.run(ownerId);
+      this.q.deleteAllNotes.run(ownerId);
+      this.q.deleteAllEpisodes.run(ownerId);
+      this.q.deleteAllFollowups.run(ownerId);
+      this.q.deleteAllChanges.run(ownerId);
+      this.q.setConsent.run('declined', ownerId);
+    });
+  }
+
+  private matchRowids(ownerId: string, match: string): number[] {
+    try {
+      return this.q.matchRowids.all(match, ownerId).map((row) => row.rowid as number);
+    } catch {
+      return [];
+    }
   }
 
   writeExtraction(ownerId: string, change: ExtractionChange): void {

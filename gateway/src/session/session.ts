@@ -8,11 +8,12 @@ import {
   type ServerMessage,
 } from '@anyidea/protocol';
 import { classifyAdapterError } from '../adapters/errorClass.ts';
-import { PERFORM_ACTION_TOOL, type AdapterFactory, type ProactiveRequest, type RealtimeAdapter, type SessionConfig } from '../adapters/types.ts';
+import type { AdapterFactory, ProactiveRequest, RealtimeAdapter, SessionConfig } from '../adapters/types.ts';
 import { log } from '../log.ts';
+import type { MemoryStore } from '../memory/store.ts';
+import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
-import type { MemoryExtractor } from '../memory/worker.ts';
 import type { TranscriptWriter } from '../memory/writer.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { devContext, type SessionContext } from './context.ts';
@@ -24,6 +25,7 @@ import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Su
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
 import { DEFAULT_TOOL_TURN_TIMEOUT_MS } from './pacing.ts';
 import { ToolTurn } from './toolTurn.ts';
+import { createToolRegistry, type ToolOutcome } from './tools/registry.ts';
 
 export interface Transport {
   send(msg: ServerMessage): void;
@@ -31,6 +33,15 @@ export interface Transport {
 }
 
 export type { TranscriptWriter };
+
+type RebuildReason = 'error' | 'closed' | 'slim' | 'forget' | 'decline';
+
+function toolPayload(outcome: ToolOutcome): { ok: boolean; error?: string; text?: string } {
+  const payload: { ok: boolean; error?: string; text?: string } = { ok: outcome.ok };
+  if (outcome.error) payload.error = outcome.error;
+  if (outcome.text) payload.text = outcome.text;
+  return payload;
+}
 
 export interface SessionDeps {
   adapterFactory: AdapterFactory;
@@ -62,6 +73,8 @@ export interface SessionDeps {
   writer?: TranscriptWriter;
   /** Optional. Dev sessions omit this, so turns and silence do not enqueue extraction. */
   worker?: MemoryExtractor;
+  /** Optional. Dev sessions have no owner store, so memory tools report memory_unavailable. */
+  store?: MemoryStore;
   /** User finals between extracts. Defaults to 10, matching gateway/config/memory.json. */
   extractEveryUserTurns?: number;
   /** Rest delay used when a worker is injected. Matches extractSilenceMs. */
@@ -99,6 +112,7 @@ export class Session {
   private readonly emotion: EmotionTagger | null;
   private readonly interrupt: InterruptCoordinator;
   private readonly actions = new ActionRouter();
+  private readonly tools = createToolRegistry();
   private readonly metrics = new ReplyMetricsTracker();
   private readonly byId = new Map<string, ResponseState>();
   private readonly bySeq = new Map<number, ResponseState>();
@@ -140,6 +154,14 @@ export class Session {
   private noticeSeq: number | null = null;
   /** User finals since the session started. Every Nth one enqueues extraction. */
   private userTurns = 0;
+  /** Spoken after this tool turn, from memory.json. Null keeps the generic tool-continue line. */
+  private pendingToolLine: string | null = null;
+  /** Forget and confirmed decline rebuild before that line. */
+  private pendingToolRebuild: 'forget' | 'decline' | null = null;
+  /** Origin seqs whose assistant text must not enter the ledger or the transcript. */
+  private readonly dropTranscriptSeqs = new Set<number>();
+  /** A forget/decline rebuild arrived while another rebuild was in progress. */
+  private rebuildAgain: 'forget' | 'decline' | null = null;
 
   constructor(
     private readonly deps: SessionDeps,
@@ -336,6 +358,10 @@ export class Session {
     if (!this.writer || !this.context.ownerId) return;
     for (const state of this.bySeq.values()) {
       if (!state.finalized || state.flushed || !state.text) continue;
+      if (this.dropTranscriptSeqs.has(state.seq)) {
+        state.flushed = true;
+        continue;
+      }
       this.writer.append({
         ownerId: this.context.ownerId,
         sessionId: this.sessionId,
@@ -378,7 +404,7 @@ export class Session {
   private sessionConfig(): SessionConfig {
     const instructions = this.instructions();
     this.lastInstructionsChars = instructions.length;
-    return { instructions, tools: [PERFORM_ACTION_TOOL], voice: this.context.voice, ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
+    return { instructions, tools: this.tools.specs(), voice: this.context.voice, ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
   }
 
   /** Sends fresh instructions to the live model session and remembers their size. */
@@ -477,17 +503,7 @@ export class Session {
     });
     a.on('toolCall', (id, callId, name, args) => {
       if (!current()) return;
-      if (name !== PERFORM_ACTION_TOOL.name) {
-        a.sendToolResult(callId, { ok: false, error: 'unknown_tool' });
-        return;
-      }
-      const { action, result } = this.actions.fromTool(args);
-      a.sendToolResult(callId, result);
-      const s = this.byId.get(id);
-      if (s) this.metrics.onToolCall(s.seq);
-      const cancelled = s ? this.interrupt.isCancelled(s.seq) : false;
-      if (action && !cancelled) this.send({ type: 'avatar.action', action, source: 'tool' });
-      if (s && !cancelled) this.beginToolTurn(s);
+      void this.onToolCall(a, id, callId, name, args);
     });
     a.on('responseDone', (id) => {
       const s = this.live(a, id);
@@ -564,9 +580,9 @@ export class Session {
       log('reply_metrics', metricFields(m));
       this.deps.onReplyMetrics?.(m);
     }
-    const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
+      const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
     s.text = text;
-    this.ledger.addAssistant(text, Date.now(), interrupted);
+    if (!this.dropTranscriptSeqs.has(s.seq)) this.ledger.addAssistant(text, Date.now(), interrupted);
     // Do not session.update here. An instructions refresh in the middle of a barge-in
     // drops the audio the server is still hearing, so the next question never lands.
     this.maybeSummarize();
@@ -634,16 +650,65 @@ export class Session {
     if (end) this.releaseToolTurn(true);
   }
 
+  private async onToolCall(a: RealtimeAdapter, id: string, callId: string, name: string, args: unknown): Promise<void> {
+    if (a !== this.adapter || this.ended) return;
+    const outcome = await this.tools.handle(name, args, {
+      ownerId: this.context.ownerId,
+      agentId: this.context.agentId,
+      sessionId: this.sessionId,
+      store: this.deps.store,
+      worker: this.deps.worker instanceof MemoryWorker ? this.deps.worker : undefined,
+      ledger: this.ledger,
+      actions: this.actions,
+      now: Date.now(),
+    });
+    if (a !== this.adapter || this.ended) return;
+    if (!outcome.ok && outcome.error === 'unknown_tool') {
+      a.sendToolResult(callId, { ok: false, error: 'unknown_tool' });
+      return;
+    }
+    a.sendToolResult(callId, toolPayload(outcome));
+    const s = this.byId.get(id);
+    if (s) this.metrics.onToolCall(s.seq);
+    const cancelled = s ? this.interrupt.isCancelled(s.seq) : false;
+    if (outcome.action && !cancelled) this.send({ type: 'avatar.action', action: outcome.action, source: 'tool' });
+    if (outcome.confirmText) this.pendingToolLine = outcome.confirmText;
+    if (outcome.rebuild) {
+      this.pendingToolRebuild = outcome.rebuild;
+      if (s) this.dropTranscriptSeqs.add(s.seq);
+    }
+    if (s && !cancelled) this.beginToolTurn(s);
+  }
+
   private maybeContinue(): void {
     if (this.ended || this.continuationAsked || !this.toolTurn.readyForContinuation()) return;
     this.continuationAsked = true;
     this.toolTurn.onContinuationRequested();
+    const line = this.pendingToolLine;
+    const rebuild = this.pendingToolRebuild;
+    this.pendingToolLine = null;
+    this.pendingToolRebuild = null;
+    if (rebuild && line) {
+      void this.speakAfterRebuild(rebuild, line);
+      return;
+    }
+    if (line) {
+      this.adapter.createResponse({ cue: 'toolContinue', instruction: line, fallbackText: line });
+      return;
+    }
     const cfg = this.deps.roles.director(this.context.roleId);
     this.adapter.createResponse({
       cue: 'toolContinue',
       instruction: cfg.toolContinueInstruction,
       fallbackText: cfg.toolContinueText,
     });
+  }
+
+  /** New adapter, then the confirm line. Director stays paused until releasePause. */
+  private async speakAfterRebuild(reason: 'forget' | 'decline', line: string): Promise<void> {
+    await this.rebuild(reason, true);
+    if (this.ended) return;
+    this.adapter.createResponse({ cue: 'toolContinue', instruction: line, fallbackText: line });
   }
 
   private armToolTimer(): void {
@@ -700,13 +765,18 @@ export class Session {
     if (estimate > limit || this.turnsSinceRebuild >= (this.deps.rebuildAfterTurns ?? 30)) void this.rebuild('slim');
   }
 
-  private async rebuild(reason: 'error' | 'closed' | 'slim'): Promise<void> {
+  private async rebuild(reason: RebuildReason, keepToolTurn = false): Promise<void> {
     if (reason === 'slim' && this.toolTurn.active) return;
-    if (this.rebuilding || this.rebuildTimer || this.ended) return;
-    if (this.toolTurn.onRebuild()) this.releaseToolTurn(false);
+    if (this.rebuilding || this.rebuildTimer || this.ended) {
+      if (reason === 'forget' || reason === 'decline') this.rebuildAgain = reason;
+      return;
+    }
+    if (!keepToolTurn && this.toolTurn.onRebuild()) this.releaseToolTurn(false);
     this.rebuilding = true;
     log('model_rebuild', { reason });
-    if (reason !== 'slim') this.send({ type: 'error', code: 'model_reconnecting', retryable: true });
+    if (reason !== 'slim' && reason !== 'forget' && reason !== 'decline') {
+      this.send({ type: 'error', code: 'model_reconnecting', retryable: true });
+    }
     this.interrupt.cancelActive('local'); // uses the old adapter
     // The old adapter's responseDone/cancel will never arrive; drop in-flight generation state.
     this.modelGenerating = false;
@@ -731,10 +801,13 @@ export class Session {
       this.scheduleRebuild(reason);
     } finally {
       this.rebuilding = false;
+      const again = this.rebuildAgain;
+      this.rebuildAgain = null;
+      if (again && !this.ended) void this.rebuild(again, true);
     }
   }
 
-  private scheduleRebuild(reason: 'error' | 'closed' | 'slim'): void {
+  private scheduleRebuild(reason: RebuildReason): void {
     if (this.ended || this.rebuildTimer) return;
     const base = this.deps.rebuildBackoffBaseMs ?? 1_000;
     const max = this.deps.rebuildBackoffMaxMs ?? 8_000;

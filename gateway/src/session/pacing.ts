@@ -33,6 +33,10 @@ const MemoryBudgetSchema = z.object({
     minHistoryChars: z.number().int().min(100).max(5_000),
   }).strict(),
   toolTurnTimeoutMs: z.number().int().min(3_000).max(30_000),
+  forgetConfirmText: z.string().min(1),
+  declineConfirmPrompt: z.string().min(1),
+  declineConfirmedText: z.string().min(1),
+  recallClipChars: z.number().int().min(20).max(500),
   // Extraction settings sit beside `instructions`. Optional so older fixtures still parse.
   extractEveryUserTurns: z.number().int().min(1).max(100).optional(),
   extractSilenceMs: z.number().int().min(1_000).max(1_800_000).optional(),

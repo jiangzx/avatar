@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { log } from '../log.ts';
 import { errorCodeOf, runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import type { SessionContext } from '../session/context.ts';
@@ -26,6 +27,7 @@ export interface MemoryWorkerOptions {
 /** One queue per owner. Jobs never overlap; a later job starts only after the earlier one settles. */
 export class MemoryWorker implements MemoryExtractor {
   private readonly tail = new Map<string, Promise<void>>();
+  private readonly jobs = new Map<string, Promise<void>>();
   private readonly transcriptMaxChars: number;
   private readonly contextMaxChars: number;
 
@@ -34,15 +36,25 @@ export class MemoryWorker implements MemoryExtractor {
     this.contextMaxChars = opts.contextMaxChars ?? 4_000;
   }
 
-  enqueue(ownerId: string, job: () => Promise<void>): void {
+  /** Queues `job` behind this owner's current work. Returns an id for waitForJob. */
+  enqueue(ownerId: string, job: () => Promise<void>): string {
+    const id = randomUUID();
     const prev = this.tail.get(ownerId) ?? Promise.resolve();
     const run = prev.then(() => job()).then(() => undefined, (error) => {
       log('memory_worker_failed', { code: errorCodeOf(error) });
     });
+    this.jobs.set(id, run);
     this.tail.set(ownerId, run);
     void run.finally(() => {
+      this.jobs.delete(id);
       if (this.tail.get(ownerId) === run) this.tail.delete(ownerId);
     });
+    return id;
+  }
+
+  /** Resolves when that queued job settles. A finished or unknown id resolves immediately. */
+  waitForJob(jobId: string): Promise<void> {
+    return this.jobs.get(jobId) ?? Promise.resolve();
   }
 
   /** Enqueues the extract. The returned promise settles when that job finishes. */

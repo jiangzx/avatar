@@ -103,6 +103,7 @@ const manager = new SessionManager(
       tailGuardMs: pacing.tailGuardMs,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
       emotion,
+      ...(store ? { store } : {}),
       ...(writer ? { writer } : {}),
       ...(worker ? {
         worker,
