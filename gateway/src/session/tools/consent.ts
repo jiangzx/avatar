@@ -32,10 +32,11 @@ export function consentTool(prompt: string, confirmedText: string): ToolHandler 
         return { ok: true };
       }
       if (!parsed.data.confirmed) return { ok: true, confirmText: prompt };
-      await enqueueThenBump(ctx.worker, store, ownerId, async () => {
+      const stored = await enqueueThenBump(ctx.worker, store, ownerId, async () => {
         store.wipeOwnerMemory(ownerId);
         ctx.ledger.clear();
       });
+      if (!stored) return { ok: false, error: 'forget_failed' };
       return { ok: true, rebuild: 'decline', confirmText: confirmedText };
     },
   };

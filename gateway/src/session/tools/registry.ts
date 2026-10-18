@@ -20,6 +20,8 @@ export interface ToolContext {
   ledger: ConversationLedger;
   actions: ActionRouter;
   now: number;
+  /** User line of this turn, when it has already arrived. Not an older row. */
+  triggerText?: string;
 }
 
 export interface ToolOutcome {

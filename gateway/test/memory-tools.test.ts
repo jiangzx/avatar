@@ -291,6 +291,22 @@ describe('memory tool registry', () => {
     expect(store.getOwner(b.ownerId)?.memoryConsent).not.toBe('declined');
     expect(store.getOwner(b.ownerId)?.memoryEpoch).toBe(0);
   });
+
+  it('does not blank an older user row when the forget sentence is not that row', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'h-a', 1);
+    const b = owner(store, 'h-b', 2);
+    say(store, a.ownerId, 'name', '我叫王叔', 11);
+    say(store, a.ownerId, 'old', '今天天气不错', 30);
+    say(store, b.ownerId, 'b-old', '今天天气不错', 31);
+    const registry = createToolRegistry();
+
+    await registry.handle('forget_memory', { query: '王叔' }, ctxFor(store, worker(store), a));
+
+    expect(store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
+    expect(store.snapshotRows(b.ownerId, b.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
+  });
 });
 
 const director: DirectorConfig = {
@@ -418,6 +434,133 @@ describe('session memory tools', () => {
     session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
     await vi.advanceTimersByTimeAsync(200);
     expect(box.sent.some((message) => message.type === 'avatar.action' && message.action === 'wave')).toBe(true);
+    session.end();
+  });
+
+  it('rebuilds after a forget that waited out the origin reply', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'h-queued');
+    store.markNotified(a.ownerId, 2);
+    say(store, a.ownerId, 'old', '今天天气不错', 10);
+    say(store, a.ownerId, 'name', '我叫王叔', 11);
+    say(store, a.ownerId, 'pending', '今天想喝茶', 12);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let markEntered!: () => void;
+    const entered = new Promise<void>((resolve) => { markEntered = resolve; });
+    const queued = new MemoryWorker({
+      store,
+      client: {
+        complete: async () => {
+          markEntered();
+          await gate;
+          return '{"ops":[]}';
+        },
+      },
+      systemPrompt: '陈述。',
+      maxTokens: 80,
+      policy: { timeoutMs: 60_000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
+    });
+    const extract = queued.extractOwner(a.ownerId, 'turns');
+    await entered;
+    const calls: Array<{ cue?: string; instruction?: string; fallbackText?: string }> = [];
+    const mocks: MockAdapter[] = [];
+    const session = new Session({
+      adapterFactory: () => {
+        const mock = new MockAdapter({
+          script: {
+            greeting: '你好呀', followup: '还在吗', fallbackReply: '我在听',
+            turns: [{ match: '忘掉', user: '忘掉王叔', reply: '好呀', tool: { name: 'forget_memory', args: { query: '王叔' } } }],
+          },
+          replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+        });
+        const create = mock.createResponse.bind(mock);
+        mock.createResponse = (request) => {
+          if (request) calls.push(request);
+          return create(request);
+        };
+        mocks.push(mock);
+        return mock;
+      },
+      summarizer: new MockSummarizer(),
+      roles: fixedRoleCatalog('P', director),
+      writer: new SqliteTranscriptWriter(store),
+      worker: queued,
+      store,
+    }, { ownerId: a.ownerId, agentId: a.agentId, roleId: 'elder-companion', styleId: 'grandchild' } satisfies SessionContext, 'live-wait');
+    const { transport } = collector();
+
+    await session.start(transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    session.handleClientMessage({ type: 'debug.userText', text: '忘掉王叔' });
+    await vi.advanceTimersByTimeAsync(400);
+    mocks[0]!.emit('userTranscript', '晚点才到的那句', true);
+    expect(calls.some((call) => call.fallbackText === memory.forgetConfirmText)).toBe(false);
+
+    release();
+    await extract;
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(calls).toContainEqual({
+      cue: 'toolContinue',
+      instruction: memory.forgetConfirmText,
+      fallbackText: memory.forgetConfirmText,
+    });
+    expect(mocks.length).toBeGreaterThan(1);
+    expect(store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text)).toEqual(['今天天气不错', '今天想喝茶']);
+    const late = db.prepare('SELECT text FROM messages WHERE owner_id = ? AND text = ?').get(a.ownerId, '晚点才到的那句');
+    expect(late).toBeUndefined();
+    session.end();
+  });
+
+  it('does not speak the confirm line when the forget job throws', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'h-throw');
+    store.markNotified(a.ownerId, 2);
+    say(store, a.ownerId, 'name', '我叫王叔', 11);
+    store.forgetMatches = () => { throw new Error('forget_failed'); };
+    const calls: Array<{ cue?: string; instruction?: string; fallbackText?: string }> = [];
+    const mocks: MockAdapter[] = [];
+    const session = new Session({
+      adapterFactory: () => {
+        const mock = new MockAdapter({
+          script: {
+            greeting: '你好呀', followup: '还在吗', fallbackReply: '我在听',
+            turns: [{ match: '忘掉', user: '忘掉王叔', reply: '好呀', tool: { name: 'forget_memory', args: { query: '王叔' } } }],
+          },
+          replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+        });
+        const create = mock.createResponse.bind(mock);
+        mock.createResponse = (request) => {
+          if (request) calls.push(request);
+          return create(request);
+        };
+        mocks.push(mock);
+        return mock;
+      },
+      summarizer: new MockSummarizer(),
+      roles: fixedRoleCatalog('P', director),
+      writer: new SqliteTranscriptWriter(store),
+      worker: worker(store),
+      store,
+    }, { ownerId: a.ownerId, agentId: a.agentId, roleId: 'elder-companion', styleId: 'grandchild' } satisfies SessionContext, 'live-throw');
+    const { transport } = collector();
+
+    await session.start(transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    session.handleClientMessage({ type: 'debug.userText', text: '忘掉王叔' });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(calls.some((call) => call.fallbackText === memory.forgetConfirmText)).toBe(false);
+    expect(mocks[0]!.toolResults.some((row) => {
+      const result = row.result as { ok?: boolean };
+      return result.ok === false;
+    })).toBe(true);
+    expect(store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text)).toContain('我叫王叔');
     session.end();
   });
 });

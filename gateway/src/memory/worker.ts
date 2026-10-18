@@ -27,7 +27,7 @@ export interface MemoryWorkerOptions {
 /** One queue per owner. Jobs never overlap; a later job starts only after the earlier one settles. */
 export class MemoryWorker implements MemoryExtractor {
   private readonly tail = new Map<string, Promise<void>>();
-  private readonly jobs = new Map<string, Promise<void>>();
+  private readonly jobs = new Map<string, Promise<boolean>>();
   private readonly transcriptMaxChars: number;
   private readonly contextMaxChars: number;
 
@@ -40,21 +40,26 @@ export class MemoryWorker implements MemoryExtractor {
   enqueue(ownerId: string, job: () => Promise<void>): string {
     const id = randomUUID();
     const prev = this.tail.get(ownerId) ?? Promise.resolve();
+    let failed = false;
     const run = prev.then(() => job()).then(() => undefined, (error) => {
+      failed = true;
       log('memory_worker_failed', { code: errorCodeOf(error) });
     });
-    this.jobs.set(id, run);
+    const done = run.then(() => !failed);
+    this.jobs.set(id, done);
     this.tail.set(ownerId, run);
     void run.finally(() => {
-      this.jobs.delete(id);
       if (this.tail.get(ownerId) === run) this.tail.delete(ownerId);
+    });
+    void done.finally(() => {
+      if (this.jobs.get(id) === done) this.jobs.delete(id);
     });
     return id;
   }
 
-  /** Resolves when that queued job settles. A finished or unknown id resolves immediately. */
-  waitForJob(jobId: string): Promise<void> {
-    return this.jobs.get(jobId) ?? Promise.resolve();
+  /** True when the job finished. False when it threw. An unknown id is already done. */
+  waitForJob(jobId: string): Promise<boolean> {
+    return this.jobs.get(jobId) ?? Promise.resolve(true);
   }
 
   /** Enqueues the extract. The returned promise settles when that job finishes. */

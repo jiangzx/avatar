@@ -25,10 +25,11 @@ export function forgetTool(confirmText: string): ToolHandler {
       const ownerId = ctx.ownerId;
       const query = parsed.data.query;
       const sessionId = ctx.sessionId;
-      await enqueueThenBump(ctx.worker, store, ownerId, async () => {
-        store.forgetMatches(ownerId, query, ftsMatch(query), sessionId);
+      const stored = await enqueueThenBump(ctx.worker, store, ownerId, async () => {
+        store.forgetMatches(ownerId, query, ftsMatch(query), sessionId, ctx.triggerText);
         ctx.ledger.clear();
       });
+      if (!stored) return { ok: false, error: 'forget_failed' };
       return { ok: true, rebuild: 'forget', confirmText };
     },
   };
@@ -40,13 +41,13 @@ export async function enqueueThenBump(
   store: MemoryStore,
   ownerId: string,
   job: () => Promise<void>,
-): Promise<void> {
+): Promise<boolean> {
   if (!worker) {
     store.bumpEpoch(ownerId);
     await job();
-    return;
+    return true;
   }
   const id = worker.enqueue(ownerId, job);
   store.bumpEpoch(ownerId);
-  await worker.waitForJob(id);
+  return worker.waitForJob(id);
 }

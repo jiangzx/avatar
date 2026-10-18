@@ -36,6 +36,18 @@ export type { TranscriptWriter };
 
 type RebuildReason = 'error' | 'closed' | 'slim' | 'forget' | 'decline';
 
+function waitsForMemoryJob(name: string, args: unknown): boolean {
+  if (name === 'forget_memory') return true;
+  if (name !== 'set_memory_consent') return false;
+  let value = args;
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value) as unknown; } catch { return false; }
+  }
+  if (!value || typeof value !== 'object') return false;
+  const row = value as { granted?: unknown; confirmed?: unknown };
+  return row.granted === 'declined' && row.confirmed === true;
+}
+
 function toolPayload(outcome: ToolOutcome): { ok: boolean; error?: string; text?: string } {
   const payload: { ok: boolean; error?: string; text?: string } = { ok: outcome.ok };
   if (outcome.error) payload.error = outcome.error;
@@ -158,6 +170,14 @@ export class Session {
   private pendingToolLine: string | null = null;
   /** Forget and confirmed decline rebuild before that line. */
   private pendingToolRebuild: 'forget' | 'decline' | null = null;
+  /** Confirm line waiting for the replacement adapter to connect. */
+  private confirmLine: string | null = null;
+  /** User utterance for this turn. Cleared when that reply is finalized. */
+  private turnUserText: string | null = null;
+  /** Forget/decline is waiting on the owner queue. Origin done during this still counts. */
+  private memoryToolWaiting = false;
+  /** User finals during a forget/decline turn are not stored. */
+  private dropUserFinals = false;
   /** Origin seqs whose assistant text must not enter the ledger or the transcript. */
   private readonly dropTranscriptSeqs = new Set<number>();
   /** A forget/decline rebuild arrived while another rebuild was in progress. */
@@ -583,6 +603,7 @@ export class Session {
       const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
     s.text = text;
     if (!this.dropTranscriptSeqs.has(s.seq)) this.ledger.addAssistant(text, Date.now(), interrupted);
+    this.turnUserText = null;
     // Do not session.update here. An instructions refresh in the middle of a barge-in
     // drops the audio the server is still hearing, so the next question never lands.
     this.maybeSummarize();
@@ -590,6 +611,8 @@ export class Session {
 
   private onUserFinal(text: string, echo: boolean): void {
     if (echo) this.send({ type: 'transcript.user', text, final: true });
+    if (this.dropUserFinals) return;
+    this.turnUserText = text;
     this.ledger.addUser(text, Date.now());
     if (this.writer && this.context.ownerId) {
       this.writer.append({
@@ -652,6 +675,16 @@ export class Session {
 
   private async onToolCall(a: RealtimeAdapter, id: string, callId: string, name: string, args: unknown): Promise<void> {
     if (a !== this.adapter || this.ended) return;
+    const s = this.byId.get(id);
+    const cancelled = s ? this.interrupt.isCancelled(s.seq) : false;
+    const slow = Boolean(s) && !cancelled && waitsForMemoryJob(name, args);
+    if (slow && s) {
+      this.dropTranscriptSeqs.add(s.seq);
+      this.dropUserFinals = true;
+      this.memoryToolWaiting = true;
+      this.beginToolTurn(s);
+    }
+    const triggerText = this.turnUserText ?? undefined;
     const outcome = await this.tools.handle(name, args, {
       ownerId: this.context.ownerId,
       agentId: this.context.agentId,
@@ -661,26 +694,36 @@ export class Session {
       ledger: this.ledger,
       actions: this.actions,
       now: Date.now(),
+      ...(triggerText ? { triggerText } : {}),
     });
+    this.memoryToolWaiting = false;
     if (a !== this.adapter || this.ended) return;
     if (!outcome.ok && outcome.error === 'unknown_tool') {
       a.sendToolResult(callId, { ok: false, error: 'unknown_tool' });
       return;
     }
     a.sendToolResult(callId, toolPayload(outcome));
-    const s = this.byId.get(id);
     if (s) this.metrics.onToolCall(s.seq);
-    const cancelled = s ? this.interrupt.isCancelled(s.seq) : false;
     if (outcome.action && !cancelled) this.send({ type: 'avatar.action', action: outcome.action, source: 'tool' });
+    if (!outcome.ok) {
+      if (slow && this.toolTurn.active) this.releaseToolTurn(false);
+      return;
+    }
+    if (slow && !this.toolTurn.active) return;
     if (outcome.confirmText) this.pendingToolLine = outcome.confirmText;
     if (outcome.rebuild) {
       this.pendingToolRebuild = outcome.rebuild;
       if (s) this.dropTranscriptSeqs.add(s.seq);
     }
+    if (slow) {
+      this.maybeContinue();
+      return;
+    }
     if (s && !cancelled) this.beginToolTurn(s);
   }
 
   private maybeContinue(): void {
+    if (this.memoryToolWaiting) return;
     if (this.ended || this.continuationAsked || !this.toolTurn.readyForContinuation()) return;
     this.continuationAsked = true;
     this.toolTurn.onContinuationRequested();
@@ -704,10 +747,16 @@ export class Session {
     });
   }
 
-  /** New adapter, then the confirm line. Director stays paused until releasePause. */
+  /** Rebuild first. The confirm is spoken only after that adapter connects. */
   private async speakAfterRebuild(reason: 'forget' | 'decline', line: string): Promise<void> {
+    this.confirmLine = line;
     await this.rebuild(reason, true);
-    if (this.ended) return;
+  }
+
+  private speakConfirm(): void {
+    const line = this.confirmLine;
+    if (!line) return;
+    this.confirmLine = null;
     this.adapter.createResponse({ cue: 'toolContinue', instruction: line, fallbackText: line });
   }
 
@@ -733,6 +782,12 @@ export class Session {
     this.continuationAsked = false;
     this.originForcedEnd = false;
     this.toolOriginSeq = null;
+    this.pendingToolLine = null;
+    this.pendingToolRebuild = null;
+    this.confirmLine = null;
+    this.dropUserFinals = false;
+    this.memoryToolWaiting = false;
+    this.turnUserText = null;
     if (this.ended) return;
     // Continuation playback rearms silence later. Timeout and barge-in rearm now.
     this.director.releasePause(!allowSpeech);
@@ -787,8 +842,10 @@ export class Session {
     this.adapter = this.createAdapter();
     old.removeAllListeners();
     old.close();
+    let connected = false;
     try {
       await this.adapter.connect(this.sessionConfig());
+      connected = true;
       this.syncInputMute();
       const buffered = this.rebuildMicBuffer.splice(0);
       if (!this.muted) for (const pcm of buffered) this.adapter.sendAudio(pcm);
@@ -803,7 +860,8 @@ export class Session {
       this.rebuilding = false;
       const again = this.rebuildAgain;
       this.rebuildAgain = null;
-      if (again && !this.ended) void this.rebuild(again, true);
+      if (again && !this.ended) await this.rebuild(again, true);
+      else if (connected) this.speakConfirm();
     }
   }
 
@@ -815,7 +873,7 @@ export class Session {
     this.rebuildAttempt++;
     this.rebuildTimer = setTimeout(() => {
       this.rebuildTimer = null;
-      void this.rebuild(reason);
+      void this.rebuild(reason, reason === 'forget' || reason === 'decline');
     }, delay);
   }
 

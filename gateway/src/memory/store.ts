@@ -79,9 +79,9 @@ export interface MemoryStore {
   searchMessages(ownerId: string, match: string, limit: number): { text: string }[];
   /**
    * Deletes facts, notes, episodes, and followups whose text contains `query`.
-   * Blanks FTS hits and the latest user line of this session, and blanks related diffs.
+   * Blanks FTS hits, the triggering user line when its text is given, and related diffs.
    */
-  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string): void;
+  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): void;
   /** Deletes this owner's messages, memory rows, and audit diffs, then marks consent declined. */
   wipeOwnerMemory(ownerId: string): void;
 }
@@ -213,9 +213,8 @@ function prepareStatements(db: DatabaseSync) {
       JOIN messages m ON m.rowid = messages_fts.rowid
       WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.excluded = 0`),
     blankMessage: p(`UPDATE messages SET text = '', bigrams = '', excluded = 1 WHERE owner_id = ? AND rowid = ?`),
-    latestUser: p(`SELECT rowid FROM messages
-      WHERE owner_id = ? AND session_id = ? AND role = 'user' AND excluded = 0
-      ORDER BY created_at DESC, rowid DESC LIMIT 1`),
+    blankTrigger: p(`UPDATE messages SET text = '', bigrams = '', excluded = 1
+      WHERE owner_id = ? AND session_id = ? AND role = 'user' AND excluded = 0 AND text = ?`),
     deleteFactsInstr: p('DELETE FROM user_facts WHERE owner_id = ? AND instr(text, ?) > 0'),
     deleteNotesInstr: p('DELETE FROM relationship_notes WHERE owner_id = ? AND instr(text, ?) > 0'),
     deleteEpisodesInstr: p('DELETE FROM episodes WHERE owner_id = ? AND instr(summary, ?) > 0'),
@@ -400,13 +399,11 @@ export class SqliteMemoryStore implements MemoryStore {
     }
   }
 
-  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string): void {
+  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): void {
     const rowids = match ? this.matchRowids(ownerId, match) : [];
     this.tx(() => {
-      // The triggering line, captured before matches are blanked so an older line is kept.
-      const latest = this.q.latestUser.get(ownerId, sessionId) as { rowid: number } | undefined;
       for (const rowid of rowids) this.q.blankMessage.run(ownerId, rowid);
-      if (latest) this.q.blankMessage.run(ownerId, latest.rowid);
+      if (triggerText) this.q.blankTrigger.run(ownerId, sessionId, triggerText);
       this.q.deleteFactsInstr.run(ownerId, query);
       this.q.deleteNotesInstr.run(ownerId, query);
       this.q.deleteEpisodesInstr.run(ownerId, query);
