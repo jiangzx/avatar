@@ -118,6 +118,27 @@ describe('memory tool registry', () => {
     await expect(registry.handle('perform_action', { action: 'dance' }, ctx)).resolves.toMatchObject({ ok: false, error: 'unsupported_action' });
   });
 
+  it('recalls separated topic keywords without requiring a cross-boundary bigram', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'or-a');
+    const b = owner(store, 'or-b');
+    say(store, a.ownerId, 'a-weather', '青岛今天的天气很凉快', 10);
+    say(store, b.ownerId, 'b-weather', '青岛天气属于另一位用户', 11);
+    const result = await createToolRegistry().handle('recall_memory', { query: '青岛天气' }, ctxFor(store, worker(store), a));
+    expect(result.ok).toBe(true);
+    expect(result.text).toContain('青岛今天的天气很凉快');
+    expect(result.text).not.toContain('另一位用户');
+  });
+
+  it('does not broaden forgetting to unrelated messages sharing only one token', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'forget-all');
+    say(store, a.ownerId, 'tea', '我喜欢喝茶', 10);
+    say(store, a.ownerId, 'walk', '我喜欢散步', 11);
+    await createToolRegistry().handle('forget_memory', { query: '喜欢喝茶' }, ctxFor(store, worker(store), a));
+    expect(store.snapshotRows(a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我喜欢散步' }]);
+  });
+
   it('recalls only the caller, with the two-character name first', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);

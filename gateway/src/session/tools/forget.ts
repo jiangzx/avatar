@@ -26,7 +26,8 @@ export function forgetTool(confirmText: string): ToolHandler {
       const query = parsed.data.query;
       const sessionId = ctx.sessionId;
       const stored = await enqueueThenBump(ctx.worker, store, ownerId, async () => {
-        store.forgetMatches(ownerId, query, ftsMatch(query), sessionId, ctx.triggerText);
+        // Forgetting stays precise even though recall accepts any keyword.
+        store.forgetMatches(ownerId, query, ftsMatch(query, 'all'), sessionId, ctx.triggerText);
         ctx.ledger.clear();
       });
       if (!stored) return { ok: false, error: 'forget_failed' };
