@@ -985,7 +985,8 @@ User approved this bounded correction to existing Plan C memory reads and role c
    - [x] Final local verification: `npm test` (protocol 6, gateway 399, avatar-core 96), `npm run typecheck`, probe syntax check, and 8797 `plan3-mock-smoke.mjs` passed.
    - [x] Real synthetic evaluation: old copy reproduced repetition; final four cases (both styles × known/empty history) passed mechanical checks plus recorded manual review in `docs/testing/plan3-topic-continuity-latest.json`. One sample per case, simulated playback; no phone or all-output guarantee. Probe exit code only covers mechanical checks; `passed` stays null until manual review.
    - [x] Independent review: P2 false-positive probe verdict fixed in d5a25e6 and re-reviewed; reviewer counterexample now rejected. No remaining substantive review findings.
-   - [ ] Obtain restart consent, apply to 8787 and complete user phone checks; assumption 8 remains separately open.
+   - [x] User confirmed restart; applied to 8787 with original DB/identity retained. Health/auth/DB metadata checks passed; ADB reverse restored and existing App restarted, original device resolution and greeting start/end observed. See roadmap application record.
+   - [ ] Complete user phone topic-continuity and non-repetition listening checks; assumption 8 remains separately open.
 
 - [ ] **Step 1: Write the failing acceptance test**
 

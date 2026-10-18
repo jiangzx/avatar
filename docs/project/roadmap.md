@@ -70,7 +70,7 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 ## Next steps
 
-0. Plan 3: Task 0、A1、B 的 8797 Mock 进程冒烟已通过（#11、#14、#31 已解除）；Plan C 的本地记忆门控、持久化快照、Mock 工具续答及 qwen-plus 真实提取（假设 7）已验证，记录见下文。2026-10-18 用户同意后，手机启动前置完成（#41 已解除）：保留原身份库，补齐文本端点并重启 8787，手机已解析原身份并收到开场。用户已确认真实第二次通话能记住称呼，但近期话题接续失败且接话重复。用户已批准 Plan C Task 12 的定向修正（#42）；最近会话摘要、OR 回忆检索和防重复接话指令已实现，单元回归、四场景合成真实模型逐句复核与独立审查已通过，下一步先征得重启同意，再回到手机复验；假设 8 仍无真机工具调用证据。后续重启 8787 仍须先征得用户同意。Plan A/B/A+B 的其他设备项仍未完成（#12–#25，排除已解除的 #14；#30、#32–#39）；本次启动不替代它们的完整清单。A+B 新音色门槛依赖 #17 和 #19；Plan D/S 尚无已批准实施计划。
+0. Plan 3: Task 0、A1、B 的 8797 Mock 进程冒烟已通过（#11、#14、#31 已解除）；Plan C 的本地记忆门控、持久化快照、Mock 工具续答及 qwen-plus 真实提取（假设 7）已验证，记录见下文。2026-10-18 用户同意后，手机启动前置完成（#41 已解除）：保留原身份库，补齐文本端点并重启 8787，手机已解析原身份并收到开场。用户已确认真实第二次通话能记住称呼，但近期话题接续失败且接话重复。用户已批准 Plan C Task 12 的定向修正（#42）；最近会话摘要、OR 回忆检索和防重复接话指令已实现，单元回归、四场景合成真实模型逐句复核与独立审查已通过，用户随后已确认重启；8787 新版 Qwen 网关与原身份手机会话已启动，下一步等待用户话题接续与防重复听感复验；假设 8 仍无真机工具调用证据。后续重启 8787 仍须先征得用户同意。Plan A/B/A+B 的其他设备项仍未完成（#12–#25，排除已解除的 #14；#30、#32–#39）；本次启动不替代它们的完整清单。A+B 新音色门槛依赖 #17 和 #19；Plan D/S 尚无已批准实施计划。
 1. Keep the local Qwen gateway running for phone debugging (`ADAPTER=qwen` on port 8787, phone `APP_SECRET` from `app/dev.json`, `adb reverse tcp:8787`). Once local VAD says the user is barging in, mic audio streams while the reply is still open; do not restore the old full-playback drop. See the pitfalls section above. Silence follow-ups stay paused while the user is actually speaking. Local barge-in uses RMS 200 after 400 ms of playback; idle speech stays at RMS 1200. At 20:04 the user confirmed the conversation was fluent. At 20:08 avatar actions worked after gestures were no longer cancelled on `response.end`. Do not restart it as Mock. Do not resume interruption latency percentiles or multi-attempt interruption counts: the user skipped both on 2026-10-16, and that skip is not a pass. The 10-minute silence sample stays skipped as well. The latest interrupt rebuild is installed, but the user has not yet confirmed that a live shout stops playback.
 2. Continue the remaining Xiaomi/desktop checks that were not skipped: active-response stale-audio listening, network cases beyond the 2026-10-16 short resume and grace expiry, subtitle finalization once, remaining Task 18 checks, ADR-001, and desktop Chrome E2E. Five actions were already observed with Chinese keywords. Cloud WSS stays deferred.
 3. Seeduplex protocol docs and successful key validation are recorded in `docs/research/seeduplex-protocol-validation.md`; `ADAPTER=mock` remains the default, while `ADAPTER=seeduplex` requires an explicit environment key. Complete ADR-001 A/B measurement as a tracked follow-up.
@@ -196,3 +196,11 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - 独立 reviewer 审查 `4e3ef5e..fa636b1`，发现探针会把换词重复判绿（P2）；`d5a25e6` 将机械检查与人工通过结论分开，并加强重复提问和开场检查，反例验证失败且增量复查确认问题已解决。模型语义仍依赖人工判读；不能将进程 exit 0 等同于行为验收通过。
 - 最终代码验证：`npm test`：protocol 6、gateway 399、avatar-core 96 全通过；`npm run typecheck`：通过；`node --check docs/testing/plan3-topic-continuity-probe.mjs`：通过。`node --import tsx docs/testing/plan3-mock-smoke.mjs`：通过，8797 notice/flush/持久尾部/工具续答无回归。未改手机代码，未运行 Flutter 或重装。
 - #42 仍开放至手机复验：下一步征得同意后重启 8787，保留现有库与身份，用户结束/重开后确认话题接续和沉默不重复。假设 8 的真机工具轮独立待验。8787 本轮未重启；未改 `.env` 或真实记忆数据，未恢复用户跳过的打断/静默采样。
+
+## 话题接续修正应用到手机网关（2026-10-18）
+
+- 用户确认重启后，以 SIGTERM 收尾旧 Qwen 进程。旧会话触发 `session_destroyed(reason=shutdown)`，记忆提取 `applied`（ops=2、messages=6）。首次脚本等待 15 秒超时未启动新进程；随后确认旧进程退出、8787 无监听，再接续启动，没有强杀或清库。
+- 新版网关（代码至 `d5a25e6`）作为独立后台 Qwen 进程运行在 8787。保持 `/Users/jed/.avatar/memory.db`、现有 Key、已验证同 workspace 文本端点及 `app/dev.json` 的手机 APP_SECRET；只注入进程环境，`.env` 哈希未变。PID 与日志路径仍由仓库外 runtime 文件管理。
+- 启动前后 owner/agent 身份集合相同，各 1 个 owner/agent/device；消息 19、episode 2、事实 1，启动前后计数相同；数据库权限 0600、外键检查无违规。只核查元信息，不输出正文。
+- 运行时检查：`GET /healthz` 200；`POST /device/register` 无密钥 401、手机密钥加无效请求体 400，未新增设备。ADB reverse 检查为 tcp:8787 → tcp:8787。保留数据 force-stop 后重新启动现有 App，观察到原设备身份解析、新会话创建和 greeting start/end；未重装。
+- 下一步：用户询问上次聊到哪里，检查能否接续已有话题，再短暂不说话观察 context/check/leave，确认不反复表示不知道或重复原答案。连接和开场事件不替代用户听感结论；#42 保持开放，假设 8 真机工具轮仍独立待验。本轮无产品代码变更，未重跑单元测试；本轮运行的服务、鉴权、数据库元信息和 ADB 检查结果如上。
