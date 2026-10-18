@@ -3,16 +3,46 @@ import { loadSafetyConfig } from '../config.ts';
 
 const safety = loadSafetyConfig(fileURLToPath(new URL('../../config/safety.json', import.meta.url)));
 
-/** Map configured Chinese numerals to ASCII digits. */
+function isDigitChar(ch: string): boolean {
+  return safety.chineseDigits[ch] !== undefined || (ch >= '0' && ch <= '9');
+}
+
+function asciiDigit(ch: string): string {
+  return safety.chineseDigits[ch] ?? ch;
+}
+
+/** Fold a digit run longer than one character to ASCII. A lone numeral stays. */
 export function normalizeChineseDigits(text: string): string {
   let out = '';
-  for (const ch of text) out += safety.chineseDigits[ch] ?? ch;
+  const chars = [...text];
+  let i = 0;
+  while (i < chars.length) {
+    if (!isDigitChar(chars[i]!)) {
+      out += chars[i++]!;
+      continue;
+    }
+    const start = i;
+    while (i < chars.length && isDigitChar(chars[i]!)) i++;
+    const run = chars.slice(start, i);
+    out += run.length > 1 ? run.map(asciiDigit).join('') : run[0]!;
+  }
   return out;
 }
 
-/** Normalize numerals, then mask each run of at least minMaskedDigits. */
+/** Mask a contiguous digit run only when it reaches minMaskedDigits. */
 export function redact(text: string): string {
-  const normalized = normalizeChineseDigits(text);
-  const pattern = new RegExp(`\\d{${safety.minMaskedDigits},}`, 'g');
-  return normalized.replace(pattern, (run) => '*'.repeat(run.length));
+  let out = '';
+  const chars = [...text];
+  let i = 0;
+  while (i < chars.length) {
+    if (!isDigitChar(chars[i]!)) {
+      out += chars[i++]!;
+      continue;
+    }
+    const start = i;
+    while (i < chars.length && isDigitChar(chars[i]!)) i++;
+    const run = chars.slice(start, i).join('');
+    out += i - start >= safety.minMaskedDigits ? '*'.repeat(i - start) : run;
+  }
+  return out;
 }
