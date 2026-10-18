@@ -39,7 +39,7 @@ const cfg: DirectorConfig = {
 
 function make(c: DirectorConfig = cfg) {
   const calls: Array<[ResponseKind, string]> = [];
-  const d = new Director(c, { requestResponse: (k, r) => calls.push([k, r.instruction]) });
+  const d = new Director(c, { requestResponse: (k, r) => calls.push([k, r.instruction]), planContext: () => '承接' });
   return { d, calls };
 }
 
@@ -141,16 +141,16 @@ describe('Director', () => {
     vi.advanceTimersByTime(9999);
     expect(calls).toEqual([['followup', 'CTX']]);
     vi.advanceTimersByTime(1);
-    expect(calls).toEqual([['followup', 'CTX'], ['followup', 'LEAVE']]);
+    expect(calls).toEqual([['followup', 'CTX']]);
   });
 
   it('continues the last concrete thing instead of a topic card', () => {
     const reqs: ProactiveRequest[] = [];
-    const d = new Director(cfg, { requestResponse: (_k, r) => reqs.push(r) });
+    const d = new Director(cfg, { requestResponse: (_k, r) => reqs.push(r), planContext: () => '承接' });
     d.onUserFinal('孙子周末来看我');
     d.onAiTurnEnded();
     vi.advanceTimersByTime(5000);
-    expect(reqs).toEqual([{ cue: 'followup', instruction: 'CTX', fallbackText: '我在' }]);
+    expect(reqs).toEqual([{ cue: 'followup', instruction: 'CTX', fallbackText: '承接' }]);
   });
 
   it('treats a longer sentence that merely contains a light word as new content', () => {
@@ -161,7 +161,7 @@ describe('Director', () => {
     expect(calls).toEqual([['followup', 'CTX']]);
   });
 
-  it('the check stays with what the user said, and with the name question before they speak', () => {
+  it('keeps opening checks contextual and skips them after a substantive continuation', () => {
     const openReqs: ProactiveRequest[] = [];
     const open = new Director({
       ...cfg,
@@ -198,20 +198,16 @@ describe('Director', () => {
       ...cfg,
       checkContextInstruction: '点到「{utterance}」，可以不回',
       checkContextText: '还在吗，刚才那件事先放着',
-    }, { requestResponse: (_k, r) => talked.push(r) });
+    }, { requestResponse: (_k, r) => talked.push(r), planContext: () => '承接' });
     d.onUserFinal('孙子周末来看我');
     d.onAiTurnEnded();
     vi.advanceTimersByTime(5000);
     d.onAiTurnEnded();
     vi.advanceTimersByTime(10000);
-    expect(talked.at(-1)).toEqual({
-      cue: 'followup',
-      instruction: '点到「孙子周末来看我」，可以不回',
-      fallbackText: '还在吗，刚才那件事先放着',
-    });
+    expect(talked).toEqual([{ cue: 'followup', instruction: 'CTX', fallbackText: '承接' }]);
   });
 
-  it('a light reply skips the check and then leaves once', () => {
+  it('a light reply after content waits quietly instead of starting another ladder', () => {
     const { d, calls } = make();
     d.onUserFinal('孙子周末来看我');
     d.onAiTurnEnded();
@@ -221,11 +217,11 @@ describe('Director', () => {
     vi.advanceTimersByTime(9999);
     expect(calls).toEqual([['followup', 'CTX']]);
     vi.advanceTimersByTime(1);
-    expect(calls).toEqual([['followup', 'CTX'], ['followup', 'LEAVE']]);
+    expect(calls).toEqual([['followup', 'CTX']]);
     d.onAiTurnEnded();
     d.onUserFinal('好');
     vi.advanceTimersByTime(60000);
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(1);
   });
 
   it('fires the quiet-rest hook once per stretch when silence reaches rest', () => {

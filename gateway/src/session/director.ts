@@ -1,11 +1,18 @@
 import type { ResponseKind } from '@anyidea/protocol';
 import type { ProactiveCue, ProactiveRequest } from '../adapters/types.ts';
 import type { DirectorConfig } from '../roles/types.ts';
+import { log } from '../log.ts';
 
 export type { DirectorConfig, TopicCard } from '../roles/types.ts';
 
+export interface SilenceContext {
+  userText: string;
+  assistantText: string;
+}
+
 export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
+  planContext?(context: SilenceContext, signal: AbortSignal): string | null | Promise<string | null>;
   /** Once per quiet stretch, when silence reaches the rest step. */
   onQuietRest?(): void;
 }
@@ -66,13 +73,16 @@ export class Director {
   private next: SilenceStep = 'context';
   /** Last substantive thing the user said. Step 1 may quote only this, never the assistant. */
   private lastContent = '';
+  private lastAnswer = '';
+  private decision: AbortController | null = null;
+  private silentStretch = false;
   /** True after the opening line has played to the end. Until then, do not say the presence line. */
   private opened = false;
   private hasMemory = false;
   /** The user cut in. Do not resume the script until their reply has finished. */
   private bargeIn = false;
   /** Silence step whose playback is in flight, or the memory notice. */
-  private pending: SilenceStep | 'notice' | null = null;
+  private pending: SilenceStep | 'notice' | 'repair' | null = null;
   /** Still owe the one-time memory notice in this session. */
   private noticePending: boolean;
   /** The notice was cut off. Say it again at the next idle moment. */
@@ -141,6 +151,10 @@ export class Director {
     if (this.pending !== 'notice') this.pending = null;
     if (this.isLight(key)) {
       if (this.left) return;
+      if (this.hadContent) {
+        this.waitQuietly();
+        return;
+      }
       if (this.eased) {
         this.next = 'rest';
         if (!this.aiBusy) this.arm();
@@ -151,8 +165,11 @@ export class Director {
       if (!this.aiBusy) this.arm();
       return;
     }
+    this.quiet = false;
     this.hadContent = true;
     this.lastContent = text.trim();
+    this.lastAnswer = '';
+    this.silentStretch = false;
     this.lightHold = false;
     this.left = false;
     this.eased = false;
@@ -212,7 +229,7 @@ export class Director {
     if (this.pending === 'notice') this.pending = null;
   }
 
-  onAiTurnEnded(): void {
+  onAiTurnEnded(assistantText?: string): void {
     this.aiBusy = false;
     const openingJustFinished = !this.opened;
     this.opened = true;
@@ -231,6 +248,10 @@ export class Director {
       return;
     }
     if (this.quiet || this.left) return;
+    if (done === 'repair' || (done === 'context' && this.hadContent) || this.silentStretch) {
+      this.waitQuietly();
+      return;
+    }
     if (done === 'rest') {
       this.left = true;
       this.lightHold = false;
@@ -263,6 +284,7 @@ export class Director {
       this.arm();
       return;
     }
+    this.lastAnswer = assistantText ?? '';
     this.next = this.lightHold ? 'leave' : 'context';
     this.arm();
   }
@@ -346,6 +368,7 @@ export class Director {
       }
       if (this.quiet || this.left) return;
       const c = this.cfg;
+      this.pending = 'repair';
       this.deps.requestResponse('followup', {
         cue: 'followup',
         instruction: c.bargeMissInstruction ?? DEFAULT_BARGE_MISS_INSTRUCTION,
@@ -365,12 +388,61 @@ export class Director {
   private fire(step: SilenceStep): void {
     this.timer = null;
     if (this.blocked() || this.left) return;
-    this.pending = step;
     if (step === 'rest' && !this.restNoticed) {
       this.restNoticed = true;
       this.deps.onQuietRest?.();
     }
+    if (this.silentStretch) {
+      this.left = true;
+      return;
+    }
+    if (step === 'context' && this.hadContent) {
+      this.planContext();
+      return;
+    }
+    this.pending = step;
     this.deps.requestResponse('followup', this.silenceRequest(step));
+  }
+
+  /** Decide before requesting audio. A cancelled decision can never speak. */
+  private planContext(): void {
+    const controller = new AbortController();
+    this.decision = controller;
+    const accept = (text: string | null) => {
+      if (this.decision !== controller || controller.signal.aborted || this.blocked() || this.left) return;
+      this.decision = null;
+      if (!text?.trim()) {
+        this.waitQuietly();
+        return;
+      }
+      this.pending = 'context';
+      this.deps.requestResponse('followup', {
+        cue: 'followup',
+        instruction: this.silence().contextInstruction
+          .replaceAll('{utterance}', this.lastContent)
+          .replaceAll('{continuation}', text),
+        fallbackText: text,
+      });
+    };
+    const failed = () => {
+      if (this.decision !== controller) return;
+      log('silence_decision_failed', { code: 'decision_error' });
+      accept(null);
+    };
+    try {
+      const result = this.deps.planContext?.({ userText: this.lastContent, assistantText: this.lastAnswer }, controller.signal) ?? null;
+      if (typeof result === 'string' || result === null) accept(result);
+      else void result.then(accept, failed);
+    } catch {
+      failed();
+    }
+  }
+
+  /** Keep the memory rest hook without filling the silence with speech. */
+  private waitQuietly(): void {
+    this.silentStretch = true;
+    this.next = 'rest';
+    if (!this.aiBusy) this.arm();
   }
 
   private delayFor(step: SilenceStep): number {
@@ -470,6 +542,8 @@ export class Director {
   }
 
   private clear(): void {
+    this.decision?.abort();
+    this.decision = null;
     if (!this.timer) return;
     clearTimeout(this.timer);
     this.timer = null;

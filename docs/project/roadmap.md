@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-18. User-trial build. Latest phone feedback: repeated answers stopped, but unrelated silence speech fails the conversation-flow gate; audit below, blocker #43. Current silence rules need a design decision before further implementation. Barge-in is usable, and a non-utterance interrupt says 没听清 instead of 我在. Silence waits are 3s, 6s, 6s, then one looser line after 3 quiet minutes. 「还在吗」is intended to keep the current context, but that behavior is not accepted. Read the pitfalls section before touching silence or barge-in. Formal line-by-line device acceptance is still open.
+Last updated: 2026-10-18. User-trial build. Latest phone feedback: repeated answers stopped, but unrelated silence speech fails the conversation-flow gate; audit below, blocker #43. User approved the #43 silence correction; implementation is in progress under Plan C Task 12 S1–S3. Barge-in is usable, and a non-utterance interrupt says 没听清 instead of 我在. Silence waits are 3s, 6s, 6s, then one looser line after 3 quiet minutes. 「还在吗」is intended to keep the current context, but that behavior is not accepted. Read the pitfalls section before touching silence or barge-in. Formal line-by-line device acceptance is still open.
 
 ## 打断与沉默：已踩过的坑
 
@@ -239,3 +239,11 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 后续验收须覆盖事实问答、经历/情绪、已有充分回应、明确再见、轻声、要求安静后重新开聊、噪声打断、工具轮与过期回执；两种风格都检查多轮相关性和是否应开口，不能只以“不重复”为通过。
 
 本轮实际运行：`npm test -w gateway -- test/director.test.ts test/session.test.ts test/qwen.test.ts`，3 文件、101 测试通过；上述 8 场景基线探针成立。只更新诊断记录，没有产品代码变更、没有新增真实模型请求、没有更改 `.env` 或读取真实记忆正文，没有重启 8787 或操作手机。按 AGENTS §7，先报告原设计缺口并确认修正行为，再开始受影响的实施。
+
+## 沉默流程修正执行（2026-10-18）
+
+- 用户已确认 #43 的修正规则，按既有 Task 12 补入 S1–S3，沿用 `executing-plans` 在当前功能分支顺序执行；不再重复请求同一行为的批准。规格 §2 已记录批准内容，具体任务、接口和检查见计划。
+- 下一步 S1：Director 的发言前判断、取消和状态恢复；前置为已批准的流程核查，均已具备。S2 复用文本客户端做结构化判断及生产接线；S3 做两种风格多轮评测和独立审查。判断失败安静，不采用提示词要求语音模型输出空音频。
+- #43 实施中，尚未声明修复或测试通过；#42 的话题接续、真机听感及假设 8 仍待验。8787 当前进程不随代码编辑重启。原有暂存文档与 `.gitignore` 改动保留。
+
+- S1 已实现并验证：新增 15 项回归先失败（缺少判断门控、取消、quiet 复位与听辨修复阶段），修复后 `npm test -w gateway -- test/director.test.ts test/director-silence.test.ts` 48/48 通过。实质对话最多一句批准的承接、轻声不重启链，跳过语音仍保留静默提取钩子。开场未聊起来的阶梯不变。S2 的实际回答传入和生产文本判断尚待接线，当前不声明整个修复完成。
