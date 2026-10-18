@@ -17,6 +17,8 @@
   "idleNoticeText": "我在呢，不着急，咱们慢慢待着。",
   "resumeInstruction": "网络刚恢复。请自然地说一句「刚才网络断了一下，我们接着聊」，然后接上之前的话题。",
   "resumeText": "刚才网络断了一下，我们接着聊吧。",
+  "toolContinueInstruction": "用一句话接上刚才的动作。不要描述动作过程。",
+  "toolContinueText": "好。",
   "contextAfterMs": 3000,
   "checkAfterMs": 6000,
   "leaveAfterMs": 6000,

@@ -53,6 +53,7 @@ describe('Seeduplex gateway integration', () => {
       followupInstruction: 'followup-instruction', followupText: 'followup-text',
       idleNoticeInstruction: 'idle-instruction', idleNoticeText: 'idle-text',
       resumeInstruction: 'resume-instruction', resumeText: 'resume-text',
+      toolContinueInstruction: 'C', toolContinueText: '好。',
     };
     const roles = fixedRoleCatalog('P', director);
     manager = new SessionManager((ctx) => new Session({

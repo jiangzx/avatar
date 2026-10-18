@@ -19,6 +19,8 @@ export interface MockScript {
   /** Optional lines for the Director's idle notice and resume cues. */
   idleNotice?: string;
   resume?: string;
+  /** Optional line for a tool-turn continuation. Falls back to followup. */
+  toolContinue?: string;
   fallbackReply: string;
   turns: MockTurn[];
 }
@@ -108,6 +110,7 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
       followup: s.followup,
       idleNotice: s.idleNotice ?? s.followup,
       resume: s.resume ?? s.followup,
+      toolContinue: s.toolContinue ?? s.followup,
     };
     const text = request ? byCue[request.cue] : this.createCount === 0 ? s.greeting : s.followup;
     this.createCount++;

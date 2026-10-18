@@ -21,6 +21,8 @@ const cfg: DirectorConfig = {
   idleNoticeText: 'idle',
   resumeInstruction: 'R',
   resumeText: 'resume',
+  toolContinueInstruction: 'C',
+  toolContinueText: '好。',
   contextInstruction: 'CTX',
   presenceInstruction: 'HERE',
   presenceText: '我在',

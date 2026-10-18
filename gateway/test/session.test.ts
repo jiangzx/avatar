@@ -6,6 +6,7 @@ import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import type { ReplyMetrics } from '../src/session/metrics.ts';
+import { InterruptCoordinator } from '../src/session/interrupt.ts';
 import { Session, type SessionDeps, type Transport } from '../src/session/session.ts';
 
 const script: MockScript = {
@@ -21,6 +22,7 @@ const script: MockScript = {
 const director: DirectorConfig = {
   followupAfterMs: 8000, idleNoticeAfterMs: 25000, maxConsecutive: 2, maxPerWindow: 3, windowMs: 300000,
   quietPhrases: [], greetingInstruction: 'G', greetingText: 'greeting', followupInstruction: 'F', followupText: 'followup', idleNoticeInstruction: 'I', idleNoticeText: 'idle', resumeInstruction: 'R', resumeText: 'resume',
+  toolContinueInstruction: '用一句话接上刚才的动作。不要描述动作过程。', toolContinueText: '好。',
 };
 
 function collector() {
@@ -570,6 +572,44 @@ describe('Session', () => {
     await s.session.start(s.transport);
     expect(seen).toHaveLength(1);
     expect('maxOutputTokens' in seen[0]!).toBe(false);
+  });
+
+  it('continues after a tool action once playback ends and keeps the mic quiet', async () => {
+    const s = setup();
+    const finished = vi.spyOn(InterruptCoordinator.prototype, 'onResponseFinished');
+    try {
+      await greetAndFinish(s);
+      finished.mockClear();
+      const creates = vi.spyOn(s.mocks[0], 'createResponse');
+      s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
+      await vi.advanceTimersByTimeAsync(1000);
+      const originSeq = s.session.lastResponseSeq;
+      expect(s.mocks[0].toolResults).toEqual([{ callId: 'call-mock-2', result: { ok: true } }]);
+      expect(of(s.sent, 'avatar.action').some((m) => m.action === 'wave')).toBe(true);
+      expect(of(s.sent, 'response.cancelled')).toContainEqual({ type: 'response.cancelled', responseSeq: originSeq });
+      expect(finished).toHaveBeenCalledWith(originSeq);
+      const finishOrder = finished.mock.invocationCallOrder[0]!;
+      const uplink = vi.spyOn(s.mocks[0], 'sendAudio');
+      s.session.handleMicAudio(loud());
+      s.session.handleMicAudio(quiet());
+      expect(uplink).not.toHaveBeenCalled();
+      s.mocks[0].emit('error', 'invalid_request_error', true);
+      expect(of(s.sent, 'error')).toEqual([]);
+      s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+      expect(creates).not.toHaveBeenCalled();
+      s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: originSeq, playedMs: 300, reason: 'ended' });
+      expect(creates).toHaveBeenCalledTimes(1);
+      expect(creates).toHaveBeenCalledWith({
+        cue: 'toolContinue',
+        instruction: '用一句话接上刚才的动作。不要描述动作过程。',
+        fallbackText: '好。',
+      });
+      expect(finishOrder).toBeLessThan(creates.mock.invocationCallOrder[0]!);
+      s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: originSeq, playedMs: 300, reason: 'ended' });
+      expect(creates).toHaveBeenCalledTimes(1);
+    } finally {
+      finished.mockRestore();
+    }
   });
 
   it('sends avatar emotions from user and assistant text when configured', async () => {

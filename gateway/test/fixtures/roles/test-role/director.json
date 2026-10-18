@@ -5,5 +5,6 @@
   "followupInstruction": "F", "followupText": "followup",
   "idleNoticeInstruction": "I", "idleNoticeText": "idle",
   "resumeInstruction": "R", "resumeText": "resume",
+  "toolContinueInstruction": "C", "toolContinueText": "好。",
   "topicInstruction": "T {topic}"
 }

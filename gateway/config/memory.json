@@ -1,3 +1,4 @@
 {
-  "instructions": { "budgetRatio": 0.4, "snapshotMaxChars": 600, "summaryMaxChars": 800, "minHistoryChars": 400 }
+  "instructions": { "budgetRatio": 0.4, "snapshotMaxChars": 600, "summaryMaxChars": 800, "minHistoryChars": 400 },
+  "toolTurnTimeoutMs": 15000
 }

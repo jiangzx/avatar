@@ -22,6 +22,9 @@ const PacingSchema = z.object({
   policies: z.object({ summarize: PolicySchema }).strict(),
 }).strict();
 
+/** Fallback when a test omits SessionDeps.toolTurnTimeoutMs. Same value as gateway/config/memory.json. */
+export const DEFAULT_TOOL_TURN_TIMEOUT_MS = 15_000;
+
 const MemoryBudgetSchema = z.object({
   instructions: z.object({
     budgetRatio: z.number().gt(0).max(0.4),
@@ -29,6 +32,7 @@ const MemoryBudgetSchema = z.object({
     summaryMaxChars: z.number().int().min(100).max(5_000),
     minHistoryChars: z.number().int().min(100).max(5_000),
   }).strict(),
+  toolTurnTimeoutMs: z.number().int().min(3_000).max(30_000),
 }).loose(); // Plan C adds extraction settings next to `instructions`
 
 export type PacingConfig = z.infer<typeof PacingSchema>;

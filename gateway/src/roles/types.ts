@@ -65,6 +65,9 @@ export interface DirectorConfig {
   idleNoticeText: string;
   resumeInstruction: string;
   resumeText: string;
+  /** Spoken after a tool action, once the origin reply has finished playing. */
+  toolContinueInstruction: string;
+  toolContinueText: string;
   /** Silence-topic template; `{topic}` is replaced by the card prompt. */
   topicInstruction?: string;
   topics?: readonly TopicCard[];

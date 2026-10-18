@@ -17,7 +17,7 @@ export interface SessionConfig {
 }
 
 /** What the Director wants said. Qwen speaks from `instruction`; adapters that cannot prompt the model speak `fallbackText`. */
-export type ProactiveCue = 'greeting' | 'followup' | 'idleNotice' | 'resume';
+export type ProactiveCue = 'greeting' | 'followup' | 'idleNotice' | 'resume' | 'toolContinue';
 
 export interface ProactiveRequest {
   cue: ProactiveCue;

@@ -362,6 +362,7 @@ export class Director {
       case 'followup': return { cue, instruction: c.followupInstruction, fallbackText: c.followupText };
       case 'idleNotice': return { cue, instruction: c.idleNoticeInstruction, fallbackText: c.idleNoticeText };
       case 'resume': return { cue, instruction: c.resumeInstruction, fallbackText: c.resumeText };
+      case 'toolContinue': return { cue, instruction: c.toolContinueInstruction, fallbackText: c.toolContinueText };
     }
   }
 

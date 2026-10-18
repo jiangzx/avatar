@@ -19,6 +19,8 @@ import { InterruptCoordinator } from './interrupt.ts';
 import { buildInstructions, historyBudget, type InstructionBudget } from './instructions.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
+import { DEFAULT_TOOL_TURN_TIMEOUT_MS } from './pacing.ts';
+import { ToolTurn } from './toolTurn.ts';
 
 export interface Transport {
   send(msg: ServerMessage): void;
@@ -43,6 +45,8 @@ export interface SessionDeps {
   maxOutputTokens?: number;
   /** Uplink resumes this long after playback ended (reason=ended) when the model owns turns. */
   tailGuardMs?: number;
+  /** Tool-turn wait. Omitted in tests: DEFAULT_TOOL_TURN_TIMEOUT_MS, same as gateway/config/memory.json. */
+  toolTurnTimeoutMs?: number;
   /** Instruction size budget (gateway/config/memory.json); undefined = unbounded (tests). */
   budget?: InstructionBudget;
   /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
@@ -108,6 +112,14 @@ export class Session {
   private vadSilentCount = 0;
   private modelGenerating = false;
   private uplinkResumeAt = 0;
+  private readonly toolTurn: ToolTurn;
+  private toolTimer: NodeJS.Timeout | null = null;
+  /** Seq passed to toolTurn.start. Playback for any other seq is ignored. */
+  private toolOriginSeq: number | null = null;
+  /** Set in the same breath as onContinuationRequested. readyForContinuation stays true after that. */
+  private continuationAsked = false;
+  /** director.resume() on a tool-turn end must not start another reply. */
+  private holdDirector = false;
 
   constructor(private readonly deps: SessionDeps, ctx: SessionContext = devContext(deps.roles)) {
     this.context = ctx;
@@ -122,6 +134,7 @@ export class Session {
       confirmWindowMs: deps.confirmWindowMs ?? 300,
       cancel: (seq, source) => this.cancel(seq, source),
     });
+    this.toolTurn = new ToolTurn(Date.now, deps.toolTurnTimeoutMs ?? DEFAULT_TOOL_TURN_TIMEOUT_MS);
     this.adapter = this.createAdapter();
   }
 
@@ -161,7 +174,7 @@ export class Session {
   }
 
   handleMicAudio(pcm: Int16Array): void {
-    if (this.muted || this.ended) return;
+    if (this.muted || this.ended || this.toolTurn.active) return;
     if (this.rebuilding || this.rebuildTimer) {
       if (this.rebuildMicBuffer.length < MAX_REBUILD_MIC_FRAMES) this.rebuildMicBuffer.push(pcm.slice());
       return;
@@ -204,6 +217,10 @@ export class Session {
     switch (msg.type) {
       case 'vad': {
         const speaking = msg.state === 'speaking';
+        if (speaking && this.toolTurn.active) {
+          const end = this.toolTurn.onUserSpeaking();
+          if (end) this.releaseToolTurn(false);
+        }
         if (speaking) this.vadSpeakingCount++;
         else this.vadSilentCount++;
         log('vad_edge', {
@@ -232,22 +249,31 @@ export class Session {
         s.playedMs = Math.max(s.playedMs, msg.playedMs);
         if (msg.reason === 'interrupted') {
           const wasActive = this.interrupt.active === msg.responseSeq;
+          const toolOrigin = this.toolTurn.active && msg.responseSeq === this.toolOriginSeq;
           this.interrupt.onClientInterrupted(msg.responseSeq);
           this.streamBarge = false;
           this.bargePreroll.length = 0;
           this.finalize(s, true);
           this.uplinkResumeAt = 0; // the user may be talking: no speaker tail to guard against
           if (wasActive) this.director.onAssistantInterrupted();
+          if (toolOrigin && this.toolTurn.onCancel()) this.releaseToolTurn(false);
         } else {
+          const toolOrigin = this.toolTurn.active && msg.responseSeq === this.toolOriginSeq;
           // Stale end (already cancelled/superseded, a newer turn may be active): ignore.
-          if (this.interrupt.active !== msg.responseSeq) break;
+          // A tool origin stays eligible after the forced finish clears interrupt.active.
+          if (!toolOrigin && this.interrupt.active !== msg.responseSeq) break;
           this.streamBarge = false;
           this.bargePreroll.length = 0;
           this.finalize(s, false);
           this.interrupt.onResponseFinished(msg.responseSeq);
           this.uplinkResumeAt = Date.now() + (this.deps.tailGuardMs ?? 0);
-          this.director.onAiTurnEnded();
-          this.maybeSlimContext();
+          if (toolOrigin) {
+            this.toolTurn.onOriginPlaybackEnded();
+            this.maybeContinue();
+          } else {
+            this.director.onAiTurnEnded();
+            this.maybeSlimContext();
+          }
         }
         break;
       }
@@ -271,6 +297,7 @@ export class Session {
   end(): void {
     if (this.ended) return;
     this.ended = true;
+    this.clearToolTimer();
     if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
     this.rebuildTimer = null;
     this.rebuildMicBuffer.length = 0;
@@ -309,7 +336,8 @@ export class Session {
   }
 
   private requestResponse(kind: ResponseKind, request: ProactiveRequest): void {
-    if (this.ended || this.interrupt.active !== null || this.modelGenerating) return; // never talk over an active or generating response
+    // Tool turns speak only through maybeContinue. Timeout and barge-in resume the director without a new reply.
+    if (this.holdDirector || this.toolTurn.active || this.ended || this.interrupt.active !== null || this.modelGenerating) return;
     this.pendingKind = kind;
     this.adapter.createResponse(request);
   }
@@ -361,6 +389,7 @@ export class Session {
     a.on('audioDelta', (id, pcm) => {
       const s = this.live(a, id);
       if (!s) return;
+      this.noteToolAudio(s);
       if (s.audioMs === 0) this.metrics.onFirstAudio(s.seq);
       s.audioMs += (pcm.length / AI_SAMPLE_RATE) * 1000;
       this.transport?.sendAudio(s.seq, pcm);
@@ -386,6 +415,7 @@ export class Session {
       if (s) this.metrics.onToolCall(s.seq);
       const cancelled = s ? this.interrupt.isCancelled(s.seq) : false;
       if (action && !cancelled) this.send({ type: 'avatar.action', action, source: 'tool' });
+      if (s && !cancelled) this.beginToolTurn(s);
     });
     a.on('responseDone', (id) => {
       const s = this.live(a, id);
@@ -395,6 +425,14 @@ export class Session {
         this.send({ type: 'response.end', responseSeq: s.seq });
         this.modelGenerating = false;
         this.responseLive = false;
+        if (this.toolTurn.active && s.seq === this.toolOriginSeq) {
+          this.toolTurn.onOriginDone();
+          this.maybeContinue();
+        } else if (this.toolTurn.active && this.continuationAsked && s.seq !== this.toolOriginSeq) {
+          this.toolTurn.onContinuationStarted();
+          const end = this.toolTurn.onContinuationDone(s.audioMs > 0);
+          if (end) this.releaseToolTurn(true);
+        }
       }
     });
     a.on('responseCancelled', (id) => {
@@ -405,10 +443,11 @@ export class Session {
       this.responseLive = false;
       log('model_auto_cancel', { seq: s.seq });
       this.finalize(s, true);
+      if (this.toolTurn.active && s.seq === this.toolOriginSeq && this.toolTurn.onCancel()) this.releaseToolTurn(false);
     });
     a.on('error', (code, retryable) => {
       if (!current()) return;
-      const errorClass = classifyAdapterError(code, false);
+      const errorClass = classifyAdapterError(code, this.toolTurn.active);
       log('adapter_error', { code, class: errorClass });
       this.metrics.onError(code);
       if (errorClass === 'ignorable') return;
@@ -466,6 +505,72 @@ export class Session {
     this.maybeSummarize();
   }
 
+  /** Clears a still-playing origin so the later continuation is not judged superseded. */
+  private beginToolTurn(s: ResponseState): void {
+    const active = this.interrupt.active;
+    if (active !== null) {
+      this.interrupt.onResponseFinished(active);
+      this.send({ type: 'response.cancelled', responseSeq: active });
+    }
+    this.toolOriginSeq = s.seq;
+    this.continuationAsked = false;
+    this.toolTurn.start(s.seq);
+    if (s.audioMs > 0) this.toolTurn.onOriginAudio();
+    this.armToolTimer();
+    this.director.pause();
+  }
+
+  private noteToolAudio(s: ResponseState): void {
+    if (!this.toolTurn.active) return;
+    if (s.seq === this.toolOriginSeq && !this.continuationAsked) {
+      this.toolTurn.onOriginAudio();
+      return;
+    }
+    if (!this.continuationAsked || s.seq === this.toolOriginSeq) return;
+    this.toolTurn.onContinuationStarted();
+    const end = this.toolTurn.onContinuationAudio();
+    if (end) this.releaseToolTurn(true);
+  }
+
+  private maybeContinue(): void {
+    if (this.ended || this.continuationAsked || !this.toolTurn.readyForContinuation()) return;
+    this.continuationAsked = true;
+    this.toolTurn.onContinuationRequested();
+    const cfg = this.deps.roles.director(this.context.roleId);
+    this.adapter.createResponse({
+      cue: 'toolContinue',
+      instruction: cfg.toolContinueInstruction,
+      fallbackText: cfg.toolContinueText,
+    });
+  }
+
+  private armToolTimer(): void {
+    this.clearToolTimer();
+    const timeoutMs = this.deps.toolTurnTimeoutMs ?? DEFAULT_TOOL_TURN_TIMEOUT_MS;
+    this.toolTimer = setTimeout(() => {
+      this.toolTimer = null;
+      if (this.ended || this.toolTurn.tick() !== 'timeout') return;
+      this.releaseToolTurn(false);
+    }, timeoutMs);
+  }
+
+  private clearToolTimer(): void {
+    if (!this.toolTimer) return;
+    clearTimeout(this.toolTimer);
+    this.toolTimer = null;
+  }
+
+  /** allowSpeech is true only when the continuation itself ended the turn. */
+  private releaseToolTurn(allowSpeech: boolean): void {
+    this.clearToolTimer();
+    this.continuationAsked = false;
+    this.toolOriginSeq = null;
+    if (this.ended) return;
+    if (!allowSpeech) this.holdDirector = true;
+    this.director.resume();
+    this.holdDirector = false;
+  }
+
   private maybeSummarize(): void {
     if (!this.ledger.needsSummary() || this.summarizeInFlight) return;
     if (Date.now() < this.summarizeRetryAt) return;
@@ -486,6 +591,7 @@ export class Session {
   }
 
   private maybeSlimContext(): void {
+    if (this.toolTurn.active) return;
     const limit = (this.deps.modelContextTokenLimit ?? 12_000) * (this.deps.rebuildTriggerRatio ?? 0.8);
     // The model holds the instructions it was last given plus everything said since the rebuild.
     const estimate = this.charsSinceRebuild + this.lastInstructionsChars;
@@ -493,7 +599,9 @@ export class Session {
   }
 
   private async rebuild(reason: 'error' | 'closed' | 'slim'): Promise<void> {
+    if (reason === 'slim' && this.toolTurn.active) return;
     if (this.rebuilding || this.rebuildTimer || this.ended) return;
+    if (this.toolTurn.onRebuild()) this.releaseToolTurn(false);
     this.rebuilding = true;
     log('model_rebuild', { reason });
     if (reason !== 'slim') this.send({ type: 'error', code: 'model_reconnecting', retryable: true });
@@ -540,7 +648,7 @@ export class Session {
     if (this.keepalive) return;
     const silence = new Int16Array(MIC_FRAME_SAMPLES);
     this.keepalive = setInterval(() => {
-      if (!this.rebuilding && !this.ended) this.adapter.sendAudio(silence);
+      if (!this.rebuilding && !this.ended && !this.toolTurn.active) this.adapter.sendAudio(silence);
     }, 20);
   }
 
