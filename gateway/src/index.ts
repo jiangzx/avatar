@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
-import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
+import { loadConfig, loadIdentityConfig, loadSafetyConfig, makeOriginCheck } from './config.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
 import { log } from './log.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from './session/pacing.ts';
@@ -26,6 +26,13 @@ const memory = loadMemoryBudget(`${root}config/memory.json`);
 const budgetReport = validateBudgets(pacing, memory, config.ledger, roles.pairs().map((p) => roles.buildPersona(p.roleId, p.styleId)));
 log('instruction_budget', { totalChars: budgetReport.budget.totalChars, minHistoryChars: budgetReport.minHistoryChars, ledgerCapped: budgetReport.ledgerCapped });
 const emotion = loadEmotionConfig(`${root}config/emotion.json`);
+const safety = loadSafetyConfig(`${root}config/safety.json`);
+log('safety_rules', {
+  rejectPhrases: safety.rejectPhrases.length,
+  degradePhrases: safety.degradePhrases.length,
+  markPhrases: safety.markPhrases.length,
+  invisibleCodePoints: safety.invisibleCodePoints.length,
+});
 const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });

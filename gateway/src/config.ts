@@ -252,3 +252,23 @@ export function loadIdentityConfig(env: Record<string, string | undefined>, repo
 }
 
 export { DirectorSchema };
+
+const SingleChar = z.string().regex(/^.$/u);
+const DigitChar = z.string().regex(/^[0-9]$/);
+const PhraseList = z.array(z.string().min(1)).min(1);
+
+/** Scan phrases, the Chinese digit map, and the long-number threshold. */
+const SafetyRulesSchema = z.object({
+  minMaskedDigits: z.number().int().min(1).max(64),
+  chineseDigits: z.record(SingleChar, DigitChar).refine((map) => Object.keys(map).length > 0, { message: 'chineseDigits must not be empty' }),
+  rejectPhrases: PhraseList,
+  invisibleCodePoints: z.array(z.number().int().min(0).max(0x10FFFF)).min(1),
+  degradePhrases: PhraseList,
+  markPhrases: PhraseList,
+}).strict();
+
+export type SafetyRules = z.infer<typeof SafetyRulesSchema>;
+
+export function loadSafetyConfig(path: string): SafetyRules {
+  return SafetyRulesSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+}
