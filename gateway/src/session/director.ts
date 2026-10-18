@@ -476,7 +476,7 @@ export class Director {
     return { cue: 'followup', instruction: s.leaveInstruction, fallbackText: s.leaveText };
   }
 
-  /** 「还在吗」plus one line of the actual context. Do not invent a topic. */
+  /** 「您还方便吗」plus one line of the actual context. Do not invent a topic. */
   private checkRequest(s: SilenceCopy): ProactiveRequest {
     if (this.hadContent && s.checkContextInstruction) {
       return {

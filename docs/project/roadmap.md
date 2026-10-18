@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-18. User-trial build. The #43 silence correction is implemented and synthetically evaluated; phone listening acceptance remains open. The three-step proactive ladder now continues after substantive replies and falls back to the configured context line when the optional planner declines or fails. Barge-in is usable, and a non-utterance interrupt says 没听清 instead of 我在. Silence waits are 3s, 6s, 6s, then one looser line after 3 quiet minutes. Read the pitfalls section before touching silence or barge-in. Formal line-by-line device acceptance is still open.
+Last updated: 2026-10-18. User-trial build. The #43 silence correction is implemented and synthetically evaluated; phone listening acceptance remains open. The three-step proactive ladder now continues after substantive replies and falls back to the configured context line when the optional planner declines or fails. Barge-in is usable, and a non-utterance interrupt says 没听清 instead of 我在. Silence waits are 3s, 12s, 12s, then one looser line after 3 quiet minutes. The timing and copy adjustment passed `npm test -w gateway` (435 tests) and `npm run typecheck -w gateway`. Read the pitfalls section before touching silence or barge-in. Formal line-by-line device acceptance is still open.
 
 ## 打断与沉默：已踩过的坑
 
@@ -22,9 +22,9 @@ Last updated: 2026-10-18. User-trial build. The #43 silence correction is implem
 
 ## 沉默话术（2026-10-18）
 
-已写进 `director.json`，规格见陪伴记忆设计第 2 节。三档等待是 3 秒、6 秒、6 秒。这一版拿去给用户试，正式逐句验收还没做。
+已写进 `director.json`，规格见陪伴记忆设计第 2 节。三档等待是 3 秒、12 秒、12 秒。这一版拿去给用户试，正式逐句验收还没做。
 
-1. 「还在吗」后面加一句当时的上下文。没聊起来时是称呼；有记忆但这次还没说话时不编具体的事；用户说过话时第二句只点 `{utterance}`。指令里不要再放第二句的例句。
+1. 「您还方便吗」后面加一句当时的上下文。没聊起来时是称呼；有记忆但这次还没说话时不编具体的事；用户说过话时第二句只点 `{utterance}`。指令里不要再放第二句的例句。
 2. 短沉默说「我先安静一会儿，想聊随时喊我。」再安静 3 分钟说「你可以先自己放空一会儿，不用急着回我。」然后停。短离开之后的轻声不立刻再开口，安静满 3 分钟仍说更松的那句。不要把旧的等待句写回指令，否定句里夹着那句也会被照读。
 
 ## Phases

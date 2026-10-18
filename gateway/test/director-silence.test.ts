@@ -39,11 +39,11 @@ describe('substantive conversation silence', () => {
     expect(s.requests).toHaveLength(1);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('我在');
-    await vi.advanceTimersByTimeAsync(6000);
+    await vi.advanceTimersByTimeAsync(12000);
     expect(s.requests).toHaveLength(2);
     s.d.onAiTurnStarted();
-    s.d.onAiTurnEnded('还在吗，刚才那件事先放着，不急着回。');
-    await vi.advanceTimersByTimeAsync(6000);
+    s.d.onAiTurnEnded('您还方便吗，刚才那件事先放着，不急着回。');
+    await vi.advanceTimersByTimeAsync(12000);
     expect(s.requests).toHaveLength(3);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('我先安静一会儿，想聊随时喊我。');
@@ -65,11 +65,11 @@ describe('substantive conversation silence', () => {
     }]);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('走累了，脚酸着也不好受。');
-    await vi.advanceTimersByTimeAsync(6000);
+    await vi.advanceTimersByTimeAsync(12000);
     expect(s.requests).toHaveLength(2);
     s.d.onAiTurnStarted();
-    s.d.onAiTurnEnded('还在吗，刚才那件事先放着，不急着回。');
-    await vi.advanceTimersByTimeAsync(6000);
+    s.d.onAiTurnEnded('您还方便吗，刚才那件事先放着，不急着回。');
+    await vi.advanceTimersByTimeAsync(12000);
     expect(s.requests).toHaveLength(3);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('我先安静一会儿，想聊随时喊我。');
@@ -109,7 +109,7 @@ describe('substantive conversation silence', () => {
     expect(s.requests).toHaveLength(1);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('我在');
-    await vi.advanceTimersByTimeAsync(6000);
+    await vi.advanceTimersByTimeAsync(12000);
     expect(s.requests).toHaveLength(2);
     s.d.stop();
   });
@@ -162,15 +162,19 @@ describe('substantive conversation silence', () => {
     expect(s.requests).toHaveLength(1);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('走累了，脚酸着也不好受。');
-    await vi.advanceTimersByTimeAsync(6000);
+    await vi.advanceTimersByTimeAsync(11999);
+    expect(s.requests).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
     expect(s.requests).toHaveLength(2);
     s.d.onAiTurnStarted();
-    s.d.onAiTurnEnded('还在吗，刚才那件事先放着，不急着回。');
-    await vi.advanceTimersByTimeAsync(6000);
+    s.d.onAiTurnEnded('您还方便吗，刚才那件事先放着，不急着回。');
+    await vi.advanceTimersByTimeAsync(11999);
+    expect(s.requests).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
     expect(s.requests).toHaveLength(3);
     expect(s.requests.map((request) => request.fallbackText)).toEqual([
       '走累了，脚酸着也不好受。',
-      '还在吗，刚才那件事先放着，不急着回。',
+      '您还方便吗，刚才那件事先放着，不急着回。',
       '我先安静一会儿，想聊随时喊我。',
     ]);
     s.d.stop();
@@ -179,7 +183,7 @@ describe('substantive conversation silence', () => {
   it('does not restart the silence ladder after a noise-hearing repair', async () => {
     const s = setup();
     s.d.onAiTurnEnded();
-    for (const wait of [3000, 6000, 6000]) {
+    for (const wait of [3000, 12000, 12000]) {
       await vi.advanceTimersByTimeAsync(wait);
       s.d.onAiTurnStarted();
       if (wait === 3000 || s.requests.length < 3) s.d.onAiTurnEnded();

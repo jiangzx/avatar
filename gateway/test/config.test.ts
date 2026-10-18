@@ -94,14 +94,14 @@ describe('config', () => {
     expect(d.maxPerWindow).toBe(8);
     expect(d.companyAfterMs).toBe(45000);
     expect(d.contextAfterMs).toBe(3000);
-    expect(d.checkAfterMs).toBe(6000);
-    expect(d.leaveAfterMs).toBe(6000);
+    expect(d.checkAfterMs).toBe(12000);
+    expect(d.leaveAfterMs).toBe(12000);
     expect(d.restAfterMs).toBe(180000);
     expect(d.presenceText).toBe('我在');
-    expect(d.checkText).toBe('还在吗，称呼不急，您方便的时候再说就好。');
+    expect(d.checkText).toBe('您还方便吗，称呼不急，您方便的时候再说就好。');
     expect(d.checkContextInstruction).toContain('{utterance}');
     expect(d.checkContextInstruction).not.toContain('我在');
-    expect(d.checkContextText).toBe('还在吗，刚才那件事先放着，不急着回。');
+    expect(d.checkContextText).toBe('您还方便吗，刚才那件事先放着，不急着回。');
     expect(d.leaveText).toBe('我先安静一会儿，想聊随时喊我。');
     expect(d.restText).toBe('你可以先自己放空一会儿，不用急着回我。');
     expect(d.leaveInstruction).not.toContain('你想说话我就在');

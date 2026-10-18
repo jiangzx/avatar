@@ -166,38 +166,38 @@ describe('Director', () => {
     const open = new Director({
       ...cfg,
       checkInstruction: 'CHECK_NAME',
-      checkText: '还在吗，称呼不急',
+      checkText: '您还方便吗，称呼不急',
       checkContextInstruction: '点到「{utterance}」，可以不回',
-      checkContextText: '还在吗，刚才那件事先放着',
+      checkContextText: '您还方便吗，刚才那件事先放着',
       checkMemoryInstruction: 'CHECK_MEMORY',
-      checkMemoryText: '还在吗，刚才那件事不急',
+      checkMemoryText: '您还方便吗，刚才那件事不急',
     }, { requestResponse: (_k, r) => openReqs.push(r) });
     open.onAiTurnEnded();
     vi.advanceTimersByTime(5000);
     open.onAiTurnEnded();
     vi.advanceTimersByTime(10000);
-    expect(openReqs.at(-1)).toEqual({ cue: 'followup', instruction: 'CHECK_NAME', fallbackText: '还在吗，称呼不急' });
+    expect(openReqs.at(-1)).toEqual({ cue: 'followup', instruction: 'CHECK_NAME', fallbackText: '您还方便吗，称呼不急' });
 
     const remembered: ProactiveRequest[] = [];
     const memory = new Director({
       ...cfg,
       checkInstruction: 'CHECK_NAME',
-      checkText: '还在吗，称呼不急',
+      checkText: '您还方便吗，称呼不急',
       checkMemoryInstruction: 'CHECK_MEMORY',
-      checkMemoryText: '还在吗，刚才那件事不急',
+      checkMemoryText: '您还方便吗，刚才那件事不急',
     }, { requestResponse: (_k, r) => remembered.push(r) });
     memory.onSessionStart(true);
     memory.onAiTurnEnded();
     vi.advanceTimersByTime(5000);
     memory.onAiTurnEnded();
     vi.advanceTimersByTime(10000);
-    expect(remembered.at(-1)).toEqual({ cue: 'followup', instruction: 'CHECK_MEMORY', fallbackText: '还在吗，刚才那件事不急' });
+    expect(remembered.at(-1)).toEqual({ cue: 'followup', instruction: 'CHECK_MEMORY', fallbackText: '您还方便吗，刚才那件事不急' });
 
     const talked: ProactiveRequest[] = [];
     const d = new Director({
       ...cfg,
       checkContextInstruction: '点到「{utterance}」，可以不回',
-      checkContextText: '还在吗，刚才那件事先放着',
+      checkContextText: '您还方便吗，刚才那件事先放着',
     }, { requestResponse: (_k, r) => talked.push(r), planContext: () => '承接' });
     d.onUserFinal('孙子周末来看我');
     d.onAiTurnEnded();
@@ -209,7 +209,7 @@ describe('Director', () => {
       {
         cue: 'followup',
         instruction: '点到「孙子周末来看我」，可以不回',
-        fallbackText: '还在吗，刚才那件事先放着',
+        fallbackText: '您还方便吗，刚才那件事先放着',
       },
     ]);
   });
