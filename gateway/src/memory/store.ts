@@ -43,6 +43,13 @@ export interface MemoryStore {
   countOwnersCreatedSince(since: number): number;
   /** Deletes up to `limit` owners created before the cutoff that never started a session. */
   deleteOrphanOwners(createdBefore: number, limit: number): number;
+  /** Records that the memory notice finished. */
+  markNotified(ownerId: string, now: number): void;
+  setConsent(ownerId: string, consent: 'granted' | 'declined', now: number): void;
+  /** Increments memory_epoch and returns the new value. */
+  bumpEpoch(ownerId: string): number;
+  /** Inserts one message when that owner row exists. */
+  insertMessage(row: { id: string; sessionId: string; ownerId: string; role: 'user' | 'assistant'; text: string; bigrams: string; now: number }): void;
 }
 
 type Row = Record<string, unknown>;
@@ -69,6 +76,12 @@ function prepareStatements(db: DatabaseSync) {
       WHERE o.created_at < ?
         AND NOT EXISTS (SELECT 1 FROM agents a JOIN sessions s ON s.agent_id = a.id WHERE a.owner_id = o.id)
       LIMIT ?`),
+    markNotified: p('UPDATE owners SET notified_at = ? WHERE id = ?'),
+    setConsent: p('UPDATE owners SET memory_consent = ? WHERE id = ?'),
+    bumpEpoch: p('UPDATE owners SET memory_epoch = memory_epoch + 1 WHERE id = ? RETURNING memory_epoch'),
+    insertMessage: p(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, created_at)
+      SELECT ?, ?, ?, ?, ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM owners WHERE id = ?)`),
   };
 }
 
@@ -162,6 +175,24 @@ export class SqliteMemoryStore implements MemoryStore {
       for (const id of ids) this.q.deleteOwner.run(id);
       return ids.length;
     });
+  }
+
+  markNotified(ownerId: string, now: number): void {
+    this.q.markNotified.run(now, ownerId);
+  }
+
+  setConsent(ownerId: string, consent: 'granted' | 'declined', _now: number): void {
+    this.q.setConsent.run(consent, ownerId);
+  }
+
+  bumpEpoch(ownerId: string): number {
+    const row = this.q.bumpEpoch.get(ownerId) as { memory_epoch: number } | undefined;
+    if (!row) throw new Error('owner not found');
+    return row.memory_epoch;
+  }
+
+  insertMessage(row: { id: string; sessionId: string; ownerId: string; role: 'user' | 'assistant'; text: string; bigrams: string; now: number }): void {
+    this.q.insertMessage.run(row.id, row.sessionId, row.ownerId, row.role, row.text, row.bigrams, row.now, row.ownerId);
   }
 
   private tx<T>(body: () => T): T {

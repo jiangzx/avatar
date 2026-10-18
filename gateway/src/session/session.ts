@@ -12,6 +12,7 @@ import { PERFORM_ACTION_TOOL, type AdapterFactory, type ProactiveRequest, type R
 import { log } from '../log.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
+import type { TranscriptWriter } from '../memory/writer.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { devContext, type SessionContext } from './context.ts';
 import { Director } from './director.ts';
@@ -28,10 +29,7 @@ export interface Transport {
   sendAudio(seq: number, pcm: Int16Array): void;
 }
 
-/** Persists one transcript turn. Implementations must not log the text. */
-export interface TranscriptWriter {
-  append(input: { ownerId: string; sessionId: string; role: 'user' | 'assistant'; text: string; now: number }): 'stored' | 'skipped' | 'rejected';
-}
+export type { TranscriptWriter };
 
 export interface SessionDeps {
   adapterFactory: AdapterFactory;
