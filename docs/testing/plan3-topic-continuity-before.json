@@ -1,0 +1,69 @@
+{
+  "synthetic": true,
+  "simulatedPlayback": true,
+  "phoneAcceptance": false,
+  "cases": [
+    {
+      "id": "empty-old-friend",
+      "style": "old-friend",
+      "history": false,
+      "question": "上次我们聊到哪儿了？",
+      "records": [
+        {
+          "stage": "greeting",
+          "seq": 1,
+          "kind": "greeting",
+          "text": "你好，我是小暖，专门来陪你聊聊天。怎么称呼你呀？",
+          "audioMs": 4980
+        },
+        {
+          "stage": "answer",
+          "seq": 2,
+          "kind": "reply",
+          "text": "咱们好像还没聊过呢，我是第一次见你。你想从哪儿开始聊起？",
+          "audioMs": 5220
+        },
+        {
+          "stage": "context",
+          "seq": 3,
+          "kind": "followup",
+          "text": "咱们之前好像没聊过，这是头一回见面。你想先说说最近的事，还是随便聊聊？",
+          "audioMs": 6740
+        },
+        {
+          "stage": "check",
+          "seq": 4,
+          "kind": "followup",
+          "text": "我在呢。咱们之前没聊过，你想说的时候随时叫我。",
+          "audioMs": 4500
+        },
+        {
+          "stage": "leave",
+          "seq": 5,
+          "kind": "followup",
+          "text": "我先安静一会儿，想聊随时喊我。",
+          "audioMs": 3250
+        },
+        {
+          "stage": "repeated-user-question",
+          "seq": 6,
+          "kind": "reply",
+          "text": "咱们之前好像没聊过，这是头一回见面。你想从哪儿开始聊起？",
+          "audioMs": 5540
+        }
+      ],
+      "checks": {
+        "questionAnswered": true,
+        "topicAnswered": true,
+        "missingHistoryAcknowledged": true,
+        "noRepeatedMiss": false,
+        "distinctSilenceSteps": true,
+        "repeatedUserQuestionAnswered": true,
+        "noErrors": true
+      },
+      "toolCalls": 0,
+      "errors": [],
+      "passed": false
+    }
+  ]
+}
