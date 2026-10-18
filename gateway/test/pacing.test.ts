@@ -20,6 +20,8 @@ describe('pacing and budget config', () => {
     expect(report.minHistoryChars).toBeGreaterThanOrEqual(memory.instructions.summaryMaxChars + memory.instructions.minHistoryChars);
     expect(report.ledgerCapped).toBe(report.minHistoryChars < 6000);
     expect(memory.toolTurnTimeoutMs).toBe(15_000);
+    expect(memory.retentionDays).toBe(90);
+    expect(memory.retentionBatch).toBe(200);
   });
 
   it('rejects an instruction budget above 40% of the rebuild threshold', () => {
@@ -37,6 +39,8 @@ describe('pacing and budget config', () => {
       declineConfirmPrompt: '那我以后就不记着咱们聊的事了，以前的也都删掉，确定吗？',
       declineConfirmedText: '好，都清掉了。',
       recallClipChars: 80,
+      retentionDays: 90,
+      retentionBatch: 200,
     };
     expect(() => validateBudgets(pacing, memory, ledger, ['P'.repeat(600)])).toThrow('instruction_budget_too_small');
     expect(() => validateBudgets(pacing, memory, { ...ledger, keepRecentTurns: 40 }, ['P'])).toThrow('ledger_keep_exceeds_rebuild_turns');

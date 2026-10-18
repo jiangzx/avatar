@@ -153,9 +153,37 @@ const shutdown = () => {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
+const DAY_MS = 24 * 60 * 60_000;
+
+/** Same daily timer as orphan cleanup. Age and batch come from memory.json. */
+async function expireTranscripts(): Promise<void> {
+  if (!store) return;
+  const olderThan = Date.now() - memory.retentionDays * DAY_MS;
+  const limit = memory.retentionBatch;
+  for (const ownerId of store.ownerIds()) {
+    for (;;) {
+      const started = performance.now();
+      let deleted: number;
+      try {
+        deleted = store.deleteExpiredMessages(ownerId, olderThan, limit);
+      } catch {
+        log('memory_retention_failed', {});
+        break;
+      }
+      log('memory_retention_batch', { deleted, ms: Math.round(performance.now() - started) });
+      if (deleted < limit) break;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+  }
+}
+
 // Orphan owners (registered, never connected, older than ORPHAN_OWNER_DAYS): at startup, then daily.
+// Message retention uses that same timer. Facts and notes are not deleted by age.
 if (registry) {
-  const runCleanup = () => registry.cleanupOrphans().catch(() => log('orphan_cleanup_failed', {}));
+  const runCleanup = () => {
+    registry.cleanupOrphans().catch(() => log('orphan_cleanup_failed', {}));
+    void expireTranscripts().catch(() => log('memory_retention_failed', {}));
+  };
   void runCleanup();
   setInterval(runCleanup, ORPHAN_CLEANUP_INTERVAL_MS).unref();
 }

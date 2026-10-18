@@ -176,6 +176,47 @@ describe('SqliteMemoryStore', () => {
     expect(store.getOwner(connected.ownerId)).toBeDefined();
     expect(store.getOwner(fresh.ownerId)).toBeDefined();
   });
+
+  it('deletes messages older than 90 days or marked excluded, and keeps facts and notes', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'ha', 1);
+    const b = owner(store, 'hb', 1);
+    const dayMs = 24 * 60 * 60_000;
+    const now = 100 * dayMs;
+    const olderThan = now - 90 * dayMs;
+    store.insertMessage({ id: 'old', sessionId: 's', ownerId: a.ownerId, role: 'user', text: 'old', bigrams: 'old', now: olderThan - 1 });
+    store.insertMessage({ id: 'fresh', sessionId: 's', ownerId: a.ownerId, role: 'assistant', text: 'fresh', bigrams: 'new', now: olderThan });
+    store.insertMessage({ id: 'blank', sessionId: 's', ownerId: a.ownerId, role: 'user', text: 'blank', bigrams: 'blank', now: now });
+    db.prepare(`UPDATE messages SET text = '', bigrams = '', excluded = 1 WHERE id = 'blank'`).run();
+    store.insertMessage({ id: 'other', sessionId: 's', ownerId: b.ownerId, role: 'user', text: 'other', bigrams: 'other', now: 1 });
+    db.prepare(
+      `INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at)
+       VALUES ('f-old', ?, 'addressing', 'kept-fact', 1, 1)`,
+    ).run(a.ownerId);
+    db.prepare(
+      `INSERT INTO relationship_notes (id, agent_id, owner_id, kind, text, updated_at)
+       VALUES ('n-old', ?, ?, 'preference', 'kept-note', 1)`,
+    ).run(a.agentId, a.ownerId);
+
+    expect(store.deleteExpiredMessages(a.ownerId, olderThan, 10)).toBe(2);
+    expect(db.prepare('SELECT id FROM messages WHERE owner_id = ? ORDER BY created_at, rowid').all(a.ownerId)).toEqual([{ id: 'fresh' }]);
+    expect(db.prepare('SELECT id FROM messages WHERE owner_id = ?').all(b.ownerId)).toEqual([{ id: 'other' }]);
+    expect(store.listFacts(a.ownerId)).toEqual([{ category: 'addressing', text: 'kept-fact' }]);
+    expect(store.listNotes(a.ownerId, a.agentId)).toEqual([{ text: 'kept-note' }]);
+    expect(db.prepare(`SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'old'`).all()).toEqual([]);
+  });
+
+  it('deletes at most limit matching messages for that owner', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'ha');
+    for (const id of ['m1', 'm2', 'm3']) {
+      store.insertMessage({ id, sessionId: 's', ownerId: a.ownerId, role: 'user', text: id, bigrams: '', now: 1 });
+    }
+    expect(store.deleteExpiredMessages(a.ownerId, 1_000, 2)).toBe(2);
+    expect(db.prepare('SELECT count(*) AS n FROM messages').get()).toEqual({ n: 1 });
+  });
 });
 
 describe('memory tables', () => {

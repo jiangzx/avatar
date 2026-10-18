@@ -24,7 +24,8 @@ export interface NewOwner { ownerId: string; deviceId: string; agentId: string }
  * Persistent identity and (from Plan C) memory. Owner data is only read or written through
  * owner/agent-scoped methods. Unscoped exceptions: the credential lookup by token hash,
  * aggregate counts for registration caps, the batched orphan-cleanup delete,
- * and the startup list of owners that still have unextracted messages.
+ * the startup list of owners that still have unextracted messages,
+ * and the owner-id list for the daily retention pass.
  */
 export interface MemoryStore {
   /** Owner + device + agent in one transaction. */
@@ -84,6 +85,13 @@ export interface MemoryStore {
   forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): void;
   /** Deletes this owner's messages, memory rows, and audit diffs, then marks consent declined. */
   wipeOwnerMemory(ownerId: string): void;
+  /**
+   * Deletes up to `limit` messages for this owner where `created_at < olderThan` or `excluded = 1`.
+   * Facts and notes stay.
+   */
+  deleteExpiredMessages(ownerId: string, olderThan: number, limit: number): number;
+  /** Owner ids for the daily retention pass. */
+  ownerIds(): string[];
 }
 
 export interface PendingMessage {
@@ -137,8 +145,27 @@ export interface ExtractionChange {
 
 type Row = Record<string, unknown>;
 
+/** `DELETE ... LIMIT` needs a sqlite compile flag this runtime often lacks. */
+const EXPIRED_BY_IDS = `DELETE FROM messages WHERE owner_id = ? AND rowid IN (
+  SELECT rowid FROM messages
+  WHERE owner_id = ? AND (created_at < ? OR excluded = 1)
+  LIMIT ?
+)`;
+
+function prepareExpiredDelete(db: DatabaseSync): { deleteExpired: ReturnType<DatabaseSync['prepare']>; expiredByIds: boolean } {
+  try {
+    return {
+      deleteExpired: db.prepare('DELETE FROM messages WHERE owner_id = ? AND (created_at < ? OR excluded = 1) LIMIT ?'),
+      expiredByIds: false,
+    };
+  } catch {
+    return { deleteExpired: db.prepare(EXPIRED_BY_IDS), expiredByIds: true };
+  }
+}
+
 function prepareStatements(db: DatabaseSync) {
   const p = (sql: string) => db.prepare(sql);
+  const expired = prepareExpiredDelete(db);
   return {
     insertOwner: p('INSERT INTO owners (id, created_at, last_seen_at) VALUES (?, ?, ?)'),
     insertDevice: p('INSERT INTO devices (id, owner_id, token_hash, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)'),
@@ -226,6 +253,9 @@ function prepareStatements(db: DatabaseSync) {
     deleteAllEpisodes: p('DELETE FROM episodes WHERE owner_id = ?'),
     deleteAllFollowups: p('DELETE FROM followups WHERE owner_id = ?'),
     deleteAllChanges: p('DELETE FROM memory_changes WHERE owner_id = ?'),
+    deleteExpired: expired.deleteExpired,
+    expiredByIds: expired.expiredByIds,
+    ownerIds: p('SELECT id FROM owners'),
   };
 }
 
@@ -422,6 +452,28 @@ export class SqliteMemoryStore implements MemoryStore {
       this.q.deleteAllChanges.run(ownerId);
       this.q.setConsent.run('declined', ownerId);
     });
+  }
+
+  deleteExpiredMessages(ownerId: string, olderThan: number, limit: number): number {
+    try {
+      return Number(this.runExpired(ownerId, olderThan, limit).changes);
+    } catch (error) {
+      if (this.q.expiredByIds) throw error;
+      // Prepared LIMIT can still throw at run time on some builds.
+      this.q.deleteExpired = this.db.prepare(EXPIRED_BY_IDS);
+      this.q.expiredByIds = true;
+      return Number(this.runExpired(ownerId, olderThan, limit).changes);
+    }
+  }
+
+  ownerIds(): string[] {
+    return this.q.ownerIds.all().map((r) => r.id as string);
+  }
+
+  private runExpired(ownerId: string, olderThan: number, limit: number) {
+    return this.q.expiredByIds
+      ? this.q.deleteExpired.run(ownerId, ownerId, olderThan, limit)
+      : this.q.deleteExpired.run(ownerId, olderThan, limit);
   }
 
   private matchRowids(ownerId: string, match: string): number[] {
