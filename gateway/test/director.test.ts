@@ -157,6 +157,56 @@ describe('Director', () => {
     expect(calls).toEqual([['followup', 'CTX']]);
   });
 
+  it('the check stays with what the user said, and with the name question before they speak', () => {
+    const openReqs: ProactiveRequest[] = [];
+    const open = new Director({
+      ...cfg,
+      checkInstruction: 'CHECK_NAME',
+      checkText: '还在吗，称呼不急',
+      checkContextInstruction: '点到「{utterance}」，可以不回',
+      checkContextText: '还在吗，刚才那件事先放着',
+      checkMemoryInstruction: 'CHECK_MEMORY',
+      checkMemoryText: '还在吗，刚才那件事不急',
+    }, { requestResponse: (_k, r) => openReqs.push(r) });
+    open.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    open.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    expect(openReqs.at(-1)).toEqual({ cue: 'followup', instruction: 'CHECK_NAME', fallbackText: '还在吗，称呼不急' });
+
+    const remembered: ProactiveRequest[] = [];
+    const memory = new Director({
+      ...cfg,
+      checkInstruction: 'CHECK_NAME',
+      checkText: '还在吗，称呼不急',
+      checkMemoryInstruction: 'CHECK_MEMORY',
+      checkMemoryText: '还在吗，刚才那件事不急',
+    }, { requestResponse: (_k, r) => remembered.push(r) });
+    memory.onSessionStart(true);
+    memory.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    memory.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    expect(remembered.at(-1)).toEqual({ cue: 'followup', instruction: 'CHECK_MEMORY', fallbackText: '还在吗，刚才那件事不急' });
+
+    const talked: ProactiveRequest[] = [];
+    const d = new Director({
+      ...cfg,
+      checkContextInstruction: '点到「{utterance}」，可以不回',
+      checkContextText: '还在吗，刚才那件事先放着',
+    }, { requestResponse: (_k, r) => talked.push(r) });
+    d.onUserFinal('孙子周末来看我');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    expect(talked.at(-1)).toEqual({
+      cue: 'followup',
+      instruction: '点到「孙子周末来看我」，可以不回',
+      fallbackText: '还在吗，刚才那件事先放着',
+    });
+  });
+
   it('a light reply skips the check and then leaves once', () => {
     const { d, calls } = make();
     d.onUserFinal('孙子周末来看我');
@@ -172,6 +222,43 @@ describe('Director', () => {
     d.onUserFinal('好');
     vi.advanceTimersByTime(60000);
     expect(calls).toHaveLength(2);
+  });
+
+  it('after the short leave, a few quiet minutes gets one looser line and then stops', () => {
+    const reqs: ProactiveRequest[] = [];
+    const d = new Director({ ...cfg, restAfterMs: 180000, restInstruction: 'REST', restText: '放空' }, {
+      requestResponse: (_k, r) => reqs.push(r),
+    });
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(179999);
+    expect(reqs).toHaveLength(3);
+    vi.advanceTimersByTime(1);
+    expect(reqs.at(-1)).toEqual({ cue: 'followup', instruction: 'REST', fallbackText: '放空' });
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(600000);
+    expect(reqs).toHaveLength(4);
+  });
+
+  it('a light reply after the short leave does not speak at once, and the looser line can still come later', () => {
+    const { d, calls } = make({ ...cfg, restAfterMs: 180000, restInstruction: 'REST', restText: '放空' });
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    d.onUserFinal('嗯');
+    vi.advanceTimersByTime(179999);
+    expect(calls.map((c) => c[1])).toEqual(['HERE', 'CHECK', 'LEAVE']);
+    vi.advanceTimersByTime(1);
+    expect(calls.at(-1)).toEqual(['followup', 'REST']);
   });
 
   it('starts again from the new thing after the leave line', () => {

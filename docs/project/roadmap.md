@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-18. User confirmed barge-in is usable. A non-utterance interrupt says 没听清 instead of 我在. Two copy changes are next and are not in this version: a softer 「还在吗」, and a two-step leave line that gives the user room instead of 「你想说话我就在」. Read the pitfalls section before touching silence or barge-in.
+Last updated: 2026-10-18. User-trial build. Barge-in is usable, and a non-utterance interrupt says 没听清 instead of 我在. Silence waits are 3s, 6s, 6s, then one looser line after 3 quiet minutes. 「还在吗」keeps the current context. Read the pitfalls section before touching silence or barge-in. Formal line-by-line device acceptance is still open.
 
 ## 打断与沉默：已踩过的坑
 
@@ -20,12 +20,12 @@ Last updated: 2026-10-18. User confirmed barge-in is usable. A non-utterance int
 
 下面「Next steps」第 1 条里「播放期间完全不上传麦克风」已过时。本地 VAD 认定在插话之后要继续上传。
 
-## 下一处话术（未做）
+## 沉默话术（2026-10-18）
 
-用户 2026-10-18 提出，不在这一版里改：
+已写进 `director.json`，规格见陪伴记忆设计第 2 节。三档等待是 3 秒、6 秒、6 秒。这一版拿去给用户试，正式逐句验收还没做。
 
-1. 「还在吗」太生硬，后面加一句贴着刚才上下文的话。
-2. 离开句不要把重心放在「我在这里等你」。短沉默轻一点，例如「我先安静一会儿，想聊随时喊我」。长沉默（几分钟）更松，例如「你可以先自己放空一会儿，不用急着回我」。强调对方可以不回，没有沉重的承诺感。现有的「你想说话我就在」不要再当唯一一句。
+1. 「还在吗」后面加一句当时的上下文。没聊起来时是称呼；有记忆但这次还没说话时不编具体的事；用户说过话时第二句只点 `{utterance}`。指令里不要再放第二句的例句。
+2. 短沉默说「我先安静一会儿，想聊随时喊我。」再安静 3 分钟说「你可以先自己放空一会儿，不用急着回我。」然后停。短离开之后的轻声不立刻再开口，安静满 3 分钟仍说更松的那句。不要把旧的等待句写回指令，否定句里夹着那句也会被照读。
 
 ## Phases
 

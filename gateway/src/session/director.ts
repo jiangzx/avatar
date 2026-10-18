@@ -8,12 +8,16 @@ export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
 }
 
-type SilenceStep = 'context' | 'check' | 'leave';
+type SilenceStep = 'context' | 'check' | 'leave' | 'rest';
 
 /** Agreed defaults when a fixture omits the silence fields. Shipped roles set them in director.json. */
 const DEFAULT_CONTEXT_AFTER_MS = 5_000;
 const DEFAULT_CHECK_AFTER_MS = 10_000;
 const DEFAULT_LEAVE_AFTER_MS = 10_000;
+/** A few quiet minutes after the short leave, then one looser line. */
+const DEFAULT_REST_AFTER_MS = 180_000;
+const DEFAULT_REST_INSTRUCTION = '用户已经安静了好几分钟。只说「你可以先自己放空一会儿，不用急着回我。」不要提问，不要再起话题。';
+const DEFAULT_REST_TEXT = '你可以先自己放空一会儿，不用急着回我。';
 const DEFAULT_GREETING_RETRY_MS = 800;
 /** If a barge-in never becomes a real utterance, say so. Do not fall through to 「我在」. */
 const DEFAULT_BARGE_REPLY_WAIT_MS = 2_500;
@@ -30,12 +34,19 @@ interface SilenceCopy {
   presenceText: string;
   checkInstruction: string;
   checkText: string;
+  checkContextInstruction?: string;
+  checkContextText: string;
+  checkMemoryInstruction?: string;
+  checkMemoryText?: string;
   leaveInstruction: string;
   leaveText: string;
+  restAfterMs: number;
+  restInstruction: string;
+  restText: string;
   lightPhrases: readonly string[];
 }
 
-/** Controls proactive speech: greeting, a three-step silence chain, and reconnect. */
+/** Controls proactive speech: greeting, the silence ladder, and reconnect. */
 export class Director {
   private timer: NodeJS.Timeout | null = null;
   private history: number[] = [];
@@ -47,6 +58,8 @@ export class Director {
   private aiBusy = false;
   private hadContent = false;
   private left = false;
+  /** The short leave has been said. Further silence waits, then one looser line. */
+  private eased = false;
   private lightHold = false;
   private next: SilenceStep = 'context';
   /** Last substantive thing the user said. Step 1 may quote only this, never the assistant. */
@@ -108,6 +121,11 @@ export class Director {
     this.pending = null;
     if (this.isLight(key)) {
       if (this.left) return;
+      if (this.eased) {
+        this.next = 'rest';
+        if (!this.aiBusy) this.arm();
+        return;
+      }
       this.lightHold = true;
       this.next = 'leave';
       if (!this.aiBusy) this.arm();
@@ -117,6 +135,7 @@ export class Director {
     this.lastContent = text.trim();
     this.lightHold = false;
     this.left = false;
+    this.eased = false;
     this.next = 'context';
     if (this.bargeIn && !this.aiBusy) this.armBargeReplyWait();
   }
@@ -152,9 +171,16 @@ export class Director {
     if (this.blocked() || this.left) return;
     const done = this.pending;
     this.pending = null;
-    if (done === 'leave') {
+    if (done === 'rest') {
       this.left = true;
       this.lightHold = false;
+      return;
+    }
+    if (done === 'leave') {
+      this.eased = true;
+      this.lightHold = false;
+      this.next = 'rest';
+      this.arm();
       return;
     }
     if (done === 'context' && this.lightHold) {
@@ -169,6 +195,11 @@ export class Director {
     }
     if (done === 'check') {
       this.next = 'leave';
+      this.arm();
+      return;
+    }
+    if (this.eased) {
+      this.next = 'rest';
       this.arm();
       return;
     }
@@ -253,6 +284,7 @@ export class Director {
     const s = this.silence();
     if (step === 'context') return s.contextAfterMs;
     if (step === 'check') return s.checkAfterMs;
+    if (step === 'rest') return s.restAfterMs;
     return s.leaveAfterMs;
   }
 
@@ -262,8 +294,24 @@ export class Director {
       return { cue: 'followup', instruction: s.contextInstruction.replaceAll('{utterance}', this.lastContent), fallbackText: s.presenceText };
     }
     if (step === 'context') return this.openingFollow(s);
-    if (step === 'check') return { cue: 'followup', instruction: s.checkInstruction, fallbackText: s.checkText };
+    if (step === 'check') return this.checkRequest(s);
+    if (step === 'rest') return { cue: 'followup', instruction: s.restInstruction, fallbackText: s.restText };
     return { cue: 'followup', instruction: s.leaveInstruction, fallbackText: s.leaveText };
+  }
+
+  /** 「还在吗」plus one line of the actual context. Do not invent a topic. */
+  private checkRequest(s: SilenceCopy): ProactiveRequest {
+    if (this.hadContent && s.checkContextInstruction) {
+      return {
+        cue: 'followup',
+        instruction: s.checkContextInstruction.replaceAll('{utterance}', this.lastContent),
+        fallbackText: s.checkContextText,
+      };
+    }
+    if (!this.hadContent && this.hasMemory && s.checkMemoryInstruction && s.checkMemoryText) {
+      return { cue: 'followup', instruction: s.checkMemoryInstruction, fallbackText: s.checkMemoryText };
+    }
+    return { cue: 'followup', instruction: s.checkInstruction, fallbackText: s.checkText };
   }
 
   private openingFollow(s: SilenceCopy): ProactiveRequest {
@@ -286,8 +334,15 @@ export class Director {
       presenceText: c.presenceText ?? c.idleNoticeText,
       checkInstruction: c.checkInstruction ?? c.followupInstruction,
       checkText: c.checkText ?? c.followupText,
+      checkContextInstruction: c.checkContextInstruction,
+      checkContextText: c.checkContextText ?? c.checkText ?? c.followupText,
+      checkMemoryInstruction: c.checkMemoryInstruction,
+      checkMemoryText: c.checkMemoryText,
       leaveInstruction: c.leaveInstruction ?? c.idleNoticeInstruction,
       leaveText: c.leaveText ?? c.idleNoticeText,
+      restAfterMs: c.restAfterMs ?? DEFAULT_REST_AFTER_MS,
+      restInstruction: c.restInstruction ?? DEFAULT_REST_INSTRUCTION,
+      restText: c.restText ?? DEFAULT_REST_TEXT,
       lightPhrases: c.lightPhrases ?? DEFAULT_LIGHT,
     };
   }

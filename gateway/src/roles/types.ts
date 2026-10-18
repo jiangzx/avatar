@@ -19,6 +19,8 @@ export interface DirectorConfig {
   checkAfterMs?: number;
   /** Silence step 3, and the wait after a light reply. Default 10000 when omitted. */
   leaveAfterMs?: number;
+  /** After the short leave, wait this long still silent, then one looser line. Default 180000. */
+  restAfterMs?: number;
   /** Step 1 when the user has said something concrete. The model writes the question from context. */
   contextInstruction?: string;
   /** Step 1 when the user has not said anything concrete. */
@@ -32,12 +34,21 @@ export interface DirectorConfig {
   /** Spoken when a barge-in is not a real utterance. */
   bargeMissInstruction?: string;
   bargeMissText?: string;
-  /** Step 2 fixed line. */
+  /** Step 2 when the user has not spoken yet. */
   checkInstruction?: string;
   checkText?: string;
-  /** Step 3 fixed line, then proactive speech stops. */
+  /** Step 2 when the user has said something. `{utterance}` is their last line. */
+  checkContextInstruction?: string;
+  checkContextText?: string;
+  /** Step 2 when a memory snapshot exists but this call has no user line yet. */
+  checkMemoryInstruction?: string;
+  checkMemoryText?: string;
+  /** Short leave after tens of seconds. Gives the user room to not reply. */
   leaveInstruction?: string;
   leaveText?: string;
+  /** Looser line after a few quiet minutes. Then proactive speech stops. */
+  restInstruction?: string;
+  restText?: string;
   /** Whole utterances that mean the user is still here. */
   lightPhrases?: readonly string[];
   quietPhrases: string[];
