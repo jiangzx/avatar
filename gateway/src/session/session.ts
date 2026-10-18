@@ -105,6 +105,8 @@ interface ResponseState {
   flushed: boolean;
   /** Set when responseDone arrives, including before the tool call. */
   responseDone: boolean;
+  /** Set when playback.stopped reason=ended arrives for this seq. */
+  playbackEnded: boolean;
 }
 
 const MAX_REBUILD_MIC_FRAMES = 25;
@@ -345,6 +347,7 @@ export class Session {
           // Stale end (already cancelled/superseded, a newer turn may be active): ignore.
           // A tool origin stays eligible after the forced finish clears interrupt.active.
           if (!toolOrigin && this.interrupt.active !== msg.responseSeq) break;
+          s.playbackEnded = true;
           this.streamBarge = false;
           this.bargePreroll.length = 0;
           this.finalize(s, false);
@@ -489,7 +492,7 @@ export class Session {
     });
     a.on('responseStarted', (id) => {
       if (!current()) return;
-      const s: ResponseState = { seq: ++this.seqCounter, kind: this.pendingKind ?? 'reply', text: '', audioMs: 0, playedMs: 0, finalized: false, flushed: false, responseDone: false };
+      const s: ResponseState = { seq: ++this.seqCounter, kind: this.pendingKind ?? 'reply', text: '', audioMs: 0, playedMs: 0, finalized: false, flushed: false, responseDone: false, playbackEnded: false };
       this.pendingKind = null;
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
@@ -670,6 +673,8 @@ export class Session {
       this.originForcedEnd = true;
     }
     if (alreadyDone) this.toolTurn.onOriginDone();
+    // A clean stop that already arrived still counts. An interrupt does not.
+    if (s.playbackEnded) this.toolTurn.onOriginPlaybackEnded();
     this.armToolTimer();
     this.director.pause();
   }

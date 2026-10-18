@@ -882,4 +882,38 @@ describe('Session', () => {
       fallbackText: director.toolContinueText,
     });
   });
+
+  it('continues when playback already ended before the tool call', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
+    s.mocks[0]!.emit('responseStarted', 'played-out');
+    s.mocks[0]!.emit('audioDelta', 'played-out', new Int16Array(480));
+    s.mocks[0]!.emit('responseDone', 'played-out');
+    const seq = s.session.lastResponseSeq;
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: seq, playedMs: 20, reason: 'ended' });
+    expect(creates).not.toHaveBeenCalled();
+    s.mocks[0]!.emit('toolCall', 'played-out', 'call-played', 'perform_action', { action: 'wave' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(creates).toHaveBeenCalledTimes(1);
+    expect(creates).toHaveBeenCalledWith({
+      cue: 'toolContinue',
+      instruction: director.toolContinueInstruction,
+      fallbackText: director.toolContinueText,
+    });
+  });
+
+  it('does not treat an interrupted stop before the tool call as playback ended', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
+    s.mocks[0]!.emit('responseStarted', 'cut-off');
+    s.mocks[0]!.emit('audioDelta', 'cut-off', new Int16Array(480));
+    s.mocks[0]!.emit('responseDone', 'cut-off');
+    const seq = s.session.lastResponseSeq;
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: seq, playedMs: 10, reason: 'interrupted' });
+    s.mocks[0]!.emit('toolCall', 'cut-off', 'call-cut', 'perform_action', { action: 'wave' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(creates).not.toHaveBeenCalled();
+  });
 });
