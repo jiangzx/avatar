@@ -109,6 +109,14 @@ export type FollowupChange =
   | { op: 'update'; id: string; text?: string; dueAt?: number }
   | { op: 'remove'; id: string };
 
+/** An op in the batch could not be stored. The write transaction must roll back. */
+export class ExtractIncompleteError extends Error {
+  constructor() {
+    super('extract_incomplete');
+    this.name = 'ExtractIncompleteError';
+  }
+}
+
 export interface ExtractionChange {
   now: number;
   messageIds: readonly string[];
@@ -355,8 +363,12 @@ export class SqliteMemoryStore implements MemoryStore {
   writeExtraction(ownerId: string, change: ExtractionChange): void {
     const sessionId = this.sessionIdFor(ownerId, change.messageIds);
     for (const op of change.facts) this.writeFact(ownerId, op, sessionId, change.now);
-    for (const op of change.notes) this.writeNote(ownerId, op, sessionId, change.now);
-    for (const op of change.episodes) this.writeEpisode(ownerId, op, sessionId, change.now);
+    for (const op of change.notes) {
+      if (!this.writeNote(ownerId, op, sessionId, change.now)) throw new ExtractIncompleteError();
+    }
+    for (const op of change.episodes) {
+      if (!this.writeEpisode(ownerId, op, sessionId, change.now)) throw new ExtractIncompleteError();
+    }
     for (const op of change.followups) this.writeFollowup(ownerId, op, sessionId, change.now);
     for (const id of change.messageIds) this.q.markExtracted.run(ownerId, id);
   }
@@ -379,40 +391,44 @@ export class SqliteMemoryStore implements MemoryStore {
     }
   }
 
-  private writeNote(ownerId: string, op: NoteChange, sessionId: string | null, now: number): void {
+  /** False when the note cannot be stored. The caller rolls the batch back. */
+  private writeNote(ownerId: string, op: NoteChange, sessionId: string | null, now: number): boolean {
     if (op.op === 'add') {
       const agentId = this.resolveAgent(ownerId, op.agentId);
-      if (!agentId) return;
+      if (!agentId) return false;
       const id = randomUUID();
       const kind = op.kind ?? 'tone';
       this.q.insertNote.run(id, agentId, ownerId, kind, op.text, sessionId, now);
       this.audit(ownerId, 'relationship_notes', id, 'add', op.text, now);
-      return;
+      return true;
     }
     if (op.op === 'remove') {
       if (this.q.deleteNote.run(op.id, ownerId).changes === 1) this.audit(ownerId, 'relationship_notes', op.id, 'remove', '', now);
-      return;
+      return true;
     }
     if (this.q.updateNote.run(op.kind ?? null, op.text ?? null, now, op.id, ownerId).changes === 1) {
       this.audit(ownerId, 'relationship_notes', op.id, 'update', op.text ?? '', now);
     }
+    return true;
   }
 
-  private writeEpisode(ownerId: string, op: EpisodeChange, sessionId: string | null, now: number): void {
+  /** False when an episode has no session to attach to. */
+  private writeEpisode(ownerId: string, op: EpisodeChange, sessionId: string | null, now: number): boolean {
     if (op.op === 'add') {
-      if (!sessionId) return;
+      if (!sessionId) return false;
       const id = randomUUID();
       this.q.insertEpisode.run(id, sessionId, ownerId, op.summary, op.mood ?? null, now);
       this.audit(ownerId, 'episodes', id, 'add', op.summary, now);
-      return;
+      return true;
     }
     if (op.op === 'remove') {
       if (this.q.deleteEpisode.run(op.id, ownerId).changes === 1) this.audit(ownerId, 'episodes', op.id, 'remove', '', now);
-      return;
+      return true;
     }
     if (this.q.updateEpisode.run(op.summary ?? null, op.mood ?? null, op.id, ownerId).changes === 1) {
       this.audit(ownerId, 'episodes', op.id, 'update', op.summary ?? '', now);
     }
+    return true;
   }
 
   private writeFollowup(ownerId: string, op: FollowupChange, sessionId: string | null, now: number): void {

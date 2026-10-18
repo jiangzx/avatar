@@ -90,6 +90,21 @@ describe('applyExtractOps', () => {
     ], [])).toBe('applied');
     expect(store.listFacts(created.ownerId)).toEqual([]);
   });
+
+  it('rolls back the batch when a note agent cannot be resolved', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = owner(store);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天想喝茶', bigrams: '', now: 1 });
+    const result = applyExtractOps(store, created.ownerId, 0, [
+      { op: 'add', table: 'user_facts', category: 'preference', text: '喜欢喝茶', sensitive: false },
+      { op: 'add', table: 'relationship_notes', agentId: 'missing-agent', text: '说话慢一点' },
+    ], ['m1']);
+    expect(result).toBe('incomplete');
+    expect(store.listFacts(created.ownerId)).toEqual([]);
+    expect(extracted(db, 'm1')).toBe(0);
+    expect((db.prepare('SELECT count(*) AS n FROM relationship_notes').get() as { n: number }).n).toBe(0);
+  });
 });
 
 describe('extract prompt and config', () => {

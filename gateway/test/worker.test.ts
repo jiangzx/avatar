@@ -66,6 +66,32 @@ describe('MemoryWorker queue', () => {
     expect((db.prepare('SELECT extracted FROM messages WHERE id = ?').get('m1') as { extracted: number }).extracted).toBe(0);
   });
 
+  it('tells the model the trigger and the clock', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
+    const now = 1_700_000_000_000;
+    let seen = '';
+    const client: TextModelClient = {
+      complete: async (input) => {
+        seen = input.user;
+        return '{"ops":[]}';
+      },
+    };
+    const timed = new MemoryWorker({
+      store,
+      client,
+      systemPrompt: '陈述。',
+      maxTokens: 80,
+      policy,
+      now: () => now,
+    });
+    await timed.extractOwner(created.ownerId, 'session_end');
+    expect(seen).toContain('session_end');
+    expect(seen).toContain(String(now));
+  });
+
   it('applies a fake client result and marks the consumed row', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);

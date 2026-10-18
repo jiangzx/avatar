@@ -19,6 +19,8 @@ export interface MemoryWorkerOptions {
   policy: PolicySpec;
   transcriptMaxChars?: number;
   contextMaxChars?: number;
+  /** Clock for the model prompt. Defaults to Date.now. */
+  now?: () => number;
 }
 
 /** One queue per owner. Jobs never overlap; a later job starts only after the earlier one settles. */
@@ -75,7 +77,8 @@ export class MemoryWorker implements MemoryExtractor {
     if (epoch === undefined) return;
     const pending = takePrefix(this.opts.store.listPendingMessages(ownerId), this.transcriptMaxChars);
     if (pending.length === 0) return;
-    const user = renderInput(this.opts.store.memoryForExtract(ownerId), pending, this.contextMaxChars);
+    const now = this.opts.now?.() ?? Date.now();
+    const user = renderInput(this.opts.store.memoryForExtract(ownerId), pending, this.contextMaxChars, { reason, now });
     const result = await runWithPolicy('extract', this.opts.policy, (signal) => this.opts.client.complete({
       system: this.opts.systemPrompt,
       user,
@@ -100,6 +103,10 @@ export class MemoryWorker implements MemoryExtractor {
       return;
     }
     const applied = applyExtractOps(this.opts.store, ownerId, epoch, ops, pending.map((row) => row.id));
+    if (applied === 'incomplete') {
+      log('memory_extract_failed', { reason, code: 'extract_incomplete', ops: ops.length, messages: pending.length });
+      return;
+    }
     log('memory_extract', { reason, result: applied, ops: ops.length, messages: pending.length });
   }
 }
@@ -128,7 +135,12 @@ function takePrefix(rows: readonly PendingMessage[], maxChars: number): PendingM
   return taken;
 }
 
-function renderInput(memory: ExtractMemory, messages: readonly PendingMessage[], maxChars: number): string {
+function renderInput(
+  memory: ExtractMemory,
+  messages: readonly PendingMessage[],
+  maxChars: number,
+  meta: { reason: ExtractReason; now: number },
+): string {
   const lines = ['已有记忆：'];
   for (const agent of memory.agents) lines.push(`智能体 ${agent.id}`);
   for (const fact of memory.facts) lines.push(`事实 ${fact.id} ${fact.category} sensitive=${fact.sensitive} ${fact.text}`);
@@ -143,5 +155,5 @@ function renderInput(memory: ExtractMemory, messages: readonly PendingMessage[],
     used += line.length + 1;
   }
   const dialogue = messages.map((row) => `${row.role === 'user' ? '用户' : '助手'}：${row.text}`);
-  return [...kept, '新增对话：', ...dialogue].join('\n');
+  return [`原因：${meta.reason}`, `现在：${meta.now}`, ...kept, '新增对话：', ...dialogue].join('\n');
 }

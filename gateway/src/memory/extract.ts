@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import type { MemoryStore } from './store.ts';
+import { ExtractIncompleteError, type MemoryStore } from './store.ts';
 export type { TextModelClient } from './textClient.ts';
 
 const Id = z.string().min(1).max(80);
@@ -99,6 +99,7 @@ export function loadExtractPrompt(path = fileURLToPath(new URL('../../roles/_sha
 /**
  * Re-reads memory_epoch inside the write transaction. A mismatch writes nothing.
  * Applied ops and extracted=1 on the consumed message ids commit together.
+ * An op that cannot be stored rolls the whole batch back.
  */
 export function applyExtractOps(
   store: MemoryStore,
@@ -106,19 +107,24 @@ export function applyExtractOps(
   epochAtStart: number,
   ops: readonly ExtractOp[],
   messageIds: readonly string[],
-): 'applied' | 'stale' {
-  return store.immediate(() => {
-    if (store.memoryEpoch(ownerId) !== epochAtStart) return 'stale';
-    store.writeExtraction(ownerId, {
-      now: Date.now(),
-      messageIds,
-      facts: ops.filter((op) => op.table === 'user_facts'),
-      notes: ops.filter((op) => op.table === 'relationship_notes'),
-      episodes: ops.filter((op) => op.table === 'episodes'),
-      followups: ops.filter((op) => op.table === 'followups'),
+): 'applied' | 'stale' | 'incomplete' {
+  try {
+    return store.immediate(() => {
+      if (store.memoryEpoch(ownerId) !== epochAtStart) return 'stale';
+      store.writeExtraction(ownerId, {
+        now: Date.now(),
+        messageIds,
+        facts: ops.filter((op) => op.table === 'user_facts'),
+        notes: ops.filter((op) => op.table === 'relationship_notes'),
+        episodes: ops.filter((op) => op.table === 'episodes'),
+        followups: ops.filter((op) => op.table === 'followups'),
+      });
+      return 'applied';
     });
-    return 'applied';
-  });
+  } catch (error) {
+    if (error instanceof ExtractIncompleteError) return 'incomplete';
+    throw error;
+  }
 }
 
 function unwrapFence(raw: string): string {
