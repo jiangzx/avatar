@@ -12,6 +12,7 @@ import type { AdapterFactory, ProactiveRequest, RealtimeAdapter, SessionConfig }
 import { log } from '../log.ts';
 import { renderSnapshot } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
+import type { TextModelClient } from '../memory/textClient.ts';
 import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
@@ -26,6 +27,7 @@ import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Su
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
 import { DEFAULT_TOOL_TURN_TIMEOUT_MS } from './pacing.ts';
 import { ToolTurn } from './toolTurn.ts';
+import { createSilencePlanner } from './silence.ts';
 import { createToolRegistry, type ToolOutcome } from './tools/registry.ts';
 
 export interface Transport {
@@ -60,6 +62,7 @@ export interface SessionDeps {
   adapterFactory: AdapterFactory;
   summarizer: Summarizer;
   roles: RoleCatalog;
+  textClient?: TextModelClient;
   ledger?: LedgerOptions;
   confirmWindowMs?: number;
   modelContextTokenLimit?: number;
@@ -203,10 +206,14 @@ export class Session {
     this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
     const extractor = deps.worker;
     const ownerId = ctx.ownerId;
+    const directorConfig = deps.roles.director(ctx.roleId);
     this.director = new Director(
-      deps.roles.director(ctx.roleId),
+      directorConfig,
       {
         requestResponse: (kind, request) => this.requestResponse(kind, request),
+        ...(deps.textClient && directorConfig.silenceDecision ? {
+          planContext: createSilencePlanner(deps.textClient, directorConfig.silenceDecision, this.persona),
+        } : {}),
         ...(extractor && ownerId ? { onQuietRest: () => { void extractor.extractOwner(ownerId, 'silence'); } } : {}),
       },
       this.noticePending,
@@ -358,7 +365,7 @@ export class Session {
             this.toolTurn.onOriginPlaybackEnded();
             this.maybeContinue();
           } else {
-            this.director.onAiTurnEnded();
+            this.director.onAiTurnEnded(s.text);
             this.maybeSlimContext();
           }
         }
@@ -852,6 +859,7 @@ export class Session {
       return;
     }
     if (!keepToolTurn && this.toolTurn.onRebuild()) this.releaseToolTurn(false);
+    this.director.pause();
     this.rebuilding = true;
     log('model_rebuild', { reason });
     if (reason !== 'slim' && reason !== 'forget' && reason !== 'decline') {
@@ -887,7 +895,10 @@ export class Session {
       const again = this.rebuildAgain;
       this.rebuildAgain = null;
       if (again && !this.ended) await this.rebuild(again, true);
-      else if (connected) this.speakConfirm();
+      else if (connected) {
+        if (this.transport && !this.toolTurn.active) this.director.releasePause(false);
+        this.speakConfirm();
+      }
     }
   }
 

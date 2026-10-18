@@ -96,6 +96,61 @@ describe('Session', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
+  it('decides from completed playback, skips speech, and ignores duplicate playback receipts', async () => {
+    const inputs: unknown[] = [];
+    const s = setup({
+      roles: fixedRoleCatalog('P', { ...director, contextAfterMs: 3000, silenceDecision: {
+        instruction: 'DECIDE', speakInstruction: 'READ {continuation}',
+        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60,
+        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
+      } }),
+      textClient: { complete: async input => { inputs.push(JSON.parse(input.user)); return '{"speak":false}'; } },
+    });
+    await greetAndFinish(s);
+    for (let i = 0; i < 10; i++) s.session.handleMicAudio(loud());
+    for (let i = 0; i < 40; i++) s.session.handleMicAudio(quiet());
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(inputs).toEqual([]);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(inputs).toEqual([{ userText: '我叫老王', assistantText: '王叔好' }]);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(600000);
+    expect(inputs).toHaveLength(1);
+    expect(of(s.sent, 'response.start')).toHaveLength(2);
+    s.session.end();
+  });
+
+  it.each(['new_turn', 'disconnect', 'rebuild'] as const)('discards optional speech across %s', async event => {
+    let finish!: (raw: string) => void;
+    let decisionSignal!: AbortSignal;
+    const s = setup({
+      roles: fixedRoleCatalog('P', { ...director, contextAfterMs: 3000, silenceDecision: {
+        instruction: 'DECIDE', speakInstruction: 'READ {continuation}',
+        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60,
+        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
+      } }),
+      textClient: { complete: input => {
+        decisionSignal = input.signal;
+        return new Promise(resolve => { finish = resolve; });
+      } },
+    });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '聊聊公园' });
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(decisionSignal).toBeDefined();
+    if (event === 'new_turn') s.session.handleClientMessage({ type: 'debug.userText', text: '再聊聊树' });
+    if (event === 'disconnect') s.session.detachTransport();
+    if (event === 'rebuild') s.mocks[0].emit('error', 'synthetic_retryable', true);
+    expect(decisionSignal.aborted).toBe(true);
+    finish('{"speak":true,"text":"公园里那条小路让您惦记着。"}');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(of(s.sent, 'response.start').filter(m => m.kind === 'followup')).toEqual([]);
+    s.session.end();
+  });
+
   it('greets proactively and records the greeting once playback ends', async () => {
     const s = setup();
     await greetAndFinish(s);
@@ -430,7 +485,8 @@ describe('Session', () => {
     s.mocks[1].sendAudio = () => { uplink++; };
     s.session.handleMicAudio(loud());
     expect(uplink).toBe(1);
-    await vi.advanceTimersByTimeAsync(9_000);
+    s.session.attachTransport(s.transport);
+    await vi.advanceTimersByTimeAsync(1000);
     expect(of(s.sent, 'response.start').map((m) => m.kind)).toContain('followup');
   });
 

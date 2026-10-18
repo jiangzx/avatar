@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, loadDirectorConfig, loadIdentityConfig, makeOriginCheck } from '../src/config.ts';
+import { DirectorSchema, loadConfig, loadDirectorConfig, loadIdentityConfig, makeOriginCheck } from '../src/config.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -107,8 +107,6 @@ describe('config', () => {
     expect(d.leaveInstruction).not.toContain('你想说话我就在');
     expect(d.restInstruction).not.toContain('你想说话我就在');
     expect(d.lightPhrases).toEqual(['嗯', '哦', '好', '行', '好的', '嗯嗯', '我知道了', '知道了', '知道啦', '明白了', '明白啦']);
-    expect(d.contextInstruction).toContain('{utterance}');
-    expect(d.contextInstruction).not.toContain('后来呢');
     expect(d.greetingText).toContain('小暖');
     expect(d.greetingMemoryInstruction).toContain('记忆');
     expect(d.greetingRetryMs).toBe(800);
@@ -120,6 +118,17 @@ describe('config', () => {
 
   it('rejects an invalid director config', () => {
     expect(() => loadDirectorConfig(`${root}package.json`)).toThrow();
+  });
+
+  it('rejects optional speech retries and a speak template that cannot carry the approved line', () => {
+    const cfg = loadDirectorConfig(`${root}roles/elder-companion/director.json`);
+    const decision = cfg.silenceDecision!;
+    expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
+      ...decision, policy: { ...decision.policy, retries: 1 },
+    } })).toThrow();
+    expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
+      ...decision, speakInstruction: 'generic presence',
+    } })).toThrow();
   });
 });
 

@@ -1,3 +1,14 @@
+import type { PolicySpec } from '../reliability/policy.ts';
+
+export interface SilenceDecisionConfig {
+  instruction: string;
+  speakInstruction: string;
+  maxTokens: number;
+  maxInputChars: number;
+  maxReplyChars: number;
+  policy: PolicySpec;
+}
+
 /** A light conversation starter used for the first silence follow-up. */
 export interface TopicCard {
   id: string;
@@ -6,6 +17,7 @@ export interface TopicCard {
 }
 
 export interface DirectorConfig {
+  silenceDecision?: SilenceDecisionConfig;
   followupAfterMs: number;
   idleNoticeAfterMs: number;
   maxConsecutive: number;
@@ -21,7 +33,7 @@ export interface DirectorConfig {
   leaveAfterMs?: number;
   /** After the short leave, wait this long still silent, then one looser line. Default 180000. */
   restAfterMs?: number;
-  /** Step 1 when the user has said something concrete. The model writes the question from context. */
+  /** Legacy/test template. Production uses silenceDecision.speakInstruction. */
   contextInstruction?: string;
   /** Step 1 when the user has not said anything concrete. */
   presenceInstruction?: string;

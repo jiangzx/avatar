@@ -243,6 +243,7 @@ export class Director {
     }
     const done = this.pending;
     this.pending = null;
+    if (done === null && assistantText !== undefined) this.lastAnswer = assistantText;
     if (this.noticePending && (this.noticeRetry || openingJustFinished || done === 'notice')) {
       this.requestMemoryNotice();
       return;
@@ -284,7 +285,6 @@ export class Director {
       this.arm();
       return;
     }
-    this.lastAnswer = assistantText ?? '';
     this.next = this.lightHold ? 'leave' : 'context';
     this.arm();
   }
@@ -418,9 +418,9 @@ export class Director {
       this.pending = 'context';
       this.deps.requestResponse('followup', {
         cue: 'followup',
-        instruction: this.silence().contextInstruction
+        instruction: (this.cfg.silenceDecision?.speakInstruction ?? this.silence().contextInstruction)
           .replaceAll('{utterance}', this.lastContent)
-          .replaceAll('{continuation}', text),
+          .replaceAll('{continuation}', JSON.stringify(text)),
         fallbackText: text,
       });
     };
@@ -430,6 +430,7 @@ export class Director {
       accept(null);
     };
     try {
+      if (!this.deps.planContext) log('silence_decision_skipped', { code: 'unconfigured' });
       const result = this.deps.planContext?.({ userText: this.lastContent, assistantText: this.lastAnswer }, controller.signal) ?? null;
       if (typeof result === 'string' || result === null) accept(result);
       else void result.then(accept, failed);

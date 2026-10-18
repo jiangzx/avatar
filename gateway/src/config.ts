@@ -132,6 +132,19 @@ export function makeOriginCheck(devOrigins: string[]): (origin: string) => boole
 }
 
 const DirectorSchema = z.object({
+  silenceDecision: z.object({
+    instruction: z.string().min(1),
+    speakInstruction: z.string().includes('{continuation}'),
+    maxTokens: z.number().int().min(32).max(512),
+    maxInputChars: z.number().int().min(100).max(20000),
+    maxReplyChars: z.number().int().min(1).max(120),
+    policy: z.object({
+      timeoutMs: z.number().int().min(100).max(10000),
+      retries: z.literal(0),
+      backoffMs: z.literal(0),
+      maxBackoffMs: z.literal(0),
+    }).strict(),
+  }).strict().refine(c => c.maxReplyChars <= c.maxInputChars, { message: 'silence_reply_exceeds_input_budget' }).optional(),
   followupAfterMs: z.number().int().positive(),
   idleNoticeAfterMs: z.number().int().positive(),
   maxConsecutive: z.number().int().min(0),

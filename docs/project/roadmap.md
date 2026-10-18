@@ -247,3 +247,6 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - #43 实施中，尚未声明修复或测试通过；#42 的话题接续、真机听感及假设 8 仍待验。8787 当前进程不随代码编辑重启。原有暂存文档与 `.gitignore` 改动保留。
 
 - S1 已实现并验证：新增 15 项回归先失败（缺少判断门控、取消、quiet 复位与听辨修复阶段），修复后 `npm test -w gateway -- test/director.test.ts test/director-silence.test.ts` 48/48 通过。实质对话最多一句批准的承接、轻声不重启链，跳过语音仍保留静默提取钩子。开场未聊起来的阶梯不变。S2 的实际回答传入和生产文本判断尚待接线，当前不声明整个修复完成。
+
+- S2 已完成生产接线：复用 `TextModelClient`，结构化结果在 zod 边界验证；未配置、失败、超时或过期时跳过发言，诊断不含正文。Session 只在有效播放完成时传入实际回答；决策只用该次用户话和回答，不把主动系统提示当成用户话。模型重建会暂停并取消判断，恢复后不自动重启语音链。
+- S2 验证：新增 Session 播完/重复回执断言先失败，重建取消断言先失败；配置校验去掉新 schema 时拒绝断言失败，恢复后通过。`npm test -w gateway -- test/director.test.ts test/director-silence.test.ts test/silence.test.ts test/session.test.ts test/config.test.ts test/fileCatalog.test.ts`：145 通过；`npm run typecheck -w gateway`：通过。S3 的真实模型语义和整体验收尚未执行，8787 未动。

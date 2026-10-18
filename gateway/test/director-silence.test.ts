@@ -4,8 +4,11 @@ import { loadDirectorConfig } from '../src/config.ts';
 import type { ProactiveRequest } from '../src/adapters/types.ts';
 import { Director, type DirectorDeps } from '../src/session/director.ts';
 
+const { silenceDecision: _decisionConfig, ...base } = loadDirectorConfig(
+  fileURLToPath(new URL('../roles/elder-companion/director.json', import.meta.url)),
+);
 const cfg = {
-  ...loadDirectorConfig(fileURLToPath(new URL('../roles/elder-companion/director.json', import.meta.url))),
+  ...base,
   contextInstruction: 'READ {continuation}',
 };
 
@@ -52,7 +55,7 @@ describe('substantive conversation silence', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(contexts).toEqual([{ userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。' }]);
     expect(s.requests).toEqual([{
-      cue: 'followup', instruction: 'READ 走累了，脚酸着也不好受。', fallbackText: '走累了，脚酸着也不好受。',
+      cue: 'followup', instruction: 'READ "走累了，脚酸着也不好受。"', fallbackText: '走累了，脚酸着也不好受。',
     }]);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('走累了，脚酸着也不好受。');

@@ -90,6 +90,7 @@ const manager = new SessionManager(
         : new MockSummarizer(),
       roles,
       ledger: config.ledger,
+      ...(config.adapter !== 'mock' && textClient ? { textClient } : {}),
       confirmWindowMs: config.confirmWindowMs,
       rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,
       rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
