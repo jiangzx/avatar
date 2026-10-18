@@ -192,6 +192,20 @@ export class Director {
     this.arm();
   }
 
+  /** Playback ended for the notice. The only path that clears the obligation. */
+  onNoticePlayed(): void {
+    this.noticePending = false;
+    this.noticeRetry = false;
+    if (this.pending === 'notice') this.pending = null;
+  }
+
+  /** The notice was not started, or its seq was cancelled before playback ended. */
+  onNoticeMissed(): void {
+    if (!this.noticePending) return;
+    this.noticeRetry = true;
+    if (this.pending === 'notice') this.pending = null;
+  }
+
   onAiTurnEnded(): void {
     this.aiBusy = false;
     const openingJustFinished = !this.opened;
@@ -199,19 +213,14 @@ export class Director {
     this.bargeIn = false;
     const hardStop = this.stopped || this.muted || this.paused || this.userSpeaking;
     if (hardStop) {
-      if (this.pending === 'notice') {
-        this.pending = null;
-        this.noticePending = false;
-        this.noticeRetry = false;
-      } else if (this.noticePending) this.noticeRetry = true;
+      // A requested notice is not finished just because this turn stopped.
+      if (this.noticePending) this.noticeRetry = true;
+      if (this.pending === 'notice') this.pending = null;
       return;
     }
     const done = this.pending;
     this.pending = null;
-    if (done === 'notice') {
-      this.noticePending = false;
-      this.noticeRetry = false;
-    } else if (this.noticeRetry || (openingJustFinished && this.noticePending)) {
+    if (this.noticePending && (this.noticeRetry || openingJustFinished || done === 'notice')) {
       this.requestMemoryNotice();
       return;
     }

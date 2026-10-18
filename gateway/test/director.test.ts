@@ -499,4 +499,23 @@ describe('Director', () => {
       },
     ]);
   });
+
+  it('requests the notice again when a turn ends before playback has ended', () => {
+    const reqs: ProactiveRequest[] = [];
+    const d = new Director({
+      ...cfg,
+      memoryNoticeInstruction: '用下面这句告诉对方，以后聊天的内容会记住，方便下次接着聊。不要加问题。',
+      memoryNoticeText: '之后咱们聊的事，我会记着，下次还能接着说。',
+    }, { requestResponse: (_k, r) => reqs.push(r) }, true);
+    d.onSessionStart();
+    d.onAiTurnEnded();
+    d.onAiTurnStarted();
+    d.onAiTurnEnded();
+    expect(reqs.filter((r) => r.cue === 'memoryNotice')).toHaveLength(2);
+    d.onNoticePlayed();
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    expect(reqs.filter((r) => r.cue === 'memoryNotice')).toHaveLength(2);
+    expect(reqs.at(-1)?.cue).toBe('followup');
+  });
 });

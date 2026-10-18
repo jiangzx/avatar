@@ -719,6 +719,37 @@ describe('Session', () => {
     expect(markNotified).not.toHaveBeenCalled();
   });
 
+  it('retries a notice that ends without playback ended, then marks notified once', async () => {
+    const markNotified = vi.fn();
+    const cues: Array<string | undefined> = [];
+    const adapters: MockAdapter[] = [];
+    const s = setup({
+      writer: { append: () => 'stored', markNotified },
+      adapterFactory: () => {
+        const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+        adapters.push(m);
+        const create = m.createResponse.bind(m);
+        m.createResponse = (req) => { cues.push(req?.cue); return create(req); };
+        return m;
+      },
+    }, ownedCtx, 'notice-missed', true);
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(80);
+    expect(cues.filter((c) => c === 'memoryNotice')).toHaveLength(1);
+    adapters[0]!.cancelResponse();
+    expect(markNotified).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(cues.filter((c) => c === 'memoryNotice').length).toBeGreaterThanOrEqual(2);
+    const retry = of(s.sent, 'response.start').at(-1)!;
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: retry.responseSeq, playedMs: 300, reason: 'ended' });
+    expect(markNotified).toHaveBeenCalledTimes(1);
+    const notices = cues.filter((c) => c === 'memoryNotice').length;
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(cues.filter((c) => c === 'memoryNotice')).toHaveLength(notices);
+  });
+
   it('does not record a server-VAD reply as the memory notice', async () => {
     const markNotified = vi.fn();
     const writer: TranscriptWriter = { append: () => 'stored', markNotified };

@@ -371,7 +371,10 @@ export class Session {
 
   private requestResponse(kind: ResponseKind, request: ProactiveRequest): void {
     // Tool turns speak only through maybeContinue.
-    if (this.toolTurn.active || this.ended || this.interrupt.active !== null || this.modelGenerating) return;
+    if (this.toolTurn.active || this.ended || this.interrupt.active !== null || this.modelGenerating) {
+      if (request.cue === 'memoryNotice') this.director.onNoticeMissed();
+      return;
+    }
     if (request.cue === 'memoryNotice') this.noticeSeq = this.seqCounter + 1;
     this.pendingKind = kind;
     this.adapter.createResponse(request);
@@ -379,9 +382,17 @@ export class Session {
 
   /** Playback ended for the notice seq is the only completion signal. */
   private finishNotice(seq: number): void {
-    if (seq !== this.noticeSeq || !this.writer || !this.context.ownerId) return;
-    this.writer.markNotified(this.context.ownerId, Date.now());
+    if (seq !== this.noticeSeq) return;
+    if (this.writer && this.context.ownerId) this.writer.markNotified(this.context.ownerId, Date.now());
     this.noticeSeq = null;
+    this.director.onNoticePlayed();
+  }
+
+  /** The notice seq will not play out. Retry later; do not mark notified. */
+  private missNotice(seq: number): void {
+    if (seq !== this.noticeSeq) return;
+    this.noticeSeq = null;
+    this.director.onNoticeMissed();
   }
 
   private createAdapter(): RealtimeAdapter {
@@ -487,7 +498,11 @@ export class Session {
       this.responseLive = false;
       log('model_auto_cancel', { seq: s.seq });
       this.finalize(s, true);
-      if (this.toolTurn.active && s.seq === this.toolOriginSeq && this.toolTurn.onCancel()) this.releaseToolTurn(false);
+      const missedNotice = s.seq === this.noticeSeq;
+      this.missNotice(s.seq);
+      const released = this.toolTurn.active && s.seq === this.toolOriginSeq && this.toolTurn.onCancel();
+      if (released) this.releaseToolTurn(false);
+      else if (missedNotice) this.director.onAiTurnEnded();
     });
     a.on('error', (code, retryable) => {
       if (!current()) return;
@@ -563,6 +578,7 @@ export class Session {
   private beginToolTurn(s: ResponseState): void {
     const active = this.interrupt.active;
     if (active !== null) {
+      this.missNotice(active);
       this.interrupt.onResponseFinished(active);
       this.send({ type: 'response.cancelled', responseSeq: active });
     }
