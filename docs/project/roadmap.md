@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-18. User-trial build. Latest phone feedback: repeated answers stopped, but unrelated silence speech fails the conversation-flow gate; audit below, blocker #43. User approved the #43 silence correction; implementation is in progress under Plan C Task 12 S1–S3. Barge-in is usable, and a non-utterance interrupt says 没听清 instead of 我在. Silence waits are 3s, 6s, 6s, then one looser line after 3 quiet minutes. 「还在吗」is intended to keep the current context, but that behavior is not accepted. Read the pitfalls section before touching silence or barge-in. Formal line-by-line device acceptance is still open.
+Last updated: 2026-10-18. User-trial build. The approved #43 silence correction is implemented and synthetically evaluated; phone listening acceptance remains open. Barge-in is usable, and a non-utterance interrupt says 没听清 instead of 我在. Silence waits are 3s, 6s, 6s, then one looser line after 3 quiet minutes on the opening-only path. Read the pitfalls section before touching silence or barge-in. Formal line-by-line device acceptance is still open.
 
 ## 打断与沉默：已踩过的坑
 
