@@ -953,6 +953,12 @@ EOF
 
 2026-10-18 recheck: `npm test` passed (protocol 6, gateway 394, avatar-core 96), `npm run typecheck` passed, and `npm test -w gateway -- test/memory-acceptance.test.ts` passed (2 tests). Process smoke: `node --import tsx docs/testing/plan3-mock-smoke.mjs` verifies the notice playback gate, persisted tail after owner replacement, and Mock tool continuation on 8797. Playback acknowledgements are simulated; snapshot content is checked through the store and renderer, not through a spoken model reply. This Mock smoke did not cover live assumptions. Assumption 7 was subsequently verified in Task 9; assumption 8 and the real second phone conversation remain NOT RUN. Historical red-test steps are not retroactively marked as run.
 
+Phone gate follow-up (2026-10-18; user authorized the restart):
+
+- [x] Startup preflight: retain the existing external identity DB, inject the verified text endpoint and phone App Secret through process environment, restart Qwen on 8787, verify health/auth/migration/permissions, restore ADB reverse, and launch the existing matching APK. Original identity resolution and greeting start/end observed; see roadmap phone-startup record and resolved blocker #41. Focused tests rerun: 18 passed; real synthetic extraction probe rerun passed.
+- [ ] Assumption 8: complete a tool turn on the phone and confirm audible continuation.
+- [ ] Real second phone conversation: confirm spoken recall after ending and reopening. Startup and synthetic snapshot checks do not satisfy this gate.
+
 - [ ] **Step 1: Write the failing acceptance test**
 
 One process, `':memory:'` db, fake `TextModelClient` that returns one `addressing` fact `称呼：王叔` and one preference. Drive:

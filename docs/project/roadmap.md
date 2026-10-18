@@ -70,7 +70,7 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 ## Next steps
 
-0. Plan 3: Task 0、A1、B 的 8797 Mock 进程冒烟于 2026-10-18 通过（#11、#14、#31 已解除）；本次验收记录见下文。Plan C 已合并到 master（`655954d..16de0a8`），本地记忆告知门控、替换会话 flush、持久化尾部快照和 Mock 工具续答验证通过。Plan C 的 qwen-plus 提取探针（假设 7）已于本次用户要求继续后通过，并验证真实提取结果进入持久化二次会话指令。下一项是手机验收准备（#41：本地 `.env` 未配置 `MEMORY_DB_PATH` / `QWEN_SUMMARIZER_ENDPOINT`；实际 8787 进程环境未读取），随后是真机工具调用（假设 8）和真实第二次通话。重启 8787 仍须先征得用户同意；不要把合成探针记为手机口头回忆验收。Plan A/B/A+B 的其他设备项仍未运行（#12–#25，排除已解除的 #14；#30、#32–#39）。A+B 新音色门槛依赖 #17 和 #19。8787 的 Qwen 网关保持原样；Plan D/S 尚无已批准实施计划。
+0. Plan 3: Task 0、A1、B 的 8797 Mock 进程冒烟已通过（#11、#14、#31 已解除）；Plan C 的本地记忆门控、持久化快照、Mock 工具续答及 qwen-plus 真实提取（假设 7）已验证，记录见下文。2026-10-18 用户同意后，手机启动前置完成（#41 已解除）：保留原身份库，补齐文本端点并重启 8787，手机已解析原身份并收到开场。下一项是真机工具调用（假设 8）和真实第二次通话，等待用户在手机上完成交互并反馈；不要把合成探针记为手机口头回忆验收。后续重启 8787 仍须先征得用户同意。Plan A/B/A+B 的其他设备项仍未完成（#12–#25，排除已解除的 #14；#30、#32–#39）；本次启动不替代它们的完整清单。A+B 新音色门槛依赖 #17 和 #19；Plan D/S 尚无已批准实施计划。
 1. Keep the local Qwen gateway running for phone debugging (`ADAPTER=qwen` on port 8787, phone `APP_SECRET` from `app/dev.json`, `adb reverse tcp:8787`). Once local VAD says the user is barging in, mic audio streams while the reply is still open; do not restore the old full-playback drop. See the pitfalls section above. Silence follow-ups stay paused while the user is actually speaking. Local barge-in uses RMS 200 after 400 ms of playback; idle speech stays at RMS 1200. At 20:04 the user confirmed the conversation was fluent. At 20:08 avatar actions worked after gestures were no longer cancelled on `response.end`. Do not restart it as Mock. Do not resume interruption latency percentiles or multi-attempt interruption counts: the user skipped both on 2026-10-16, and that skip is not a pass. The 10-minute silence sample stays skipped as well. The latest interrupt rebuild is installed, but the user has not yet confirmed that a live shout stops playback.
 2. Continue the remaining Xiaomi/desktop checks that were not skipped: active-response stale-audio listening, network cases beyond the 2026-10-16 short resume and grace expiry, subtitle finalization once, remaining Task 18 checks, ADR-001, and desktop Chrome E2E. Five actions were already observed with Chinese keywords. Cloud WSS stays deferred.
 3. Seeduplex protocol docs and successful key validation are recorded in `docs/research/seeduplex-protocol-validation.md`; `ADAPTER=mock` remains the default, while `ADAPTER=seeduplex` requires an explicit environment key. Complete ADR-001 A/B measurement as a tracked follow-up.
@@ -91,6 +91,15 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 - `node --env-file-if-exists=gateway/.env --import tsx docs/testing/plan3-qwen-memory-probe.mjs`：修复后 PASS；1 次真实调用、返回文本 336 字节，2/2 条消息提取、2 条事实，称呼/偏好各命中 1；关闭并重开同一 SQLite 后，快照与下一会话指令包含记忆，另一 owner 无快照。总耗时 2337 ms 是本次提取探针耗时，不是首次音频延迟。
 - 本次先运行 `npm test -w gateway -- test/extract.test.ts test/worker.test.ts test/memory-acceptance.test.ts`（18 通过）和 gateway typecheck；修复后 `npm test && npm run typecheck` 再次通过（protocol 6、gateway 394、avatar-core 96）。探针只用合成文本、模拟告知完成，不存音频、不输出正文，临时库已删除。
 - 真实手机工具轮、真实第二次通话、听感和首次音频延迟仍 NOT RUN。Xiaomi 在 adb 中可见，但本次没有安装/启动 App、读取对话日志、重启 8787 或修改 `.env`。手机启动配置前置见 `docs/blockers.md` #41。
+
+## 手机记忆验收启动前置（2026-10-18）
+
+- 用户明确同意启动准备及重启 8787。只读核查发现旧进程已有 `MEMORY_DB_PATH=/Users/jed/.avatar/memory.db`，但没有文本端点；旧库已有 1 个 owner、1 个 agent，尚无 `messages` 表。保留原路径和身份，不创建替代 owner、不清除手机数据。
+- 使用现有 Key、已验证同 workspace 文本端点和 `app/dev.json` 的 `APP_SECRET`，仅通过进程环境注入；`ADAPTER=qwen`、端口 8787。不修改 `.env`。网关作为独立后台进程运行，PID 和内容脱敏日志路径分别记录在仓库外 `~/.avatar/runtime/gateway-phone.pid` 和 `gateway-phone-log-path`；日志权限 `0600`。
+- 重启后 `/healthz` 为 200；`POST /device/register` 无密钥为 401，手机密钥加无效请求体为 400（只验证鉴权与身份路由，不新增设备）。数据库迁移建立 `messages`、`user_facts` 等表，owner/agent 仍各 1，主库权限 `0600`，`PRAGMA foreign_key_check` 无违规。
+- 手机已安装 APK 与本地 debug APK 的 SHA-256 一致，包含身份页/API/安全凭据模块，App 源码修改时间均早于 APK；本次无需重装。`adb reverse tcp:8787 tcp:8787` 和 `adb shell am start -n com.anyidea.avatar_app/.MainActivity` 成功，网关观察到原身份 `device_resolved`（old-friend）、`session_created`、greeting start/end。这是连接证据，听感和记忆告知完成仍须用户反馈。
+- 本次重跑 `npm test -w gateway -- test/memory-acceptance.test.ts test/worker.test.ts test/extract.test.ts`：18/18 通过。重跑真实合成探针：1 次调用、202 字节、2/2 消息提取、2 条事实、持久化快照与 owner 隔离通过，耗时 1727 ms；临时库已清理。
+- 假设 8 真机工具轮、真实第二次通话口头回忆仍 NOT RUN。下一步由用户听完记忆告知，说一个测试称呼及偏好，完成一轮后结束并重开；只检查事件/计数与用户听感反馈，不读取或记录对话正文。用户跳过的打断及静默采样保持跳过。
 
 ## Handed to Plan 2 (accepted minors / hardening, from the final review)
 
