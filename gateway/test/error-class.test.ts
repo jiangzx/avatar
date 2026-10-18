@@ -9,6 +9,8 @@ describe('classifyAdapterError', () => {
   it('treats a rejected session and bad frames as fatal', () => {
     expect(classifyAdapterError('qwen_session_rejected', false)).toBe('fatal');
     expect(classifyAdapterError('qwen_invalid_json', true)).toBe('fatal');
+    expect(classifyAdapterError('upstream_invalid_json', true)).toBe('fatal');
+    expect(classifyAdapterError('upstream_invalid_json', false)).toBe('fatal');
   });
   it('retries a dropped socket', () => {
     expect(classifyAdapterError('qwen_socket_error', false)).toBe('retryable');

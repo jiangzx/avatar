@@ -1,6 +1,6 @@
 import type { ErrorClass } from '../reliability/policy.ts';
 
-const FATAL = new Set(['qwen_session_rejected', 'qwen_invalid_json', 'qwen_connect_closed', 'qwen_connect_timeout']);
+const FATAL = new Set(['qwen_session_rejected', 'qwen_invalid_json', 'qwen_connect_closed', 'qwen_connect_timeout', 'upstream_invalid_json']);
 
 /**
  * Maps an adapter error code onto the shared policy classes.
