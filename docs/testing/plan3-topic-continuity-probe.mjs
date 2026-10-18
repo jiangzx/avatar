@@ -30,7 +30,7 @@ const reportName = process.argv[3] ?? 'plan3-topic-continuity-latest.json';
 if (!/^[a-z0-9-]+\.json$/.test(reportName) || !['all', ...cases.map(c => c.id)].includes(selected)) throw new Error('invalid_probe_args');
 const question = '上次我们聊到哪儿了？';
 const missed = /不记得|记不清|想不起|没记住|没找到|找不到|缺少|不确定|不知道|不太清楚|没有.{0,6}(记录|记忆)|没.{0,6}(记录|想起来|记下来)|还没.{0,4}聊|头一回|第一次/;
-const report = { synthetic: true, simulatedPlayback: true, phoneAcceptance: false, cases: [] };
+const report = { synthetic: true, simulatedPlayback: true, phoneAcceptance: false, requiresManualReview: true, cases: [] };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function run(test) {
@@ -122,12 +122,15 @@ async function run(test) {
       noRepeatedMiss: followups.every(r => !missed.test(r.text)),
       contextDoesNotAsk: !/[？?]/.test(followups[0].text),
       distinctSilenceSteps: new Set(normalized).size === normalized.length,
-      repeatedUserQuestionAnswered: repeated.kind === 'reply' && repeated.text.length > 1,
+      repeatedUserQuestionAnswered: repeated.kind === 'reply' && (test.history
+        ? /青岛|海边/.test(repeated.text) && /天气|散步/.test(repeated.text)
+        : missed.test(repeated.text)),
+      greetingDoesNotClaimCurrentWeather: !/今天.{0,8}(天气|不错|晴|凉|暖|冷)/.test(records[0].text),
       noErrors: errors.length === 0,
     };
-    return { ...test, question, records, checks, toolCalls: metrics.reduce((n, m) => n + m.toolCalls, 0), errors, passed: Object.values(checks).every(Boolean) };
+    return { ...test, question, records, checks, toolCalls: metrics.reduce((n, m) => n + m.toolCalls, 0), errors, automatedPassed: Object.values(checks).every(Boolean), manualReview: null, passed: null };
   } catch (error) {
-    return { ...test, question, records, errors, passed: false, code: errorCodeOf(error) };
+    return { ...test, question, records, errors, automatedPassed: false, manualReview: null, passed: false, code: errorCodeOf(error) };
   } finally {
     session?.end();
     db.close();
@@ -138,6 +141,7 @@ for (const test of cases.filter(c => selected === 'all' || c.id === selected)) {
   const result = await run(test);
   report.cases.push(result);
   writeFileSync(join(root, 'docs/testing', reportName), `${JSON.stringify(report, null, 2)}\n`);
-  console.log(JSON.stringify({ event: 'topic_probe_case', id: result.id, passed: result.passed, code: result.code ?? null, checks: result.checks, replies: result.records.length }));
+  console.log(JSON.stringify({ event: 'topic_probe_case', id: result.id, automatedPassed: result.automatedPassed, requiresManualReview: true, code: result.code ?? null, checks: result.checks, replies: result.records.length }));
 }
-if (!report.cases.every(c => c.passed)) process.exitCode = 1;
+// Exit status covers mechanical checks only; semantic acceptance needs recorded manual review.
+if (!report.cases.every(c => c.automatedPassed)) process.exitCode = 1;
