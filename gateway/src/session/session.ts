@@ -531,6 +531,15 @@ export class Session {
   private onUserFinal(text: string, echo: boolean): void {
     if (echo) this.send({ type: 'transcript.user', text, final: true });
     this.ledger.addUser(text, Date.now());
+    if (this.writer && this.context.ownerId) {
+      this.writer.append({
+        ownerId: this.context.ownerId,
+        sessionId: this.sessionId,
+        role: 'user',
+        text,
+        now: Date.now(),
+      });
+    }
     this.turnsSinceRebuild++;
     this.charsSinceRebuild += text.length;
     this.director.onUserFinal(text);

@@ -646,7 +646,7 @@ describe('Session', () => {
     expect(of(s.sent, 'avatar.emotion').map((m) => m.emotion)).toEqual(['sad', 'happy']);
   });
 
-  it('flushes finalized assistant replies once and skips user text', async () => {
+  it('writes a user final when it arrives and flushes assistant replies once', async () => {
     const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
     const s = setup({ writer: { append } }, ownedCtx, 'session-fixed');
     await s.session.start(s.transport);
@@ -656,18 +656,23 @@ describe('Session', () => {
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
     s.session.flush();
     s.session.handleClientMessage({ type: 'debug.userText', text: '我叫老王' });
+    expect(append.mock.calls.map((c) => c[0])).toEqual([
+      { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'assistant', text: '你好呀', now: expect.any(Number) },
+      { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'user', text: '我叫老王', now: expect.any(Number) },
+    ]);
     await vi.advanceTimersByTimeAsync(1000);
     expect(assistantText(s.sent, 2)).toBe('我在听');
     s.session.flush();
-    expect(append.mock.calls.map((c) => c[0].text)).toEqual(['你好呀']);
+    expect(append.mock.calls.map((c) => c[0].text)).toEqual(['你好呀', '我叫老王']);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 400, reason: 'ended' });
     s.session.flush();
     expect(append.mock.calls.map((c) => c[0])).toEqual([
       { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'assistant', text: '你好呀', now: expect.any(Number) },
+      { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'user', text: '我叫老王', now: expect.any(Number) },
       { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'assistant', text: '我在听', now: expect.any(Number) },
     ]);
     s.session.flush();
-    expect(append).toHaveBeenCalledTimes(2);
+    expect(append).toHaveBeenCalledTimes(3);
   });
 
   it('flushes the playback slice of an interrupted reply', async () => {
@@ -680,18 +685,20 @@ describe('Session', () => {
     // 3×100ms chunks at 24 kHz. Half of that audio is the first two characters.
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 150, reason: 'interrupted' });
     s.session.flush();
-    expect(append.mock.calls.map((c) => c[0].text)).toEqual(['你好呀', '我在']);
+    expect(append.mock.calls.map((c) => c[0].text)).toEqual(['随便聊聊', '你好呀', '我在']);
   });
 
   it('writes nothing when the writer or the owner is missing', async () => {
     const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
     const noOwner = setup({ writer: { append } }, undefined, 'session-no-owner');
     await greetAndFinish(noOwner);
+    noOwner.session.handleClientMessage({ type: 'debug.userText', text: '我叫老王' });
     noOwner.session.flush();
     expect(append).not.toHaveBeenCalled();
 
     const noWriter = setup({}, ownedCtx);
     await greetAndFinish(noWriter);
+    expect(() => noWriter.session.handleClientMessage({ type: 'debug.userText', text: '我叫老王' })).not.toThrow();
     expect(() => noWriter.session.flush()).not.toThrow();
   });
 });
