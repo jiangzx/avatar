@@ -1,6 +1,7 @@
 export function renderSnapshot(input: {
   facts: readonly { category: string; text: string }[]
   notes: readonly { text: string }[]
+  episode?: { summary: string }
   tail: readonly { role: 'user' | 'assistant'; text: string }[]
   maxChars: number
 }): string {
@@ -11,8 +12,10 @@ export function renderSnapshot(input: {
   const head = addressing.join('\n');
   // Names stay whole even when the addressing block itself exceeds the budget.
   if (head.length > input.maxChars) return head;
-  const kept: string[] = [];
-  for (const line of [...addressing, ...other, ...notes]) {
+  const kept = [...addressing];
+  const episode = input.episode?.summary ? `上次聊天摘要：${input.episode.summary}` : '';
+  if (episode && joinedLength([...kept, episode]) <= input.maxChars) kept.push(episode);
+  for (const line of [...other, ...notes]) {
     if (joinedLength([...kept, line]) > input.maxChars) break;
     kept.push(line);
   }

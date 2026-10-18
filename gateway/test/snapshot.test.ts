@@ -45,6 +45,27 @@ describe('renderSnapshot', () => {
     expect(text).toBe('称呼：王叔\n也叫王先生');
   });
 
+  it('keeps the previous discussion ahead of other facts within the budget', () => {
+    const name = '称呼：王叔';
+    const summary = '聊过公园散步和出门添衣';
+    const text = renderSnapshot({
+      facts: [{ category: 'addressing', text: name }, { category: 'preference', text: 'x'.repeat(100) }],
+      episode: { summary }, notes: [], tail: [], maxChars: 60,
+    });
+    expect(text.startsWith(name)).toBe(true);
+    expect(text).toContain(summary);
+    expect(text).not.toContain('x');
+    expect(text.length).toBeLessThanOrEqual(60);
+  });
+
+  it('omits an episode that cannot fit without cutting the name', () => {
+    const text = renderSnapshot({
+      facts: [{ category: 'addressing', text: '称呼：王叔' }],
+      episode: { summary: 'x'.repeat(100) }, notes: [], tail: [], maxChars: 10,
+    });
+    expect(text).toBe('称呼：王叔');
+  });
+
   it('returns an empty string when there is nothing to remember', () => {
     expect(renderSnapshot({ facts: [], notes: [], tail: [], maxChars: 600 })).toBe('');
   });

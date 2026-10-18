@@ -56,6 +56,8 @@ export interface MemoryStore {
   listFacts(ownerId: string): { category: string; text: string }[];
   /** Notes for one agent. A different agent's notes are not returned. */
   listNotes(ownerId: string, agentId: string): { text: string }[];
+  /** Latest discussion from an ended session of this owner's agent. */
+  latestEpisode(ownerId: string, agentId: string): { summary: string } | undefined;
   /**
    * Unextracted tail for the owner. No cap: the previous session already flushed,
    * and extraction later marks these rows extracted. `agentId` is unused; messages are owner-scoped.
@@ -194,6 +196,11 @@ function prepareStatements(db: DatabaseSync) {
       WHERE EXISTS (SELECT 1 FROM owners WHERE id = ?)`),
     listFacts: p('SELECT category, text FROM user_facts WHERE owner_id = ? ORDER BY updated_at, id'),
     listNotes: p('SELECT text FROM relationship_notes WHERE owner_id = ? AND agent_id = ? ORDER BY updated_at, id'),
+    latestEpisode: p(`SELECT e.summary FROM episodes e
+      JOIN sessions s ON s.id = e.session_id
+      JOIN agents a ON a.id = s.agent_id AND a.owner_id = e.owner_id
+      WHERE e.owner_id = ? AND a.id = ? AND s.ended_at IS NOT NULL
+      ORDER BY s.started_at DESC, e.created_at DESC, e.rowid DESC LIMIT 1`),
     snapshotRows: p(`SELECT role, text FROM messages
       WHERE owner_id = ? AND extracted = 0 AND excluded = 0
       ORDER BY created_at, rowid`),
@@ -375,6 +382,11 @@ export class SqliteMemoryStore implements MemoryStore {
 
   listNotes(ownerId: string, agentId: string): { text: string }[] {
     return this.q.listNotes.all(ownerId, agentId).map((r) => ({ text: r.text as string }));
+  }
+
+  latestEpisode(ownerId: string, agentId: string): { summary: string } | undefined {
+    const row = this.q.latestEpisode.get(ownerId, agentId);
+    return row ? { summary: row.summary as string } : undefined;
   }
 
   snapshotRows(ownerId: string, _agentId: string): { role: 'user' | 'assistant'; text: string }[] {

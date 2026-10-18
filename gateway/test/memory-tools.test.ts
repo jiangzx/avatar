@@ -587,6 +587,10 @@ describe('session memory tools', () => {
     store.markNotified(a.ownerId, 2);
     insertFact(db, a.ownerId, 'addr', 'addressing', '称呼：王叔');
     insertFact(db, a.ownerId, 'pref', 'preference', '喜欢喝茶');
+    store.recordSessionStart('episode-before-forget', a.agentId, 1);
+    store.recordSessionEnd('episode-before-forget', a.agentId, 2);
+    db.prepare('INSERT INTO episodes (id, session_id, owner_id, summary, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run('kept-episode', 'episode-before-forget', a.ownerId, '聊过公园散步', 3);
     const live = sessionWithSnapshot({
       store,
       who: a,
@@ -607,6 +611,7 @@ describe('session memory tools', () => {
     const rebuilt = live.configs.at(-1)!.instructions;
     expect(rebuilt).not.toContain('喜欢喝茶');
     expect(rebuilt).toContain('称呼：王叔');
+    expect(rebuilt).toContain('聊过公园散步');
     live.session.end();
   });
 

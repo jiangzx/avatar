@@ -900,6 +900,7 @@ export class Session {
     const text = renderSnapshot({
       facts: store.listFacts(ownerId),
       notes: store.listNotes(ownerId, this.context.agentId ?? ''),
+      episode: store.latestEpisode(ownerId, this.context.agentId ?? ''),
       tail: store.snapshotRows(ownerId, this.context.agentId ?? ''),
       maxChars,
     });

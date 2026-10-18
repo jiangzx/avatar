@@ -98,6 +98,7 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     const snapshot = renderSnapshot({
       facts: store.listFacts(device.ownerId),
       notes: store.listNotes(device.ownerId, agent.id),
+      episode: store.latestEpisode(device.ownerId, agent.id),
       tail: store.snapshotRows(device.ownerId, agent.id),
       maxChars: this.snapshotMaxChars,
     });

@@ -959,16 +959,17 @@ Phone gate follow-up (2026-10-18; user authorized the restart):
 - [ ] Assumption 8: complete a tool turn on the phone and confirm audible continuation.
 - [ ] Real second phone conversation: user confirmed addressing recall after ending and reopening, but recent-topic continuity failed and repeated followups were reported. Full acceptance remains open; see blocker #42 and the proposal below.
 
-#### Proposed correction after phone feedback — awaiting approval
+#### Approved correction after phone feedback (2026-10-18)
 
-This is a bounded correction to existing Plan C memory reads and role copy, grounded in design §§5–8. Execute with `executing-plans` after approval. The approved 3s/6s/6s/3min silence timing, interruption mechanisms and existing unextracted-tail behavior remain constraints. No change has been implemented yet.
+User approved this bounded correction to existing Plan C memory reads and role copy, grounded in design §§5–8. Continue with `executing-plans`. The approved 3s/6s/6s/3min silence timing, interruption mechanisms and existing unextracted-tail behavior remain constraints. Task status is recorded below.
 
-1. **Carry the last discussion into the next session.**
+1. [x] **Carry the last discussion into the next session.**
    - Files: `gateway/src/memory/store.ts`, `gateway/src/memory/snapshot.ts`, `gateway/src/identity/registry.ts`, `gateway/src/session/session.ts`; tests: `memory-store.test.ts`, `snapshot.test.ts`, `memory-acceptance.test.ts`, `memory-tools.test.ts`.
    - Add `MemoryStore.latestEpisode(ownerId: string, agentId: string): { summary: string } | undefined`. Join episodes to sessions and agents, scope by owner and agent, restrict to ended sessions, order by session start then episode creation and rowid descending, and take the latest available episode. An empty session must not erase an earlier episode.
    - Add optional `episode?: { summary: string }` to `renderSnapshot` input. Render addressing first, then a clearly labelled historical discussion summary, then other facts/notes/tail within the existing character budget. Do not treat prior weather discussion as current weather data. Preserve full addressing and the existing pending-tail fallback.
    - Wire both initial identity resolution and forget/decline refresh. Forgotten or declined episodes must disappear immediately; no cross-owner/agent leakage and no new model call on startup.
    - TDD: reproduce extracted=1 with a stored episode and verify it reaches the next session's actual instructions; cover no episode, empty session, owner/agent isolation, budget pressure, unextracted fallback, forget and decline. Run the failing tests before implementation, then make them pass and commit this task with its status update.
+   - Verification: the new snapshot and next-session assertions failed before the implementation; the refresh regression also failed without episode wiring. After implementation, the focused store/snapshot/acceptance/tools suite passed 43 tests; gateway typecheck passed.
 2. **Correct keyword retrieval and the repeated-response instructions.**
    - Files: `gateway/src/session/tools/recall.ts`, `gateway/roles/elder-companion/styles/old-friend.md`, `grandchild.md`, `gateway/roles/elder-companion/director.json`; tests: `gateway/test/memory-tools.test.ts`, existing Director regression suite.
    - Change `ftsMatch` to join escaped tokens with ` OR `, as the approved spec requires. A generic request to resume the last discussion uses the episode snapshot, not an invented keyword; specific missing details can use the existing `recall_memory` tool.

@@ -51,6 +51,7 @@ const FACTS = JSON.stringify({
   ops: [
     { op: 'add', table: 'user_facts', category: 'addressing', text: '称呼：王叔' },
     { op: 'add', table: 'user_facts', category: 'preference', text: '喜欢喝茶' },
+    { op: 'add', table: 'episodes', summary: '喜欢喝茶，聊起泡茶的杯子' },
   ],
 });
 
@@ -140,6 +141,7 @@ describe('Plan C memory acceptance', () => {
         writer,
         worker: queued,
         store,
+        budget: { totalChars: 8_000, snapshotMaxChars: 600, summaryMaxChars: 800 },
         extractEveryUserTurns: 10,
       }, ctx, sessionId, noticePending),
       60_000,
@@ -200,6 +202,7 @@ describe('Plan C memory acceptance', () => {
     const again = opened(registeredA.deviceToken);
     expect(again.ctx.memorySnapshot).toContain('称呼：王叔');
     expect(again.ctx.memorySnapshot).toContain('喜欢喝茶');
+    expect(again.ctx.memorySnapshot).toContain('泡茶的杯子');
     const built = buildInstructions({
       persona: roles.buildPersona(again.ctx.roleId, again.ctx.styleId),
       memorySnapshot: again.ctx.memorySnapshot,
@@ -222,6 +225,7 @@ describe('Plan C memory acceptance', () => {
     expect(director.greetingMemoryInstruction).not.toBe(director.greetingInstruction);
     expect(instructions[remembered]).toContain('## 关于用户（记忆）');
     expect(instructions[remembered]).toContain('称呼：王叔');
+    expect(instructions[remembered]).toContain('泡茶的杯子');
 
     await finishCurrent(sessionMemory.session);
     await say(sessionMemory.session, '昨天去了公园');
@@ -250,6 +254,7 @@ describe('Plan C memory acceptance', () => {
     expect(sessionForget.session.ledger.recent).toEqual([]);
     const forgotten = opened(registeredA.deviceToken);
     expect(forgotten.ctx.memorySnapshot ?? '').not.toContain('喜欢喝茶');
+    expect(instructions.at(-1)).not.toContain('泡茶的杯子');
     expect(store.searchMessages(ownerId, ftsMatch('喜欢喝茶')!, 12)).toEqual([]);
     expect(store.listFacts(ownerId).map((fact) => fact.text)).toContain('称呼：王叔');
     expect(store.listFacts(ownerId).map((fact) => fact.text)).not.toContain('喜欢喝茶');

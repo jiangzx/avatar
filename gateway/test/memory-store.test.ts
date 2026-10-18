@@ -131,6 +131,36 @@ describe('SqliteMemoryStore', () => {
     expect(store.listSessions(a.ownerId)[0]?.endedAt).toBe(30);
   });
 
+  it('reads the latest episode by ended session, scoped to both owner and agent', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'ha');
+    const b = owner(store, 'hb');
+    const otherAgent = store.ensureAgent(a.ownerId, 'other-role', 'default', 2);
+    const episode = (id: string, sessionId: string, who: typeof a, agentId: string, start: number, created: number, ended = true) => {
+      store.recordSessionStart(sessionId, agentId, start);
+      if (ended) store.recordSessionEnd(sessionId, agentId, start + 1);
+      db.prepare('INSERT INTO episodes (id, session_id, owner_id, summary, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(id, sessionId, who.ownerId, id, created);
+    };
+    expect(store.latestEpisode(a.ownerId, a.agentId)).toBeUndefined();
+    episode('recent', 's-recent', a, a.agentId, 20, 30);
+    episode('late-old-extraction', 's-old', a, a.agentId, 10, 100);
+    episode('active', 's-active', a, a.agentId, 40, 101, false);
+    episode('other-owner', 's-b', b, b.agentId, 50, 102);
+    episode('other-agent', 's-other', a, otherAgent.id, 60, 103);
+    store.recordSessionStart('s-empty', a.agentId, 70);
+    store.recordSessionEnd('s-empty', a.agentId, 71);
+    expect(store.latestEpisode(a.ownerId, a.agentId)).toEqual({ summary: 'recent' });
+    expect(store.latestEpisode(b.ownerId, a.agentId)).toBeUndefined();
+    expect(store.latestEpisode(a.ownerId, b.agentId)).toBeUndefined();
+    db.prepare('INSERT INTO episodes (id, session_id, owner_id, summary, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run('recent-update', 's-recent', a.ownerId, 'latest-in-session', 31);
+    expect(store.latestEpisode(a.ownerId, a.agentId)).toEqual({ summary: 'latest-in-session' });
+    db.prepare('DELETE FROM episodes WHERE owner_id = ?').run(a.ownerId);
+    expect(store.latestEpisode(a.ownerId, a.agentId)).toBeUndefined();
+  });
+
   it('touches device and owner last-seen times', () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
