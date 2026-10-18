@@ -6,6 +6,7 @@ import {
   type ResponseKind,
   type ServerMessage,
 } from '@anyidea/protocol';
+import { classifyAdapterError } from '../adapters/errorClass.ts';
 import { PERFORM_ACTION_TOOL, type AdapterFactory, type ProactiveRequest, type RealtimeAdapter, type SessionConfig } from '../adapters/types.ts';
 import { log } from '../log.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
@@ -407,9 +408,11 @@ export class Session {
     });
     a.on('error', (code, retryable) => {
       if (!current()) return;
-      log('adapter_error', { code, retryable });
+      const errorClass = classifyAdapterError(code, false);
+      log('adapter_error', { code, class: errorClass });
       this.metrics.onError(code);
-      if (retryable) void this.rebuild('error');
+      if (errorClass === 'ignorable') return;
+      if (errorClass === 'retryable') void this.rebuild('error');
       else this.send({ type: 'error', code, retryable: false });
     });
     a.on('closed', () => {
