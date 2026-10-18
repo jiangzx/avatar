@@ -949,6 +949,8 @@ EOF
 **Interfaces:**
 - Consumes: Tasks 1–11.
 
+2026-10-18 recheck: `npm test` passed (protocol 6, gateway 394, avatar-core 96), `npm run typecheck` passed, and `npm test -w gateway -- test/memory-acceptance.test.ts` passed (2 tests). Process smoke: `node --import tsx docs/testing/plan3-mock-smoke.mjs` verifies the notice playback gate, persisted tail after owner replacement, and Mock tool continuation on 8797. Playback acknowledgements are simulated; snapshot content is checked through the store and renderer, not through a spoken model reply. Assumptions 7/8 and the real second phone conversation remain NOT RUN. Historical red-test steps are not retroactively marked as run.
+
 - [ ] **Step 1: Write the failing acceptance test**
 
 One process, `':memory:'` db, fake `TextModelClient` that returns one `addressing` fact `称呼：王叔` and one preference. Drive:
@@ -963,23 +965,23 @@ One process, `':memory:'` db, fake `TextModelClient` that returns one `addressin
 
 Latency: build a snapshot of 50 facts and assert `renderSnapshot` plus `snapshotRows` on `':memory:'` finishes in under 300 ms. This is the in-process stand-in for "加入快照后首次回复延迟增加不超过 300 ms". It does not measure the live model.
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `npm test -w gateway -- test/memory-acceptance.test.ts`
 Expected: PASS if Tasks 1–11 are in place. If this task is started early, FAIL on the missing snapshot.
 
-- [ ] **Step 3: Run the gateway suite**
+- [x] **Step 3: Run the gateway suite**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS, typecheck clean.
 
-- [ ] **Step 4: Record what is not verified**
+- [x] **Step 4: Record what is not verified**
 
 In `docs/project/roadmap.md`, under Plan 3, state that the Plan C unit acceptance passed with the command from Step 3, and that these remain NOT RUN until the user asks: assumption 7 live probe if it was skipped, assumption 8 on-device tool turn, and a real second conversation on the phone. Do not restart port 8787 as part of this task.
 
 If Assumption 7 was skipped or failed, record in the NOT RUN section: "Assumption 7 (qwen-plus reachable): if failed, extraction and real second-session memory recall NOT VERIFIED; only in-process fake-client acceptance passed."
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gateway/test/memory-acceptance.test.ts docs/project/roadmap.md

@@ -3778,9 +3778,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Run: `npm test && npm run typecheck`
 Expected: protocol, gateway, avatar-core PASS; typecheck clean. Record exact counts.
 
-- [ ] **Step 2: Mock live smoke**
+- [x] **Step 2: Mock live smoke**
 
-Not run (user instruction: Mock only, no services/device/real model); see docs/blockers.md #14
+Verified on 2026-10-18 with `node --import tsx docs/testing/plan3-mock-smoke.mjs`: `/session` 200, one `instruction_budget` event, no checked conversation text in logs; see `docs/blockers.md` #14
 
 ```bash
 cd gateway && ADAPTER=mock APP_SECRET=local-dev-secret-0123 PORT=8797 node --import tsx src/index.ts | tee /tmp/gw-mock.log

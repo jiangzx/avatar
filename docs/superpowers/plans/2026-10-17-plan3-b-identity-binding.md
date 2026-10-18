@@ -2641,8 +2641,8 @@ Append to `gateway/.env.example`:
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS; typecheck clean.
 
-- [ ] **Step 7: Live smoke on Mock (port 8797; do not touch the user's 8787 gateway)**
-  Not run (user instruction: Mock only, no services); see docs/blockers.md #31
+- [x] **Step 7: Live smoke on Mock (port 8797; do not touch the user's 8787 gateway)**
+  Verified on 2026-10-18 with `node --import tsx docs/testing/plan3-mock-smoke.mjs`; see docs/blockers.md #31.
 
 Terminal 1:
 
@@ -2668,7 +2668,7 @@ grep -c "$TOKEN" $SMOKE_DIR/gateway.log
 grep -c '"event":"device_resolved"' $SMOKE_DIR/gateway.log
 node -e 'const { DatabaseSync } = require("node:sqlite"); const db = new DatabaseSync(process.argv[1], { readOnly: true }); console.log(db.prepare("SELECT count(*) AS owners FROM owners").get(), db.prepare("SELECT style_id FROM agents").all());' $SMOKE_DIR/memory.db
 ```
-Expected, in order: `43`, `200`, `401`, `200`, `{"style":"grandchild"}`, `404`, `600`, `0`, `1`, `{ owners: 1 }` and `[ { style_id: 'grandchild' } ]`. (On Linux use `stat -c '%a'`.) The last command is also how a developer finds an owner id for the dev endpoint: `SELECT id FROM owners`.
+Expected, in order: `43`, `200`, `401`, `200`, `{"style":"grandchild"}`, `404`, `600`, `0`, `2`, `{ owners: 1 }` and `[ { style_id: 'grandchild' } ]`. After Plan C, one bearer session logs `device_resolved` twice: once to identify the owner and once after flushing the old session. (On Linux use `stat -c '%a'`.) The last command is also how a developer finds an owner id for the dev endpoint: `SELECT id FROM owners`.
 
 Stop the gateway with Ctrl-C and confirm the log ends with `session_destroyed` lines and no error. Then `rm -rf $SMOKE_DIR`.
 

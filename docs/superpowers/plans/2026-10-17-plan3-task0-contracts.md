@@ -919,7 +919,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Run: `npm test && npm run typecheck`
 Expected: protocol, gateway, avatar-core all PASS; typecheck clean. Record the exact counts.
 
-- [ ] **Step 2: Live smoke on Mock**
+- [x] **Step 2: Live smoke on Mock**
 
 Run (from repo root, in a separate terminal; `APP_SECRET` must be ≥16 chars):
 
@@ -936,7 +936,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'x-app-secret: local-dev-sec
 
 Expected: `200` then `401`. Stop the gateway afterwards. (Port 8797 keeps the user's Qwen gateway on 8787 untouched.) (If `.env` already sets these variables, the inline values override them.)
 
-Not run in this session (user instruction: no local services); run manually before Plan A/B device work. Tracked in `docs/blockers.md` #11.
+Verified on 2026-10-18 with `node --import tsx docs/testing/plan3-mock-smoke.mjs`: identity off, `/session` 200 without bearer and 401 with forged bearer; gateway stopped cleanly. See `docs/blockers.md` #11.
 
 - [x] **Step 3: Document worktree preparation**
 
