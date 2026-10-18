@@ -3,11 +3,12 @@ import type { ServerMessage } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
 import type { SessionConfig } from '../src/adapters/types.ts';
 import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
+import type { SessionContext } from '../src/session/context.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import type { ReplyMetrics } from '../src/session/metrics.ts';
 import { InterruptCoordinator } from '../src/session/interrupt.ts';
-import { Session, type SessionDeps, type Transport } from '../src/session/session.ts';
+import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
 
 const script: MockScript = {
   greeting: '你好呀',
@@ -57,7 +58,11 @@ describe('Session context', () => {
   });
 });
 
-function setup(overrides: Partial<SessionDeps> = {}) {
+const ownedCtx: SessionContext = {
+  ownerId: 'owner-1', agentId: 'agent-1', roleId: 'elder-companion', styleId: 'grandchild',
+};
+
+function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessionId?: string) {
   const mocks: MockAdapter[] = [];
   const session = new Session({
     adapterFactory: () => {
@@ -68,7 +73,7 @@ function setup(overrides: Partial<SessionDeps> = {}) {
     summarizer: new MockSummarizer(),
     roles: fixedRoleCatalog('P', director),
     ...overrides,
-  });
+  }, ctx, sessionId);
   return { session, mocks, ...collector() };
 }
 
@@ -639,5 +644,41 @@ describe('Session', () => {
     expect(of(s.sent, 'avatar.emotion').map((m) => m.emotion)).toEqual(['sad']);
     await vi.advanceTimersByTimeAsync(6_000);
     expect(of(s.sent, 'avatar.emotion').map((m) => m.emotion)).toEqual(['sad', 'happy']);
+  });
+
+  it('flushes finalized assistant replies once and skips user text', async () => {
+    const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
+    const s = setup({ writer: { append } }, ownedCtx, 'session-fixed');
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.flush();
+    expect(append).not.toHaveBeenCalled();
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    s.session.flush();
+    s.session.handleClientMessage({ type: 'debug.userText', text: '我叫老王' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(assistantText(s.sent, 2)).toBe('我在听');
+    s.session.flush();
+    expect(append.mock.calls.map((c) => c[0].text)).toEqual(['你好呀']);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 400, reason: 'ended' });
+    s.session.flush();
+    expect(append.mock.calls.map((c) => c[0])).toEqual([
+      { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'assistant', text: '你好呀', now: expect.any(Number) },
+      { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'assistant', text: '我在听', now: expect.any(Number) },
+    ]);
+    s.session.flush();
+    expect(append).toHaveBeenCalledTimes(2);
+  });
+
+  it('writes nothing when the writer or the owner is missing', async () => {
+    const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
+    const noOwner = setup({ writer: { append } }, undefined, 'session-no-owner');
+    await greetAndFinish(noOwner);
+    noOwner.session.flush();
+    expect(append).not.toHaveBeenCalled();
+
+    const noWriter = setup({}, ownedCtx);
+    await greetAndFinish(noWriter);
+    expect(() => noWriter.session.flush()).not.toThrow();
   });
 });

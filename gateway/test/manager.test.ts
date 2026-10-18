@@ -1,14 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionContext } from '../src/session/context.ts';
 import { SessionManager, type SessionLifecycle } from '../src/session/manager.ts';
-import type { Session, Transport } from '../src/session/session.ts';
+import type { Session, TranscriptWriter, Transport } from '../src/session/session.ts';
 
 const transport: Transport = { send: () => {}, sendAudio: () => {} };
 const owned = (ownerId: string): SessionContext => ({ ownerId, agentId: `agent-${ownerId}`, roleId: 'elder-companion', styleId: 'grandchild' });
 const dev: SessionContext = { roleId: 'elder-companion', styleId: 'grandchild' };
 
 function fakeSession() {
-  return { start: vi.fn(async () => {}), end: vi.fn(), attachTransport: vi.fn(), detachTransport: vi.fn() };
+  return {
+    start: vi.fn(async () => {}),
+    end: vi.fn(),
+    attachTransport: vi.fn(),
+    detachTransport: vi.fn(),
+    flush: vi.fn(),
+  };
 }
 
 let manager: SessionManager | null = null;
@@ -82,6 +88,38 @@ describe('SessionManager owner invariant', () => {
     m.create(owned('o1'));
     expect(m.size).toBe(4);
     expect(made.map((s) => s.end.mock.calls.length)).toEqual([1, 0, 0, 0, 0]);
+  });
+
+  it('flushes the previous session before destroying it', () => {
+    const writer = { append: vi.fn<TranscriptWriter['append']>(() => 'stored') };
+    const made: Array<ReturnType<typeof fakeSession>> = [];
+    manager = new SessionManager((ctx, sessionId) => {
+      const s = fakeSession();
+      s.flush.mockImplementation(() => {
+        writer.append({
+          ownerId: ctx.ownerId ?? '',
+          sessionId,
+          role: 'assistant',
+          text: 'kept',
+          now: 1,
+        });
+      });
+      made.push(s);
+      return s as unknown as Session;
+    }, 60_000, 300_000, 10_000);
+    const first = manager.create(owned('o1'));
+    manager.create(owned('o1'));
+    const previous = made[0]!;
+    expect(previous.flush).toHaveBeenCalledOnce();
+    expect(previous.flush.mock.invocationCallOrder[0]).toBeLessThan(previous.end.mock.invocationCallOrder[0]!);
+    expect(writer.append).toHaveBeenCalledWith({
+      ownerId: 'o1',
+      sessionId: first.sessionId,
+      role: 'assistant',
+      text: 'kept',
+      now: 1,
+    });
+    expect(made[1]!.flush).not.toHaveBeenCalled();
   });
 
   it('endOwner ends every session of that owner and returns the count', async () => {

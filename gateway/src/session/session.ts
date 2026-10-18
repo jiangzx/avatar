@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   AI_SAMPLE_RATE,
   MIC_FRAME_SAMPLES,
@@ -27,6 +28,11 @@ export interface Transport {
   sendAudio(seq: number, pcm: Int16Array): void;
 }
 
+/** Persists one transcript turn. Implementations must not log the text. */
+export interface TranscriptWriter {
+  append(input: { ownerId: string; sessionId: string; role: 'user' | 'assistant'; text: string; now: number }): 'stored' | 'skipped' | 'rejected';
+}
+
 export interface SessionDeps {
   adapterFactory: AdapterFactory;
   summarizer: Summarizer;
@@ -53,6 +59,8 @@ export interface SessionDeps {
   rebuildTriggerRatio?: number;
   /** Emotion lexicon (gateway/config/emotion.json); undefined = no avatar.emotion messages. */
   emotion?: EmotionConfig;
+  /** Optional. flush() returns immediately when this is absent. */
+  writer?: TranscriptWriter;
 }
 
 interface ResponseState {
@@ -62,6 +70,8 @@ interface ResponseState {
   audioMs: number;
   playedMs: number;
   finalized: boolean;
+  /** Set once flush() has handed this reply to the writer. */
+  flushed: boolean;
 }
 
 const MAX_REBUILD_MIC_FRAMES = 25;
@@ -76,6 +86,7 @@ const DEFAULT_SUMMARIZE_POLICY: PolicySpec = { timeoutMs: 15_000, retries: 0, ba
 export class Session {
   readonly ledger: ConversationLedger;
   readonly context: SessionContext;
+  private readonly writer: TranscriptWriter | undefined;
   private readonly persona: string;
   private adapter: RealtimeAdapter;
   private transport: Transport | null = null;
@@ -121,7 +132,12 @@ export class Session {
   /** True when this turn's own cancel stands in for playback.stopped. */
   private originForcedEnd = false;
 
-  constructor(private readonly deps: SessionDeps, ctx: SessionContext = devContext(deps.roles)) {
+  constructor(
+    private readonly deps: SessionDeps,
+    ctx: SessionContext = devContext(deps.roles),
+    readonly sessionId: string = randomUUID(),
+  ) {
+    this.writer = deps.writer;
     this.context = ctx;
     this.persona = deps.roles.buildPersona(ctx.roleId, ctx.styleId);
     const ledgerOpts = deps.ledger ?? DEFAULT_LEDGER_OPTIONS;
@@ -294,6 +310,22 @@ export class Session {
     }
   }
 
+  /** Writes finalized assistant replies that are not yet stored. User finals are not flushed here. */
+  flush(): void {
+    if (!this.writer || !this.context.ownerId) return;
+    for (const state of this.bySeq.values()) {
+      if (!state.finalized || state.flushed || !state.text) continue;
+      this.writer.append({
+        ownerId: this.context.ownerId,
+        sessionId: this.sessionId,
+        role: 'assistant',
+        text: state.text,
+        now: Date.now(),
+      });
+      state.flushed = true;
+    }
+  }
+
   end(): void {
     if (this.ended) return;
     this.ended = true;
@@ -366,7 +398,7 @@ export class Session {
     });
     a.on('responseStarted', (id) => {
       if (!current()) return;
-      const s: ResponseState = { seq: ++this.seqCounter, kind: this.pendingKind ?? 'reply', text: '', audioMs: 0, playedMs: 0, finalized: false };
+      const s: ResponseState = { seq: ++this.seqCounter, kind: this.pendingKind ?? 'reply', text: '', audioMs: 0, playedMs: 0, finalized: false, flushed: false };
       this.pendingKind = null;
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
