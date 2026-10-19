@@ -7,7 +7,7 @@ import type { VadCallbacks } from '../src/audio/vad.ts';
 import type { ToFlutter } from '../src/bridge.ts';
 import type { GatewayClientEvents } from '../src/net/gatewayClient.ts';
 
-const cfg: AppConfig = { gatewayUrl: 'http://127.0.0.1:8787', appSecret: 'x'.repeat(16), audioPath: 'A', avatarUrl: 'a.glb', echo: 'true' };
+const cfg: AppConfig = { gatewayUrl: 'http://127.0.0.1:8787', appSecret: 'x'.repeat(16), audioPath: 'A', avatarUrl: './avatars/avatar.glb', echo: 'true' };
 
 class FakePlayback implements PlaybackLike {
   readonly gate = new PlaybackGate();

@@ -168,7 +168,7 @@ export class AppController {
     }
 
     this.avatar = this.deps.createAvatar(this.el);
-    await this.avatar.load(this.cfg.avatarUrl);
+    await this.avatar.load(this.cfg.avatarUrl, () => this.post({ type: 'diag', key: 'avatar_fallback', value: '1' }));
     this.actions = this.deps.createActions(this.avatar);
 
     const stream = await this.capture.start({

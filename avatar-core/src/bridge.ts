@@ -25,7 +25,7 @@ export type NativeViewEvent =
   | { type: 'error'; code: string };
 
 export type FromFlutter =
-  | { type: 'config'; gatewayUrl: string; appSecret: string; audioPath: AudioPath; echo?: EchoMode; audioMode?: 'native' }
+  | { type: 'config'; gatewayUrl: string; appSecret: string; audioPath: AudioPath; avatarUrl: string; echo?: EchoMode; audioMode?: 'native' }
   | { type: 'mute'; muted: boolean }
   | { type: 'end' }
   | { type: 'debugText'; text: string }

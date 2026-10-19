@@ -1,5 +1,6 @@
 import { ACTION_NAMES } from '@anyidea/protocol';
 import type { FromFlutter, NativeViewEvent } from './bridge.ts';
+import { normalizeAvatarUrl } from './avatar/catalog.ts';
 
 /** Gateway hosts the WebView may talk to (dev/loopback/LAN only). Plan 2 adds the cloud host. */
 export const GATEWAY_HOST_ALLOWLIST = {
@@ -49,13 +50,15 @@ export function parseFromFlutter(raw: unknown): FromFlutter | null {
   if (!isObject(raw)) return null;
   switch (raw.type) {
     case 'config': {
-      const { gatewayUrl, appSecret, audioPath, echo, audioMode } = raw;
+      const { gatewayUrl, appSecret, audioPath, avatarUrl, echo, audioMode } = raw;
       if (!isAllowedGatewayUrl(gatewayUrl)) return null;
       if (typeof appSecret !== 'string' || appSecret.length === 0 || appSecret.length > MAX_APP_SECRET_LEN) return null;
       if (typeof audioPath !== 'string' || !AUDIO_PATHS.includes(audioPath)) return null;
       if (echo !== undefined && (typeof echo !== 'string' || !ECHO_MODES.includes(echo))) return null;
       if (audioMode !== undefined && audioMode !== 'native') return null;
-      return { type: 'config', gatewayUrl, appSecret, audioPath: audioPath as 'A' | 'B', echo: echo as 'true' | 'all' | undefined, ...(audioMode === 'native' ? { audioMode } : {}) };
+      const normalizedAvatarUrl = normalizeAvatarUrl(avatarUrl);
+      if (normalizedAvatarUrl === null) return null;
+      return { type: 'config', gatewayUrl, appSecret, audioPath: audioPath as 'A' | 'B', avatarUrl: normalizedAvatarUrl, echo: echo as 'true' | 'all' | undefined, ...(audioMode === 'native' ? { audioMode } : {}) };
     }
     case 'mute':
       return typeof raw.muted === 'boolean' ? { type: 'mute', muted: raw.muted } : null;

@@ -2,6 +2,7 @@ import { AppController, type AppConfig } from './app.ts';
 import { hasFlutter, onFlutterMessage, postToFlutter, setDevSink, type ToFlutter } from './bridge.ts';
 import { parseFromFlutter } from './bridgeValidate.ts';
 import { NativeAvatarController, browserNativeDeps } from './nativeAvatar.ts';
+import { DEFAULT_AVATAR_URL } from './avatar/catalog.ts';
 
 const el = document.getElementById('avatar');
 if (!el) throw new Error('#avatar missing');
@@ -42,7 +43,7 @@ onFlutterMessage((raw: unknown) => {
   }
   if (m.type === 'config') {
     void boot(
-      { gatewayUrl: m.gatewayUrl, appSecret: m.appSecret, audioPath: m.audioPath, avatarUrl: './avatars/avatar.glb', echo: m.echo ?? 'true' },
+      { gatewayUrl: m.gatewayUrl, appSecret: m.appSecret, audioPath: m.audioPath, avatarUrl: m.avatarUrl, echo: m.echo ?? 'true' },
       m.audioMode,
     );
   } else if (nativeApp) {
@@ -85,7 +86,7 @@ function installDevPanel(): void {
       gatewayUrl: import.meta.env.VITE_GATEWAY_URL ?? 'http://127.0.0.1:8787',
       appSecret: import.meta.env.VITE_APP_SECRET ?? '',
       audioPath: 'A',
-      avatarUrl: './avatars/avatar.glb',
+      avatarUrl: DEFAULT_AVATAR_URL,
       echo: new URLSearchParams(location.search).get('echo') === 'all' ? 'all' : 'true',
     });
   });

@@ -6,6 +6,7 @@ const cfg = (over: Record<string, unknown> = {}) => ({
   gatewayUrl: 'http://10.0.2.2:8787',
   appSecret: 's3cret',
   audioPath: 'A',
+  avatarUrl: './avatars/avatar.glb',
   echo: 'true',
   ...over,
 });
@@ -16,6 +17,14 @@ describe('parseFromFlutter', () => {
     expect(parseFromFlutter(cfg({ echo: undefined }))).toEqual({ ...cfg(), echo: undefined });
     expect(parseFromFlutter(cfg({ audioPath: 'B', echo: 'all' }))).toEqual(cfg({ audioPath: 'B', echo: 'all' }));
     expect(parseFromFlutter(cfg({ audioMode: 'native' }))).toEqual(cfg({ audioMode: 'native' }));
+  });
+
+  it('defaults an omitted avatar path and rejects URLs or traversal', () => {
+    const { avatarUrl: _ignored, ...withoutAvatar } = cfg();
+    expect(parseFromFlutter(withoutAvatar)).toEqual(cfg());
+    for (const avatarUrl of ['https://example.com/avatar.glb', 'data:model/gltf-binary;base64,x', './avatars/../avatar.glb', './avatars/unknown.glb', 4, null]) {
+      expect(parseFromFlutter(cfg({ avatarUrl })), String(avatarUrl)).toBeNull();
+    }
   });
 
   it('accepts loopback, emulator and RFC1918 gateway hosts', () => {
