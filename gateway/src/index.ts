@@ -102,6 +102,7 @@ const manager = new SessionManager(
       summarizePolicy: pacing.policies.summarize,
       ...(pacing.output.maxTokens !== null ? { maxOutputTokens: pacing.output.maxTokens } : {}),
       tailGuardMs: pacing.tailGuardMs,
+      slim: pacing.slim,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
       emotion,
       ...(store ? { store } : {}),

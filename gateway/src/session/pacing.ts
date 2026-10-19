@@ -20,6 +20,17 @@ const PacingSchema = z.object({
   tailGuardMs: z.number().int().min(0).max(1_000),
   output: z.object({ maxTokens: z.number().int().min(16).max(4_096).nullable() }).strict(),
   policies: z.object({ summarize: PolicySchema }).strict(),
+  slim: z.object({
+    enabled: z.boolean(),
+    intervalMs: z.number().int().min(60_000).max(3_600_000),
+    maxDeferMs: z.number().int().min(0).max(600_000),
+    bridgeAfterMs: z.number().int().min(0).max(10_000),
+    summaryLanguage: z.enum(['zh', 'ja']),
+    bridge: z.object({
+      zh: z.string().min(1).max(80),
+      ja: z.string().min(1).max(80),
+    }).strict(),
+  }).strict(),
 }).strict();
 
 /** Fallback when a test omits SessionDeps.toolTurnTimeoutMs. Same value as gateway/config/memory.json. */

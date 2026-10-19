@@ -30,8 +30,60 @@ describe('pacing and budget config', () => {
     expect(() => loadMemoryBudget(join(dir, 'memory.json'))).toThrow();
   });
 
+  it('requires slim pacing config with zh or ja summary language', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pace-'));
+    const base = {
+      rebuild: { contextChars: 12_000, triggerRatio: 0.8, afterTurns: 30 },
+      tailGuardMs: 400,
+      output: { maxTokens: null },
+      policies: { summarize: { timeoutMs: 15_000, retries: 1, backoffMs: 1000, maxBackoffMs: 4000 } },
+    };
+    writeFileSync(join(dir, 'pacing.json'), JSON.stringify(base));
+    expect(() => loadPacing(join(dir, 'pacing.json'))).toThrow();
+
+    writeFileSync(
+      join(dir, 'pacing.json'),
+      JSON.stringify({
+        ...base,
+        slim: {
+          enabled: true,
+          intervalMs: 1_200_000,
+          maxDeferMs: 120_000,
+          bridgeAfterMs: 400,
+          summaryLanguage: 'zh',
+          bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。' },
+        },
+      }),
+    );
+    expect(loadPacing(join(dir, 'pacing.json')).slim.intervalMs).toBe(1_200_000);
+
+    writeFileSync(
+      join(dir, 'pacing.json'),
+      JSON.stringify({
+        ...base,
+        slim: {
+          enabled: true,
+          intervalMs: 1_200_000,
+          maxDeferMs: 120_000,
+          bridgeAfterMs: 400,
+          summaryLanguage: 'en',
+          bridge: { zh: 'x', ja: 'y' },
+        },
+      }),
+    );
+    expect(() => loadPacing(join(dir, 'pacing.json'))).toThrow();
+  });
+
   it('rejects personas that leave too little room for history, and inconsistent ledger turns', () => {
-    const pacing: PacingConfig = { rebuild: { contextChars: 2000, triggerRatio: 1, afterTurns: 30 }, tailGuardMs: 400, output: { maxTokens: null }, policies: { summarize: { timeoutMs: 1000, retries: 0, backoffMs: 0, maxBackoffMs: 0 } } };
+    const slim = {
+      enabled: true,
+      intervalMs: 1_200_000,
+      maxDeferMs: 120_000,
+      bridgeAfterMs: 400,
+      summaryLanguage: 'zh' as const,
+      bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。' },
+    };
+    const pacing: PacingConfig = { rebuild: { contextChars: 2000, triggerRatio: 1, afterTurns: 30 }, tailGuardMs: 400, output: { maxTokens: null }, policies: { summarize: { timeoutMs: 1000, retries: 0, backoffMs: 0, maxBackoffMs: 0 } }, slim };
     const memory: MemoryBudgetConfig = {
       instructions: { budgetRatio: 0.4, snapshotMaxChars: 100, summaryMaxChars: 200, minHistoryChars: 100 },
       toolTurnTimeoutMs: 15_000,

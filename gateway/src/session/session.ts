@@ -25,7 +25,7 @@ import { InterruptCoordinator } from './interrupt.ts';
 import { buildInstructions, historyBudget, type InstructionBudget } from './instructions.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
-import { DEFAULT_TOOL_TURN_TIMEOUT_MS } from './pacing.ts';
+import { DEFAULT_TOOL_TURN_TIMEOUT_MS, type PacingConfig } from './pacing.ts';
 import { ToolTurn } from './toolTurn.ts';
 import { createSilencePlanner } from './silence.ts';
 import { createToolRegistry, type ToolOutcome } from './tools/registry.ts';
@@ -83,6 +83,8 @@ export interface SessionDeps {
   budget?: InstructionBudget;
   /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
   rebuildTriggerRatio?: number;
+  /** Interval slim rebuild (gateway/config/pacing.json slim). */
+  slim?: PacingConfig['slim'];
   /** Emotion lexicon (gateway/config/emotion.json); undefined = no avatar.emotion messages. */
   emotion?: EmotionConfig;
   /** Optional. flush() returns immediately when this is absent. */
