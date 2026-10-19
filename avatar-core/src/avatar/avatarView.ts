@@ -1,6 +1,7 @@
 import { TalkingHead } from '@met4citizen/talkinghead';
 import type { MouthShape } from '../audio/mouth.ts';
 import type { AvatarState } from './stateMachine.ts';
+import { avatarBodyForUrl, DEFAULT_AVATAR_URL } from './catalog.ts';
 
 const MOUTH_KEYS = ['jawOpen', 'mouthFunnel', 'mouthPucker', 'mouthStretchLeft', 'mouthStretchRight'] as const;
 const MOODS = new Set(['neutral', 'happy', 'sad', 'love']);
@@ -21,6 +22,21 @@ export const NEUTRAL_SMILE = 0.15;
 export const REST_SMILE = 0.45;
 
 type ModelFpsTarget = { opt?: { modelFPS: number }; animFrameDur?: number };
+export type AvatarModelLoader = Pick<TalkingHead, 'showAvatar'>;
+
+export async function loadAvatarModel(
+  head: AvatarModelLoader,
+  url: string,
+  onFallback?: () => void,
+): Promise<void> {
+  try {
+    await head.showAvatar({ url, body: avatarBodyForUrl(url), avatarMood: 'happy', lipsyncLang: 'en' });
+  } catch (error) {
+    if (url === DEFAULT_AVATAR_URL) throw error;
+    onFallback?.();
+    await head.showAvatar({ url: DEFAULT_AVATAR_URL, body: avatarBodyForUrl(DEFAULT_AVATAR_URL), avatarMood: 'happy', lipsyncLang: 'en' });
+  }
+}
 
 /** 60 while speaking or acting; 30 otherwise. */
 export function modelFpsFor(state: AvatarState, acting: boolean): number {
@@ -78,8 +94,8 @@ export class AvatarView {
     return this.head;
   }
 
-  async load(url: string, body: 'F' | 'M' = 'F'): Promise<void> {
-    await this.head.showAvatar({ url, body, avatarMood: 'happy', lipsyncLang: 'en' });
+  async load(url: string, onFallback?: () => void): Promise<void> {
+    await loadAvatarModel(this.head, url, onFallback);
     this.head.setMood('happy');
     this.head.setBaselineValue('eyesLookDown', 0);
     this.head.setFixedValue('mouthSmile', REST_SMILE);

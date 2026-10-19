@@ -47,6 +47,7 @@ void main() {
     expect(identityErrorText('http_401'), '应用配置有误，请联系家人');
     expect(identityErrorText('http_429'), '现在注册的人太多了，请稍后再试');
     expect(identityErrorText('http_503'), '现在注册的人太多了，请稍后再试');
+    expect(identityErrorText('invalid_avatar'), '这个形象暂时不可用，请换一个');
     expect(identityErrorText('http_500'), '出错了（http_500），请稍后再试');
   });
 

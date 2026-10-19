@@ -259,3 +259,10 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - S2 验证：新增 Session 播完/重复回执断言先失败，重建取消断言先失败；配置校验去掉新 schema 时拒绝断言失败，恢复后通过。`npm test -w gateway -- test/director.test.ts test/director-silence.test.ts test/silence.test.ts test/session.test.ts test/config.test.ts test/fileCatalog.test.ts`：145 通过；`npm run typecheck -w gateway`：通过。
 - S3 的初版合成评测和独立审查已完成：真实 Qwen 文本判断覆盖两种风格、16 个语义场景，机械检查 16/16；该报告验证了判断器语义，却没有覆盖三步主动链回归。报告见 `docs/testing/plan3-silence-flow-latest.json`，旧失败基线保留在 `plan3-silence-flow-before.json`；两份报告均区分人工判读与机械检查。
 - 独立审查发现并修复一个 P2：记忆告知完成回执不能提前清掉 `pending`，否则告知文案会覆盖上一轮实际回答；断线恢复提示也标记为独立 cue，播完后不再拿旧话题重新判断。初版交错回归后，`npm test`：protocol 6、gateway 434、avatar-core 96 全通过；本轮三步主动链回归后 gateway 为 435。`npm run typecheck`、Mock 8797 冒烟、两个探针 `node --check` 均通过。8787 未重启，手机听感和 #42 话题接续仍待用户复验。
+
+## Avatar selection implementation (2026-10-19)
+
+- Added independent local avatar selection for the existing model plus `cute-girl`, `cute-boy`, `young-woman`, and `young-man`. First launch is style then avatar; settings manages both; changes apply on the next session.
+- Flutter focused verification: `flutter test test/app_shell_test.dart test/avatar_page_config_test.dart test/companion_picker_test.dart test/style_picker_test.dart` passed (20 tests). `flutter analyze` completed with only the existing missing generated Web asset warnings and pre-existing lint/info items.
+- Avatar-core verification: `npm test -w avatar-core` passed (16 files, 102 tests); `npm run typecheck -w avatar-core` passed. Bridge validation accepts exactly the five catalog paths, defaults omitted paths, rejects URLs/traversal, and retries the existing model when a selected model is unavailable.
+- `./scripts/build-web.sh --probe-only` remains the appropriate build check until model assets are supplied. The four new GLBs, their licenses, and target-phone visual acceptance remain open in blocker #44; this checkout currently has only the externally supplied default model.

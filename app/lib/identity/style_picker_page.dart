@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'companion_picker.dart';
 import 'device_identity.dart';
 import 'styles.dart';
 
@@ -9,6 +10,7 @@ String identityErrorText(String reason) => switch (reason) {
   'storage' => '手机保存身份信息失败，请重试',
   'http_400' => '这个伙伴暂时不可用，请换一个',
   'http_401' => '应用配置有误，请联系家人',
+  'invalid_avatar' => '这个形象暂时不可用，请换一个',
   'http_429' || 'http_503' => '现在注册的人太多了，请稍后再试',
   _ => '出错了（$reason），请稍后再试',
 };
@@ -52,7 +54,14 @@ class _StylePickerPageState extends State<StylePickerPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+              Text(
+                widget.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 24),
               Expanded(
                 child: ListView(
@@ -60,13 +69,23 @@ class _StylePickerPageState extends State<StylePickerPage> {
                     for (final option in styleOptions)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 16),
-                        child: _StyleCard(
+                        child: SelectionCard(
                           option: option,
                           selected: option.id == _selected,
-                          onTap: widget.busy ? null : () => setState(() => _selected = option.id),
+                          keyPrefix: 'style',
+                          onTap: widget.busy
+                              ? null
+                              : () => setState(() => _selected = option.id),
                         ),
                       ),
-                    if (error != null) Text(error, style: const TextStyle(color: Colors.amberAccent, fontSize: 18)),
+                    if (error != null)
+                      Text(
+                        error,
+                        style: const TextStyle(
+                          color: Colors.amberAccent,
+                          fontSize: 18,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -74,10 +93,22 @@ class _StylePickerPageState extends State<StylePickerPage> {
                 height: 64,
                 child: FilledButton(
                   key: const Key('style-confirm'),
-                  onPressed: widget.busy ? null : () => widget.onConfirm(_selected),
+                  onPressed: widget.busy
+                      ? null
+                      : () => widget.onConfirm(_selected),
                   child: widget.busy
-                      ? const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3))
-                      : Text(widget.confirmLabel, style: const TextStyle(fontSize: 22)),
+                      ? Semantics(
+                          label: '正在保存',
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(strokeWidth: 3),
+                          ),
+                        )
+                      : Text(
+                          widget.confirmLabel,
+                          style: const TextStyle(fontSize: 22),
+                        ),
                 ),
               ),
               if (widget.onCancel != null) ...[
@@ -99,51 +130,13 @@ class _StylePickerPageState extends State<StylePickerPage> {
   }
 }
 
-class _StyleCard extends StatelessWidget {
-  const _StyleCard({required this.option, required this.selected, required this.onTap});
-
-  final StyleOption option;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      key: Key('style-${option.id}'),
-      color: selected ? const Color(0xFF1F3B3A) : const Color(0xFF1B1F2A),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: selected ? Colors.tealAccent : Colors.white24, width: selected ? 3 : 1),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(option.title, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text(option.subtitle, style: const TextStyle(color: Colors.white70, fontSize: 18)),
-                  ],
-                ),
-              ),
-              if (selected) const Icon(Icons.check_circle, color: Colors.tealAccent, size: 36),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Settings: change the style via PATCH /agent/style. Pops with the new style id, or null.
 class StyleSettingsPage extends StatefulWidget {
-  const StyleSettingsPage({super.key, required this.identity, required this.current});
+  const StyleSettingsPage({
+    super.key,
+    required this.identity,
+    required this.current,
+  });
 
   final DeviceIdentity identity;
   final String current;

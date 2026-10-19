@@ -3,16 +3,24 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../native_gateway/gateway_client.dart';
+import 'avatar_picker_page.dart';
+import 'avatars.dart';
+import 'companion_settings_page.dart';
 import 'device_identity.dart';
 import 'style_picker_page.dart';
 import 'styles.dart';
 
 /// First launch: style picker + registration. Afterwards: the avatar with a settings button on top.
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.identity, required this.avatarBuilder});
+  const AppShell({
+    super.key,
+    required this.identity,
+    required this.avatarBuilder,
+  });
 
   final DeviceIdentity identity;
-  final Widget Function(DeviceTokenProvider identity) avatarBuilder;
+  final Widget Function(DeviceTokenProvider identity, String avatarId)
+  avatarBuilder;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -21,6 +29,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   bool _loading = true;
   String? _style;
+  String? _avatar;
   bool _busy = false;
   String? _error;
 
@@ -32,17 +41,38 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _load() async {
     String? style;
+    String? avatar;
     String? error;
     try {
       style = await widget.identity.savedStyle();
+      avatar = await widget.identity.savedAvatar();
     } on Exception {
       error = identityErrorText('storage');
     }
     if (!mounted) return;
     setState(() {
       _style = style;
+      _avatar = avatar;
       _error = error;
       _loading = false;
+    });
+  }
+
+  Future<void> _chooseFirstAvatar(String avatar) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final result = await widget.identity.changeAvatar(avatar);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      switch (result) {
+        case IdentityOk():
+          _avatar = avatar;
+        case IdentityFailed(:final reason):
+          _error = identityErrorText(reason);
+      }
     });
   }
 
@@ -67,20 +97,37 @@ class _AppShellState extends State<AppShell> {
   Future<void> _openSettings() async {
     final current = _style;
     if (current == null) return;
-    final saved = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => StyleSettingsPage(identity: widget.identity, current: current)),
+    final avatar = _avatar;
+    if (avatar == null) return;
+    final saved = await Navigator.of(context).push<CompanionSelection>(
+      MaterialPageRoute(
+        builder: (_) => CompanionSettingsPage(
+          currentStyle: current,
+          currentAvatar: avatar,
+          onSaveStyle: widget.identity.changeStyle,
+          onSaveAvatar: widget.identity.changeAvatar,
+        ),
+      ),
     );
     if (!mounted || saved == null) return;
-    setState(() => _style = saved);
+    setState(() {
+      _style = saved.style;
+      _avatar = saved.avatar;
+    });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已换好，下次聊天时生效', style: TextStyle(fontSize: 18))),
+      const SnackBar(
+        content: Text('已换好，下次聊天时生效', style: TextStyle(fontSize: 18)),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(backgroundColor: Color(0xFF10131A), body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        backgroundColor: Color(0xFF10131A),
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
     if (_style == null) {
       return StylePickerPage(
@@ -92,11 +139,25 @@ class _AppShellState extends State<AppShell> {
         onConfirm: _chooseFirst,
       );
     }
+    if (_avatar == null) {
+      return AvatarPickerPage(
+        title: '选一个聊天形象',
+        confirmLabel: '开始聊天',
+        initial: defaultAvatarId,
+        busy: _busy,
+        error: _error,
+        onConfirm: _chooseFirstAvatar,
+      );
+    }
     return Stack(
       children: [
-        Positioned.fill(child: widget.avatarBuilder(widget.identity)),
+        Positioned.fill(child: widget.avatarBuilder(widget.identity, _avatar!)),
         // Bottom-right, clear of the centered mute/end buttons in AvatarOverlay.
-        Positioned(right: 16, bottom: 28, child: SafeArea(child: _SettingsButton(onTap: _openSettings))),
+        Positioned(
+          right: 16,
+          bottom: 28,
+          child: SafeArea(child: _SettingsButton(onTap: _openSettings)),
+        ),
       ],
     );
   }
@@ -118,7 +179,11 @@ class _SettingsButton extends StatelessWidget {
         key: const Key('settings'),
         customBorder: const CircleBorder(),
         onTap: onTap,
-        child: const SizedBox(width: 64, height: 64, child: Icon(Icons.tune, color: Colors.white, size: 32)),
+        child: const SizedBox(
+          width: 64,
+          height: 64,
+          child: Icon(Icons.tune, color: Colors.white, size: 32),
+        ),
       ),
     ),
   );

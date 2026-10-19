@@ -7,6 +7,7 @@ import type { AvatarState } from './avatar/stateMachine.ts';
 import { ActionPlayer } from './avatar/actions.ts';
 import { AvatarView } from './avatar/avatarView.ts';
 import { SubtitleMouth } from './avatar/subtitleMouth.ts';
+import { DEFAULT_AVATAR_URL } from './avatar/catalog.ts';
 
 /** Bridge `avatar.action` source used by Flutter for listening nods (local VAD backchannel). */
 export const BACKCHANNEL_SOURCE = 'backchannel';
@@ -45,7 +46,7 @@ export class NativeAvatarController {
   constructor(
     private readonly el: HTMLElement,
     private readonly deps: NativeAvatarDeps,
-    private readonly avatarUrl = './avatars/avatar.glb',
+    private readonly avatarUrl = DEFAULT_AVATAR_URL,
   ) {}
 
   async start(): Promise<void> {
@@ -53,7 +54,7 @@ export class NativeAvatarController {
     this.ended = false;
     this.deps.post({ type: 'status', status: 'loading' });
     const avatar = this.deps.createAvatar(this.el);
-    await avatar.load(this.avatarUrl);
+    await avatar.load(this.avatarUrl, () => this.deps.post({ type: 'diag', key: 'avatar_fallback', value: '1' }));
     this.avatar = avatar;
     this.actions = this.deps.createActions(avatar);
     avatar.setRendering(true);
