@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../native_gateway/gateway_client.dart';
 import 'credential_store.dart';
 import 'identity_api.dart';
+import 'avatars.dart';
 
 sealed class IdentityResult {
   const IdentityResult();
@@ -26,12 +27,16 @@ class DeviceIdentity implements DeviceTokenProvider {
 
   static const tokenKey = 'device_token';
   static const styleKey = 'style_id';
+  static const avatarKey = 'avatar_id';
 
   final CredentialStore store;
   final IdentityBackend backend;
 
   /// Null = first launch (show the style picker).
   Future<String?> savedStyle() => store.read(styleKey);
+
+  /// Null = the existing install has not chosen an avatar yet.
+  Future<String?> savedAvatar() => store.read(avatarKey);
 
   @override
   Future<String?> token() => store.read(tokenKey);
@@ -83,6 +88,13 @@ class DeviceIdentity implements DeviceTokenProvider {
       if (status < 200 || status >= 300) return IdentityFailed('http_$status');
     }
     await store.write(styleKey, style);
+    return const IdentityOk();
+  });
+
+  /// Avatar appearance is local-only and takes effect on the next session.
+  Future<IdentityResult> changeAvatar(String avatarId) => _guard(() async {
+    if (!isAvatarId(avatarId)) return const IdentityFailed('invalid_avatar');
+    await store.write(avatarKey, avatarId);
     return const IdentityOk();
   });
 

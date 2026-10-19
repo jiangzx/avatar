@@ -9,6 +9,7 @@ import 'support/identity_fakes.dart';
 
 const tokenKey = DeviceIdentity.tokenKey;
 const styleKey = DeviceIdentity.styleKey;
+const avatarKey = DeviceIdentity.avatarKey;
 
 void main() {
   test('first style choice registers once and stores token and style', () async {
@@ -92,6 +93,31 @@ void main() {
     expect(await DeviceIdentity(store: store, backend: backend).changeStyle('old-friend'), isA<IdentityOk>());
     expect(backend.patched, isEmpty);
     expect(store.values, {styleKey: 'old-friend'});
+  });
+
+  test('changeAvatar saves locally without calling the gateway', () async {
+    final store = MemoryCredentialStore({styleKey: 'grandchild'});
+    final backend = FakeBackend();
+    final identity = DeviceIdentity(store: store, backend: backend);
+
+    expect(await identity.savedAvatar(), isNull);
+    expect(await identity.changeAvatar('cute-girl'), isA<IdentityOk>());
+    expect(await identity.savedAvatar(), 'cute-girl');
+    expect(backend.patched, isEmpty);
+  });
+
+  test('changeAvatar rejects unknown ids and keeps the old value', () async {
+    final store = MemoryCredentialStore({avatarKey: 'young-man'});
+    final result = await DeviceIdentity(store: store, backend: FakeBackend()).changeAvatar('unknown');
+
+    expect(result, isA<IdentityFailed>().having((r) => r.reason, 'reason', 'invalid_avatar'));
+    expect(store.values[avatarKey], 'young-man');
+  });
+
+  test('changeAvatar maps storage errors to a readable failure', () async {
+    final result = await DeviceIdentity(store: ThrowingCredentialStore(), backend: FakeBackend()).changeAvatar('young-woman');
+
+    expect(result, isA<IdentityFailed>().having((r) => r.reason, 'reason', 'storage'));
   });
 
   test('renew never throws: backend and storage failures return null', () async {
