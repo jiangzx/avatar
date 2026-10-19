@@ -131,3 +131,16 @@
 
 - Xiaomi 22101317C was visible to `adb`; `adb reverse tcp:8787 tcp:8787` succeeded and the local gateway Mock process started.
 - Installing the freshly built release APK failed with `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`. No app launch or real-device Plan 2 acceptance was claimed. Device install permission/confirmation must be enabled before repeating.
+
+## 2026-10-19 Seeduplex 日语能力
+
+- 按 grilling 共享理解做音色表核查：端到端路径（Seeduplex 3.0 + 旧 RealtimeAPI 音色清单）仅见 `zh_*` / `en_*`（及中文克隆），无 `ja_*`；方言参数仅中文方言。
+- 按 Q9 直接记 FAIL，未用中文音色硬试日语（避免假阳性）。详情：`docs/research/seeduplex-japanese-probe.md`。
+- 影响：日语产品不走 `ADAPTER=seeduplex`。解除条件：换适配器/级联方案获批准并探针通过，或厂商日后提供日语端到端音色并复测通过。
+
+## 2026-10-20 主动三段式接话回归（根因已定位，未修复）
+
+- 复现根因在未提交的 Director 改动：`fire()` 对 `context/check/leave` 三个阶段都调用 `planContext(step)`；规划器在 `speak:false`、超时、无效 JSON、输入不完整或未配置时返回 `null`，`planContext` 随后只推进 `next` 并重新计时，不排队任何语音，所以三段主动追问会全部消失。
+- 第二个状态缺口是规划器有内容时始终写入 `pending = 'context'`，即使当前阶段是 `check` 或 `leave`；播放结束后 Director 会把它误判为第一阶段并重新排 `check`，阶段状态无法可靠推进。
+- 证据：该工作区实现的 focused 回归为 `101 passed, 7 failed`；撤回未批准改动后基线回归为 `108 passed`。未重启网关、未安装 APK。
+- 按用户要求，修复实现尚未开始。下一步必须先补失败测试：规划器拒绝/失败时保留配置兜底并继续阶梯，规划器通过时保留当前阶段状态；通过后再跑完整 gateway 回归和 typecheck，最后才安排手机复验。

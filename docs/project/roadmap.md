@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-18. User-trial build. The #43 silence correction is implemented and synthetically evaluated; phone listening acceptance remains open. The three-step proactive ladder now continues after substantive replies and falls back to the configured context line when the optional planner declines or fails. Barge-in is usable, and a non-utterance interrupt says 没听清 instead of 我在. Silence waits are 3s, 12s, 12s, then one looser line after 3 quiet minutes. The timing and copy adjustment passed `npm test -w gateway` (435 tests) and `npm run typecheck -w gateway`. Read the pitfalls section before touching silence or barge-in. Formal line-by-line device acceptance is still open.
+Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链回归根因已定位但尚未修复：未批准的 Director 改动会在规划器返回空值时跳过 `context -> check -> leave`，规划器通过时又把后续阶段误记为 `context`。代码实现和手机验收均暂停；恢复前先补失败测试并完成 gateway 全量验证。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
 
 ## 打断与沉默：已踩过的坑
 
@@ -268,3 +268,15 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - `scripts/fetch-assets.sh` now restores the five local model paths from a pinned TalkingHead revision, verifies the three upstream SHA-256 values, and derives `cute-boy.glb` from the pinned male source while preserving its rig and blendshapes. The GLBs remain ignored because the upstream examples are non-commercial or attribution-bound.
 - Full validation after provisioning: `./scripts/build-web.sh` passed and copied all five models into the Web bundle; `npm test` passed (protocol 6, gateway 435, avatar-core 102); `npm run typecheck` passed; `cd app && flutter test` passed (161); `flutter analyze` reported no issues; `git diff --check` passed.
 - Blocker #44 is narrowed to target-phone visual acceptance and release-license review. Local GLB structure, checksums, build inclusion, catalog paths, and runtime fallback are verified; framing, materials, facial blendshapes, and animation quality on the target phone remain unverified.
+
+## Seeduplex local gateway switch (2026-10-19)
+
+- `gateway/.env` now selects `ADAPTER=seeduplex` with the locally supplied API key and the existing Seeduplex endpoint/model/voice settings; the key remains in the ignored file and was not logged or committed.
+- Restarted the phone gateway on port 8787 after the previous Qwen process closed. Health returned 200, the startup event reported `adapter=seeduplex`, and the existing Android app reconnected through the preserved ADB reverse mapping.
+- The new gateway log recorded one session, 16 completed response pairs, 5 response cancellations, and 3 silence decisions with no error events. This verifies local session connectivity; full target-phone voice acceptance remains open.
+
+## 沉默固定文案修正（2026-10-19，当前状态更正）
+
+- Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，因此 Director 传入的 `fallbackText` 就是手机实际听到的内容；固定文案问题与主动链阶段状态问题必须一起验收。
+- 2026-10-20 复测发现未批准的阶段规划改动会让 `speak:false`、超时或无效 JSON 直接跳过三段链，且通过结果的 `pending` 阶段不准确。上轮“已修正/已部署”的描述不再作为当前验收结论。
+- 当前没有新的部署动作；网关和 APK 均按用户要求暂停，待失败测试和实现审查完成后再安排。
