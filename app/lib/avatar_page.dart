@@ -72,7 +72,7 @@ Map<String, Object?> buildAvatarConfig({
   'audioPath': audioPath,
   'echo': echo,
   'avatarUrl': avatarUrlFor(avatarId),
-  if (audioMode != null) 'audioMode': audioMode,
+  ...?audioMode == null ? null : {'audioMode': audioMode},
 };
 
 class AvatarPage extends StatefulWidget {
