@@ -27,13 +27,24 @@ class AvatarApp extends StatelessWidget {
     return MaterialApp(
       title: '小柔',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: Colors.teal, brightness: Brightness.dark),
+      theme: ThemeData(
+        colorSchemeSeed: Colors.teal,
+        brightness: Brightness.dark,
+      ),
       home: switch (AppConfig.spike) {
         'native_audio' => const NativeAudioSpikePage(),
         'secure_storage' => const SecureStorageSpikePage(),
-        _ => problem == null
-            ? const _Home()
-            : Scaffold(body: Center(child: Text('配置错误：$problem', style: const TextStyle(fontSize: 20)))),
+        _ =>
+          problem == null
+              ? const _Home()
+              : Scaffold(
+                  body: Center(
+                    child: Text(
+                      '配置错误：$problem',
+                      style: const TextStyle(fontSize: 20),
+                    ),
+                  ),
+                ),
       },
     );
   }
@@ -60,6 +71,10 @@ class _HomeState extends State<_Home> {
   @override
   Widget build(BuildContext context) => AppShell(
     identity: _identity,
-    avatarBuilder: (identity) => AvatarPage(identity: identity, savedStyle: _identity.savedStyle),
+    avatarBuilder: (identity, avatarId) => AvatarPage(
+      identity: identity,
+      savedStyle: _identity.savedStyle,
+      avatarId: avatarId,
+    ),
   );
 }

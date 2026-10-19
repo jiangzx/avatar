@@ -54,7 +54,14 @@ class _StylePickerPageState extends State<StylePickerPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+              Text(
+                widget.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 24),
               Expanded(
                 child: ListView(
@@ -66,10 +73,19 @@ class _StylePickerPageState extends State<StylePickerPage> {
                           option: option,
                           selected: option.id == _selected,
                           keyPrefix: 'style',
-                          onTap: widget.busy ? null : () => setState(() => _selected = option.id),
+                          onTap: widget.busy
+                              ? null
+                              : () => setState(() => _selected = option.id),
                         ),
                       ),
-                    if (error != null) Text(error, style: const TextStyle(color: Colors.amberAccent, fontSize: 18)),
+                    if (error != null)
+                      Text(
+                        error,
+                        style: const TextStyle(
+                          color: Colors.amberAccent,
+                          fontSize: 18,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -77,10 +93,22 @@ class _StylePickerPageState extends State<StylePickerPage> {
                 height: 64,
                 child: FilledButton(
                   key: const Key('style-confirm'),
-                  onPressed: widget.busy ? null : () => widget.onConfirm(_selected),
+                  onPressed: widget.busy
+                      ? null
+                      : () => widget.onConfirm(_selected),
                   child: widget.busy
-                      ? const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3))
-                      : Text(widget.confirmLabel, style: const TextStyle(fontSize: 22)),
+                      ? Semantics(
+                          label: '正在保存',
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(strokeWidth: 3),
+                          ),
+                        )
+                      : Text(
+                          widget.confirmLabel,
+                          style: const TextStyle(fontSize: 22),
+                        ),
                 ),
               ),
               if (widget.onCancel != null) ...[
@@ -104,7 +132,11 @@ class _StylePickerPageState extends State<StylePickerPage> {
 
 /// Settings: change the style via PATCH /agent/style. Pops with the new style id, or null.
 class StyleSettingsPage extends StatefulWidget {
-  const StyleSettingsPage({super.key, required this.identity, required this.current});
+  const StyleSettingsPage({
+    super.key,
+    required this.identity,
+    required this.current,
+  });
 
   final DeviceIdentity identity;
   final String current;

@@ -40,9 +40,19 @@ class _AvatarPickerPageState extends State<AvatarPickerPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+              Text(
+                widget.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 8),
-              const Text('选好后，下次聊天会使用新的形象', style: TextStyle(color: Colors.white70, fontSize: 17)),
+              const Text(
+                '选好后，下次聊天会使用新的形象',
+                style: TextStyle(color: Colors.white70, fontSize: 17),
+              ),
               const SizedBox(height: 20),
               Expanded(
                 child: ListView(
@@ -54,11 +64,19 @@ class _AvatarPickerPageState extends State<AvatarPickerPage> {
                           option: option,
                           selected: option.id == _selected,
                           keyPrefix: 'avatar',
-                          onTap: widget.busy ? null : () => setState(() => _selected = option.id),
+                          onTap: widget.busy
+                              ? null
+                              : () => setState(() => _selected = option.id),
                         ),
                       ),
                     if (widget.error != null)
-                      Text(widget.error!, style: const TextStyle(color: Colors.amberAccent, fontSize: 18)),
+                      Text(
+                        widget.error!,
+                        style: const TextStyle(
+                          color: Colors.amberAccent,
+                          fontSize: 18,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -66,10 +84,22 @@ class _AvatarPickerPageState extends State<AvatarPickerPage> {
                 height: 64,
                 child: FilledButton(
                   key: const Key('avatar-confirm'),
-                  onPressed: widget.busy ? null : () => widget.onConfirm(_selected),
+                  onPressed: widget.busy
+                      ? null
+                      : () => widget.onConfirm(_selected),
                   child: widget.busy
-                      ? const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3))
-                      : Text(widget.confirmLabel, style: const TextStyle(fontSize: 22)),
+                      ? Semantics(
+                          label: '正在保存',
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(strokeWidth: 3),
+                          ),
+                        )
+                      : Text(
+                          widget.confirmLabel,
+                          style: const TextStyle(fontSize: 22),
+                        ),
                 ),
               ),
               if (widget.onCancel != null) ...[

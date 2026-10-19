@@ -12,6 +12,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'bridge.dart';
 import 'config.dart';
 import 'diag_log.dart';
+import 'identity/avatars.dart';
 import 'local_asset_server.dart';
 import 'metrics.dart';
 import 'native_audio/filler_clips.dart';
@@ -35,33 +36,57 @@ const _statusLabels = {
 };
 
 /// A connection that is open again clears a transient error.
-String? errorAfterStatus(String? error, String status) => status == 'open' ? null : error;
+String? errorAfterStatus(String? error, String status) =>
+    status == 'open' ? null : error;
 
 /// Subtitle line per avatar state: "…" while thinking; cleared when going idle after thinking.
 String aiLineAfterState(String state, String current) => switch (state) {
-      'thinking' => '…',
-      'idle' when current == '…' => '',
-      _ => current,
-    };
+  'thinking' => '…',
+  'idle' when current == '…' => '',
+  _ => current,
+};
 
 String _errorLabel(String code) => switch (code) {
-      'NotAllowedError' => '麦克风被拒绝，请在设置中允许',
-      'NotFoundError' => '没有找到麦克风',
-      'gateway_start_failed' => '网关暂时不可用，请稍后重试',
-      'audio_start_failed' => '音频初始化失败，请检查麦克风权限',
-      _ => '出错了：$code',
-    };
+  'NotAllowedError' => '麦克风被拒绝，请在设置中允许',
+  'NotFoundError' => '没有找到麦克风',
+  'gateway_start_failed' => '网关暂时不可用，请稍后重试',
+  'audio_start_failed' => '音频初始化失败，请检查麦克风权限',
+  _ => '出错了：$code',
+};
 
 /// Filler clips follow the agent's saved style; unknown or missing styles use the config default.
 String fillerStyle(ThinkingConfig cfg, String? saved) =>
     saved != null && cfg.styles.contains(saved) ? saved : cfg.defaultStyle;
 
+Map<String, Object?> buildAvatarConfig({
+  required String avatarId,
+  required String gatewayUrl,
+  required String appSecret,
+  required String audioPath,
+  required String echo,
+  String? audioMode,
+}) => {
+  'type': 'config',
+  'gatewayUrl': gatewayUrl,
+  'appSecret': appSecret,
+  'audioPath': audioPath,
+  'echo': echo,
+  'avatarUrl': avatarUrlFor(avatarId),
+  if (audioMode != null) 'audioMode': audioMode,
+};
+
 class AvatarPage extends StatefulWidget {
-  const AvatarPage({super.key, this.identity, this.savedStyle});
+  const AvatarPage({
+    super.key,
+    this.identity,
+    this.savedStyle,
+    this.avatarId = defaultAvatarId,
+  });
 
   /// Device bearer source for POST /session; null = dev mode (APP_SECRET only).
   final DeviceTokenProvider? identity;
   final Future<String?> Function()? savedStyle;
+  final String avatarId;
 
   @override
   State<AvatarPage> createState() => _AvatarPageState();
@@ -101,11 +126,17 @@ class _AvatarPageState extends State<AvatarPage> {
     final controller = WebViewController();
     await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
     await controller.setBackgroundColor(const Color(0xFF10131A));
-    await controller.addJavaScriptChannel('FlutterBridge', onMessageReceived: (m) => _onJs(m.message));
-    await controller.setNavigationDelegate(NavigationDelegate(
-      onNavigationRequest: (req) =>
-          req.url.startsWith(base.toString()) ? NavigationDecision.navigate : NavigationDecision.prevent,
-    ));
+    await controller.addJavaScriptChannel(
+      'FlutterBridge',
+      onMessageReceived: (m) => _onJs(m.message),
+    );
+    await controller.setNavigationDelegate(
+      NavigationDelegate(
+        onNavigationRequest: (req) => req.url.startsWith(base.toString())
+            ? NavigationDecision.navigate
+            : NavigationDecision.prevent,
+      ),
+    );
     final platform = controller.platform;
     if (platform is AndroidWebViewController) {
       await platform.setAllowFileAccess(false);
@@ -146,14 +177,16 @@ class _AvatarPageState extends State<AvatarPage> {
   }
 
   void _sendConfig() {
-    _send({
-      'type': 'config',
-      'gatewayUrl': AppConfig.gatewayUrl,
-      'appSecret': AppConfig.appSecret,
-      'audioPath': AppConfig.audioPath,
-      'echo': AppConfig.echo,
-      if (AppConfig.audioMode == 'native') 'audioMode': 'native',
-    });
+    _send(
+      buildAvatarConfig(
+        avatarId: widget.avatarId,
+        gatewayUrl: AppConfig.gatewayUrl,
+        appSecret: AppConfig.appSecret,
+        audioPath: AppConfig.audioPath,
+        echo: AppConfig.echo,
+        audioMode: AppConfig.audioMode == 'native' ? 'native' : null,
+      ),
+    );
   }
 
   Future<void> _send(Map<String, Object?> message) async {
@@ -170,12 +203,20 @@ class _AvatarPageState extends State<AvatarPage> {
     try {
       saved = await widget.savedStyle?.call();
     } on Exception catch (e) {
-      logcatDiagSink(formatDiag('saved_style_read_failed', {'type': e.runtimeType.toString()}));
+      logcatDiagSink(
+        formatDiag('saved_style_read_failed', {
+          'type': e.runtimeType.toString(),
+        }),
+      );
       saved = null; // storage failure: fall back to the config default
     }
     final clips = thinking == null
         ? const <String, Int16List>{}
-        : await loadFillerClips(rootBundle, thinking, fillerStyle(thinking, saved));
+        : await loadFillerClips(
+            rootBundle,
+            thinking,
+            fillerStyle(thinking, saved),
+          );
     final session = NativeSessionController(
       audio: PluginNativeAudioIO(filler: thinking?.audio),
       detector: EnergySpeechDetector(),
@@ -203,7 +244,9 @@ class _AvatarPageState extends State<AvatarPage> {
 
   Future<ThinkingConfig?> _loadThinking() async {
     try {
-      return ThinkingConfig.parse(await rootBundle.loadString(ThinkingConfig.assetPath));
+      return ThinkingConfig.parse(
+        await rootBundle.loadString(ThinkingConfig.assetPath),
+      );
     } catch (_) {
       logcatDiagSink(formatDiag('thinking_config_invalid', {}));
       return null;
@@ -234,7 +277,13 @@ class _AvatarPageState extends State<AvatarPage> {
         setState(() => _metrics.add(name, ms.toDouble()));
       case UiError(:final code):
         setState(() => _error = _errorLabel(code));
-      case UiResponseStart() || UiResponseEnd() || UiResponseCancelled() || UiAvatarAction() || UiAvatarEmotion() || UiAudioLevel() || UiDiag():
+      case UiResponseStart() ||
+          UiResponseEnd() ||
+          UiResponseCancelled() ||
+          UiAvatarAction() ||
+          UiAvatarEmotion() ||
+          UiAudioLevel() ||
+          UiDiag():
         break;
     }
   }
@@ -258,7 +307,10 @@ class _AvatarPageState extends State<AvatarPage> {
   }
 
   Widget _debugPanel() {
-    final summary = _metrics.summary().entries.map((e) => '${e.key}: n=${e.value.count} p50=${e.value.p50.round()} p90=${e.value.p90.round()}');
+    final summary = _metrics.summary().entries.map(
+      (e) =>
+          '${e.key}: n=${e.value.count} p50=${e.value.p50.round()} p90=${e.value.p90.round()}',
+    );
     return Container(
       padding: const EdgeInsets.all(8),
       color: Colors.black87,
@@ -266,31 +318,47 @@ class _AvatarPageState extends State<AvatarPage> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('state=$_state  audioPath=${AppConfig.audioPath}  echo=${AppConfig.echo}', style: const TextStyle(color: Colors.white70)),
-          ...summary.map((s) => Text(s, style: const TextStyle(color: Colors.white))),
-          ..._diag.entries.map((e) => Text('${e.key}=${e.value}', style: const TextStyle(color: Colors.white54, fontSize: 12))),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _debugText,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(hintText: '输入文字代替语音', hintStyle: TextStyle(color: Colors.white38)),
-                onSubmitted: (v) {
-                  if (v.trim().isEmpty) return;
-                  if (AppConfig.audioMode == 'native') {
-                    _session?.debugText(v.trim());
-                  } else {
-                    unawaited(_send({'type': 'debugText', 'text': v.trim()}));
-                  }
-                  _debugText.clear();
-                },
+          Text(
+            'state=$_state  audioPath=${AppConfig.audioPath}  echo=${AppConfig.echo}',
+            style: const TextStyle(color: Colors.white70),
+          ),
+          ...summary.map(
+            (s) => Text(s, style: const TextStyle(color: Colors.white)),
+          ),
+          ..._diag.entries.map(
+            (e) => Text(
+              '${e.key}=${e.value}',
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _debugText,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: '输入文字代替语音',
+                    hintStyle: TextStyle(color: Colors.white38),
+                  ),
+                  onSubmitted: (v) {
+                    if (v.trim().isEmpty) return;
+                    if (AppConfig.audioMode == 'native') {
+                      _session?.debugText(v.trim());
+                    } else {
+                      unawaited(_send({'type': 'debugText', 'text': v.trim()}));
+                    }
+                    _debugText.clear();
+                  },
+                ),
               ),
-            ),
-            TextButton(
-              onPressed: () => Clipboard.setData(ClipboardData(text: _metrics.toCsv())),
-              child: const Text('复制 CSV'),
-            ),
-          ]),
+              TextButton(
+                onPressed: () =>
+                    Clipboard.setData(ClipboardData(text: _metrics.toCsv())),
+                child: const Text('复制 CSV'),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -312,7 +380,8 @@ class _AvatarPageState extends State<AvatarPage> {
       backgroundColor: const Color(0xFF10131A),
       body: Stack(
         children: [
-          if (controller != null) Positioned.fill(child: WebViewWidget(controller: controller)),
+          if (controller != null)
+            Positioned.fill(child: WebViewWidget(controller: controller)),
           AvatarOverlay(
             userLine: _userLine,
             aiLine: _aiLine,

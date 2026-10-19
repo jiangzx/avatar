@@ -26,12 +26,16 @@ class SelectionCard extends StatelessWidget {
       label: option.title,
       selected: selected,
       button: true,
+      enabled: onTap != null,
       child: Material(
         key: Key('$keyPrefix-${option.id}'),
         color: selected ? const Color(0xFF1F3B3A) : const Color(0xFF1B1F2A),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: selected ? Colors.tealAccent : Colors.white24, width: selected ? 3 : 1),
+          side: BorderSide(
+            color: selected ? Colors.tealAccent : Colors.white24,
+            width: selected ? 3 : 1,
+          ),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -44,13 +48,31 @@ class SelectionCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(option.title, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                      Text(
+                        option.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 8),
-                      Text(option.subtitle, style: const TextStyle(color: Colors.white70, fontSize: 18)),
+                      Text(
+                        option.subtitle,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 18,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                if (selected) const Icon(Icons.check_circle, color: Colors.tealAccent, size: 36),
+                if (selected)
+                  const Icon(
+                    Icons.check_circle,
+                    color: Colors.tealAccent,
+                    size: 36,
+                  ),
               ],
             ),
           ),
