@@ -1,5 +1,7 @@
 /// Styles of the elder-companion role. Ids must match the gateway RoleCatalog style ids.
-class StyleOption {
+import 'companion_picker.dart';
+
+class StyleOption implements PickerOption {
   const StyleOption({required this.id, required this.title, required this.subtitle, this.sampleAsset});
 
   final String id;

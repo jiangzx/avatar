@@ -1,4 +1,6 @@
-class AvatarOption {
+import 'companion_picker.dart';
+
+class AvatarOption implements PickerOption {
   const AvatarOption({required this.id, required this.title, required this.subtitle, required this.assetPath});
 
   final String id;
