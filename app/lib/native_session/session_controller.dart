@@ -294,11 +294,17 @@ class NativeSessionController implements GatewayClientEvents {
       case Presence(:final phase):
         final thinking = _thinking;
         if (phase == 'refreshing') {
-          if (thinking != null) await _apply(thinking.onContextRefresh());
-          else emit(const UiState('thinking'));
+          if (thinking != null) {
+            await _apply(thinking.onContextRefresh());
+          } else {
+            emit(const UiState('thinking'));
+          }
         } else {
-          if (thinking != null) await _apply(thinking.onContextRefreshDone());
-          else emit(const UiState('idle'));
+          if (thinking != null) {
+            await _apply(thinking.onContextRefreshDone());
+          } else {
+            emit(const UiState('idle'));
+          }
         }
       case TranscriptUser(:final text, :final isFinal):
         _thinking?.onUserTranscript();
