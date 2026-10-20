@@ -297,6 +297,48 @@ describe('gateway server', () => {
     await c2.waitFor((m) => m.type === 'session.resumed');
   });
 
+  it('survives a malformed websocket frame and keeps the session resumable', async () => {
+    const base = await boot();
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    const c = await connect(base, t.connectToken);
+    start(c);
+    await c.waitFor((m) => m.type === 'session.ready');
+    const closed = new Promise<void>((resolve) => c.ws.once('close', () => resolve()));
+    // Bypass the ws client's frame writer: a reserved opcode is a protocol error upstream.
+    const socket = (c.ws as unknown as { _socket: { write(chunk: Buffer): void } })._socket;
+    socket.write(Buffer.from([0x83, 0x81, 1, 2, 3, 4, 0x00]));
+    await Promise.race([
+      closed,
+      new Promise<void>((_, reject) => setTimeout(() => reject(new Error('socket stayed open')), 1000)),
+    ]);
+    // The gateway process must still be serving, and only this socket was dropped.
+    expect((await fetch(`${base}/healthz`)).status).toBe(200);
+    expect((await post(base, '/session/resume', { sessionId: t.sessionId, resumeToken: t.resumeToken })).status).toBe(200);
+  });
+
+  it('terminates open client sockets on shutdown so server.close can finish', async () => {
+    const base = await boot();
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    const c = await connect(base, t.connectToken);
+    start(c);
+    await c.waitFor((m) => m.type === 'session.ready');
+    const closed = new Promise<void>((resolve) => c.ws.once('close', () => resolve()));
+    manager!.shutdown();
+    await Promise.race([
+      closed,
+      new Promise<void>((_, reject) => setTimeout(() => reject(new Error('socket stayed open')), 1000)),
+    ]);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('server.close did not finish')), 1000);
+      server!.close(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+    server = null;
+    manager = null;
+  });
+
   it('lets a new connection take over a half-open one', async () => {
     const base = await boot();
     const t = (await post(base, '/session')).json as unknown as SessionTokens;

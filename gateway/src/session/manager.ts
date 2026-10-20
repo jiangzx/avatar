@@ -107,9 +107,12 @@ export class SessionManager {
     return { sessionId, connId: entry.connId };
   }
 
-  attachSocket(sessionId: string, connId: number, terminate: () => void): void {
+  /** False when the session ended or another connection superseded this one before the upgrade finished. */
+  attachSocket(sessionId: string, connId: number, terminate: () => void): boolean {
     const entry = this.sessions.get(sessionId);
-    if (entry && entry.connId === connId) entry.terminate = terminate;
+    if (!entry || entry.connId !== connId) return false;
+    entry.terminate = terminate;
+    return true;
   }
 
   async begin(sessionId: string, connId: number, kind: 'start' | 'resume', transport: Transport): Promise<boolean> {
@@ -164,7 +167,11 @@ export class SessionManager {
   }
 
   shutdown(): void {
-    for (const id of [...this.sessions.keys()]) this.destroy(id, 'shutdown');
+    for (const [sessionId, entry] of [...this.sessions]) {
+      const terminate = entry.terminate;
+      this.destroy(sessionId, 'shutdown');
+      terminate?.(); // server.close() waits for upgraded sockets; destroy() alone leaves them open
+    }
   }
 
   private destroy(sessionId: string, reason: string): void {

@@ -142,14 +142,22 @@ const shutdown = () => {
   if (stopping) return;
   stopping = true;
   manager.shutdown();
+  // Stop accepting immediately: draining can take seconds, and a session created during it
+  // would miss manager.shutdown() and keep server.close() waiting.
+  server.close();
+  // Upgraded sockets are not closed by server.close(); closeAllConnections is the last-resort
+  // guarantee for connections the manager never tracked (e.g. a mid-upgrade socket).
+  server.closeAllConnections();
   void (async () => {
     try {
       if (worker) await worker.drain(memory.extractDrainMs ?? 8_000);
     } finally {
-      server.close(() => {
+      try {
         if (memoryDb?.isOpen) memoryDb.close();
-        process.exit(0);
-      });
+      } catch {
+        log('memory_db_close_failed', {});
+      }
+      process.exit(0);
     }
   })();
 };

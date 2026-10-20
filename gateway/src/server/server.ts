@@ -298,7 +298,15 @@ function bindConnection(ws: WebSocket, sessionId: string, connId: number, opts: 
       if (ws.readyState === ws.OPEN) ws.send(encodeAudioFrame(FRAME_AI, seq, pcm));
     },
   };
-  manager.attachSocket(sessionId, connId, () => ws.terminate());
+  // ws emits protocol errors on the socket; without a listener Node throws and kills the gateway.
+  ws.on('error', () => {
+    log('ws_error', {});
+    ws.terminate();
+  });
+  if (!manager.attachSocket(sessionId, connId, () => ws.terminate())) {
+    ws.terminate(); // the session ended between claim and upgrade
+    return;
+  }
   const heartbeat = setInterval(() => {
     if (!alive) {
       log('ws_heartbeat_timeout', {});

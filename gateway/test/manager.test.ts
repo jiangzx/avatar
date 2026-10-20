@@ -70,6 +70,27 @@ describe('SessionManager owner invariant', () => {
     expect(terminate).toHaveBeenCalledOnce();
   });
 
+  it('terminates every live socket on shutdown', async () => {
+    const { manager: m } = setup();
+    const first = await startNew(m, owned('o1'));
+    const firstTerminate = vi.fn();
+    expect(m.attachSocket(first.t.sessionId, first.claim.connId, firstTerminate)).toBe(true);
+    const second = await startNew(m, owned('o2'));
+    const secondTerminate = vi.fn();
+    expect(m.attachSocket(second.t.sessionId, second.claim.connId, secondTerminate)).toBe(true);
+    m.shutdown();
+    expect(firstTerminate).toHaveBeenCalledOnce();
+    expect(secondTerminate).toHaveBeenCalledOnce();
+    expect(m.size).toBe(0);
+  });
+
+  it('refuses to attach a socket after the session ended', async () => {
+    const { manager: m } = setup();
+    const first = await startNew(m, owned('o1'));
+    m.end(first.t.sessionId);
+    expect(m.attachSocket(first.t.sessionId, first.claim.connId, () => {})).toBe(false);
+  });
+
   it('also replaces a session that was never claimed', () => {
     const { manager: m, made, events } = setup();
     m.create(owned('o1'));
