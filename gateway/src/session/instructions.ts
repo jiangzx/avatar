@@ -17,7 +17,7 @@ const line = (e: LedgerEntry) => `${e.role === 'user' ? '用户' : '助手'}：$
 
 function render(persona: string, snapshot: string, summary: string, lines: readonly string[]): string {
   const parts = [persona.trim()];
-  if (snapshot) parts.push('## 关于用户（记忆）', snapshot);
+  if (snapshot) parts.push('## 记忆参考（可能不准确，注意「用户」与「助手」的区别）', snapshot);
   parts.push('## 对话摘要', summary || '（暂无）', '## 最近对话', lines.length > 0 ? lines.join('\n') : '（暂无）');
   return parts.join('\n\n');
 }

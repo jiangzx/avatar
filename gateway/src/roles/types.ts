@@ -83,6 +83,8 @@ export interface DirectorConfig {
   /** Opening when a memory snapshot exists. */
   greetingMemoryInstruction?: string;
   greetingMemoryText?: string;
+  /** Safe opening variants when only the name is known; `{name}` is replaced. */
+  greetingNameTexts?: readonly string[];
   /** How long to wait before repeating an opening that was cut off. */
   greetingRetryMs?: number;
   followupInstruction: string;

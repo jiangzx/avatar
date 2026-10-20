@@ -190,6 +190,7 @@ const DirectorSchema = z.object({
   /** Opening when a memory snapshot exists. Falls back to the plain greeting. */
   greetingMemoryInstruction: z.string().min(1).optional(),
   greetingMemoryText: z.string().min(1).optional(),
+  greetingNameTexts: z.array(z.string().min(1).includes('{name}')).min(1).max(5).optional(),
   /** Retry the opening after it is cut off and the user is already quiet. */
   greetingRetryMs: z.number().int().positive().optional(),
   followupInstruction: z.string().min(1),

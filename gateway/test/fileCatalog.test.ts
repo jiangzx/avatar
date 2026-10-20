@@ -49,7 +49,16 @@ describe('FileRoleCatalog', () => {
     expect(grandchild.indexOf('安全底线')).toBe(grandchild.indexOf('##') + 3);
     expect(grandchild.indexOf('安全底线')).toBeLessThan(grandchild.indexOf('孙辈'));
     expect(grandchild).toContain('perform_action');
-    expect(roles.buildPersona('elder-companion', 'old-friend')).toContain('老朋友');
+    const oldFriend = roles.buildPersona('elder-companion', 'old-friend');
+    expect(oldFriend).toContain('老朋友');
+    for (const persona of [grandchild, oldFriend]) {
+      expect(persona).toContain('没有身体');
+      expect(persona).toContain('除了开场，回复不要用名字开头');
+      expect(persona).toContain('不要编造用户说过的话');
+      expect(persona).toContain('不先加应答词');
+      expect(persona).toContain('标成"用户："的是对方原话');
+      expect(persona).toContain('不声称上次聊过什么');
+    }
     expect(roles.director('elder-companion').topics?.length).toBeGreaterThanOrEqual(5);
   });
 

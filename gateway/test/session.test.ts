@@ -96,6 +96,28 @@ describe('Session', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
+  it('uses a safe name greeting instead of planning a topic', async () => {
+    let plannerCalls = 0;
+    const roles = fixedRoleCatalog('P', {
+      ...director,
+      greetingNameTexts: ['{name}，又见面了。'],
+      silenceDecision: {
+        instruction: 'D', speakInstruction: 'SAY {continuation}',
+        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
+        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
+      },
+    });
+    const s = setup({
+      roles,
+      textClient: { complete: async () => { plannerCalls += 1; return '{"speak":true,"text":"上次聊到您喜欢听京剧"}'; } },
+    }, { ...ownedCtx, memorySnapshot: '称呼：王叔', greetingMemorySnapshot: '称呼：王叔', greetingHasTopic: true }, 'safe-greeting');
+    const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
+    await s.session.start(s.transport);
+    expect(plannerCalls).toBe(0);
+    expect(creates).toHaveBeenCalledWith({ cue: 'greeting', instruction: '王叔，又见面了。', fallbackText: '王叔，又见面了。' });
+    s.session.end();
+  });
+
   it('keeps the substantive answer when a deferred memory notice plays after it', async () => {
     const inputs: unknown[] = [];
     const s = setup({

@@ -1,3 +1,4 @@
+// High-risk silence contract: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
 import { z } from 'zod';
 import { log } from '../log.ts';
 import type { TextModelClient } from '../memory/textClient.ts';

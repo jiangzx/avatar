@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildInstructions } from '../src/session/instructions.ts';
-import { renderSnapshot } from '../src/memory/snapshot.ts';
+import { renderMemoryViews, renderSnapshot } from '../src/memory/snapshot.ts';
 
 describe('renderSnapshot', () => {
   it('puts the addressing name ahead of a preference, a note, and the tail', () => {
@@ -13,7 +13,7 @@ describe('renderSnapshot', () => {
       tail: [{ role: 'user', text: '昨天去了公园' }, { role: 'assistant', text: '公园空气好' }],
       maxChars: 200,
     });
-    expect(text).toBe('称呼：王叔\n喜欢喝茶\n说话慢一点\n用户：昨天去了公园\n助手：公园空气好');
+    expect(text).toBe('称呼：王叔\n事实：喜欢喝茶\n关系：说话慢一点\n用户：昨天去了公园\n助手：公园空气好');
   });
 
   it('clips at line boundaries and keeps the name whole when the budget fits the name', () => {
@@ -96,9 +96,9 @@ describe('renderSnapshot', () => {
         { role: 'user', text: '很久以前的那句话呀' },
         { role: 'assistant', text: '刚刚这句' },
       ],
-      maxChars: '称呼：王叔\n喜欢喝茶\n说话慢一点\n助手：刚刚这句'.length,
+      maxChars: '称呼：王叔\n事实：喜欢喝茶\n关系：说话慢一点\n助手：刚刚这句'.length,
     });
-    expect(text).toBe('称呼：王叔\n喜欢喝茶\n说话慢一点\n助手：刚刚这句');
+    expect(text).toBe('称呼：王叔\n事实：喜欢喝茶\n关系：说话慢一点\n助手：刚刚这句');
   });
 
   it('starts the instructions memory section with the name', () => {
@@ -115,6 +115,54 @@ describe('renderSnapshot', () => {
       { persona: 'P', memorySnapshot: snapshot, summary: 'S', recent: [] },
       { totalChars: 1000, snapshotMaxChars: 600, summaryMaxChars: 100 },
     );
-    expect(text.split('## 关于用户（记忆）\n\n')[1]?.startsWith('称呼：王叔')).toBe(true);
+    expect(text.split('## 记忆参考（可能不准确，注意「用户」与「助手」的区别）\n\n')[1]?.startsWith('称呼：王叔')).toBe(true);
+  });
+
+  it('renders a legacy self-introduction as a short addressing label', () => {
+    const text = renderSnapshot({
+      facts: [{ category: 'addressing', text: '用户名叫王叔' }],
+      notes: [],
+      tail: [],
+      maxChars: 200,
+    });
+    expect(text).toBe('称呼：王叔');
+  });
+});
+
+describe('renderMemoryViews', () => {
+  const views = renderMemoryViews({
+    addressing: ['称呼：王叔'],
+    facts: ['喜欢喝茶'],
+    tail: [
+      { role: 'user', text: '上次聊过电影吗？' },
+      { role: 'user', text: '我什么时候说喜欢喝茶？' },
+      { role: 'user', text: '昨天去了公园' },
+      { role: 'assistant', text: '公园空气好' },
+    ],
+    maxChars: 600,
+  });
+
+  it('keeps the full view to user statements only', () => {
+    expect(views.full).toBe('称呼：王叔\n事实：喜欢喝茶\n用户：昨天去了公园');
+    expect(views.full).not.toContain('公园空气好');
+    expect(views.full).not.toContain('上次聊过电影吗');
+    expect(views.full).not.toContain('我什么时候说喜欢喝茶');
+  });
+
+  it('removes the tail for greetings and the name for proactive lines', () => {
+    expect(views.greeting).toBe('称呼：王叔\n事实：喜欢喝茶');
+    expect(views.proactive).toBe('事实：喜欢喝茶');
+    expect(views.hasTopic).toBe(true);
+  });
+
+  it('marks a name-only greeting as having no topic', () => {
+    const nameOnly = renderMemoryViews({
+      addressing: ['称呼：王叔'],
+      facts: [],
+      tail: [{ role: 'user', text: '昨天去了公园' }],
+      maxChars: 600,
+    });
+    expect(nameOnly.greeting).toBe('称呼：王叔');
+    expect(nameOnly.hasTopic).toBe(false);
   });
 });

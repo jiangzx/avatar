@@ -7,7 +7,7 @@ export interface QwenSummarizerOptions {
   timeoutMs?: number;
 }
 
-const SYSTEM_PROMPT = '将给定的对话压缩成简洁的中文摘要。保留称呼、自述信息、人和事、情绪偏好以及未完成话题。只输出摘要正文，不要添加标题或解释。';
+const SYSTEM_PROMPT = '将给定的一组用户原话压缩成简洁的中文摘要。只记录用户明确说过的信息、经历和偏好，不要推断、评价或编造细节，记不清的不写。保留称呼、人和事、明确表达的情绪以及未完成话题。只输出摘要正文，不要添加标题或解释。';
 
 export class QwenSummarizer implements Summarizer {
   private readonly opts: Required<QwenSummarizerOptions>;
@@ -20,9 +20,12 @@ export class QwenSummarizer implements Summarizer {
   }
 
   async summarize(previous: string, entries: readonly LedgerEntry[]): Promise<string> {
+    // Only user lines are evidence for user memory; assistant replies never enter the summary source.
+    const users = entries.filter((entry) => entry.role === 'user');
+    if (users.length === 0) return previous;
     const transcript = [
       previous ? `已有摘要：${previous}` : '',
-      ...entries.map((entry) => `${entry.role === 'user' ? '用户' : '助手'}：${entry.text}`),
+      ...users.map((entry) => `用户：${entry.text}`),
     ].filter(Boolean).join('\n');
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs);

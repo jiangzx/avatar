@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { log } from '../log.ts';
-import { renderSnapshot } from '../memory/snapshot.ts';
+import { renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { devContext, type ContextResolver, type ResolveResult, type SessionContext } from '../session/context.ts';
@@ -40,6 +40,8 @@ export interface DeviceRegistryDeps {
   now?: () => number;
   /** Defaults to instructions.snapshotMaxChars in gateway/config/memory.json. */
   snapshotMaxChars?: number;
+  /** Lines that challenge or deny an earlier memory; defaults to memory.json. */
+  recallSkipPatterns?: readonly string[];
 }
 
 /** Device registration and bearer → owner/agent resolution. Only token hashes are stored. */
@@ -48,10 +50,13 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
   readonly lifecycle: SessionLifecycle;
   private readonly now: () => number;
   private readonly snapshotMaxChars: number;
+  private readonly recallSkipPatterns: readonly string[];
 
   constructor(private readonly deps: DeviceRegistryDeps) {
+    const memory = loadMemoryBudget(fileURLToPath(new URL('../../config/memory.json', import.meta.url)));
     this.now = deps.now ?? Date.now;
-    this.snapshotMaxChars = deps.snapshotMaxChars ?? loadMemoryBudget(fileURLToPath(new URL('../../config/memory.json', import.meta.url))).instructions.snapshotMaxChars;
+    this.snapshotMaxChars = deps.snapshotMaxChars ?? memory.instructions.snapshotMaxChars;
+    this.recallSkipPatterns = deps.recallSkipPatterns ?? memory.recallSkipPatterns ?? [];
     this.lifecycle = {
       started: (sessionId, ctx) => {
         if (ctx.agentId !== undefined) deps.store.recordSessionStart(sessionId, ctx.agentId, this.now());
@@ -95,14 +100,20 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     const owner = store.getOwner(device.ownerId);
     const ctx: SessionContext = { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: roles.voiceFor(roleId, styleId) };
     // Read the store, not the live Session. The server flushes the previous owner before this resolve is used.
-    const snapshot = renderSnapshot({
-      facts: store.listFacts(device.ownerId),
-      notes: store.listNotes(device.ownerId, agent.id),
-      episode: store.latestEpisode(device.ownerId, agent.id),
-      tail: store.snapshotRows(device.ownerId, agent.id),
+    // Only user-grounded memory enters prompts: no episodes, notes, sensitive facts, or assistant lines.
+    const views = renderMemoryViews({
+      addressing: store.listFacts(device.ownerId).filter((fact) => fact.category === 'addressing').map((fact) => fact.text),
+      facts: store.listProactiveFacts(device.ownerId).map((fact) => fact.text),
+      tail: store.recentUserMessages(device.ownerId, 12).slice().reverse(),
+      skipPatterns: this.recallSkipPatterns,
       maxChars: this.snapshotMaxChars,
     });
-    if (snapshot) ctx.memorySnapshot = snapshot;
+    if (views.full) ctx.memorySnapshot = views.full;
+    if (views.greeting) {
+      ctx.greetingMemorySnapshot = views.greeting;
+      ctx.greetingHasTopic = views.hasTopic;
+    }
+    if (views.proactive) ctx.proactiveMemorySnapshot = views.proactive;
     return {
       ok: true,
       ctx,

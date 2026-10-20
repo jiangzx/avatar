@@ -109,6 +109,41 @@ describe('Director', () => {
     expect(reqs).toEqual([{ cue: 'greeting', instruction: `SAY ${JSON.stringify(line)}`, fallbackText: line }]);
   });
 
+  it('uses the deterministic name-only greeting instead of planning an invented topic', () => {
+    const reqs: ProactiveRequest[] = [];
+    let planned = 0;
+    const d = new Director(cfg, {
+      requestResponse: (_k, r) => reqs.push(r),
+      planProactiveLine: () => { planned += 1; return { text: '上次聊到您喜欢听京剧' }; },
+      getMemorySnapshot: () => '称呼：王叔',
+      safeGreeting: () => '王叔，又见面啦，今天想聊点什么呀？',
+    });
+    d.onSessionStart(true);
+    expect(planned).toBe(0);
+    expect(reqs).toEqual([{
+      cue: 'greeting',
+      instruction: '王叔，又见面啦，今天想聊点什么呀？',
+      fallbackText: '王叔，又见面啦，今天想聊点什么呀？',
+    }]);
+  });
+
+  it('plans the first silence step after a recall question instead of speaking fallback copy', () => {
+    const contexts: SilenceContext[] = [];
+    const reqs: ProactiveRequest[] = [];
+    const d = new Director(cfg, {
+      requestResponse: (_k, r) => reqs.push(r),
+      planProactiveLine: (context) => { contexts.push(context); return { text: '上次聊电影挺有意思，您想接着聊哪部？' }; },
+      safeGreeting: () => 'greeting',
+    });
+    d.onSessionStart();
+    d.onUserFinal('上次咱聊到哪了？聊电影了吗？');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    expect(contexts[0]?.userText).toBe('上次咱聊到哪了？聊电影了吗？');
+    expect(reqs.some((request) => request.fallbackText === '上次聊电影挺有意思，您想接着聊哪部？')).toBe(true);
+    expect(reqs.some((request) => request.fallbackText === cfg.contextText)).toBe(false);
+  });
+
   it('falls back to configured copy when a plan is declined, and drops a stale greeting plan', async () => {
     const declined = make();
     const noPlan = new Director(cfg, {
@@ -188,6 +223,20 @@ describe('Director', () => {
     expect(contexts[1]).toEqual({
       stage: 'context', userText: '', assistantText: 'greeting', previousTexts: [], memorySnapshot: '上次聊到想去公园。',
     });
+  });
+
+  it('uses the full memory only for the greeting and the safe view afterwards', () => {
+    const contexts: SilenceContext[] = [];
+    const d = new Director(cfg, {
+      requestResponse: () => {},
+      planProactiveLine: context => { contexts.push(context); return { text: '接着聊' }; },
+      getMemorySnapshot: (stage) => stage === 'greeting' ? 'FULL' : 'SAFE',
+    });
+    d.onSessionStart();
+    d.onAiTurnEnded('greeting');
+    vi.advanceTimersByTime(5000);
+    expect(contexts[0]?.memorySnapshot).toBe('FULL');
+    expect(contexts[1]?.memorySnapshot).toBe('SAFE');
   });
 
   it('repeats the opening instead of the presence line when the greeting is cut off', () => {

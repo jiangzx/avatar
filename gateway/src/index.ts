@@ -96,6 +96,7 @@ const manager = new SessionManager(
       rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
       modelOwnsTurns: config.adapter === 'qwen',
       budget: budgetReport.budget,
+      recallSkipPatterns: memory.recallSkipPatterns,
       modelContextTokenLimit: pacing.rebuild.contextChars,
       rebuildTriggerRatio: pacing.rebuild.triggerRatio,
       rebuildAfterTurns: pacing.rebuild.afterTurns,

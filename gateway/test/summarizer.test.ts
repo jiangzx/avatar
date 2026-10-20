@@ -6,13 +6,15 @@ describe('QwenSummarizer', () => {
   const servers: Server[] = [];
   afterEach(async () => { for (const server of servers.splice(0)) await new Promise<void>((resolve) => server.close(() => resolve())); });
 
-  it('sends a structured summary request and returns only the model content', async () => {
+  it('sends user lines only and returns only the model content', async () => {
+    let seen = '';
     const server = createServer((req, res) => {
       expect(req.method).toBe('POST');
       expect(req.headers.authorization).toBe('Bearer fixture-key');
       let body = '';
       req.on('data', (chunk) => { body += chunk; });
       req.on('end', () => {
+        seen = body;
         const payload = JSON.parse(body) as { model: string; messages: Array<{ role: string; content: string }> };
         expect(payload.model).toBe('fixture-model');
         expect(payload.messages.map((message) => message.role)).toEqual(['system', 'user']);
@@ -24,7 +26,12 @@ describe('QwenSummarizer', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const port = (server.address() as { port: number }).port;
     const summarizer = new QwenSummarizer({ apiKey: 'fixture-key', endpoint: `http://127.0.0.1:${port}/chat/completions`, model: 'fixture-model' });
-    await expect(summarizer.summarize('', [{ role: 'user', text: 'fixture user', ts: 1 }])).resolves.toBe('fixture summary');
+    await expect(summarizer.summarize('', [
+      { role: 'user', text: 'fixture user', ts: 1 },
+      { role: 'assistant', text: 'fixture assistant', ts: 2 },
+    ])).resolves.toBe('fixture summary');
+    expect(seen).toContain('用户：fixture user');
+    expect(seen).not.toContain('fixture assistant');
   });
 
   it('rejects malformed or unsuccessful responses without exposing payloads', async () => {
@@ -33,6 +40,6 @@ describe('QwenSummarizer', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const port = (server.address() as { port: number }).port;
     const summarizer = new QwenSummarizer({ apiKey: 'fixture-key', endpoint: `http://127.0.0.1:${port}/chat/completions`, model: 'fixture-model', timeoutMs: 500 });
-    await expect(summarizer.summarize('', [])).rejects.toThrow('summarizer_http_502');
+    await expect(summarizer.summarize('', [{ role: 'user', text: 'fixture user', ts: 1 }])).rejects.toThrow('summarizer_http_502');
   });
 });

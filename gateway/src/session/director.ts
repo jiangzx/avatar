@@ -27,8 +27,10 @@ export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
   /** Plans any conversational proactive line from memory and context; all stages fall back to configured copy. */
   planProactiveLine?(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null>;
-  /** Current rendered memory for this session, read at planning time. */
-  getMemorySnapshot?(): string;
+  /** Current rendered memory for this session, read at planning time; proactive stages get the safe view. */
+  getMemorySnapshot?(stage: ProactivePlanStage): string;
+  /** Deterministic opening when the name is known; never let the planner invent a past topic. */
+  safeGreeting?(): string | null;
   /** Once per quiet stretch, when silence reaches the rest step. */
   onQuietRest?(): void;
 }
@@ -499,6 +501,13 @@ export class Director {
 
   /** The opening is planned like every other conversational line; configured copy is the failure fallback. */
   private requestGreeting(): void {
+    if (this.blocked() || this.left || this.opened) return;
+    // With a stored name, never let the planner invent a past topic.
+    const safe = this.deps.safeGreeting?.();
+    if (safe) {
+      this.deps.requestResponse('greeting', { cue: 'greeting', instruction: safe, fallbackText: safe });
+      return;
+    }
     const plan = this.deps.planProactiveLine;
     if (!plan) {
       this.deps.requestResponse('greeting', this.greetingRequest());
@@ -547,7 +556,7 @@ export class Director {
       userText: stage === 'greeting' ? '' : this.lastContent,
       assistantText: stage === 'greeting' ? '' : this.lastAnswer,
       previousTexts: [...this.ladderTexts],
-      memorySnapshot: this.deps.getMemorySnapshot?.() ?? '',
+      memorySnapshot: this.deps.getMemorySnapshot?.(stage) ?? '',
     };
   }
 

@@ -10,7 +10,7 @@ import {
 import { classifyAdapterError } from '../adapters/errorClass.ts';
 import type { AdapterFactory, ProactiveRequest, RealtimeAdapter, SessionConfig } from '../adapters/types.ts';
 import { log } from '../log.ts';
-import { renderSnapshot } from '../memory/snapshot.ts';
+import { renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
 import type { TextModelClient } from '../memory/textClient.ts';
 import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
@@ -81,6 +81,8 @@ export interface SessionDeps {
   toolTurnTimeoutMs?: number;
   /** Instruction size budget (gateway/config/memory.json); undefined = unbounded (tests). */
   budget?: InstructionBudget;
+  /** Lines that challenge or deny an earlier memory; undefined = no denial filtering (tests). */
+  recallSkipPatterns?: readonly string[];
   /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
   rebuildTriggerRatio?: number;
   /** Emotion lexicon (gateway/config/emotion.json); undefined = no avatar.emotion messages. */
@@ -176,6 +178,8 @@ export class Session {
   private userTurns = 0;
   /** Spoken after this tool turn, from memory.json. Null keeps the generic tool-continue line. */
   private pendingToolLine: string | null = null;
+  /** Grounded line from a recall result; preferred over the generic continue copy. */
+  private pendingToolSpeak: { text: string; found: boolean } | null = null;
   /** Forget and confirmed decline rebuild before that line. */
   private pendingToolRebuild: 'forget' | 'decline' | null = null;
   /** Confirm line waiting for the replacement adapter to connect. */
@@ -213,7 +217,10 @@ export class Session {
         requestResponse: (kind, request) => this.requestResponse(kind, request),
         ...(deps.textClient && directorConfig.silenceDecision ? {
           planProactiveLine: createSilencePlanner(deps.textClient, directorConfig.silenceDecision),
-          getMemorySnapshot: () => this.context.memorySnapshot ?? '',
+          getMemorySnapshot: (stage) => stage === 'greeting'
+            ? this.context.greetingMemorySnapshot ?? ''
+            : this.context.proactiveMemorySnapshot ?? '',
+          safeGreeting: () => this.safeGreeting(),
         } : {}),
         ...(extractor && ownerId ? { onQuietRest: () => { void extractor.extractOwner(ownerId, 'silence'); } } : {}),
       },
@@ -717,6 +724,7 @@ export class Session {
       sessionId: this.sessionId,
       store: this.deps.store,
       worker: this.deps.worker instanceof MemoryWorker ? this.deps.worker : undefined,
+      ...(this.deps.textClient ? { textClient: this.deps.textClient } : {}),
       ledger: this.ledger,
       actions: this.actions,
       now: Date.now(),
@@ -741,6 +749,9 @@ export class Session {
     }
     if (slow && !this.toolTurn.active) return;
     if (outcome.confirmText) this.pendingToolLine = outcome.confirmText;
+    if (outcome.spokenText && (!this.pendingToolSpeak || (!this.pendingToolSpeak.found && outcome.spokenFound === true))) {
+      this.pendingToolSpeak = { text: outcome.spokenText, found: outcome.spokenFound === true };
+    }
     if (outcome.rebuild) {
       this.pendingToolRebuild = outcome.rebuild;
       if (s) this.dropTranscriptSeqs.add(s.seq);
@@ -761,8 +772,10 @@ export class Session {
     this.continuationAsked = true;
     this.toolTurn.onContinuationRequested();
     const line = this.pendingToolLine;
+    const speak = this.pendingToolSpeak;
     const rebuild = this.pendingToolRebuild;
     this.pendingToolLine = null;
+    this.pendingToolSpeak = null;
     this.pendingToolRebuild = null;
     if (rebuild && line) {
       void this.speakAfterRebuild(rebuild, line);
@@ -770,6 +783,15 @@ export class Session {
     }
     if (line) {
       this.adapter.createResponse({ cue: 'toolContinue', instruction: line, fallbackText: line });
+      return;
+    }
+    if (speak) {
+      // The line quotes the user's own retrieved words; never let the model rewrite it.
+      this.adapter.createResponse({
+        cue: 'toolContinue',
+        instruction: `请直接说下面这句话，不要改写：${speak.text}`,
+        fallbackText: speak.text,
+      });
       return;
     }
     const cfg = this.deps.roles.director(this.context.roleId);
@@ -816,6 +838,7 @@ export class Session {
     this.originForcedEnd = false;
     this.toolOriginSeq = null;
     this.pendingToolLine = null;
+    this.pendingToolSpeak = null;
     this.pendingToolRebuild = null;
     this.confirmLine = null;
     this.dropUserFinals = false;
@@ -903,21 +926,43 @@ export class Session {
     }
   }
 
-  /** Re-reads the store. An empty render removes the snapshot. Slim rebuilds skip this. */
+  /** Re-reads the store. Empty renders remove the views. Slim rebuilds skip this. */
   private refreshMemorySnapshot(): void {
     const store = this.deps.store;
     const ownerId = this.context.ownerId;
     const maxChars = this.deps.budget?.snapshotMaxChars;
     if (!store || !ownerId || maxChars === undefined) return;
-    const text = renderSnapshot({
-      facts: store.listFacts(ownerId),
-      notes: store.listNotes(ownerId, this.context.agentId ?? ''),
-      episode: store.latestEpisode(ownerId, this.context.agentId ?? ''),
-      tail: store.snapshotRows(ownerId, this.context.agentId ?? ''),
+    const views = renderMemoryViews({
+      addressing: store.listFacts(ownerId).filter((fact) => fact.category === 'addressing').map((fact) => fact.text),
+      facts: store.listProactiveFacts(ownerId).map((fact) => fact.text),
+      tail: store.recentUserMessages(ownerId, 12).slice().reverse(),
+      skipPatterns: this.deps.recallSkipPatterns ?? [],
       maxChars,
     });
-    if (text) this.context.memorySnapshot = text;
+    if (views.full) this.context.memorySnapshot = views.full;
     else delete this.context.memorySnapshot;
+    if (views.greeting) {
+      this.context.greetingMemorySnapshot = views.greeting;
+      this.context.greetingHasTopic = views.hasTopic;
+    } else {
+      delete this.context.greetingMemorySnapshot;
+      delete this.context.greetingHasTopic;
+    }
+    if (views.proactive) this.context.proactiveMemorySnapshot = views.proactive;
+    else delete this.context.proactiveMemorySnapshot;
+  }
+
+  /** Safe name-based opening; null lets the planner handle the no-memory case (ask for a name). */
+  private safeGreeting(): string | null {
+    const snapshot = this.context.greetingMemorySnapshot;
+    if (!snapshot) return null;
+    const nameLine = snapshot.split('\n').find((line) => line.startsWith('称呼：'));
+    const name = nameLine?.slice('称呼：'.length).trim();
+    if (!name) return null;
+    const config = this.deps.roles.director(this.context.roleId);
+    const templates = config.greetingNameTexts;
+    if (!templates || templates.length === 0) return config.greetingMemoryText ?? null;
+    return templates[Math.floor(Math.random() * templates.length)]!.replaceAll('{name}', name);
   }
 
   private scheduleRebuild(reason: RebuildReason): void {

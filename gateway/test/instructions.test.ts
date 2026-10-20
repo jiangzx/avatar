@@ -14,7 +14,7 @@ describe('buildInstructions', () => {
 
   it('keeps everything that fits and adds the memory section only when present', () => {
     const text = buildInstructions({ persona: 'P', memorySnapshot: '称呼：王叔', summary: 'S', recent: [entry('user', 'U')] }, { totalChars: 1000, snapshotMaxChars: 100, summaryMaxChars: 100 });
-    expect(text).toBe('P\n\n## 关于用户（记忆）\n\n称呼：王叔\n\n## 对话摘要\n\nS\n\n## 最近对话\n\n用户：U');
+    expect(text).toBe('P\n\n## 记忆参考（可能不准确，注意「用户」与「助手」的区别）\n\n称呼：王叔\n\n## 对话摘要\n\nS\n\n## 最近对话\n\n用户：U');
   });
 
   it('drops the oldest recent lines first and never touches the persona', () => {

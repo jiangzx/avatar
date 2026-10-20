@@ -54,13 +54,18 @@ export interface MemoryStore {
   insertMessage(row: { id: string; sessionId: string; ownerId: string; role: 'user' | 'assistant'; text: string; bigrams: string; now: number }): void;
   /** Owner facts, addressing and otherwise. Caller reorders addressing to the front. */
   listFacts(ownerId: string): { category: string; text: string }[];
+  /** Non-sensitive facts except addressing, for proactive lines. Sensitive memory stays out of idle talk. */
+  listProactiveFacts(ownerId: string): { category: string; text: string }[];
   /** Notes for one agent. A different agent's notes are not returned. */
   listNotes(ownerId: string, agentId: string): { text: string }[];
+  /** Newest user messages from ended sessions only; the active session never becomes memory here. */
+  recentUserMessages(ownerId: string, limit: number): { text: string }[];
   /** Latest discussion from an ended session of this owner's agent. */
   latestEpisode(ownerId: string, agentId: string): { summary: string } | undefined;
   /**
-   * Unextracted tail for the owner. No cap: the previous session already flushed,
-   * and extraction later marks these rows extracted. `agentId` is unused; messages are owner-scoped.
+   * Unextracted user tail for the owner. Assistant lines are never memory evidence.
+   * No cap: the previous session already flushed, and extraction later marks these rows extracted.
+   * `agentId` is unused; messages are owner-scoped.
    */
   snapshotRows(ownerId: string, agentId: string): { role: 'user' | 'assistant'; text: string }[];
   /** Runs `body` inside one immediate write transaction. */
@@ -78,7 +83,7 @@ export interface MemoryStore {
    * Does not check memory_epoch; applyExtractOps does that in the same transaction.
    */
   writeExtraction(ownerId: string, change: ExtractionChange): void;
-  /** Owner-scoped FTS. `match` is an FTS5 expression. Empty when the expression is invalid. */
+  /** Owner-scoped FTS over user messages only. `match` is an FTS5 expression; empty when invalid. */
   searchMessages(ownerId: string, match: string, limit: number): { text: string }[];
   /**
    * Deletes facts, notes, episodes, and followups whose text contains `query`.
@@ -195,14 +200,20 @@ function prepareStatements(db: DatabaseSync) {
       SELECT ?, ?, ?, ?, ?, ?, ?
       WHERE EXISTS (SELECT 1 FROM owners WHERE id = ?)`),
     listFacts: p('SELECT category, text FROM user_facts WHERE owner_id = ? ORDER BY updated_at, id'),
+    listProactiveFacts: p("SELECT category, text FROM user_facts WHERE owner_id = ? AND sensitive = 0 AND category != 'addressing' ORDER BY updated_at, id"),
     listNotes: p('SELECT text FROM relationship_notes WHERE owner_id = ? AND agent_id = ? ORDER BY updated_at, id'),
+    recentUserMessages: p(`SELECT m.text AS text FROM messages m
+      JOIN sessions s ON s.id = m.session_id
+      WHERE m.owner_id = ? AND m.role = 'user' AND m.excluded = 0 AND s.ended_at IS NOT NULL
+      ORDER BY m.created_at DESC, m.rowid DESC
+      LIMIT ?`),
     latestEpisode: p(`SELECT e.summary FROM episodes e
       JOIN sessions s ON s.id = e.session_id
       JOIN agents a ON a.id = s.agent_id AND a.owner_id = e.owner_id
       WHERE e.owner_id = ? AND a.id = ? AND s.ended_at IS NOT NULL
       ORDER BY s.started_at DESC, e.created_at DESC, e.rowid DESC LIMIT 1`),
     snapshotRows: p(`SELECT role, text FROM messages
-      WHERE owner_id = ? AND extracted = 0 AND excluded = 0
+      WHERE owner_id = ? AND role = 'user' AND extracted = 0 AND excluded = 0
       ORDER BY created_at, rowid`),
     memoryEpoch: p('SELECT memory_epoch FROM owners WHERE id = ?'),
     listPending: p(`SELECT id, role, text, session_id FROM messages
@@ -240,7 +251,7 @@ function prepareStatements(db: DatabaseSync) {
       VALUES (?, ?, ?, ?, ?, ?, 'extract', ?)`),
     searchMessages: p(`SELECT m.text AS text FROM messages_fts
       JOIN messages m ON m.rowid = messages_fts.rowid
-      WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.excluded = 0
+      WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.role = 'user' AND m.excluded = 0
       ORDER BY bm25(messages_fts)
       LIMIT ?`),
     matchRowids: p(`SELECT m.rowid AS rowid FROM messages_fts
@@ -380,8 +391,16 @@ export class SqliteMemoryStore implements MemoryStore {
     return this.q.listFacts.all(ownerId).map((r) => ({ category: r.category as string, text: r.text as string }));
   }
 
+  listProactiveFacts(ownerId: string): { category: string; text: string }[] {
+    return this.q.listProactiveFacts.all(ownerId).map((r) => ({ category: r.category as string, text: r.text as string }));
+  }
+
   listNotes(ownerId: string, agentId: string): { text: string }[] {
     return this.q.listNotes.all(ownerId, agentId).map((r) => ({ text: r.text as string }));
+  }
+
+  recentUserMessages(ownerId: string, limit: number): { text: string }[] {
+    return this.q.recentUserMessages.all(ownerId, limit).map((r) => ({ text: r.text as string }));
   }
 
   latestEpisode(ownerId: string, agentId: string): { summary: string } | undefined {

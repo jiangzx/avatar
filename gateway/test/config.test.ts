@@ -102,7 +102,8 @@ describe('config', () => {
     expect(d.checkText).toBe('您还方便吗，称呼不急，您方便的时候再说就好。');
     expect(d.checkContextInstruction).toContain('{utterance}');
     expect(d.checkContextInstruction).not.toContain('我在');
-    expect(d.checkContextText).toBe('您还方便吗，刚才那件事先放着，不急着回。');
+    expect(d.contextText).toBe('您想接着聊点什么？我听着呢。');
+    expect(d.checkContextText).toBe('您想聊点别的也行，我在这儿陪着您。');
     expect(d.leaveText).toBe('我先安静一会儿，想聊随时喊我。');
     expect(d.checkinInstruction).toContain('是否还在听');
     expect(d.checkinText).toBe('您还在听吗？不着急，您随时想聊都可以，我一直都在。');
@@ -120,7 +121,13 @@ describe('config', () => {
     expect(d.silenceDecision?.variationHints?.checkin).toHaveLength(3);
     expect(d.silenceDecision?.instruction).toContain('greeting');
     expect(d.silenceDecision?.instruction).toContain('checkin');
+    expect(d.silenceDecision?.instruction).toContain('主动挑一个相关的小话题');
+    expect(d.silenceDecision?.instruction).toContain('checkin：必须问对方是否还在听');
     expect(d.greetingRetryMs).toBe(800);
+    // No bare acknowledgement fallback and no name on every proactive line.
+    expect(d.toolContinueText).not.toMatch(/^[好嗯哦行啊]/);
+    expect(d.toolContinueInstruction).toContain('应答词');
+    expect(d.silenceDecision?.instruction).toContain('一律不要叫名字');
     expect(d.openingFollowText).toBe('您要是方便，告诉我怎么称呼您就好。');
     expect(d.openingFollowInstruction).toContain('称呼');
     expect(d.bargeMissText).toBe('没听清，您再说一遍。');

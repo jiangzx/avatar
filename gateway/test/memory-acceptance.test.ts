@@ -202,14 +202,15 @@ describe('Plan C memory acceptance', () => {
     const again = opened(registeredA.deviceToken);
     expect(again.ctx.memorySnapshot).toContain('称呼：王叔');
     expect(again.ctx.memorySnapshot).toContain('喜欢喝茶');
-    expect(again.ctx.memorySnapshot).toContain('泡茶的杯子');
+    // Episode summaries stay in the store but never enter the prompt.
+    expect(again.ctx.memorySnapshot).not.toContain('泡茶的杯子');
     const built = buildInstructions({
       persona: roles.buildPersona(again.ctx.roleId, again.ctx.styleId),
       memorySnapshot: again.ctx.memorySnapshot,
       summary: '',
       recent: [],
     });
-    expect(built).toContain('## 关于用户（记忆）');
+    expect(built).toContain('## 记忆参考（可能不准确，注意「用户」与「助手」的区别）');
     expect(built).toContain('称呼：王叔');
     const other = opened(registeredB.deviceToken);
     expect(other.ctx.memorySnapshot ?? '').not.toContain('王叔');
@@ -223,9 +224,9 @@ describe('Plan C memory acceptance', () => {
       fallbackText: director.greetingMemoryText,
     });
     expect(director.greetingMemoryInstruction).not.toBe(director.greetingInstruction);
-    expect(instructions[remembered]).toContain('## 关于用户（记忆）');
+    expect(instructions[remembered]).toContain('## 记忆参考（可能不准确，注意「用户」与「助手」的区别）');
     expect(instructions[remembered]).toContain('称呼：王叔');
-    expect(instructions[remembered]).toContain('泡茶的杯子');
+    expect(instructions[remembered]).not.toContain('泡茶的杯子');
 
     await finishCurrent(sessionMemory.session);
     await say(sessionMemory.session, '昨天去了公园');

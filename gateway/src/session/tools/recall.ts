@@ -1,7 +1,10 @@
+// High-risk recall contract: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
 import { z } from 'zod';
 import type { SafetyRules } from '../../config.ts';
 import { bigrams } from '../../memory/bigram.ts';
+import { isMemoryEvidence } from '../../memory/evidence.ts';
 import { scanText } from '../../memory/scan.ts';
+import type { TextModelClient } from '../../memory/textClient.ts';
 import type { ToolContext, ToolHandler, ToolOutcome } from './registry.ts';
 
 const RecallSchema = z.object({ query: z.string().min(1).max(2_000) }).strict();
@@ -27,7 +30,30 @@ function clip(text: string, maxChars: number): string {
   return chars.length <= maxChars ? text : chars.slice(0, maxChars).join('');
 }
 
-export function recallTool(rules: SafetyRules, clipChars: number): ToolHandler {
+/** Punctuation-insensitive comparison so the current question never becomes its own memory hit. */
+function sameUtterance(a: string, b: string): boolean {
+  const normalize = (text: string) => text.replace(/[\s，。！？、,.!?~～]/g, '');
+  return normalize(a) === normalize(b);
+}
+
+export interface RecallCopy {
+  /** Spoken when there is no usable user line. */
+  emptyText: string;
+  /** Prefix for a grounded spoken quote of the first hit. */
+  foundPrefix: string;
+  /** Challenge or denial lines are not evidence that the user said the thing. */
+  skipPatterns: readonly string[];
+  /** Vague "what did we talk about" queries answer from recent user statements instead of FTS. */
+  recentQueryPatterns: readonly string[];
+  /** System prompt for natural phrasing of a grounded line. */
+  phraseInstruction: string;
+  /** Spoken phrasing cap; longer output falls back to the verbatim quote. */
+  phraseMaxChars: number;
+  /** Phrasing deadline; timeout falls back to the verbatim quote. */
+  phraseTimeoutMs: number;
+}
+
+export function recallTool(rules: SafetyRules, clipChars: number, copy: RecallCopy): ToolHandler {
   return {
     spec: {
       name: 'recall_memory',
@@ -39,25 +65,96 @@ export function recallTool(rules: SafetyRules, clipChars: number): ToolHandler {
       },
     },
     handle(args: unknown, ctx: ToolContext): Promise<ToolOutcome> {
-      return Promise.resolve(recall(args, ctx, rules, clipChars));
+      return recall(args, ctx, rules, clipChars, copy);
     },
   };
 }
 
-function recall(args: unknown, ctx: ToolContext, rules: SafetyRules, clipChars: number): ToolOutcome {
+async function recall(args: unknown, ctx: ToolContext, rules: SafetyRules, clipChars: number, copy: RecallCopy): Promise<ToolOutcome> {
   const parsed = RecallSchema.safeParse(args);
   if (!parsed.success) return { ok: false, error: 'invalid_args' };
   if (!ctx.store || !ctx.ownerId) return { ok: false, error: 'memory_unavailable' };
-  const match = ftsMatch(parsed.data.query);
-  if (!match) return { ok: true, text: WRAP };
-  // Over-fetch so a rejected hit does not shrink the page of three.
-  const rows = ctx.store.searchMessages(ctx.ownerId, match, 12);
+  const query = parsed.data.query;
+  // Vague "what did we talk about" questions have no useful FTS tokens; use recent user statements.
+  const normalized = query.replace(/\s/g, '');
+  if (copy.recentQueryPatterns.some((pattern) => pattern.length > 0 && normalized.includes(pattern))) {
+    const recent = ctx.store.recentUserMessages(ctx.ownerId, 12)
+      .map((row) => stripInvisible(row.text, rules.invisibleCodePoints))
+      .filter((text) => text.length > 0 && scanText(text, rules) !== 'reject' && isMemoryEvidence(text, copy.skipPatterns))
+      .slice(0, 3)
+      .map((text) => clip(text, clipChars));
+    return outcome(recent, copy, await phrase(ctx.textClient, recent[0], copy, rules));
+  }
+  const match = ftsMatch(query);
+  if (!match) return outcome([], copy);
+  // Over-fetch so rejected questions/denials do not shrink the page of three.
+  const rows = ctx.store.searchMessages(ctx.ownerId, match, 50);
+  const trigger = ctx.triggerText?.trim();
   const lines: string[] = [];
   for (const row of rows) {
     const stripped = stripInvisible(row.text, rules.invisibleCodePoints);
     if (!stripped || scanText(stripped, rules) === 'reject') continue;
+    if (trigger && sameUtterance(stripped, trigger)) continue;
+    if (!isMemoryEvidence(stripped, copy.skipPatterns)) continue;
     lines.push(clip(stripped, clipChars));
     if (lines.length === 3) break;
   }
-  return { ok: true, text: lines.length > 0 ? `${WRAP}\n${lines.join('\n')}` : WRAP };
+  return outcome(lines, copy, await phrase(ctx.textClient, lines[0], copy, rules));
+}
+
+/** Ask the text model to phrase one grounded line naturally; any failure keeps the verbatim quote. */
+async function phrase(client: TextModelClient | undefined, source: string | undefined, copy: RecallCopy, rules: SafetyRules): Promise<string | undefined> {
+  if (!client || !source) return undefined;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), copy.phraseTimeoutMs);
+  try {
+    const raw = await client.complete({
+      system: copy.phraseInstruction,
+      user: JSON.stringify({ userLine: source }),
+      maxTokens: 120,
+      temperature: 0.7,
+      jsonMode: true,
+      signal: controller.signal,
+    });
+    const text = parsePhrase(raw);
+    if (!text || [...text].length > copy.phraseMaxChars) return undefined;
+    if (scanText(text, rules) === 'reject') return undefined;
+    if (!grounded(text, source)) return undefined;
+    return text;
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parsePhrase(raw: string): string | null {
+  const text = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  try {
+    const value = JSON.parse(text) as { text?: unknown };
+    return typeof value.text === 'string' && value.text.trim() ? value.text.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Reject a phrasing that adds a new quoted title or loses every content bigram from the source. */
+function grounded(text: string, source: string): boolean {
+  if (sameUtterance(text, source)) return false;
+  for (const match of text.matchAll(/[《「『“]([^》」』”]{1,20})[》」』”]/g)) {
+    if (!source.includes(match[1]!)) return false;
+  }
+  const tokens = bigrams(source).split(' ').filter((token) => token.length === 2);
+  return tokens.some((token) => text.includes(token));
+}
+
+/** Seeduplex cannot continue a tool turn; speak the grounded line instead of a canned reply. */
+function outcome(lines: readonly string[], copy: RecallCopy, phrased?: string): ToolOutcome {
+  if (lines.length === 0) return { ok: true, text: WRAP, spokenText: copy.emptyText, spokenFound: false };
+  return {
+    ok: true,
+    text: `${WRAP}\n${lines.join('\n')}`,
+    spokenText: phrased ?? `${copy.foundPrefix}${lines[0]}`,
+    spokenFound: true,
+  };
 }

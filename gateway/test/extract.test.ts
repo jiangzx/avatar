@@ -114,6 +114,9 @@ describe('extract prompt and config', () => {
     expect(prompt).toContain('没把握');
     expect(prompt).toContain('sensitive');
     expect(prompt).toContain('指令');
+    // Only user lines are evidence; assistant paraphrases never become user facts.
+    expect(prompt).toContain('只有「用户：」');
+    expect(prompt).toContain('不要推断');
     const memory = loadMemoryBudget(fileURLToPath(new URL('../config/memory.json', import.meta.url)));
     expect(memory.instructions.budgetRatio).toBe(0.4);
     expect(memory.extractEveryUserTurns).toBe(10);

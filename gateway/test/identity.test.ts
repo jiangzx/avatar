@@ -171,13 +171,17 @@ describe('DeviceRegistry', () => {
     const first = ctxOf(registry, token);
     const other = ctxOf(registry, otherToken);
     if (!first.ownerId || !first.agentId || !other.ownerId || !other.agentId) throw new Error('unresolved');
+    registry.lifecycle.started('s1', first);
+    registry.lifecycle.ended('s1', first, 'client_end');
     expect(first.memorySnapshot).toBeUndefined();
     expect(registry.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined }, noticePending: false });
 
     db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'preference', '喜欢喝茶', 0.8, 1)`).run(`pref-${first.ownerId}`, first.ownerId);
     db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'addressing', '称呼：王叔', 0.9, 2)`).run(`addr-${first.ownerId}`, first.ownerId);
     db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'addressing', '称呼：李姨', 0.9, 1)`).run(`addr-${other.ownerId}`, other.ownerId);
+    db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, sensitive, confidence, updated_at) VALUES (?, ?, 'health', '膝盖不太好', 1, 0.9, 4)`).run(`health-${first.ownerId}`, first.ownerId);
     db.prepare(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, created_at) VALUES ('m-tail', 's1', ?, 'user', '昨天去了公园', '', 10)`).run(first.ownerId);
+    db.prepare(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, created_at) VALUES ('m-assistant-tail', 's1', ?, 'assistant', '助手不该进尾部', '', 13)`).run(first.ownerId);
     db.prepare(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, extracted, created_at) VALUES ('m-done', 's1', ?, 'assistant', '已经抽过', '', 1, 11)`).run(first.ownerId);
     db.prepare(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, excluded, created_at) VALUES ('m-drop', 's1', ?, 'user', '不要这条', '', 1, 12)`).run(first.ownerId);
     db.prepare(`INSERT INTO relationship_notes (id, agent_id, owner_id, kind, text, updated_at) VALUES ('note-a', ?, ?, 'tone', '说话慢一点', 3)`).run(first.agentId, first.ownerId);
@@ -186,14 +190,29 @@ describe('DeviceRegistry', () => {
     const second = ctxOf(registry, token);
     expect(second.memorySnapshot).toContain('称呼：王叔');
     expect(second.memorySnapshot).toContain('喜欢喝茶');
-    expect(second.memorySnapshot).toContain('说话慢一点');
     expect(second.memorySnapshot).toContain('用户：昨天去了公园');
+    expect(second.memorySnapshot).not.toContain('说话慢一点');
+    expect(second.memorySnapshot).not.toContain('膝盖不太好');
     expect(second.memorySnapshot).not.toContain('称呼：李姨');
     expect(second.memorySnapshot).not.toContain('别人的备注');
     expect(second.memorySnapshot).not.toContain('已经抽过');
     expect(second.memorySnapshot).not.toContain('不要这条');
+    expect(second.memorySnapshot).not.toContain('助手不该进尾部');
     expect(second.memorySnapshot!.indexOf('称呼：王叔')).toBeLessThan(second.memorySnapshot!.indexOf('喜欢喝茶'));
     expect(second.memorySnapshot!.indexOf('喜欢喝茶')).toBeLessThan(second.memorySnapshot!.indexOf('用户：昨天去了公园'));
+
+    // Greetings keep the name but never the tail or sensitive memory.
+    expect(second.greetingMemorySnapshot).toContain('称呼：王叔');
+    expect(second.greetingMemorySnapshot).toContain('喜欢喝茶');
+    expect(second.greetingMemorySnapshot).not.toContain('用户：昨天去了公园');
+    expect(second.greetingMemorySnapshot).not.toContain('膝盖不太好');
+
+    // Proactive lines get interests only: no name, no notes, no tail, and no sensitive memory.
+    expect(second.proactiveMemorySnapshot).toContain('喜欢喝茶');
+    expect(second.proactiveMemorySnapshot).not.toContain('称呼：王叔');
+    expect(second.proactiveMemorySnapshot).not.toContain('说话慢一点');
+    expect(second.proactiveMemorySnapshot).not.toContain('昨天去了公园');
+    expect(second.proactiveMemorySnapshot).not.toContain('膝盖不太好');
 
     const otherSnapshot = ctxOf(registry, otherToken).memorySnapshot;
     expect(otherSnapshot).toContain('称呼：李姨');

@@ -87,6 +87,7 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
   sendUserText(text: string): void { if (this.connected) this.send({ type: 'speech_text_buffer.commit', event_id: this.eventId(), text }); }
   updateInstructions(text: string): void { this.instructions = text; if (this.connected) this.send({ type: 'session.update', event_id: this.eventId(), session: this.sessionPayload() }); }
   createResponse(request?: ProactiveRequest): void {
+    // High-risk tool/proactive path: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
     // speech_text_buffer.commit is direct TTS; committing the Director prompt would speak it verbatim.
     if (this.connected && request?.fallbackText) this.send({ type: 'speech_text_buffer.commit', event_id: this.eventId(), text: request.fallbackText });
   }

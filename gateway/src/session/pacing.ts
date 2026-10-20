@@ -37,6 +37,15 @@ const MemoryBudgetSchema = z.object({
   declineConfirmPrompt: z.string().min(1),
   declineConfirmedText: z.string().min(1),
   recallClipChars: z.number().int().min(20).max(500),
+  recallEmptyText: z.string().min(1).max(200).optional(),
+  recallFoundPrefix: z.string().min(1).max(100).optional(),
+  /** Lines that challenge or deny an earlier memory are not recall evidence. */
+  recallSkipPatterns: z.array(z.string().min(1).max(30)).max(50).optional(),
+  /** Vague "what did we talk about" queries answer from recent user statements. */
+  recallRecentQueries: z.array(z.string().min(1).max(30)).max(50).optional(),
+  /** Natural recall phrasing output cap and deadline; failure falls back to the verbatim line. */
+  recallPhraseMaxChars: z.number().int().min(20).max(120).optional(),
+  recallPhraseTimeoutMs: z.number().int().min(300).max(5_000).optional(),
   retentionDays: z.number().int().min(1).max(3_650),
   retentionBatch: z.number().int().min(1).max(10_000),
   // Extraction settings sit beside `instructions`. Optional so older fixtures still parse.

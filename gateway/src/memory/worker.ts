@@ -92,10 +92,23 @@ export class MemoryWorker implements MemoryExtractor {
     if (!owner || owner.memoryConsent === 'declined') return;
     const epoch = this.opts.store.memoryEpoch(ownerId);
     if (epoch === undefined) return;
-    const pending = takePrefix(this.opts.store.listPendingMessages(ownerId), this.transcriptMaxChars);
+    const pending = this.opts.store.listPendingMessages(ownerId);
     if (pending.length === 0) return;
+    // Only user lines are evidence. Assistant text stays out of the extractor prompt entirely.
+    const users = takePrefix(pending.filter((row) => row.role === 'user'), this.transcriptMaxChars);
+    if (users.length === 0) {
+      // Assistant-only tail: advance the watermark without spending a model call.
+      const applied = applyExtractOps(this.opts.store, ownerId, epoch, [], pending.map((row) => row.id));
+      log('memory_extract', { reason, result: applied === 'applied' ? 'assistant_only' : applied, ops: 0, messages: pending.length });
+      return;
+    }
+    const last = users[users.length - 1]!;
+    // Include the assistant replies that belong to this user turn, then stop before the next user line.
+    let end = pending.indexOf(last) + 1;
+    while (end < pending.length && pending[end]!.role === 'assistant') end++;
+    const consumed = pending.slice(0, end);
     const now = this.opts.now?.() ?? Date.now();
-    const user = renderInput(this.opts.store.memoryForExtract(ownerId), pending, this.contextMaxChars, { reason, now });
+    const user = renderInput(this.opts.store.memoryForExtract(ownerId), users, this.contextMaxChars, { reason, now });
     const result = await runWithPolicy('extract', this.opts.policy, (signal) => this.opts.client.complete({
       system: this.opts.systemPrompt,
       user,
@@ -119,12 +132,12 @@ export class MemoryWorker implements MemoryExtractor {
       log('memory_extract_failed', { reason, code: 'extract_parse' });
       return;
     }
-    const applied = applyExtractOps(this.opts.store, ownerId, epoch, ops, pending.map((row) => row.id));
+    const applied = applyExtractOps(this.opts.store, ownerId, epoch, ops, consumed.map((row) => row.id));
     if (applied === 'incomplete') {
-      log('memory_extract_failed', { reason, code: 'extract_incomplete', ops: ops.length, messages: pending.length });
+      log('memory_extract_failed', { reason, code: 'extract_incomplete', ops: ops.length, messages: consumed.length });
       return;
     }
-    log('memory_extract', { reason, result: applied, ops: ops.length, messages: pending.length });
+    log('memory_extract', { reason, result: applied, ops: ops.length, messages: consumed.length });
   }
 }
 
@@ -158,7 +171,7 @@ function renderInput(
   maxChars: number,
   meta: { reason: ExtractReason; now: number },
 ): string {
-  const lines = ['已有记忆：'];
+  const lines = ['已有记忆（仅用于 update/remove，不是本轮证据）：'];
   for (const agent of memory.agents) lines.push(`智能体 ${agent.id}`);
   for (const fact of memory.facts) lines.push(`事实 ${fact.id} ${fact.category} sensitive=${fact.sensitive} ${fact.text}`);
   for (const note of memory.notes) lines.push(`关系 ${note.id} agent=${note.agentId} ${note.kind} ${note.text}`);
@@ -171,6 +184,6 @@ function renderInput(
     kept.push(line);
     used += line.length + 1;
   }
-  const dialogue = messages.map((row) => `${row.role === 'user' ? '用户' : '助手'}：${row.text}`);
-  return [`原因：${meta.reason}`, `现在：${meta.now}`, ...kept, '新增对话：', ...dialogue].join('\n');
+  const dialogue = messages.map((row) => `用户：${row.text}`);
+  return [`原因：${meta.reason}`, `现在：${meta.now}`, ...kept, '新增对话（只有「用户：」是本轮证据）：', ...dialogue].join('\n');
 }

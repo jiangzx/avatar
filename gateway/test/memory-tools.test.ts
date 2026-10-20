@@ -162,6 +162,95 @@ describe('memory tool registry', () => {
     expect(ftsTexts(db, a.ownerId, '王叔')[0]).toBe('我叫王叔');
   });
 
+  it('never recalls assistant lines as the user history', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-role');
+    say(store, a.ownerId, 'u1', '我说过喜欢喝茶', 10);
+    store.insertMessage({ id: 'a1', sessionId: 's1', ownerId: a.ownerId, role: 'assistant', text: '助手说过喜欢喝茶', bigrams: bigrams('助手说过喜欢喝茶'), now: 11 });
+    const result = await createToolRegistry().handle('recall_memory', { query: '喝茶' }, ctxFor(store, worker(store), a));
+    expect(result.ok).toBe(true);
+    expect(result.text).toContain('我说过喜欢喝茶');
+    expect(result.text).not.toContain('助手说过喜欢喝茶');
+  });
+
+  it('never treats the current question as a past memory hit', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-current');
+    const current = '我说过喜欢喝茶吗？';
+    say(store, a.ownerId, 'current', current, 10);
+    const ctx = { ...ctxFor(store, worker(store), a), triggerText: current };
+    const only = await createToolRegistry().handle('recall_memory', { query: '喝茶' }, ctx);
+    expect(only.spokenFound).toBe(false);
+    expect(only.spokenText).toBe('我这边暂时找不到上次的记录，您想接着说点什么？');
+
+    say(store, a.ownerId, 'real', '我平时喜欢喝茶', 11);
+    const mixed = await createToolRegistry().handle('recall_memory', { query: '喝茶' }, ctx);
+    expect(mixed.spokenFound).toBe(true);
+    expect(mixed.spokenText).toBe('我这边记着，您之前说过：我平时喜欢喝茶');
+    expect(mixed.text).not.toContain(current);
+  });
+
+  it('answers a vague memory question from recent user statements', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-recent');
+    store.recordSessionStart('s-old', a.agentId, 1);
+    say(store, a.ownerId, 'm1', '我记得我之前看过一部电影叫咒怨。', 2, 's-old');
+    store.recordSessionEnd('s-old', a.agentId, 3);
+    const result = await createToolRegistry().handle('recall_memory', { query: '上次咱们聊过什么' }, ctxFor(store, worker(store), a));
+    expect(result.spokenFound).toBe(true);
+    expect(result.spokenText).toBe('我这边记着，您之前说过：我记得我之前看过一部电影叫咒怨。');
+  });
+
+  it('does not quote a question as past evidence', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-question');
+    say(store, a.ownerId, 'q1', '我不记得了，上次我们聊过电影吗？', 10);
+    say(store, a.ownerId, 'q2', '最近我有没有跟你聊过什么电影之类的？', 11);
+    const result = await createToolRegistry().handle('recall_memory', { query: '电影' }, ctxFor(store, worker(store), a));
+    expect(result.spokenFound).toBe(false);
+    expect(result.spokenText).toBe('我这边暂时找不到上次的记录，您想接着说点什么？');
+  });
+
+  it('phrases a recalled line naturally but falls back when it adds a new title', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-phrase');
+    say(store, a.ownerId, 'm1', '我记得我之前看过一部电影叫咒怨。', 10);
+    const seen: string[] = [];
+    const good: TextModelClient = {
+      complete: async (input) => { seen.push(input.user); return JSON.stringify({ text: '您之前提过看过《咒怨》，那部片子确实挺吓人的。' }); },
+    };
+    const natural = await createToolRegistry().handle('recall_memory', { query: '电影' }, { ...ctxFor(store, worker(store), a), textClient: good });
+    expect(natural.spokenText).toBe('您之前提过看过《咒怨》，那部片子确实挺吓人的。');
+    expect(seen[0]).toContain('咒怨');
+
+    const bad: TextModelClient = { complete: async () => JSON.stringify({ text: '您之前提过最爱《庐山恋》。' }) };
+    const fallback = await createToolRegistry().handle('recall_memory', { query: '电影' }, { ...ctxFor(store, worker(store), a), textClient: bad });
+    expect(fallback.spokenText).toBe('我这边记着，您之前说过：我记得我之前看过一部电影叫咒怨。');
+  });
+
+  it('does not treat a memory challenge as evidence that the user said it', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-challenge');
+    say(store, a.ownerId, 'denial', '我什么时候说心里空落落了？你是不是记错了？', 10);
+    say(store, a.ownerId, 'real', '我最近心里空落落的', 11);
+    const result = await createToolRegistry().handle('recall_memory', { query: '空落落' }, ctxFor(store, worker(store), a));
+    expect(result.spokenFound).toBe(true);
+    expect(result.spokenText).toBe('我这边记着，您之前说过：我最近心里空落落的');
+    expect(result.text).not.toContain('我什么时候说');
+  });
+
+  it('returns a grounded spoken line for a hit and a clear spoken miss', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-speak');
+    say(store, a.ownerId, 'u1', '我一直想看恐怖片', 10);
+    const hit = await createToolRegistry().handle('recall_memory', { query: '恐怖片' }, ctxFor(store, worker(store), a));
+    expect(hit.spokenFound).toBe(true);
+    expect(hit.spokenText).toBe('我这边记着，您之前说过：我一直想看恐怖片');
+    const miss = await createToolRegistry().handle('recall_memory', { query: '不存在的词', }, ctxFor(store, worker(store), a));
+    expect(miss.spokenFound).toBe(false);
+    expect(miss.spokenText).toBe('我这边暂时找不到上次的记录，您想接着说点什么？');
+  });
+
   it('strips invisible characters, drops rejected snippets, and keeps at most three', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
@@ -403,6 +492,51 @@ describe('session memory tools', () => {
     session.end();
   });
 
+  it('speaks the recalled user line instead of the generic tool continue copy', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'h-recall-live');
+    store.markNotified(a.ownerId, 2);
+    say(store, a.ownerId, 'mem', '我一直想看恐怖片', 10);
+    const calls: Array<{ cue?: string; instruction?: string; fallbackText?: string }> = [];
+    const session = new Session({
+      adapterFactory: () => {
+        const mock = new MockAdapter({
+          script: {
+            greeting: '你好呀', followup: '还在吗', fallbackReply: '我在听',
+            turns: [{ match: '电影', user: '上次聊过电影吗', reply: '好呀', tool: { name: 'recall_memory', args: { query: '恐怖片' } } }],
+          },
+          replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+        });
+        const create = mock.createResponse.bind(mock);
+        mock.createResponse = (request) => {
+          if (request) calls.push(request);
+          return create(request);
+        };
+        return mock;
+      },
+      summarizer: new MockSummarizer(),
+      roles: fixedRoleCatalog('P', director),
+      writer: new SqliteTranscriptWriter(store),
+      worker: worker(store),
+      store,
+    }, { ownerId: a.ownerId, agentId: a.agentId, roleId: 'elder-companion', styleId: 'grandchild' } satisfies SessionContext, 'live-recall');
+    const { transport } = collector();
+
+    await session.start(transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    session.handleClientMessage({ type: 'debug.userText', text: '上次聊过电影吗' });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(calls).toContainEqual({
+      cue: 'toolContinue',
+      instruction: `请直接说下面这句话，不要改写：我这边记着，您之前说过：我一直想看恐怖片`,
+      fallbackText: '我这边记着，您之前说过：我一直想看恐怖片',
+    });
+    session.end();
+  });
+
   it('speaks the decline prompt without deleting, and still sends perform_action', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
@@ -632,7 +766,9 @@ describe('session memory tools', () => {
     const rebuilt = live.configs.at(-1)!.instructions;
     expect(rebuilt).not.toContain('喜欢喝茶');
     expect(rebuilt).toContain('称呼：王叔');
-    expect(rebuilt).toContain('聊过公园散步');
+    // Stored episode remains auditable but is never injected as memory evidence.
+    expect(store.latestEpisode(a.ownerId, a.agentId)).toEqual({ summary: '聊过公园散步' });
+    expect(rebuilt).not.toContain('聊过公园散步');
     live.session.end();
   });
 
@@ -659,8 +795,8 @@ describe('session memory tools', () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(live.configs.length).toBeGreaterThan(1);
-    expect(live.configs[0]!.instructions).toContain('## 关于用户（记忆）');
-    expect(live.configs.at(-1)!.instructions).not.toContain('## 关于用户（记忆）');
+    expect(live.configs[0]!.instructions).toContain('## 记忆参考（可能不准确，注意「用户」与「助手」的区别）');
+    expect(live.configs.at(-1)!.instructions).not.toContain('## 记忆参考（可能不准确，注意「用户」与「助手」的区别）');
     expect(live.session.context.memorySnapshot).toBeUndefined();
     live.session.end();
   });

@@ -8,8 +8,14 @@ export interface SessionContext {
   styleId: string;
   /** undefined = the adapter's configured default voice. */
   voice?: string;
-  /** Frozen memory snapshot injected at session start (Plan C). */
+  /** Frozen memory snapshot injected into normal replies: addressing, non-sensitive facts, user tail. */
   memorySnapshot?: string;
+  /** Greeting planner: addressing and non-sensitive facts only. */
+  greetingMemorySnapshot?: string;
+  /** True when the greeting view has a real topic fact, not only the name. */
+  greetingHasTopic?: boolean;
+  /** Silence planner: non-sensitive facts only; never the name or sensitive memory. */
+  proactiveMemorySnapshot?: string;
 }
 
 /** Context for sessions without a device token (dev / Mock mode): no owner, no memory. */

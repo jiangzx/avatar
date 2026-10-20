@@ -110,6 +110,38 @@ describe('MemoryWorker queue', () => {
     expect((db.prepare('SELECT extracted FROM messages WHERE id = ?').get('m1') as { extracted: number }).extracted).toBe(1);
   });
 
+  it('extracts only user lines but advances the assistant watermark', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '我喜欢喝茶', bigrams: '', now: 2 });
+    store.insertMessage({ id: 'm2', sessionId: 's1', ownerId: created.ownerId, role: 'assistant', text: '好呀，我记住了', bigrams: '', now: 3 });
+    let seen = '';
+    const client: TextModelClient = {
+      complete: async (input) => {
+        seen = input.user;
+        return '{"ops":[]}';
+      },
+    };
+    await worker(store, client).extractOwner(created.ownerId, 'session_end');
+    expect(seen).toContain('只有「用户：」是本轮证据');
+    expect(seen).toContain('用户：我喜欢喝茶');
+    expect(seen).not.toContain('好呀，我记住了');
+    expect((db.prepare('SELECT extracted FROM messages WHERE id = ?').get('m1') as { extracted: number }).extracted).toBe(1);
+    expect((db.prepare('SELECT extracted FROM messages WHERE id = ?').get('m2') as { extracted: number }).extracted).toBe(1);
+  });
+
+  it('advances an assistant-only tail without calling the model', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'assistant', text: '我自己说的', bigrams: '', now: 2 });
+    let calls = 0;
+    await worker(store, { complete: async () => { calls += 1; return '{"ops":[]}'; } }).extractOwner(created.ownerId, 'startup');
+    expect(calls).toBe(0);
+    expect((db.prepare('SELECT extracted FROM messages WHERE id = ?').get('m1') as { extracted: number }).extracted).toBe(1);
+  });
+
   it('does not call the model when nothing is pending', async () => {
     const store = new SqliteMemoryStore(open());
     const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
