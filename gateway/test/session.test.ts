@@ -1145,6 +1145,30 @@ describe('Session', () => {
     s.session.end();
   });
 
+  it('keeps the slim rebuild out while a response is still generating but playback already ended', async () => {
+    const long = '这是一段更长的回复，用来让响应在区间到期时仍然在生成过程中。';
+    let created = 0;
+    const s = setup({
+      slim: slimOn,
+      adapterFactory: () => {
+        created++;
+        return new MockAdapter({
+          script: { ...script, fallbackReply: long },
+          replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+        });
+      },
+    });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '你好' });
+    await vi.advanceTimersByTimeAsync(100); // seq 2 started; its generation is still in flight
+    // Playback ended early: interrupt.active clears, responseLive stays true until responseDone.
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 100, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(500); // t=1600: the interval fired while responseLive is still true
+    expect(created).toBe(1);
+    expect(of(s.sent, 'presence')).toEqual([]);
+    s.session.end();
+  });
+
   it('releases the thinking pose when the slim rebuild cannot connect', async () => {
     let created = 0;
     const s = setup({
