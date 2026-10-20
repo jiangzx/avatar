@@ -1188,8 +1188,30 @@ describe('Session', () => {
       { type: 'presence', phase: 'refreshing' },
       { type: 'presence', phase: 'ready' },
     ]);
-    expect(of(s.sent, 'error')).toContainEqual({ type: 'error', code: 'model_unavailable', retryable: true });
+    expect(of(s.sent, 'error')).toEqual([]);
     expect(assistantText(s.sent, 2)).toBe('');
     s.session.end();
+  });
+
+  it('logs the slim rebuild without any line or conversation text', async () => {
+    const chunks: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      chunks.push(String(chunk));
+      return true;
+    });
+    try {
+      const s = setup({ slim: slimOn });
+      await greetAndFinish(s);
+      await vi.advanceTimersByTimeAsync(900); // the interval fires and the reconnect is immediate
+      s.session.end();
+    } finally {
+      spy.mockRestore();
+    }
+    const rebuilds = chunks
+      .filter((line) => line.includes('"event":"model_rebuild"'))
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(rebuilds).toHaveLength(1);
+    expect(Object.keys(rebuilds[0]!).sort()).toEqual(['bridge', 'elapsedMs', 'event', 'reason', 't']);
+    expect(chunks.join('')).not.toContain(slimOn.bridge.zh);
   });
 });

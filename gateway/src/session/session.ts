@@ -909,7 +909,8 @@ export class Session {
       this.charsSinceRebuild = 0;
     } catch {
       log('model_rebuild_failed', { reason });
-      this.send({ type: 'error', code: 'model_unavailable', retryable: true });
+      // A silent slim rebuild never surfaces reconnect copy; presence ready ends the thinking pose.
+      if (reason !== 'slim') this.send({ type: 'error', code: 'model_unavailable', retryable: true });
       this.scheduleRebuild(reason);
     } finally {
       this.rebuilding = false;
