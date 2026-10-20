@@ -187,6 +187,26 @@ void main() {
     expect(transport.lastSocket.jsonMessages.single['type'], 'session.resume');
   });
 
+  test('reconnects when session.ready never arrives', () async {
+    final transport = FakeGatewayTransport(
+      tokens: firstTokens,
+      resumeTokens: [secondTokens],
+    );
+    final c = NativeGatewayClient(
+      baseUri: Uri.parse('http://gw.test'),
+      appSecret: 'secret-123456789',
+      transport: transport,
+      events: RecordingGatewayEvents(),
+      reconnectBase: Duration.zero,
+      readyTimeout: const Duration(milliseconds: 20),
+    );
+    await c.start();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(transport.postedPaths, contains('/session/resume'));
+    expect(transport.lastSocket.jsonMessages.single['type'], 'session.resume');
+    await c.close();
+  });
+
   test('backs off when fresh session creation keeps failing after the resume window', () async {
     final transport = FakeGatewayTransport(tokens: firstTokens);
     final events = RecordingGatewayEvents();

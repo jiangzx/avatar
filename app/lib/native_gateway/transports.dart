@@ -94,10 +94,14 @@ class IoGatewayTransport implements GatewayTransport {
   }
 
   @override
-  Future<NativeSocket> openWebSocket(Uri uri) async => _IoNativeSocket(
-    await WebSocket.connect(uri.toString())
-        .timeout(AppConfig.gatewaySocketTimeout),
-  );
+  Future<NativeSocket> openWebSocket(Uri uri) async {
+    final socket = await WebSocket.connect(
+      uri.toString(),
+    ).timeout(AppConfig.gatewaySocketTimeout);
+    // Detect a half-open path even when no application frame is pending.
+    socket.pingInterval = const Duration(seconds: 15);
+    return _IoNativeSocket(socket);
+  }
 }
 
 class _IoNativeSocket implements NativeSocket {

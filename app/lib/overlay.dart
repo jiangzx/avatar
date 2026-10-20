@@ -12,6 +12,7 @@ class AvatarOverlay extends StatelessWidget {
     required this.onMute,
     required this.onEnd,
     required this.onToggleDebug,
+    this.onRetry,
     this.debugPanel,
   });
 
@@ -23,6 +24,7 @@ class AvatarOverlay extends StatelessWidget {
   final VoidCallback onMute;
   final VoidCallback onEnd;
   final VoidCallback onToggleDebug;
+  final VoidCallback? onRetry;
   final Widget? debugPanel;
 
   @override
@@ -84,7 +86,16 @@ class AvatarOverlay extends StatelessWidget {
                 margin: const EdgeInsets.all(24),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(12)),
-                child: Text(error!, style: const TextStyle(color: Colors.white, fontSize: 20)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 20)),
+                    if (onRetry != null) ...[
+                      const SizedBox(height: 12),
+                      TextButton(key: const Key('retry'), onPressed: onRetry, child: const Text('重试')),
+                    ],
+                  ],
+                ),
               ),
             ),
           if (debugPanel != null) Positioned(top: 56, left: 8, right: 8, child: debugPanel!),

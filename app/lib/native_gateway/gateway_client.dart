@@ -49,6 +49,7 @@ class NativeGatewayClient implements GatewayClientLike {
     this.reconnectMax = const Duration(seconds: 4),
     this.requestTimeout = AppConfig.gatewayRequestTimeout,
     this.socketTimeout = AppConfig.gatewaySocketTimeout,
+    this.readyTimeout = const Duration(seconds: 10),
     this.identity,
   });
 
@@ -63,6 +64,8 @@ class NativeGatewayClient implements GatewayClientLike {
   final Duration reconnectMax;
   final Duration requestTimeout;
   final Duration socketTimeout;
+  /// Grace period for session.ready/resumed after the socket opens.
+  final Duration readyTimeout;
 
   /// Device identity; null = dev mode (APP_SECRET only).
   final DeviceTokenProvider? identity;
@@ -71,6 +74,7 @@ class NativeGatewayClient implements GatewayClientLike {
   StreamSubscription<Object>? _subscription;
   SessionTokens? _tokens;
   Timer? _retryTimer;
+  Timer? _readyTimer;
   DateTime? _disconnectedAt;
   bool _closedByUser = false;
   bool _closedEmitted = false;
@@ -116,6 +120,8 @@ class NativeGatewayClient implements GatewayClientLike {
     _closedByUser = true;
     _retryTimer?.cancel();
     _retryTimer = null;
+    _readyTimer?.cancel();
+    _readyTimer = null;
     send(const SessionEnd());
     final subscription = _subscription;
     _subscription = null;
@@ -174,6 +180,12 @@ class NativeGatewayClient implements GatewayClientLike {
       send(SessionStart(platform: platform, audioPath: audioPath));
       _startSent = true;
     }
+    _readyTimer?.cancel();
+    _readyTimer = Timer(readyTimeout, () {
+      if (!identical(_socket, socket) || _closedByUser) return;
+      // A socket that never accepted the session must go through the resume path.
+      unawaited(socket.close(4003).catchError((_) {}));
+    });
   }
 
   void _onSocketData(NativeSocket socket, Object data) {
@@ -191,6 +203,8 @@ class NativeGatewayClient implements GatewayClientLike {
         _sessionStarted = true;
         _attempt = 0;
         _disconnectedAt = null;
+        _readyTimer?.cancel();
+        _readyTimer = null;
         events.onStatus(GatewayStatus.open);
       }
       events.onMessage(message);
@@ -211,6 +225,8 @@ class NativeGatewayClient implements GatewayClientLike {
     if (!identical(_socket, socket)) return;
     _socket = null;
     _subscription = null;
+    _readyTimer?.cancel();
+    _readyTimer = null;
     if (_closedByUser) {
       _emitClosed();
       return;

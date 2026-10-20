@@ -107,6 +107,9 @@ class _AvatarPageState extends State<AvatarPage> {
   String? _error;
   bool _muted = false;
   bool _debug = false;
+  /// End/dispose invalidates an in-flight session start; it must not leave a live mic.
+  bool _ending = false;
+  int _sessionEpoch = 0;
 
   @override
   void initState() {
@@ -116,36 +119,40 @@ class _AvatarPageState extends State<AvatarPage> {
   }
 
   Future<void> _init() async {
-    final mic = await Permission.microphone.request();
-    if (!mic.isGranted) {
-      setState(() => _error = '需要麦克风权限才能聊天');
-      return;
+    try {
+      final mic = await Permission.microphone.request();
+      if (!mic.isGranted) {
+        if (mounted) setState(() => _error = '需要麦克风权限才能聊天');
+        return;
+      }
+      await _server.start();
+      final base = _server.baseUri;
+      final controller = WebViewController();
+      await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+      await controller.setBackgroundColor(const Color(0xFF10131A));
+      await controller.addJavaScriptChannel(
+        'FlutterBridge',
+        onMessageReceived: (m) => _onJs(m.message),
+      );
+      await controller.setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (req) => req.url.startsWith(base.toString())
+              ? NavigationDecision.navigate
+              : NavigationDecision.prevent,
+        ),
+      );
+      final platform = controller.platform;
+      if (platform is AndroidWebViewController) {
+        await platform.setAllowFileAccess(false);
+        await AndroidWebViewController.enableDebugging(kDebugMode);
+      }
+      if (!mounted || _ending) return;
+      // Assign before loading: the page may post 'ready' before loadRequest returns, and _send needs the controller.
+      setState(() => _controller = controller);
+      await controller.loadRequest(base.resolve(AppConfig.page));
+    } catch (_) {
+      if (mounted && !_ending) setState(() => _error = '初始化失败，请重试');
     }
-    await _server.start();
-    final base = _server.baseUri;
-    final controller = WebViewController();
-    await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
-    await controller.setBackgroundColor(const Color(0xFF10131A));
-    await controller.addJavaScriptChannel(
-      'FlutterBridge',
-      onMessageReceived: (m) => _onJs(m.message),
-    );
-    await controller.setNavigationDelegate(
-      NavigationDelegate(
-        onNavigationRequest: (req) => req.url.startsWith(base.toString())
-            ? NavigationDecision.navigate
-            : NavigationDecision.prevent,
-      ),
-    );
-    final platform = controller.platform;
-    if (platform is AndroidWebViewController) {
-      await platform.setAllowFileAccess(false);
-      await AndroidWebViewController.enableDebugging(kDebugMode);
-    }
-    if (!mounted) return;
-    // Assign before loading: the page may post 'ready' before loadRequest returns, and _send needs the controller.
-    setState(() => _controller = controller);
-    await controller.loadRequest(base.resolve(AppConfig.page));
   }
 
   void _onJs(String raw) {
@@ -196,8 +203,9 @@ class _AvatarPageState extends State<AvatarPage> {
   }
 
   Future<void> _startNativeSession() async {
-    if (_session != null || _startingSession) return;
+    if (_session != null || _startingSession || _ending) return;
     _startingSession = true;
+    final epoch = ++_sessionEpoch;
     final thinking = await _loadThinking();
     String? saved;
     try {
@@ -217,6 +225,10 @@ class _AvatarPageState extends State<AvatarPage> {
             thinking,
             fillerStyle(thinking, saved),
           );
+    if (!mounted || epoch != _sessionEpoch || _ending) {
+      _startingSession = false;
+      return; // ended or restarted while loading
+    }
     final session = NativeSessionController(
       audio: PluginNativeAudioIO(filler: thinking?.audio),
       detector: EnergySpeechDetector(),
@@ -240,6 +252,27 @@ class _AvatarPageState extends State<AvatarPage> {
     } finally {
       _startingSession = false;
     }
+    if (!mounted || epoch != _sessionEpoch || _ending) {
+      if (identical(_session, session)) _session = null;
+      await session.stop(); // End/dispose won the race: release the mic and gateway
+    }
+  }
+
+  void _retry() {
+    if (_startingSession || _ending) return;
+    setState(() => _error = null);
+    if (_controller == null) {
+      unawaited(_init());
+      return;
+    }
+    if (AppConfig.audioMode == 'native') {
+      final existing = _session;
+      _session = null;
+      if (existing != null) unawaited(existing.stop());
+      unawaited(_startNativeSession());
+      return;
+    }
+    _sendConfig();
   }
 
   Future<ThinkingConfig?> _loadThinking() async {
@@ -298,6 +331,8 @@ class _AvatarPageState extends State<AvatarPage> {
   }
 
   void _end() {
+    _ending = true;
+    _sessionEpoch++;
     if (AppConfig.audioMode == 'native') {
       unawaited(_session?.stop() ?? Future<void>.value());
     } else {
@@ -366,6 +401,8 @@ class _AvatarPageState extends State<AvatarPage> {
 
   @override
   void dispose() {
+    _ending = true;
+    _sessionEpoch++;
     unawaited(_session?.stop() ?? Future<void>.value());
     _server.stop();
     _debugText.dispose();
@@ -390,6 +427,7 @@ class _AvatarPageState extends State<AvatarPage> {
             muted: _muted,
             onMute: _toggleMute,
             onEnd: _end,
+            onRetry: _retry,
             onToggleDebug: () => setState(() => _debug = !_debug),
             debugPanel: _debug ? _debugPanel() : null,
           ),

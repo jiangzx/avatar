@@ -43,4 +43,18 @@ void main() {
     expect(find.text('需要麦克风权限才能聊天'), findsOneWidget);
     expect(find.byIcon(Icons.mic_off), findsOneWidget);
   });
+
+  testWidgets('offers a retry action when provided', (tester) async {
+    var retries = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AvatarOverlay(
+          userLine: '', aiLine: '', status: '', error: '启动失败', muted: false,
+          onMute: () {}, onEnd: () {}, onToggleDebug: () {}, onRetry: () => retries++,
+        ),
+      ),
+    ));
+    await tester.tap(find.byKey(const Key('retry')));
+    expect(retries, 1);
+  });
 }
