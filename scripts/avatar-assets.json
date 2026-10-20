@@ -1,0 +1,43 @@
+{
+  "sourceRevision": "2afe6d79779313db8909badebf46f9805a6c7b70",
+  "upstreamBase": "https://raw.githubusercontent.com/met4citizen/TalkingHead/{revision}/avatars",
+  "assets": [
+    {
+      "file": "placeholder.glb",
+      "source": "brunette.glb",
+      "sha256": "8864c504b5c11daa2f0037afffdc0815bb0fa2e6062e37a584746116a3c2f538",
+      "license": "CC BY-NC 4.0; internal non-commercial POC with attribution required",
+      "derived": false
+    },
+    {
+      "file": "young-woman.glb",
+      "source": "brunette.glb",
+      "sha256": "8864c504b5c11daa2f0037afffdc0815bb0fa2e6062e37a584746116a3c2f538",
+      "license": "CC BY-NC 4.0; internal non-commercial POC with attribution required",
+      "derived": false
+    },
+    {
+      "file": "cute-girl.glb",
+      "source": "young-woman.glb",
+      "sha256": "0a863fca547dcb669c3c045a8b25e63f8876a564bf322ab28bfa465ce42dd06a",
+      "license": "Derived from CC BY-NC 4.0 source; internal non-commercial POC with attribution required",
+      "derived": true,
+      "transform": { "armatureScale": 0.9, "headScale": 1.08 }
+    },
+    {
+      "file": "young-man.glb",
+      "source": "avatarsdk.glb",
+      "sha256": "193c07c351f1f94b12b499ece3f8813432dbe902afe0b5dd6957e788a9a36605",
+      "license": "AvatarSDK non-commercial example terms; internal POC only until confirmed",
+      "derived": false
+    },
+    {
+      "file": "cute-boy.glb",
+      "source": "young-man.glb",
+      "sha256": "6b988d4adc814d8e2766bb4334d620198de7cdecc4a5cdeefbc7777bcbe34d69",
+      "license": "Derived from AvatarSDK non-commercial example; internal POC only until confirmed",
+      "derived": true,
+      "transform": { "armatureScale": 0.9, "headScale": 1.08 }
+    }
+  ]
+}

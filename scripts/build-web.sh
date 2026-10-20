@@ -4,6 +4,7 @@
 #   ./scripts/build-web.sh --probe-only  no avatar-core build: probe page and placeholder directories only
 set -euo pipefail
 cd "$(dirname "$0")/.."
+node scripts/generate-avatar-catalog.mjs
 mode="${1:-full}"
 rm -rf app/assets/web
 mkdir -p app/assets/web

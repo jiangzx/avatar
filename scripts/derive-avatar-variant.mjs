@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const [sourcePath, targetPath] = process.argv.slice(2);
+const [sourcePath, targetPath, transformArg] = process.argv.slice(2);
 if (!sourcePath || !targetPath) throw new Error('usage: derive-avatar-variant.mjs <source.glb> <target.glb>');
+const transform = transformArg ? JSON.parse(transformArg) : { armatureScale: 0.9, headScale: 1.08 };
 
 const input = readFileSync(sourcePath);
 if (input.readUInt32LE(0) !== 0x46546c67 || input.readUInt32LE(4) !== 2) throw new Error('invalid GLB');
@@ -12,10 +13,15 @@ const armature = json.nodes?.find((node) => node.name === 'Armature');
 const head = json.nodes?.find((node) => node.name === 'Head');
 if (!armature || !head) throw new Error('source avatar has no expected skeleton');
 
-// Keep the source's facial blendshapes and rig, but give the child variant a shorter body and larger head.
-armature.scale = [0.9, 0.9, 0.9];
-head.scale = [1.08, 1.08, 1.08];
-json.asset = { ...json.asset, extras: { ...(json.asset?.extras ?? {}), derivedVariant: 'cute-boy', source: 'avatarsdk.glb' } };
+// Keep the source's facial blendshapes and rig while changing proportions from the manifest.
+const armatureScale = Number(transform.armatureScale);
+const headScale = Number(transform.headScale);
+if (!Number.isFinite(armatureScale) || !Number.isFinite(headScale) || armatureScale <= 0 || headScale <= 0) {
+  throw new Error('invalid transform');
+}
+armature.scale = [armatureScale, armatureScale, armatureScale];
+head.scale = [headScale, headScale, headScale];
+json.asset = { ...json.asset, extras: { ...(json.asset?.extras ?? {}), derivedVariant: true, armatureScale, headScale } };
 
 const jsonBytes = Buffer.from(JSON.stringify(json));
 const paddedJson = Buffer.concat([jsonBytes, Buffer.alloc((4 - (jsonBytes.length % 4)) % 4, 0x20)]);
