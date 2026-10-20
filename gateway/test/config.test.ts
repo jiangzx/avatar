@@ -112,6 +112,9 @@ describe('config', () => {
     expect(d.lightPhrases).toEqual(['嗯', '哦', '好', '行', '好的', '嗯嗯', '我知道了', '知道了', '知道啦', '明白了', '明白啦']);
     expect(d.greetingText).toContain('小暖');
     expect(d.greetingMemoryInstruction).toContain('记忆');
+    // A new session greets first and then asks.
+    expect(d.greetingMemoryText.startsWith('您好')).toBe(true);
+    expect(d.greetingMemoryText).toContain('？');
     expect(d.greetingRetryMs).toBe(800);
     expect(d.openingFollowText).toBe('您要是方便，告诉我怎么称呼您就好。');
     expect(d.openingFollowInstruction).toContain('称呼');
