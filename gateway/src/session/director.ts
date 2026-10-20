@@ -12,13 +12,13 @@ export interface SilenceContext {
 
 export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
-  planContext?(context: SilenceContext, signal: AbortSignal, step: PlannedSilenceStep): string | null | Promise<string | null>;
+  /** Decides only the context line. A null decision falls back to the configured warm copy. */
+  planContext?(context: SilenceContext, signal: AbortSignal): string | null | Promise<string | null>;
   /** Once per quiet stretch, when silence reaches the rest step. */
   onQuietRest?(): void;
 }
 
 type SilenceStep = 'context' | 'check' | 'leave' | 'rest';
-type PlannedSilenceStep = Exclude<SilenceStep, 'rest'>;
 
 /** Agreed defaults when a fixture omits the silence fields. Shipped roles set them in director.json. */
 const DEFAULT_CONTEXT_AFTER_MS = 5_000;
@@ -40,6 +40,7 @@ interface SilenceCopy {
   checkAfterMs: number;
   leaveAfterMs: number;
   contextInstruction: string;
+  contextText: string;
   presenceInstruction: string;
   presenceText: string;
   checkInstruction: string;
@@ -400,27 +401,28 @@ export class Director {
       this.left = true;
       return;
     }
-    if (this.hadContent && step !== 'rest' && this.deps.planContext) {
-      this.planContext(step);
+    // Only the first step is judged. Check and leave always speak their configured copies.
+    if (step === 'context' && this.hadContent && this.deps.planContext) {
+      this.planContext();
       return;
     }
     this.pending = step;
     this.deps.requestResponse('followup', this.silenceRequest(step));
   }
 
-  /** Decide before requesting audio. A cancelled decision can never speak. */
-  private planContext(step: PlannedSilenceStep): void {
+  /** Decide the context line before requesting audio. A cancelled decision can never speak. */
+  private planContext(): void {
     const controller = new AbortController();
     this.decision = controller;
     const accept = (text: string | null) => {
       if (this.decision !== controller || controller.signal.aborted || this.blocked() || this.left) return;
       this.decision = null;
       if (!text?.trim()) {
-        // A declined stage stays silent, then continues to the next stage.
-        this.skipPlannedStep(step);
+        // A declined context line falls back to the configured copy; the ladder still runs.
+        this.speakContextFallback();
         return;
       }
-      this.pending = step;
+      this.pending = 'context';
       this.deps.requestResponse('followup', {
         cue: 'followup',
         instruction: (this.cfg.silenceDecision?.speakInstruction ?? this.silence().contextInstruction)
@@ -435,8 +437,7 @@ export class Director {
       accept(null);
     };
     try {
-      if (!this.deps.planContext) log('silence_decision_skipped', { code: 'unconfigured' });
-      const result = this.deps.planContext?.({ userText: this.lastContent, assistantText: this.lastAnswer }, controller.signal, step) ?? null;
+      const result = this.deps.planContext?.({ userText: this.lastContent, assistantText: this.lastAnswer }, controller.signal) ?? null;
       if (typeof result === 'string' || result === null) accept(result);
       else void result.then(accept, failed);
     } catch {
@@ -444,9 +445,9 @@ export class Director {
     }
   }
 
-  private skipPlannedStep(step: PlannedSilenceStep): void {
-    this.next = step === 'context' ? 'check' : step === 'check' ? 'leave' : 'rest';
-    this.arm();
+  private speakContextFallback(): void {
+    this.pending = 'context';
+    this.deps.requestResponse('followup', this.silenceRequest('context'));
   }
 
   /** Keep the memory rest hook without filling the silence with speech. */
@@ -471,8 +472,8 @@ export class Director {
         cue: 'followup',
         instruction: s.contextInstruction
           .replaceAll('{utterance}', this.lastContent)
-          .replaceAll('{continuation}', s.presenceText),
-        fallbackText: s.presenceText,
+          .replaceAll('{continuation}', s.contextText),
+        fallbackText: s.contextText,
       };
     }
     if (step === 'context') return this.openingFollow(s);
@@ -512,6 +513,7 @@ export class Director {
       checkAfterMs: c.checkAfterMs ?? DEFAULT_CHECK_AFTER_MS,
       leaveAfterMs: c.leaveAfterMs ?? DEFAULT_LEAVE_AFTER_MS,
       contextInstruction: c.contextInstruction ?? c.followupInstruction,
+      contextText: c.contextText ?? c.followupText,
       presenceInstruction: c.presenceInstruction ?? c.idleNoticeInstruction,
       presenceText: c.presenceText ?? c.idleNoticeText,
       checkInstruction: c.checkInstruction ?? c.followupInstruction,

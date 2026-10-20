@@ -35,6 +35,8 @@ export interface DirectorConfig {
   restAfterMs?: number;
   /** Legacy/test template. Production uses silenceDecision.speakInstruction. */
   contextInstruction?: string;
+  /** Step 1 spoken fallback when the judged continuation is declined. Defaults to followupText. */
+  contextText?: string;
   /** Step 1 when the user has not said anything concrete. */
   presenceInstruction?: string;
   presenceText?: string;

@@ -20,6 +20,7 @@
   "greetingRetryMs": 800,
   "followupInstruction": "用户安静了一会儿，可能在想事情。不要追问，像陪在旁边一样轻轻说一句接着刚才话题的感受或关心，不超过 25 个字。",
   "followupText": "嗯，我在听，您慢慢说，不着急。",
+  "contextText": "您接着说，我在这儿听着呢。",
   "idleNoticeInstruction": "用户仍然没有说话。像坐在旁边一样，轻轻表达您还方便继续、不着急，不要提问，也不要结束这次陪伴。",
   "idleNoticeText": "我在呢，不着急，咱们慢慢待着。",
   "resumeInstruction": "网络刚恢复。请自然地说一句「刚才网络断了一下，我们接着聊」，然后接上之前的话题。",

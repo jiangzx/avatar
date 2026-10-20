@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链回归已在本地修复：规划器按 `context -> check -> leave` 阶段推进，失败只跳过当前段。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，gateway 全量回归 436 项通过，真机首句恢复为短问候（详见下文），用户已确认首句正常、不再念提示词。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
+Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链已在 2026-10-20 统一修正：只有 context 段经过判断器，拒绝/失败改说温和承接；check/leave 固定使用配置文案，Qwen 与 Seeduplex 共用同一 Director 行为（详见下文）。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，gateway 全量回归 436 项通过，真机首句恢复为短问候（详见下文），用户已确认首句正常、不再念提示词。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
 
 ## 打断与沉默：已踩过的坑
 
@@ -280,5 +280,15 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - **2026-10-20 更正：** Seeduplex 的 `speech_text_buffer.commit` 是直接文本合成，提交 Director 的 `instruction` 会把完整提示词原样播给用户。手机首句播报“当前没有…请礼貌…开场只用一句陈述…”即该回归，不是固定文案问题。主动响应路径只能提交可直接播报的 `fallbackText`。
 - 已修复 `gateway/src/adapters/seeduplex.ts`：`createResponse` 只提交 `fallbackText`；`gateway/test/seeduplex.test.ts` 断言 commit 文本既不是 instruction 也不是 cue。`npm test -w gateway` 436 项通过，`npm run typecheck -w gateway` 通过。
 - 2026-10-20 真机复验：重启 8787（`ADAPTER=seeduplex`）并重开 App 后，新会话 greeting 播放约 5.3 秒（修复前同一路径约 20.2 秒），随后两段沉默 followup 分别约 5.8 / 9.7 秒，均为短句时长；本轮无 `adapter_error`。再次重开 App 的 greeting 播放约 3.8 秒，用户确认首句正常、不再念提示词。内容正确性由适配器回归测试和用户听感共同确认。
-- 2026-10-20 复测发现的阶段推进改动保留：`speak:false`、超时或无效 JSON 只跳过当前段，`context -> check -> leave` 继续推进，rest 仍只触发一次提取。已知风险：Seeduplex 直出 TTS 不回报 text，`lastAnswer` 不包含主动接话，`planContext` 在 check/leave 可能重复同一承接；需下一次手机听感复验时确认。
+- 2026-10-20 后续：阶段推进逻辑已由下一节“三步主动链统一”修正取代；check/leave 不再经过判断器，Seeduplex 不会因 `speak:false` 逐段静默。
 - 当前没有新的部署动作；网关和 APK 均按用户要求暂停，手机复验等待用户安排。
+
+## 三步主动链统一（2026-10-20）
+
+- 用户听感：Seeduplex 模式下正常聊过几轮后沉默，没有 Qwen 那样的三段主动接话，而是一直等待；要求对标 Qwen，两种适配器共用同一套逻辑。
+- 根因：共享 Director 在 `hadContent` 时把 context/check/leave 三段都交给文本判断器；Seeduplex 直出 TTS 不回报回答文本，判断器更容易返回 `speak:false`，`skipPlannedStep` 于是逐段静默，手机听感就是一直等待。这不是 Seeduplex 适配器差异，而是 Director 把“判断器拒绝”当成了“整条链不发言”。
+- 修正（统一在 `Director`，不区分适配器）：只有 context 段经过判断器；判断器拒绝、异常或超时都改说配置的温和承接 `contextText`（默认 `followupText`），并继续三步链。check/leave 不再询问判断器，固定使用配置文案；Qwen 仍按 instruction 生成，Seeduplex 按 fallbackText 直接播报。rest 仍只触发一次提取并按配置播一句后停止。
+- 配置：`gateway/roles/elder-companion/director.json` 新增 `contextText: "您接着说，我在这儿听着呢。"`；zod schema 与 `DirectorConfig` 同步，启动时校验。
+- TDD：新增/更新 `director-silence.test.ts`，覆盖判断器拒绝、异常和批准三种路径都走完 context → check → leave → rest；`director.test.ts`、`session.test.ts` 更新为 check 不再调用判断器。`npm test -w gateway` → 102 files / 436 tests passed；`npm run typecheck -w gateway` 通过。
+- 规格：`docs/superpowers/specs/2026-10-17-companionship-memory-design.md` §2 已改为 2026-10-20 约定，取代 2026-10-18 #43 的“最多一句、其余安静等待”。
+- 待办：重启 8787 后真机复验“聊几轮 → 沉默”，应听到 3 秒后的温和承接、约 12 秒后的「您还方便吗」、再约 12 秒后的短离开；用户听感确认前不算完成。8787 未重启。

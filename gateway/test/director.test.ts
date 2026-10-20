@@ -208,8 +208,8 @@ describe('Director', () => {
       { cue: 'followup', instruction: 'CTX', fallbackText: '承接' },
       {
         cue: 'followup',
-        instruction: 'CTX',
-        fallbackText: '承接',
+        instruction: '点到「孙子周末来看我」，可以不回',
+        fallbackText: '您还方便吗，刚才那件事先放着',
       },
     ]);
   });
