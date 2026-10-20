@@ -212,32 +212,30 @@ Expected: FAIL（`gateway/src/i18n/load.ts` 不存在）。
 1. `config/i18n/zh/safety.json` 原样保存 `config/safety.json` 的三个短语数组；ja/en 各写本地化词表。`gateway/src/config.ts` 新增 `SharedSafetyConfig`、`loadSharedSafety(path)`、`mergeSafety(shared, phrases)`；**保留**现有 `loadSafetyConfig`/`SafetyRules` 不动，避免本任务打断 writer/tools。`load.ts` 用 `mergeSafety(loadSafetyConfig(sharedPath), i18nPhrases)` 得到 `I18nBundle.safety`，去重。
 2. `config/i18n/zh/emotion.json` 原样保存 `config/emotion.json` 的 `lexicon`；ja/en 各写本地化词表。`session/emotion.ts` 新增 `SharedEmotionConfig`、`loadSharedEmotion`、`mergeEmotion`；**保留**现有 `loadEmotionConfig`/`EmotionConfig` 不动。`load.ts` 把共享 `lexicon` 与三语词表合并去重。
 3. `config/i18n/zh/memory.json` 原样保存 `config/memory.json` 的中文文案与词表（这是 Task 4/5 切换前的副本）；`config/memory.json` 本任务**不改**。`memory.json` 里的 `extractLabels` 使用现有 `worker.renderInput` 的中文标签逐字复制；`evidence.questionPatterns` 使用现有 `(?:吗|呢|么|嘛|来着)\s*[。.!！…~～]*$`；`addressingPatterns` 使用现有 `^(?:用户名叫|用户叫|我叫)(.+)$`。
-4. `language.json` 使用**模板**而非正则：`names`（本语言名称）、`shortAcks`、`questionSuffixes`、`requestTemplates: [{ language, template }]`。`{name}` 由目标语言的 `names` 展开；加载器锚定整句（`^(?:...)$`，`iu`），并保留现有“去边缘标点/空白”的语义；短应答在加载时归一化（去边缘标点、小写）后并入一个 Set。
+4. `language.json` 使用 `names`（本语言名称）、`shortAcks`、`questionSuffixes`、`explicitRequestPatterns: [{ language, pattern }]`。`pattern` 是**完整锚定**的正则源码（`^...$`），由加载器 `new RegExp(pattern, 'iu')` 编译；非法则 `i18n_pattern_invalid:<lang>:explicitRequestPatterns`。M1 `requestPatterns()` 的正则原样迁入对应语言文件（zh 文件保存中文句式，en 文件保存英文句式，ja 文件保存日语句式），每条带目标语言；不要用模板重新拼，否则会漏掉 `讲英语`/`麻烦用英语`/`用英语回答` 等 M1 已支持的句式。边缘标点/空白的去法保持不变；短应答在加载时归一化（去边缘标点、小写）后并入一个 Set。
 5. `load.ts` 读取 `config/i18n/<lang>/{language,memory,safety,emotion,silence}.json`，任何缺失抛 `i18n_missing:<lang>:<file>`；正则编译失败抛 `i18n_pattern_invalid:<lang>:<field>`；合并 `evidence`/`recentQueries`/`safety`/`emotion`；导出 `DEFAULT_I18N = loadI18n(<gateway/config>)`。
 
-`zh/language.json` 参考内容（必须覆盖 M1 全部显式换语用例）：
+`zh/language.json` 的 `explicitRequestPatterns` 必须逐字迁入 M1 `requestPatterns()` 的四个中文正则（按目标语言各一份，`names` 分别为 `英文|英语|english`、`日语|日文|日本語|japanese`、`中文|汉语|普通话|chinese`）：
 
 ```json
 {
   "names": ["中文", "汉语", "普通话", "chinese"],
   "shortAcks": ["嗯", "嗯嗯", "哦", "好", "好的", "好好", "行", "行吧", "对对", "是是", "我知道了", "知道了", "知道啦", "明白了", "明白啦"],
   "questionSuffixes": ["吗", "呢", "么", "嘛", "来着"],
-  "requestTemplates": [
-    { "language": "en", "template": "{name}" },
-    { "language": "en", "template": "请用{name}说" },
-    { "language": "en", "template": "说{name}" },
-    { "language": "en", "template": "用{name}" },
-    { "language": "en", "template": "切换到{name}" },
-    { "language": "en", "template": "切换成{name}" },
-    { "language": "ja", "template": "用{name}" },
-    { "language": "ja", "template": "请说{name}" },
-    { "language": "zh", "template": "请说{name}" },
-    { "language": "zh", "template": "用{name}" }
+  "explicitRequestPatterns": [
+    { "language": "en", "pattern": "^(?:英文|英语|english)$" },
+    { "language": "en", "pattern": "^(?:英文|英语|english)\\s+please$" },
+    { "language": "en", "pattern": "^(?:please\\s+)?(?:speak|talk|reply|answer|switch)(?:\\s+(?:to|in))?(?:\\s+in)?\\s+(?:英文|英语|english)(?:\\s+please)?$" },
+    { "language": "en", "pattern": "^(?:请|麻烦)?(?:用|说|讲|切换(?:到|成)?)(?:英文|英语|english)(?:说|讲|回答|聊天|跟我说话|跟我聊天|跟我交流|跟我讲)?$" },
+    { "language": "ja", "pattern": "^(?:日语|日文|日本語|japanese)$" },
+    { "language": "ja", "pattern": "^(?:请|麻烦)?(?:用|说|讲|切换(?:到|成)?)(?:日语|日文|日本語|japanese)(?:说|讲|回答|聊天|跟我说话|跟我聊天|跟我交流|跟我讲)?$" },
+    { "language": "zh", "pattern": "^(?:中文|汉语|普通话|chinese)$" },
+    { "language": "zh", "pattern": "^(?:请|麻烦)?(?:用|说|讲|切换(?:到|成)?)(?:中文|汉语|普通话|chinese)(?:说|讲|回答|聊天|跟我说话|跟我聊天|跟我交流|跟我讲)?$" }
   ]
 }
 ```
 
-`ja/language.json` 至少包含 `names: ["日语","日文","日本語","japanese"]`、日语短应答（はい/うん/ええ/いいえ/そう/そうですね）、`questionSuffixes: ["か","かな","かしら"]`、模板 `"日本語で"`、`"日本語でお願いします"`、`"英語で"`、`"中国語で"`。`en/language.json` 至少包含 `names: ["英文","英语","english"]`、短应答（ok/okay/yes/yeah/yep/no/nope）、模板 `"{name} please"`、`"speak {name}"`、`"speak in {name}"`、`"talk in {name}"`、`"switch to {name}"`、`"reply in {name}"`、`"answer in {name}"`。
+`ja/language.json` 至少包含 `names: ["日语","日文","日本語","japanese"]`、日语短应答（はい/うん/ええ/いいえ/そう/そうですね）、`questionSuffixes: ["か","かな","かしら"]`、以及 M1 的 `^日本語で(?:お願いします)?$`（目标 ja）和对应目标 en/zh 的 `英語で`/`中国語で` 整句式。`en/language.json` 至少包含 `names: ["英文","英语","english"]`、短应答（ok/okay/yes/yeah/yep/no/nope）、以及 M1 英文整句正则（目标 en/ja/zh 各一份）：`^(?:names)$`、`^(?:names)\\s+please$`、`^(?:please\\s+)?(?:speak|talk|reply|answer|switch)(?:\\s+(?:to|in))?(?:\\s+in)?\\s+(?:names)(?:\\s+please)?$`。
 
 - [ ] **Step 5: 把 `detectLanguage` 改为配置驱动**
 
@@ -266,7 +264,7 @@ export function detectLanguage(text: string, previous: Language = 'zh', rules: L
 
 - [ ] **Step 6: 更新测试与调用点**
 
-- `language.test.ts` 改为 `const rules = loadI18n(config).language;`，所有 `detectLanguage(x, y)` 变 `detectLanguage(x, y, rules)`；M1 全部用例必须保持通过。
+- `language.test.ts` 改为 `const rules = loadI18n(config).language;`，所有 `detectLanguage(x, y)` 变 `detectLanguage(x, y, rules)`；M1 全部用例必须保持通过。新增回归：`讲英语`、`麻烦用英语`、`麻烦说英语`、`切换英语`、`用英语回答`、`请用英语跟我说话`、`说英语跟我聊天`、`please speak English`、`talk English`、`reply English`、`switch English` 都必须切到目标语言；`我在学英语` 等提及句仍不切。
 - `session.test.ts` 的 `setup()` 增加 `languageRules: loadI18n(config).language`；`multilingual.test.ts` 后续同样。
 - `index.ts`：`const i18n = loadI18n(`${root}config`)`；传 `languageRules: i18n.language`。此任务不接线其它 i18n 字段，`config/memory.json`、`config/safety.json`、`config/emotion.json` 保持原样。
 
