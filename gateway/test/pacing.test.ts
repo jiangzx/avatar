@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +27,13 @@ describe('pacing and budget config', () => {
   it('rejects an instruction budget above 40% of the rebuild threshold', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mem-'));
     writeFileSync(join(dir, 'memory.json'), JSON.stringify({ instructions: { budgetRatio: 0.5, snapshotMaxChars: 0, summaryMaxChars: 100, minHistoryChars: 100 } }));
+    expect(() => loadMemoryBudget(join(dir, 'memory.json'))).toThrow();
+  });
+
+  it('rejects unknown memory budget keys', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mem-'));
+    const cfg = JSON.parse(readFileSync(join(root, 'config/memory.json'), 'utf8')) as Record<string, unknown>;
+    writeFileSync(join(dir, 'memory.json'), JSON.stringify({ ...cfg, typoKey: 1 }));
     expect(() => loadMemoryBudget(join(dir, 'memory.json'))).toThrow();
   });
 

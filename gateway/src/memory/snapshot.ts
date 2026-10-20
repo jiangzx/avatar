@@ -8,10 +8,10 @@ export function renderSnapshot(input: {
   tail: readonly { role: 'user' | 'assistant'; text: string }[]
   maxChars: number
 }): string {
-  const addressing = input.facts.filter((f) => f.category === 'addressing' && f.text).map((f) => addressingText(f.text));
-  const other = input.facts.filter((f) => f.category !== 'addressing' && f.text).map((f) => `事实：${f.text}`);
-  const notes = input.notes.filter((n) => n.text).map((n) => `关系：${n.text}`);
-  const tail = input.tail.filter((t) => t.text).map((t) => `${t.role === 'user' ? '用户' : '助手'}：${t.text}`);
+  const addressing = input.facts.filter((f) => f.category === 'addressing' && f.text).map((f) => addressingText(oneLine(f.text)));
+  const other = input.facts.filter((f) => f.category !== 'addressing' && f.text).map((f) => `事实：${oneLine(f.text)}`);
+  const notes = input.notes.filter((n) => n.text).map((n) => `关系：${oneLine(n.text)}`);
+  const tail = input.tail.filter((t) => t.text).map((t) => `${t.role === 'user' ? '用户' : '助手'}：${oneLine(t.text)}`);
   const head = addressing.join('\n');
   // Names stay whole even when the addressing block itself exceeds the budget.
   if (head.length > input.maxChars) return head;
@@ -68,6 +68,11 @@ export function renderMemoryViews(input: {
     proactive: renderSnapshot({ facts: factLines, notes: [], tail: [], maxChars: input.maxChars }),
     hasTopic: factLines.length > 0,
   };
+}
+
+/** A stored line must not be able to forge a second labelled snapshot line. */
+function oneLine(text: string): string {
+  return text.replace(/[\r\n]+/g, ' ').trim();
 }
 
 /** Renders a stored self-introduction as a short label so the model does not mirror the whole sentence. */

@@ -116,6 +116,10 @@ export const MIGRATIONS: readonly string[] = [
     created_at INTEGER NOT NULL
   );
   `,
+  `
+  CREATE INDEX messages_owner_created ON messages (owner_id, created_at);
+  CREATE INDEX messages_owner_pending ON messages (owner_id) WHERE extracted = 0 AND excluded = 0;
+  `,
 ];
 
 /** Applies pending steps, each in its own transaction. Returns the resulting schema version. */

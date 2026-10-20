@@ -117,6 +117,8 @@ export class MemoryWorker implements MemoryExtractor {
     }), {
       classify: (error) => {
         const code = errorCodeOf(error);
+        // Rate limits and request timeouts are transient; other 4xx (bad auth/request) are not.
+        if (['extract_http_408', 'extract_http_425', 'extract_http_429'].includes(code)) return 'retryable';
         if (code.startsWith('extract_http_4') || code === 'extract_invalid_response' || code === 'extract_invalid_json') return 'fatal';
         return 'retryable';
       },

@@ -52,6 +52,28 @@ describe('QwenAdapter', () => {
     expect(seen).toEqual(['start:r', 'text:fixture', 'tool:c:perform_action', 'done:r']); expect(bytes).toBe(2); expect(done).toBe(1); a.close();
   });
 
+  it('emits one responseStarted when both start events share an id', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s);
+    await new Promise<void>((r) => s.once('listening', r));
+    const port = (s.address() as { port: number }).port;
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString()) as Record<string, unknown>;
+      if (e.type === 'session.update') {
+        ws.send(JSON.stringify({ type: 'session.created' }));
+        ws.send(JSON.stringify({ type: 'session.updated' }));
+        ws.send(JSON.stringify({ type: 'response.created', response: { id: 'same' } }));
+        ws.send(JSON.stringify({ type: 'response.audio.started', response_id: 'same' }));
+      }
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture' });
+    const started: string[] = [];
+    a.on('responseStarted', (id) => started.push(id));
+    await a.connect({ instructions: 'fixture', tools: [] });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(started).toEqual(['same']);
+    a.close();
+  });
+
   it('continues with response.create after a tool result', async () => {
     const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
     const sent: Array<Record<string, unknown>> = [];

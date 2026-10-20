@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DirectorSchema, loadConfig, loadDirectorConfig, loadIdentityConfig, makeOriginCheck } from '../src/config.ts';
@@ -47,6 +48,12 @@ describe('config', () => {
     const c = loadConfig({ APP_SECRET: 'x'.repeat(16), SUMMARIZER: 'qwen', DASHSCOPE_API_KEY: 'test-key', QWEN_SUMMARIZER_ENDPOINT: 'https://workspace.example/compatible-mode/v1/chat/completions' });
     expect(c.summarizer).toBe('qwen');
     expect(c.summarizerModel).toBe('qwen-flash');
+  });
+
+  it('rejects unknown director keys', () => {
+    const cfg = JSON.parse(readFileSync(join(root, 'roles/elder-companion/director.json'), 'utf8')) as Record<string, unknown>;
+    expect(() => DirectorSchema.parse(cfg)).not.toThrow();
+    expect(() => DirectorSchema.parse({ ...cfg, typoKey: true })).toThrow();
   });
 
   it('validates endpoint protocols at startup', () => {

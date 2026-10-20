@@ -173,6 +173,8 @@ const DirectorSchema = z.object({
   maxPerWindow: z.number().int().min(0),
   windowMs: z.number().int().positive(),
   companyAfterMs: z.number().int().positive().optional(),
+  /** Role catalogs require `{topic}` here; the shared schema only checks the shape is present. */
+  topicInstruction: z.string().optional(),
   contextAfterMs: z.number().int().positive().optional(),
   checkAfterMs: z.number().int().positive().optional(),
   leaveAfterMs: z.number().int().positive().optional(),
@@ -220,7 +222,7 @@ const DirectorSchema = z.object({
   toolContinueText: z.string().min(1),
   memoryNoticeInstruction: z.string().min(1),
   memoryNoticeText: z.string().min(1),
-});
+}).strict();
 
 export function loadDirectorConfig(path: string): DirectorConfig {
   return DirectorSchema.parse(JSON.parse(readFileSync(path, 'utf8')));

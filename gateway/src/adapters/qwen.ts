@@ -41,6 +41,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   private instructions = '';
   private eventCounter = 0;
   private completedResponses = new Set<string>();
+  private startedResponses = new Set<string>();
   private initialization: { resolve: () => void; reject: (error: Error) => void } | null = null;
   private connectTimer: NodeJS.Timeout | null = null;
   private readonly opts: Required<QwenOptions>;
@@ -124,10 +125,20 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     if (type === 'input_audio_buffer.speech_stopped') { this.emit('userSpeechStopped'); return; }
     if (type === 'conversation.item.input_audio_transcription.delta') { this.emit('userTranscript', String(e.delta ?? e.text ?? ''), false); return; }
     if (type === 'conversation.item.input_audio_transcription.completed') { this.emit('userTranscript', String(e.transcript ?? e.text ?? ''), true); return; }
-    if (type === 'response.audio.started') { this.responseId = this.responseIdFrom(e); this.completedResponses.delete(this.responseId); this.emit('responseStarted', this.responseId); return; }
+    if (type === 'response.audio.started') {
+      const id = this.responseIdFrom(e);
+      if (this.startedResponses.has(id)) return;
+      this.startedResponses.add(id);
+      this.responseId = id;
+      this.completedResponses.delete(id);
+      this.emit('responseStarted', id);
+      return;
+    }
     if (type === 'response.created') {
       const nested = e.response as Json | undefined;
       const id = typeof nested?.id === 'string' ? nested.id : this.responseIdFrom(e);
+      if (this.startedResponses.has(id)) return;
+      this.startedResponses.add(id);
       this.responseId = id;
       this.completedResponses.delete(id);
       this.emit('responseStarted', id);

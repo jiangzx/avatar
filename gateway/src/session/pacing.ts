@@ -72,7 +72,7 @@ const MemoryBudgetSchema = z.object({
   extractTranscriptMaxChars: z.number().int().min(100).max(50_000).optional(),
   extractContextMaxChars: z.number().int().min(100).max(20_000).optional(),
   extractPolicy: PolicySchema.optional(),
-}).loose();
+}).strict();
 
 export type PacingConfig = z.infer<typeof PacingSchema>;
 export type MemoryBudgetConfig = z.infer<typeof MemoryBudgetSchema>;

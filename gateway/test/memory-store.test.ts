@@ -261,10 +261,12 @@ describe('SqliteMemoryStore', () => {
 });
 
 describe('memory tables', () => {
-  it('reaches schema version 2, finds a message by bigram, and cascades with the owner', () => {
+  it('reaches schema version 3, finds a message by bigram, and cascades with the owner', () => {
     const db = open();
-    expect(MIGRATIONS).toHaveLength(2);
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 2 });
+    expect(MIGRATIONS).toHaveLength(3);
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 3 });
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('messages_owner_created', 'messages_owner_pending') ORDER BY name").all())
+      .toEqual([{ name: 'messages_owner_created' }, { name: 'messages_owner_pending' }]);
     const created = owner(new SqliteMemoryStore(db), 'h-mem');
 
     db.prepare(
@@ -325,14 +327,14 @@ describe('memory tables', () => {
     expect(db.prepare(`SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'hello'`).all()).toEqual([]);
   });
 
-  it('upgrades a version-1 database to version 2 without reapplying step 0', () => {
+  it('upgrades a version-1 database to the current version without reapplying step 0', () => {
     const db = new DatabaseSync(':memory:');
     dbs.push(db);
     db.exec('PRAGMA foreign_keys = ON');
     expect(migrate(db, MIGRATIONS.slice(0, 1))).toBe(1);
     db.prepare('INSERT INTO owners (id, created_at, last_seen_at) VALUES (?, ?, ?)').run('owner-v1', 1, 1);
-    expect(migrate(db)).toBe(2);
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 2 });
+    expect(migrate(db)).toBe(3);
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 3 });
     expect(db.prepare('SELECT id FROM owners WHERE id = ?').get('owner-v1')).toEqual({ id: 'owner-v1' });
     expect(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'messages'").get()).toEqual({ n: 1 });
   });
