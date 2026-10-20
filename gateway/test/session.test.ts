@@ -120,7 +120,7 @@ describe('Session', () => {
     expect(inputs).toEqual([]);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 3, playedMs: 5000, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(3000);
-    expect(inputs).toEqual([{ userText: '我叫老王', assistantText: '王叔好' }]);
+    expect(inputs).toEqual([{ stage: 'context', userText: '我叫老王', assistantText: '王叔好', previousTexts: [] }]);
     await vi.advanceTimersByTimeAsync(600000);
     expect(of(s.sent, 'response.start')).toHaveLength(4);
     s.session.end();
@@ -143,7 +143,7 @@ describe('Session', () => {
     expect(inputs).toEqual([]);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(3000);
-    expect(inputs).toEqual([{ userText: '我叫老王', assistantText: '王叔好' }]);
+    expect(inputs).toEqual([{ stage: 'context', userText: '我叫老王', assistantText: '王叔好', previousTexts: [] }]);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(600000);
     expect(inputs).toHaveLength(1);

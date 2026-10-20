@@ -39,7 +39,7 @@ const cfg: DirectorConfig = {
 
 function make(c: DirectorConfig = cfg) {
   const calls: Array<[ResponseKind, string]> = [];
-  const d = new Director(c, { requestResponse: (k, r) => calls.push([k, r.instruction]), planContext: () => '承接' });
+  const d = new Director(c, { requestResponse: (k, r) => calls.push([k, r.instruction]), planSilenceLine: () => ({ text: '承接' }) });
   return { d, calls };
 }
 
@@ -146,7 +146,7 @@ describe('Director', () => {
 
   it('continues the last concrete thing instead of a topic card', () => {
     const reqs: ProactiveRequest[] = [];
-    const d = new Director(cfg, { requestResponse: (_k, r) => reqs.push(r), planContext: () => '承接' });
+    const d = new Director(cfg, { requestResponse: (_k, r) => reqs.push(r), planSilenceLine: () => ({ text: '承接' }) });
     d.onUserFinal('孙子周末来看我');
     d.onAiTurnEnded();
     vi.advanceTimersByTime(5000);
@@ -198,19 +198,15 @@ describe('Director', () => {
       ...cfg,
       checkContextInstruction: '点到「{utterance}」，可以不回',
       checkContextText: '您还方便吗，刚才那件事先放着',
-    }, { requestResponse: (_k, r) => talked.push(r), planContext: () => '承接' });
+    }, { requestResponse: (_k, r) => talked.push(r), planSilenceLine: context => ({ text: `${context.stage}承接` }) });
     d.onUserFinal('孙子周末来看我');
     d.onAiTurnEnded();
     vi.advanceTimersByTime(5000);
     d.onAiTurnEnded();
     vi.advanceTimersByTime(10000);
     expect(talked).toEqual([
-      { cue: 'followup', instruction: 'CTX', fallbackText: '承接' },
-      {
-        cue: 'followup',
-        instruction: '点到「孙子周末来看我」，可以不回',
-        fallbackText: '您还方便吗，刚才那件事先放着',
-      },
+      { cue: 'followup', instruction: 'CTX', fallbackText: 'context承接' },
+      { cue: 'followup', instruction: 'CTX', fallbackText: 'check承接' },
     ]);
   });
 

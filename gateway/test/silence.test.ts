@@ -9,7 +9,12 @@ const config: SilenceDecisionConfig = {
   maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60,
   policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
 };
-const context = { userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。' };
+const context = {
+  stage: 'context' as const,
+  userText: '今天走了很多路，脚有点酸。',
+  assistantText: '今天走了不少地方。',
+  previousTexts: [] as string[],
+};
 const signal = () => new AbortController().signal;
 const client = (raw: string): TextModelClient => ({ complete: async () => raw });
 
@@ -17,25 +22,31 @@ describe('silence planner', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
-  it('returns silence without manufacturing a presence line', async () => {
+  it('returns no text when the model stays silent', async () => {
     const plan = createSilencePlanner(client('{"speak":false}'), config);
-    expect(await plan(context, signal())).toBeNull();
+    expect(await plan(context, signal())).toEqual({ text: null });
   });
 
-  it('passes the actual exchange as data and returns the validated continuation', async () => {
+  it('passes the stage, exchange and previous lines as data and returns the validated line', async () => {
     let input!: Parameters<TextModelClient['complete']>[0];
     const plan = createSilencePlanner({ complete: async data => {
       input = data;
       return '{"speak":true,"text":"走累了，脚酸着也不好受。"}';
     } }, config);
-    expect(await plan(context, signal())).toBe('走累了，脚酸着也不好受。');
-    expect(JSON.parse(input.user)).toEqual(context);
+    const checkContext = { ...context, stage: 'check' as const, previousTexts: ['走累了，脚酸着也不好受。'] };
+    expect(await plan(checkContext, signal())).toEqual({ text: '走累了，脚酸着也不好受。' });
+    expect(JSON.parse(input.user)).toEqual(checkContext);
     expect(input.maxTokens).toBe(128);
+  });
+
+  it('closes the ladder only when the model reports a clear ending', async () => {
+    const plan = createSilencePlanner(client('{"speak":false,"close":true}'), config);
+    expect(await plan(context, signal())).toEqual({ text: null, close: true });
   });
 
   it.each([
     'not JSON', '{}', '{"speak":"false"}', '{"speak":false,"text":"不应播放"}',
-    '{"speak":true,"text":" "}', '{"speak":true,"text":123}',
+    '{"speak":false,"close":"yes"}', '{"speak":true,"text":" "}', '{"speak":true,"text":123}',
     JSON.stringify({ speak: true, text: '长'.repeat(61) }),
   ])('stays quiet on an invalid model result: %s', async raw => {
     expect(await createSilencePlanner(client(raw), config)(context, signal())).toBeNull();
@@ -44,10 +55,16 @@ describe('silence planner', () => {
   it('does not send oversized or incomplete exchanges for optional speech', async () => {
     let calls = 0;
     const plan = createSilencePlanner({ complete: async () => { calls++; return '{"speak":true,"text":"不应播放"}'; } }, config);
-    expect(await plan({ userText: '长'.repeat(6001), assistantText: '好。' }, signal())).toBeNull();
-    expect(await plan({ userText: '', assistantText: '好。' }, signal())).toBeNull();
-    expect(await plan({ userText: '你好', assistantText: '' }, signal())).toBeNull();
+    expect(await plan({ ...context, userText: '长'.repeat(6001) }, signal())).toBeNull();
+    expect(await plan({ ...context, userText: '' }, signal())).toBeNull();
     expect(calls).toBe(0);
+  });
+
+  it('plans from the user turn when the adapter reports no assistant text', async () => {
+    let calls = 0;
+    const plan = createSilencePlanner({ complete: async () => { calls++; return '{"speak":true,"text":"您接着说。"}'; } }, config);
+    expect(await plan({ ...context, assistantText: '' }, signal())).toEqual({ text: '您接着说。' });
+    expect(calls).toBe(1);
   });
 
   it('bounds an unresponsive client, aborts its request and does not retry', async () => {

@@ -6,19 +6,29 @@ import { log } from '../log.ts';
 export type { DirectorConfig, TopicCard } from '../roles/types.ts';
 
 export interface SilenceContext {
+  stage: PlannedSilenceStep;
   userText: string;
   assistantText: string;
+  previousTexts: readonly string[];
+}
+
+export interface SilencePlan {
+  /** Spoken line. Null means the configured stage copy should be used. */
+  text: string | null;
+  /** The user clearly ended the conversation; stop the ladder instead of speaking. */
+  close?: boolean;
 }
 
 export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
-  /** Decides only the context line. A null decision falls back to the configured warm copy. */
-  planContext?(context: SilenceContext, signal: AbortSignal): string | null | Promise<string | null>;
+  /** Plans one silence line. Null or no text falls back to the configured copy; close stops the ladder. */
+  planSilenceLine?(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null>;
   /** Once per quiet stretch, when silence reaches the rest step. */
   onQuietRest?(): void;
 }
 
 type SilenceStep = 'context' | 'check' | 'leave' | 'rest';
+type PlannedSilenceStep = Exclude<SilenceStep, 'rest'>;
 
 /** Agreed defaults when a fixture omits the silence fields. Shipped roles set them in director.json. */
 const DEFAULT_CONTEXT_AFTER_MS = 5_000;
@@ -76,6 +86,8 @@ export class Director {
   /** Last substantive thing the user said. Step 1 may quote only this, never the assistant. */
   private lastContent = '';
   private lastAnswer = '';
+  /** Lines already spoken in the current silence ladder, so the planner can avoid repeats. */
+  private ladderTexts: string[] = [];
   private decision: AbortController | null = null;
   private silentStretch = false;
   /** True after the opening line has played to the end. Until then, do not say the presence line. */
@@ -171,6 +183,7 @@ export class Director {
     this.hadContent = true;
     this.lastContent = text.trim();
     this.lastAnswer = '';
+    this.ladderTexts = [];
     this.silentStretch = false;
     this.lightHold = false;
     this.left = false;
@@ -401,28 +414,34 @@ export class Director {
       this.left = true;
       return;
     }
-    // Only the first step is judged. Check and leave always speak their configured copies.
-    if (step === 'context' && this.hadContent && this.deps.planContext) {
-      this.planContext();
+    // After real chat every stage is planned; a failed plan falls back to the configured copy.
+    if (step !== 'rest' && this.hadContent && this.deps.planSilenceLine) {
+      this.planSilenceLine(step);
       return;
     }
-    this.pending = step;
-    this.deps.requestResponse('followup', this.silenceRequest(step));
+    this.requestSilenceStep(step);
   }
 
-  /** Decide the context line before requesting audio. A cancelled decision can never speak. */
-  private planContext(): void {
+  /** Plan one stage before requesting audio. A cancelled plan can never speak. */
+  private planSilenceLine(step: PlannedSilenceStep): void {
     const controller = new AbortController();
     this.decision = controller;
-    const accept = (text: string | null) => {
+    const accept = (plan: SilencePlan | null) => {
       if (this.decision !== controller || controller.signal.aborted || this.blocked() || this.left) return;
       this.decision = null;
-      if (!text?.trim()) {
-        // A declined context line falls back to the configured copy; the ladder still runs.
-        this.speakContextFallback();
+      if (plan?.close) {
+        // The user clearly ended the conversation: no fallback copy, no later stages.
+        this.left = true;
         return;
       }
-      this.pending = 'context';
+      const text = plan?.text?.trim();
+      if (!text) {
+        // A declined or failed plan still speaks the configured stage copy.
+        this.requestSilenceStep(step);
+        return;
+      }
+      this.pending = step;
+      this.rememberLadderText(text);
       this.deps.requestResponse('followup', {
         cue: 'followup',
         instruction: (this.cfg.silenceDecision?.speakInstruction ?? this.silence().contextInstruction)
@@ -437,17 +456,29 @@ export class Director {
       accept(null);
     };
     try {
-      const result = this.deps.planContext?.({ userText: this.lastContent, assistantText: this.lastAnswer }, controller.signal) ?? null;
-      if (typeof result === 'string' || result === null) accept(result);
-      else void result.then(accept, failed);
+      const result = this.deps.planSilenceLine?.({
+        stage: step,
+        userText: this.lastContent,
+        assistantText: this.lastAnswer,
+        previousTexts: [...this.ladderTexts],
+      }, controller.signal) ?? null;
+      if (result instanceof Promise) void result.then(accept, failed);
+      else accept(result);
     } catch {
       failed();
     }
   }
 
-  private speakContextFallback(): void {
-    this.pending = 'context';
-    this.deps.requestResponse('followup', this.silenceRequest('context'));
+  private requestSilenceStep(step: SilenceStep): void {
+    this.pending = step;
+    const request = this.silenceRequest(step);
+    if (this.hadContent && step !== 'rest') this.rememberLadderText(request.fallbackText);
+    this.deps.requestResponse('followup', request);
+  }
+
+  private rememberLadderText(text: string): void {
+    this.ladderTexts.push(text);
+    if (this.ladderTexts.length > 3) this.ladderTexts.shift();
   }
 
   /** Keep the memory rest hook without filling the silence with speech. */

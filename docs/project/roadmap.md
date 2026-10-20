@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链已在 2026-10-20 统一修正：只有 context 段经过判断器，拒绝/失败改说温和承接；check/leave 固定使用配置文案，Qwen 与 Seeduplex 共用同一 Director 行为（详见下文）。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，gateway 全量回归 436 项通过，真机首句恢复为短问候（详见下文），用户已确认首句正常、不再念提示词。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
+Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链已在 2026-10-20 统一修正，并按同日第二轮听感反馈继续改进：context/check/leave 三段都由共享文本模型按阶段生成与上下文相关的主动接话（带前文去重和明确收尾判定），失败时回退配置文案；Qwen 与 Seeduplex 共用同一 Director 行为（详见下文）。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，真机首句恢复为短问候，用户已确认首句正常、不再念提示词。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
 
 ## 打断与沉默：已踩过的坑
 
@@ -292,3 +292,14 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - TDD：新增/更新 `director-silence.test.ts`，覆盖判断器拒绝、异常和批准三种路径都走完 context → check → leave → rest；`director.test.ts`、`session.test.ts` 更新为 check 不再调用判断器。`npm test -w gateway` → 102 files / 436 tests passed；`npm run typecheck -w gateway` 通过。
 - 规格：`docs/superpowers/specs/2026-10-17-companionship-memory-design.md` §2 已改为 2026-10-20 约定，取代 2026-10-18 #43 的“最多一句、其余安静等待”。
 - 待办：重启 8787 后真机复验“聊几轮 → 沉默”，应听到 3 秒后的温和承接、约 12 秒后的「您还方便吗」、再约 12 秒后的短离开；用户听感确认前不算完成。8787 未重启。
+- 2026-10-20 后续：用户已确认三段都听到，但反馈衔接不自然、缺少主动性、像固定语句；本节的“仅 context 判断 + check/leave 固定文案”由下一节取代。
+
+## 三步主动链接话自然化（2026-10-20 第二轮）
+
+- 用户听感：三段都能听到，但上下文衔接不自然，接话没有主动性，更像固定语句；要求给三段式增加互动性与主动性，同时保持 Qwen / Seeduplex 行为统一。
+- 修正（仍在共享 `Director`，不区分适配器）：context、check、leave 三段都调用 `planSilenceLine`。规划输入扩展为 `SilenceContext { stage, userText, assistantText, previousTexts }`；规划结果扩展为 `SilencePlan { text, close? }`。`previousTexts` 记录本轮链已播出的接话（最多保留 3 句），新的实质用户发言后清空，规划提示词据此避免重复角度和问题。
+- 三段定位：context 抓住用户最后一句里具体的人、事或感受，回应并可用一个具体小问题把话递给对方；check 换一个相关角度继续聊，最多一个轻松问题；leave 温暖地给空间，不再提问。规划器不再要求 `assistantText` 非空（Seeduplex 直出 TTS 常无回答文本），空回答时仍可用用户话规划。
+- 结束条件：只有用户最后一句明确结束对话（睡觉、出门、再见、别聊了）时才返回 `close`，此时不播任何文案并停止本轮链；其余情况都主动接话。规划返回 `null`、无文本、异常、超时或输入超预算时，仍回退到该阶段配置文案（`contextText` / `checkContextText` / `leaveText`），三段不会整体静默。
+- 配置：`gateway/roles/elder-companion/director.json` 的 `silenceDecision.instruction` 改为分阶段、主动接话提示词；`speakInstruction` 允许已规划句子里的小问题（不再要求“不加问句”）。Qwen 按 instruction 生成，Seeduplex 按 `fallbackText` 直接播报，两种适配器走同一套阶段与回退逻辑。
+- TDD：`silence.test.ts` 覆盖新 `SilencePlan`、stage/previousTexts、`close`、空 `assistantText`、预算与取消；`director-silence.test.ts` 覆盖三段都规划、前文累积、`close` 停止、规划异常回退、迟到结果丢弃；`director.test.ts`、`session.test.ts` 同步新输入形状。`npm test -w gateway` → 39 files / 440 tests passed；根 `npm test` → protocol 6、gateway 440、avatar-core 103 passed；`npm run typecheck -w gateway` 与 `git diff --check` 通过。
+- 待办：重启 8787 需再次征得用户同意；真机复验重点听三段是否顺着刚才的话题、是否避免重复、leave 是否自然收束。用户听感确认前不算完成。
