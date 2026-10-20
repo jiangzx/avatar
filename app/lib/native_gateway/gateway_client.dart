@@ -75,6 +75,9 @@ class NativeGatewayClient implements GatewayClientLike {
   bool _closedByUser = false;
   bool _closedEmitted = false;
   bool _sessionStarted = false;
+  /// A session.start was sent at least once; a later reconnect must resume it even
+  /// if the matching session.ready was lost with the socket.
+  bool _startSent = false;
   int _attempt = 0;
 
   bool get isOpen => _socket != null;
@@ -87,6 +90,7 @@ class NativeGatewayClient implements GatewayClientLike {
     _closedByUser = false;
     _closedEmitted = false;
     _sessionStarted = false;
+    _startSent = false;
     _attempt = 0;
     _disconnectedAt = null;
     await _startFresh();
@@ -123,6 +127,7 @@ class NativeGatewayClient implements GatewayClientLike {
   }
 
   Future<void> _startFresh() async {
+    _startSent = false;
     _tokens = await _createSession().timeout(requestTimeout);
     if (_closedByUser) return;
     await _open(resume: false);
@@ -163,11 +168,12 @@ class NativeGatewayClient implements GatewayClientLike {
           unawaited(_onSocketClosed(socket)),
       cancelOnError: false,
     );
-    send(
-      resume
-          ? SessionResume(tokens.sessionId)
-          : SessionStart(platform: platform, audioPath: audioPath),
-    );
+    if (resume) {
+      send(SessionResume(tokens.sessionId));
+    } else {
+      send(SessionStart(platform: platform, audioPath: audioPath));
+      _startSent = true;
+    }
   }
 
   void _onSocketData(NativeSocket socket, Object data) {
@@ -240,7 +246,9 @@ class NativeGatewayClient implements GatewayClientLike {
         'resumeToken': tokens.resumeToken,
       }).timeout(requestTimeout);
       if (_closedByUser) return;
-      await _open(resume: _sessionStarted);
+      // If the server already started the session, a lost session.ready must not make
+      // us send session.start again (the gateway rejects it with 4002 until expiry).
+      await _open(resume: _sessionStarted || _startSent);
     } on GatewayHttpException catch (error) {
       if (error.statusCode == 401 || error.statusCode == 404) {
         await _restartFresh();

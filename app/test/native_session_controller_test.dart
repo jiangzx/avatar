@@ -14,6 +14,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/thinking_fixture.dart';
 
 void main() {
+  test('clears model_reconnecting when the rebuilt model replies', () async {
+    final f = SessionFakes();
+    final c = f.controller();
+    await c.start();
+    f.client.emit(const GatewayError('model_reconnecting', true));
+    await pumpEvents();
+    expect(
+      f.events.whereType<UiStatus>().map((e) => e.status),
+      contains('model_reconnecting'),
+    );
+    f.client.emit(const ResponseStart(3, 'reply'));
+    await pumpEvents();
+    expect(f.events.whereType<UiStatus>().map((e) => e.status), contains('open'));
+  });
+
   test('logs perceived latency from local speech end to first reply audio', () async {
     var now = 1000;
     final lines = <String>[];

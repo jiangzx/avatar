@@ -56,6 +56,7 @@ class NativeSessionController implements GatewayClientEvents {
   bool _speechOpen = false;
   int? _activeSeq;
   int _seqFloor = 0;
+  bool _modelReconnecting = false;
   int _lastLevelAt = 0;
   int _levelCount = 0;
   int _vadSpeakingCount = 0;
@@ -227,6 +228,7 @@ class NativeSessionController implements GatewayClientEvents {
     if (_ended) return;
     switch (message) {
       case SessionReady():
+        _modelReconnecting = false;
         _seqFloor = 0;
         _activeSeq = null;
         _assistantText.clear();
@@ -239,6 +241,7 @@ class NativeSessionController implements GatewayClientEvents {
         client.send(ClientMute(_muted));
         await _resetThinkingTurn();
       case SessionResumed(:final lastResponseSeq):
+        _modelReconnecting = false;
         _seqFloor = lastResponseSeq;
         _activeSeq = null;
         _assistantText.removeWhere((seq, _) => seq <= lastResponseSeq);
@@ -252,6 +255,7 @@ class NativeSessionController implements GatewayClientEvents {
         await _resetThinkingTurn();
       case ResponseStart(:final responseSeq, :final kind):
         if (responseSeq <= _seqFloor) return;
+        _clearModelReconnecting();
         _closeOpenSpeech();
         _activeSeq = responseSeq;
         _assistantText[responseSeq] = '';
@@ -300,6 +304,7 @@ class NativeSessionController implements GatewayClientEvents {
             emit(const UiState('thinking'));
           }
         } else {
+          _clearModelReconnecting();
           if (thinking != null) {
             await _apply(thinking.onContextRefreshDone());
           } else {
@@ -322,12 +327,19 @@ class NativeSessionController implements GatewayClientEvents {
         emit(UiMetric(name: name, ms: ms.round()));
       case GatewayError(:final code, :final retryable):
         if (code == 'model_reconnecting' || retryable) {
+          _modelReconnecting = true;
           _thinking?.onModelReconnecting();
           emit(UiStatus('model_reconnecting'));
         } else {
           emit(UiError(code));
         }
     }
+  }
+
+  void _clearModelReconnecting() {
+    if (!_modelReconnecting) return;
+    _modelReconnecting = false;
+    emit(const UiStatus('open'));
   }
 
   void _onFrame(Int16List frame) {

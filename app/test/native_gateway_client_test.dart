@@ -167,6 +167,26 @@ void main() {
     expect(identity.renewCalls, 0);
   });
 
+  test('resumes instead of starting when session.ready was lost', () async {
+    final transport = FakeGatewayTransport(
+      tokens: firstTokens,
+      resumeTokens: [secondTokens],
+    );
+    final c = NativeGatewayClient(
+      baseUri: Uri.parse('http://gw.test'),
+      appSecret: 'secret-123456789',
+      transport: transport,
+      events: RecordingGatewayEvents(),
+      reconnectBase: Duration.zero,
+    );
+    await c.start();
+    // The server may have started the session before the ready frame was lost.
+    transport.lastSocket.closeUnexpectedly();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(transport.postedPaths, contains('/session/resume'));
+    expect(transport.lastSocket.jsonMessages.single['type'], 'session.resume');
+  });
+
   test('backs off when fresh session creation keeps failing after the resume window', () async {
     final transport = FakeGatewayTransport(tokens: firstTokens);
     final events = RecordingGatewayEvents();
