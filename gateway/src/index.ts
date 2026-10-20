@@ -146,6 +146,8 @@ const server = createGatewayServer({
   maxFramesPerSecond: config.wsMaxFramesPerSecond,
   maxSessions: config.maxSessions,
   sessionRateLimit: { max: config.sessionRateLimitMax, windowMs: config.sessionRateLimitWindowMs },
+  resumeRateLimit: { max: config.resumeRateLimitMax, windowMs: config.resumeRateLimitWindowMs },
+  trustProxy: config.trustProxy,
 });
 
 server.listen(config.port, '0.0.0.0', () => log('gateway_listening', { port: config.port, adapter: config.adapter }));

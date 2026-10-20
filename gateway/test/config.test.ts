@@ -24,7 +24,7 @@ describe('config', () => {
 
   it('parses defaults and dev origins', () => {
     const c = loadConfig({ APP_SECRET: 'x'.repeat(16), DEV_ORIGINS: 'http://localhost:5173, http://a.test' });
-    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', qwenEndpoint: '', qwenModel: 'qwen3.8-omni-flash-realtime', qwenVoice: 'longanlingxin', summarizer: 'mock', summarizerEndpoint: '', summarizerModel: 'qwen-flash', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, mockPaceFactor: 2, sessionStartTimeoutMs: 10000, confirmWindowMs: 300, ledger: { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6000 }, sessionGraceMs: 60000, sessionUnclaimedMs: 300000, wsHeartbeatMs: 10000, wsMaxFramesPerSecond: 100, maxSessions: 100, sessionRateLimitMax: 10, sessionRateLimitWindowMs: 60000, rebuildBackoffBaseMs: 1000, rebuildBackoffMaxMs: 8000 });
+    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', qwenEndpoint: '', qwenModel: 'qwen3.8-omni-flash-realtime', qwenVoice: 'longanlingxin', summarizer: 'mock', summarizerEndpoint: '', summarizerModel: 'qwen-flash', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, mockPaceFactor: 2, sessionStartTimeoutMs: 10000, confirmWindowMs: 300, ledger: { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6000 }, sessionGraceMs: 60000, sessionUnclaimedMs: 300000, wsHeartbeatMs: 10000, wsMaxFramesPerSecond: 100, maxSessions: 100, sessionRateLimitMax: 10, sessionRateLimitWindowMs: 60000, resumeRateLimitMax: 30, resumeRateLimitWindowMs: 60000, trustProxy: false, rebuildBackoffBaseMs: 1000, rebuildBackoffMaxMs: 8000 });
   });
 
   it('requires a key only when Seeduplex is explicitly selected', () => {
@@ -48,6 +48,13 @@ describe('config', () => {
     const c = loadConfig({ APP_SECRET: 'x'.repeat(16), SUMMARIZER: 'qwen', DASHSCOPE_API_KEY: 'test-key', QWEN_SUMMARIZER_ENDPOINT: 'https://workspace.example/compatible-mode/v1/chat/completions' });
     expect(c.summarizer).toBe('qwen');
     expect(c.summarizerModel).toBe('qwen-flash');
+  });
+
+  it('parses resume and proxy tunables', () => {
+    const c = loadConfig({ APP_SECRET: 'x'.repeat(16), RESUME_RATE_LIMIT_MAX: '5', RESUME_RATE_LIMIT_WINDOW_MS: '1000', TRUST_PROXY: '1' });
+    expect(c.resumeRateLimitMax).toBe(5);
+    expect(c.resumeRateLimitWindowMs).toBe(1000);
+    expect(c.trustProxy).toBe(true);
   });
 
   it('rejects unknown director keys', () => {
@@ -90,7 +97,7 @@ describe('config', () => {
   });
 
   it('rejects invalid hardening tunables', () => {
-    for (const [key, value] of [['CONFIRM_WINDOW_MS', '0'], ['LEDGER_KEEP_RECENT_TURNS', '0'], ['LEDGER_SUMMARIZE_AFTER_TURNS', '-1'], ['LEDGER_SUMMARIZE_AFTER_TOKENS', 'nope'], ['SESSION_GRACE_MS', '99'], ['SESSION_UNCLAIMED_MS', '99'], ['WS_HEARTBEAT_MS', '99'], ['WS_MAX_FRAMES_PER_SECOND', '0'], ['MAX_SESSIONS', '0'], ['SESSION_RATE_LIMIT_MAX', '0'], ['SESSION_RATE_LIMIT_WINDOW_MS', '99'], ['REBUILD_BACKOFF_BASE_MS', '99'], ['REBUILD_BACKOFF_MAX_MS', '99']] as const) {
+    for (const [key, value] of [['CONFIRM_WINDOW_MS', '0'], ['LEDGER_KEEP_RECENT_TURNS', '0'], ['LEDGER_SUMMARIZE_AFTER_TURNS', '-1'], ['LEDGER_SUMMARIZE_AFTER_TOKENS', 'nope'], ['SESSION_GRACE_MS', '99'], ['SESSION_UNCLAIMED_MS', '99'], ['WS_HEARTBEAT_MS', '99'], ['WS_MAX_FRAMES_PER_SECOND', '0'], ['MAX_SESSIONS', '0'], ['SESSION_RATE_LIMIT_MAX', '0'], ['SESSION_RATE_LIMIT_WINDOW_MS', '99'], ['RESUME_RATE_LIMIT_MAX', '0'], ['RESUME_RATE_LIMIT_WINDOW_MS', '99'], ['REBUILD_BACKOFF_BASE_MS', '99'], ['REBUILD_BACKOFF_MAX_MS', '99']] as const) {
       expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), [key]: value })).toThrow(key);
     }
   });

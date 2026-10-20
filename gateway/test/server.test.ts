@@ -25,7 +25,7 @@ let server: Server | null = null;
 let manager: SessionManager | null = null;
 const sockets: WebSocket[] = [];
 
-async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugText?: boolean; heartbeatMs?: number; startTimeoutMs?: number; adapterConnect?: 'fail' | 'hang'; maxSessions?: number; sessionRateLimit?: { max: number; windowMs: number }; contextResolver?: ContextResolver; onContext?: (ctx: SessionContext) => void } = {}) {
+async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugText?: boolean; heartbeatMs?: number; startTimeoutMs?: number; adapterConnect?: 'fail' | 'hang'; maxSessions?: number; sessionRateLimit?: { max: number; windowMs: number }; resumeRateLimit?: { max: number; windowMs: number }; trustProxy?: boolean; contextResolver?: ContextResolver; onContext?: (ctx: SessionContext) => void } = {}) {
   const roles = fixedRoleCatalog('P', director);
   manager = new SessionManager(
     (ctx) => {
@@ -54,6 +54,8 @@ async function boot(opts: { graceMs?: number; unclaimedMs?: number; allowDebugTe
     heartbeatMs: opts.heartbeatMs,
     maxSessions: opts.maxSessions,
     sessionRateLimit: opts.sessionRateLimit,
+    resumeRateLimit: opts.resumeRateLimit,
+    trustProxy: opts.trustProxy,
   });
   await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
   const { port } = server.address() as AddressInfo;
@@ -68,10 +70,10 @@ afterEach(async () => {
   manager = null;
 });
 
-async function post(base: string, path: string, body: unknown = {}, secret = SECRET) {
+async function post(base: string, path: string, body: unknown = {}, secret = SECRET, extraHeaders: Record<string, string> = {}) {
   const res = await fetch(base + path, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-app-secret': secret },
+    headers: { 'content-type': 'application/json', 'x-app-secret': secret, ...extraHeaders },
     body: JSON.stringify(body),
   });
   return { status: res.status, json: (await res.json()) as Record<string, unknown> };
@@ -214,6 +216,26 @@ describe('gateway server', () => {
     const limited = await post(base, '/session');
     expect(limited.status).toBe(429);
     expect(limited.json).toEqual({ error: 'rate_limited' });
+  });
+
+  it('rate limits session resume separately from session creation', async () => {
+    const base = await boot({ resumeRateLimit: { max: 1, windowMs: 1000 } });
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    expect((await post(base, '/session/resume', { sessionId: t.sessionId, resumeToken: t.resumeToken })).status).toBe(200);
+    expect((await post(base, '/session/resume', { sessionId: t.sessionId, resumeToken: t.resumeToken })).status).toBe(429);
+  });
+
+  it('does not trust X-Forwarded-For by default', async () => {
+    const base = await boot({ sessionRateLimit: { max: 1, windowMs: 1000 } });
+    expect((await post(base, '/session', {}, SECRET, { 'x-forwarded-for': '1.1.1.1' })).status).toBe(200);
+    expect((await post(base, '/session', {}, SECRET, { 'x-forwarded-for': '2.2.2.2' })).status).toBe(429);
+  });
+
+  it('uses X-Forwarded-For when trustProxy is enabled', async () => {
+    const base = await boot({ sessionRateLimit: { max: 1, windowMs: 1000 }, trustProxy: true });
+    expect((await post(base, '/session', {}, SECRET, { 'x-forwarded-for': '3.3.3.3' })).status).toBe(200);
+    expect((await post(base, '/session', {}, SECRET, { 'x-forwarded-for': '4.4.4.4' })).status).toBe(200);
+    expect((await post(base, '/session', {}, SECRET, { 'x-forwarded-for': '3.3.3.3' })).status).toBe(429);
   });
 
   it('rejects unknown and reused connect tokens', async () => {

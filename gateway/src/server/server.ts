@@ -26,6 +26,10 @@ export interface GatewayServerOptions {
   identity?: IdentityService;
   /** Separate bucket from sessionRateLimit. */
   registerRateLimit?: { max: number; windowMs: number };
+  /** Resume rotates tokens; give reconnects their own bucket so a flapping link cannot flood it. */
+  resumeRateLimit?: { max: number; windowMs: number };
+  /** Trust the first X-Forwarded-For hop. Enable only behind a proxy that overwrites the header. */
+  trustProxy?: boolean;
   /** Set only when ENABLE_DEV_ENDPOINTS=1; DELETE /dev/owner/:id must carry it in x-dev-token. */
   devToken?: string;
 }
@@ -43,6 +47,7 @@ export function createGatewayServer(opts: GatewayServerOptions): Server {
   const limiters: Limiters = {
     session: opts.sessionRateLimit ? new RateLimiter(opts.sessionRateLimit) : null,
     register: opts.registerRateLimit ? new RateLimiter(opts.registerRateLimit) : null,
+    resume: opts.resumeRateLimit ? new RateLimiter(opts.resumeRateLimit) : null,
   };
   const server = createServer((req, res) => {
     handleHttp(req, res, opts, limiters).catch(() => {
@@ -85,6 +90,7 @@ export function createGatewayServer(opts: GatewayServerOptions): Server {
 interface Limiters {
   session: RateLimiter | null;
   register: RateLimiter | null;
+  resume: RateLimiter | null;
 }
 
 type Route =
@@ -142,10 +148,14 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
       createSession(req, res, opts, limiters.session);
       return;
     case 'resume':
+      if (limiters.resume && !limiters.resume.allow(clientAddress(req, opts.trustProxy))) {
+        json(res, 429, { error: 'rate_limited' });
+        return;
+      }
       await resumeSession(req, res, opts);
       return;
     case 'register':
-      await registerDevice(req, res, route.identity, limiters.register);
+      await registerDevice(req, res, route.identity, limiters.register, opts.trustProxy);
       return;
     case 'style':
       await changeStyle(req, res, route.identity);
@@ -161,7 +171,7 @@ function createSession(req: IncomingMessage, res: ServerResponse, opts: GatewayS
     json(res, 503, { error: 'session_capacity' });
     return;
   }
-  if (limiter && !limiter.allow(req.socket.remoteAddress ?? 'unknown')) {
+  if (limiter && !limiter.allow(clientAddress(req, opts.trustProxy))) {
     json(res, 429, { error: 'rate_limited' });
     return;
   }
@@ -205,8 +215,8 @@ async function resumeSession(req: IncomingMessage, res: ServerResponse, opts: Ga
 
 const REGISTER_ERROR_STATUS = { unknown_style: 400, owner_capacity: 503, register_daily_cap: 429 } as const;
 
-async function registerDevice(req: IncomingMessage, res: ServerResponse, identity: IdentityService, limiter: RateLimiter | null): Promise<void> {
-  if (limiter && !limiter.allow(req.socket.remoteAddress ?? 'unknown')) {
+async function registerDevice(req: IncomingMessage, res: ServerResponse, identity: IdentityService, limiter: RateLimiter | null, trustProxy?: boolean): Promise<void> {
+  if (limiter && !limiter.allow(clientAddress(req, trustProxy))) {
     json(res, 429, { error: 'rate_limited' });
     return;
   }
@@ -265,19 +275,44 @@ function deleteOwner(req: IncomingMessage, res: ServerResponse, manager: Session
   res.writeHead(204).end();
 }
 
+/** X-Forwarded-For is trusted only when the deployment says a proxy overwrites it. */
+function clientAddress(req: IncomingMessage, trustProxy: boolean | undefined): string {
+  if (trustProxy) {
+    const header = req.headers['x-forwarded-for'];
+    const value = Array.isArray(header) ? header[0] : header;
+    const first = value?.split(',')[0]?.trim();
+    if (first) return first.slice(0, 64);
+  }
+  return req.socket.remoteAddress ?? 'unknown';
+}
+
 class RateLimiter {
   private readonly attempts = new Map<string, number[]>();
+  private calls = 0;
 
   constructor(private readonly opts: { max: number; windowMs: number }, private readonly now = Date.now) {}
 
+  /** Visible for tests; expired buckets are swept periodically. */
+  get size(): number {
+    return this.attempts.size;
+  }
+
   allow(source: string): boolean {
-    const cutoff = this.now() - this.opts.windowMs;
+    const current = this.now();
+    const cutoff = current - this.opts.windowMs;
+    if (++this.calls % 256 === 0) {
+      for (const [key, times] of this.attempts) {
+        const recent = times.filter((t) => t > cutoff);
+        if (recent.length === 0) this.attempts.delete(key);
+        else this.attempts.set(key, recent);
+      }
+    }
     const recent = (this.attempts.get(source) ?? []).filter((t) => t > cutoff);
     if (recent.length >= this.opts.max) {
       this.attempts.set(source, recent);
       return false;
     }
-    recent.push(this.now());
+    recent.push(current);
     this.attempts.set(source, recent);
     return true;
   }

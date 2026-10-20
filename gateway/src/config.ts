@@ -36,6 +36,10 @@ export interface GatewayConfig {
   maxSessions: number;
   sessionRateLimitMax: number;
   sessionRateLimitWindowMs: number;
+  resumeRateLimitMax: number;
+  resumeRateLimitWindowMs: number;
+  /** Trust the first X-Forwarded-For hop; only behind a proxy that overwrites it. */
+  trustProxy: boolean;
   rebuildBackoffBaseMs: number;
   rebuildBackoffMaxMs: number;
 }
@@ -89,6 +93,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const maxSessions = integerEnv(env, 'MAX_SESSIONS', 100, 1, 10_000);
   const sessionRateLimitMax = integerEnv(env, 'SESSION_RATE_LIMIT_MAX', 10, 1, 1_000);
   const sessionRateLimitWindowMs = integerEnv(env, 'SESSION_RATE_LIMIT_WINDOW_MS', 60_000, 100, 60 * 60_000);
+  const resumeRateLimitMax = integerEnv(env, 'RESUME_RATE_LIMIT_MAX', 30, 1, 1_000);
+  const resumeRateLimitWindowMs = integerEnv(env, 'RESUME_RATE_LIMIT_WINDOW_MS', 60_000, 100, 60 * 60_000);
+  const trustProxy = env.TRUST_PROXY === '1';
   const rebuildBackoffBaseMs = integerEnv(env, 'REBUILD_BACKOFF_BASE_MS', 1_000, 100, 60_000);
   const rebuildBackoffMaxMs = integerEnv(env, 'REBUILD_BACKOFF_MAX_MS', 8_000, 100, 10 * 60_000);
   if (rebuildBackoffMaxMs < rebuildBackoffBaseMs) throw new Error('REBUILD_BACKOFF_MAX_MS must be at least REBUILD_BACKOFF_BASE_MS');
@@ -121,6 +128,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     maxSessions,
     sessionRateLimitMax,
     sessionRateLimitWindowMs,
+    resumeRateLimitMax,
+    resumeRateLimitWindowMs,
+    trustProxy,
     rebuildBackoffBaseMs,
     rebuildBackoffMaxMs,
   };
