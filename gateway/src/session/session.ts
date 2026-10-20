@@ -537,7 +537,7 @@ export class Session {
   }
 
   private maybePushLanguage(): void {
-    if (!this.languagePushPending || this.ended || this.modelGenerating || this.responseLive) return;
+    if (!this.languagePushPending || this.ended || this.modelGenerating || !this.slimSeamOpen()) return;
     this.languagePushPending = false;
     this.pushInstructions();
   }
@@ -787,7 +787,8 @@ export class Session {
     // Do not session.update here. An instructions refresh in the middle of a barge-in
     // drops the audio the server is still hearing, so the next question never lands.
     this.maybeSummarize();
-    this.maybePushLanguage();
+    // An interrupted reply keeps the pending push for the next safe seam.
+    if (!interrupted) this.maybePushLanguage();
   }
 
   private onUserFinal(text: string, echo: boolean): void {

@@ -132,6 +132,17 @@ function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessi
   return { session, mocks, ...collector() };
 }
 
+/** Two-language catalog used by the instruction-push tests. */
+const bilingualRoles = (): RoleCatalog => fixedRoleCatalog('P-zh', director, {
+  languages: ['zh', 'en'],
+  defaultLanguage: 'zh',
+  personas: { zh: 'P-zh', en: 'P-en' },
+});
+
+/** Narrow cast: the guard tests need one push attempt without a real model request. */
+const drivePush = (session: Session): void =>
+  (session as unknown as { maybePushLanguage(): void }).maybePushLanguage();
+
 const of = <T extends ServerMessage['type']>(sent: ServerMessage[], type: T) =>
   sent.filter((m): m is Extract<ServerMessage, { type: T }> => m.type === type);
 const assistantText = (sent: ServerMessage[], seq: number) =>
@@ -770,6 +781,45 @@ describe('Session', () => {
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
     expect(s.mocks[0].instructions).not.toContain('被用户打断');
     expect(s.session.ledger.recent.at(-1)?.interrupted).toBe(true);
+  });
+
+  it('pushes new-language instructions before the next proactive request', async () => {
+    const s = setup({ roles: bilingualRoles() }, { ...ownedCtx });
+    await greetAndFinish(s);
+    const push = vi.spyOn(s.mocks[0]!, 'updateInstructions');
+    s.session.setInitialLanguage('en');
+    expect(push).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(8_500); // silence follow-up goes through requestResponse
+    expect(push).toHaveBeenCalled();
+    expect(push.mock.calls.at(-1)?.[0]).toContain('P-en');
+    s.session.end();
+  });
+
+  it('defers new-language instructions while the user is speaking', async () => {
+    const s = setup({ roles: bilingualRoles() }, { ...ownedCtx });
+    await greetAndFinish(s);
+    const push = vi.spyOn(s.mocks[0]!, 'updateInstructions');
+    s.session.setInitialLanguage('en');
+    s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 0 });
+    drivePush(s.session);
+    expect(push).not.toHaveBeenCalled();
+    s.session.handleClientMessage({ type: 'vad', state: 'silent', t: 400 });
+    drivePush(s.session);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push.mock.calls[0]?.[0]).toContain('P-en');
+    s.session.end();
+  });
+
+  it('does not push new-language instructions when an interruption finalizes the reply', async () => {
+    const s = setup({ roles: bilingualRoles() }, { ...ownedCtx });
+    await greetAndFinish(s);
+    const push = vi.spyOn(s.mocks[0]!, 'updateInstructions');
+    s.session.setInitialLanguage('en');
+    s.session.handleClientMessage({ type: 'debug.userText', text: 'hello' });
+    await vi.advanceTimersByTimeAsync(150);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
+    expect(push).not.toHaveBeenCalled();
+    s.session.end();
   });
 
   it('passes the configured output cap to the adapter', async () => {

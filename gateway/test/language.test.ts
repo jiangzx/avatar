@@ -27,15 +27,30 @@ describe('detectLanguage', () => {
     expect(detectLanguage('嗯', 'en')).toBe('en');
     expect(detectLanguage('...', 'ja')).toBe('ja');
     expect(detectLanguage('', 'zh')).toBe('zh');
-    expect(detectLanguage('OK', 'zh')).toBe('en');
-    expect(detectLanguage('はい', 'en')).toBe('ja');
+    expect(detectLanguage('OK', 'zh')).toBe('zh');
+    expect(detectLanguage('yes', 'zh')).toBe('zh');
+    expect(detectLanguage('はい', 'en')).toBe('en');
+  });
+
+  it('ignores punctuation around a short acknowledgement', () => {
+    expect(detectLanguage('OK!', 'zh')).toBe('zh');
+    expect(detectLanguage(' 好的。', 'en')).toBe('en');
+    expect(detectLanguage('はい。', 'en')).toBe('en');
   });
 
   it('honours explicit language requests', () => {
     expect(detectLanguage('请用英语说', 'zh')).toBe('en');
+    expect(detectLanguage('说英语', 'zh')).toBe('en');
+    expect(detectLanguage('用日语', 'zh')).toBe('ja');
+    expect(detectLanguage('English please', 'zh')).toBe('en');
+    expect(detectLanguage('中文', 'en')).toBe('zh');
     expect(detectLanguage('日本語でお願いします', 'zh')).toBe('ja');
     expect(detectLanguage('请说中文', 'en')).toBe('zh');
+  });
+
+  it('does not treat a language question as an explicit request', () => {
     expect(detectLanguage('你会说日语吗', 'zh')).toBe('zh');
+    expect(detectLanguage('你会说日语吗？', 'zh')).toBe('zh');
   });
 
   it('validates and resolves language values', () => {
