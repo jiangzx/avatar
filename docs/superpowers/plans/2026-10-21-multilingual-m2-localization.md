@@ -303,9 +303,13 @@ git commit -m "feat(gateway): add i18n config loader and language rules"
 - Modify: `gateway/roles/_shared/zh/extract.md`（只加一条“每条 text/summary 用用户原话的语言写，不要翻译”）
 - Modify: `gateway/src/roles/catalog.ts`（`extractPrompt`/`recallPrompt`）
 - Modify: `gateway/src/roles/fileCatalog.ts`（共享四文件、topic parity、activity 分隔符）
-- Modify: `gateway/src/index.ts`（启动校验 elder-companion 三语）
+- Modify: `gateway/src/session/pacing.ts`（按语言指令预算）
+- Modify: `gateway/src/session/session.ts`（按当前语言取预算）
+- Modify: `gateway/config/memory.json`（`instructions.languageBudgetRatio`）
+- Modify: `gateway/src/index.ts`（启动校验 elder-companion 三语；传 `budgets`）
 - Modify: `gateway/test/fixtures/roles/**`
 - Test: `gateway/test/fileCatalog.test.ts`
+- Test: `gateway/test/config.test.ts`
 
 **Interfaces:**
 - Consumes: Task 1 的 `I18nBundle`、`PROMPT_LABELS`。
@@ -314,6 +318,8 @@ git commit -m "feat(gateway): add i18n config loader and language rules"
   - `RoleCatalog.recallPrompt(language?: Language): string`
   - `SharedText { safety; actions; extract; recall }`
   - role.json `supportedLanguages: ["zh","ja","en"]`、`voices` 三语。
+  - `BudgetReport.budgets: Partial<Record<Language, InstructionBudget>>`；`validateBudgets` 对每种语言用 `languageBudgetRatio[language] ?? budgetRatio` 计算 `totalChars`；`zh` 结果必须与 M1 完全一致。
+  - `SessionDeps.budgets?: Partial<Record<Language, InstructionBudget>>`；`Session` 用当前语言的预算渲染 instructions/初始 historyBudget，`budget` 字段保留为测试回退。
   - 启动错误码：`shared_missing:<language>:<file>`、`topic_set_mismatch:<role>`、`role_languages_incomplete:elder-companion:<missing>`。
 
 - [ ] **Step 1: 先写 parity 失败测试**
@@ -375,6 +381,46 @@ Expected: FAIL（`extractPrompt` 不存在 / elder-companion 仍只有 zh）。
 const missing = LANGUAGES.filter((language) => !roles.supportedLanguages(DEFAULT_ROLE).includes(language));
 if (missing.length > 0) throw new Error(`role_languages_incomplete:${DEFAULT_ROLE}:${missing.join(',')}`);
 ```
+
+- [ ] **Step 3b: 按语言指令预算（英语字符更长，不能复用中文预算）**
+
+`gateway/config/memory.json` 的 `instructions` 增加：
+
+```json
+"languageBudgetRatio": { "ja": 0.45, "en": 0.6 }
+```
+
+`pacing.ts` 的 `MemoryBudgetSchema` 增加 `languageBudgetRatio: z.record(z.enum(['zh','ja','en']), z.number().gt(0).max(0.8)).optional()`。`validateBudgets`：
+
+```ts
+const ratioFor = (language: Language) => memory.instructions.languageBudgetRatio?.[language] ?? m.budgetRatio;
+const budgets: Partial<Record<Language, InstructionBudget>> = {};
+// per language:
+const totalChars = Math.floor(rebuildChars * ratioFor(language));
+const budget = { totalChars, snapshotMaxChars: m.snapshotMaxChars, summaryMaxChars: m.summaryMaxChars };
+const languageMin = Math.min(...list.map((persona) => historyBudget(persona, budget, PROMPT_LABELS[language])));
+if (languageMin < m.summaryMaxChars + m.minHistoryChars) throw ...
+budgets[language] = budget;
+```
+
+返回值保留 `budget`（`zh` 或第一个语言的预算，兼容旧调用）并新增 `budgets`。`SessionDeps` 增加 `budgets?: Partial<Record<Language, InstructionBudget>>`；`Session` 用 `this.deps.budgets?.[language] ?? this.deps.budget`；构造函数初始 `historyBudget` 用初始语言预算。`index.ts` 传 `budgets: budgetReport.budgets`，日志只记各语言 `totalChars` 和 `minHistoryChars`。
+
+测试：
+
+```ts
+it('gives ja/en their own instruction budget while zh stays unchanged', () => {
+  const pacing = loadPacing(pacingPath);
+  const memory = loadMemoryBudget(memoryPath);
+  const report = validateBudgets(pacing, memory, ledgerOpts, {
+    zh: ['中'.repeat(1800)], ja: ['日'.repeat(1900)], en: ['E'.repeat(3200)],
+  });
+  expect(report.budgets.zh!.totalChars).toBe(3840);
+  expect(report.budgets.en!.totalChars).toBeGreaterThan(report.budgets.zh!.totalChars);
+  expect(report.perLanguage.en!.minHistoryChars).toBeGreaterThanOrEqual(1200);
+});
+```
+
+若 en persona 在 0.6 比例下仍超预算，优先压缩英文人设；最多把 en 提到 0.75，不得改 zh 的 `budgetRatio` 或 `pacing.rebuild`。
 
 - [ ] **Step 4: 写 ja/en 内容包**
 
@@ -451,7 +497,7 @@ Expected: PASS。
 - [ ] **Step 7: 提交**
 
 ```bash
-git add gateway/roles gateway/src/roles gateway/src/index.ts gateway/test/fixtures/roles gateway/test/fileCatalog.test.ts
+git add gateway/roles gateway/src/roles gateway/src/session/pacing.ts gateway/src/session/session.ts gateway/config/memory.json gateway/src/index.ts gateway/test/fixtures/roles gateway/test/fileCatalog.test.ts gateway/test/config.test.ts
 git commit -m "feat(gateway): add ja/en elder-companion language packs"
 ```
 
