@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链回归已在本地修复：规划器按 `context -> check -> leave` 阶段推进，失败只跳过当前段。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，gateway 全量回归 436 项通过，真机首句恢复为短问候（详见下文）。手机听感仍待用户确认。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
+Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链回归已在本地修复：规划器按 `context -> check -> leave` 阶段推进，失败只跳过当前段。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，gateway 全量回归 436 项通过，真机首句恢复为短问候（详见下文），用户已确认首句正常、不再念提示词。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
 
 ## 打断与沉默：已踩过的坑
 
@@ -279,6 +279,6 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 
 - **2026-10-20 更正：** Seeduplex 的 `speech_text_buffer.commit` 是直接文本合成，提交 Director 的 `instruction` 会把完整提示词原样播给用户。手机首句播报“当前没有…请礼貌…开场只用一句陈述…”即该回归，不是固定文案问题。主动响应路径只能提交可直接播报的 `fallbackText`。
 - 已修复 `gateway/src/adapters/seeduplex.ts`：`createResponse` 只提交 `fallbackText`；`gateway/test/seeduplex.test.ts` 断言 commit 文本既不是 instruction 也不是 cue。`npm test -w gateway` 436 项通过，`npm run typecheck -w gateway` 通过。
-- 2026-10-20 真机复验：重启 8787（`ADAPTER=seeduplex`）并重开 App 后，新会话 greeting 播放约 5.3 秒（修复前同一路径约 20.2 秒），随后两段沉默 followup 分别约 5.8 / 9.7 秒，均为短句时长；本轮无 `adapter_error`。内容正确性由适配器回归测试保证，最终听感仍待用户确认。
+- 2026-10-20 真机复验：重启 8787（`ADAPTER=seeduplex`）并重开 App 后，新会话 greeting 播放约 5.3 秒（修复前同一路径约 20.2 秒），随后两段沉默 followup 分别约 5.8 / 9.7 秒，均为短句时长；本轮无 `adapter_error`。再次重开 App 的 greeting 播放约 3.8 秒，用户确认首句正常、不再念提示词。内容正确性由适配器回归测试和用户听感共同确认。
 - 2026-10-20 复测发现的阶段推进改动保留：`speak:false`、超时或无效 JSON 只跳过当前段，`context -> check -> leave` 继续推进，rest 仍只触发一次提取。已知风险：Seeduplex 直出 TTS 不回报 text，`lastAnswer` 不包含主动接话，`planContext` 在 check/leave 可能重复同一承接；需下一次手机听感复验时确认。
 - 当前没有新的部署动作；网关和 APK 均按用户要求暂停，手机复验等待用户安排。
