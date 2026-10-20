@@ -84,6 +84,10 @@ export interface SessionDeps {
   budget?: InstructionBudget;
   /** Lines that challenge or deny an earlier memory; undefined = no denial filtering (tests). */
   recallSkipPatterns?: readonly string[];
+  /** Whole-utterance acknowledgements that are not user statements. */
+  lightAcks?: readonly string[];
+  /** The memory notice is verified by these words in its transcript (or verbatim fallback). */
+  noticeKeywords?: readonly string[];
   /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
   rebuildTriggerRatio?: number;
   /** Interval slim rebuild (gateway/config/pacing.json slim). */
@@ -183,8 +187,12 @@ export class Session {
   private continuationAsked = false;
   /** True when this turn's own cancel stands in for playback.stopped. */
   private originForcedEnd = false;
-  /** Seq of the in-flight memory notice. Set when that cue is requested. */
+  /** Seq of the in-flight memory notice, associated when its response actually starts. */
   private noticeSeq: number | null = null;
+  /** A notice request is outstanding but no response has started yet. */
+  private noticePendingRequest = false;
+  private noticeFallback: string | null = null;
+  private noticeVerbatim = false;
   /** User finals since the session started. Every Nth one enqueues extraction. */
   private userTurns = 0;
   /** Spoken after this tool turn, from memory.json. Null keeps the generic tool-continue line. */
@@ -495,7 +503,11 @@ export class Session {
       if (request.cue === 'memoryNotice') this.director.onNoticeMissed();
       return;
     }
-    if (request.cue === 'memoryNotice') this.noticeSeq = this.seqCounter + 1;
+    if (request.cue === 'memoryNotice') {
+      this.noticePendingRequest = true;
+      this.noticeFallback = request.fallbackText;
+      this.noticeVerbatim = this.adapter.verbatimFallback;
+    }
     this.pendingKind = kind;
     this.adapter.createResponse(request);
   }
@@ -503,6 +515,11 @@ export class Session {
   /** Playback ended for the notice seq is the only completion signal. */
   private finishNotice(seq: number): void {
     if (seq !== this.noticeSeq) return;
+    if (!this.noticeVerified(seq)) {
+      log('memory_notice_unverified', {});
+      this.missNotice(seq);
+      return;
+    }
     if (this.writer && this.context.ownerId) {
       try {
         this.writer.markNotified(this.context.ownerId, Date.now());
@@ -512,13 +529,25 @@ export class Session {
       }
     }
     this.noticeSeq = null;
+    this.noticePendingRequest = false;
+    this.noticeFallback = null;
     this.director.onNoticePlayed();
+  }
+
+  /** Qwen may paraphrase the notice; direct-TTS adapters speak the fallback we supplied. */
+  private noticeVerified(seq: number): boolean {
+    const keywords = this.deps.noticeKeywords ?? [];
+    if (keywords.length === 0) return true;
+    const text = this.noticeVerbatim ? this.noticeFallback ?? '' : this.bySeq.get(seq)?.text ?? '';
+    return keywords.some((keyword) => text.includes(keyword));
   }
 
   /** The notice seq will not play out. Retry later; do not mark notified. */
   private missNotice(seq: number): void {
     if (seq !== this.noticeSeq) return;
     this.noticeSeq = null;
+    this.noticePendingRequest = false;
+    this.noticeFallback = null;
     this.director.onNoticeMissed();
   }
 
@@ -550,6 +579,10 @@ export class Session {
       this.pendingKind = null;
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
+      if (this.noticePendingRequest) {
+        this.noticePendingRequest = false;
+        this.noticeSeq = s.seq;
+      }
       log('response_start', { seq: s.seq, kind: s.kind });
       this.metrics.onResponseStarted(s.seq, s.kind);
       this.emotion?.onResponseStart(s.seq);
@@ -653,6 +686,7 @@ export class Session {
     this.send({ type: 'response.cancelled', responseSeq: seq });
     const s = this.bySeq.get(seq);
     if (s) this.finalize(s, true);
+    if (seq === this.noticeSeq) this.missNotice(seq);
   }
 
   private finalize(s: ResponseState, interrupted: boolean): void {
@@ -928,6 +962,12 @@ export class Session {
     }
     if (!keepToolTurn && this.toolTurn.onRebuild()) this.releaseToolTurn(false);
     this.director.pause();
+    if (this.noticePendingRequest) {
+      // The request never produced a response; do not let a later reply inherit it.
+      this.noticePendingRequest = false;
+      this.noticeFallback = null;
+      this.director.onNoticeMissed();
+    }
     this.rebuilding = true;
     const startedAt = this.now();
     if (reason === 'slim') this.send({ type: 'presence', phase: 'refreshing' });
@@ -1067,6 +1107,7 @@ export class Session {
       facts: store.listProactiveFacts(ownerId).map((fact) => fact.text),
       tail: store.recentUserMessages(ownerId, 12).slice().reverse(),
       skipPatterns: this.deps.recallSkipPatterns ?? [],
+      lightAcks: this.deps.lightAcks ?? [],
       maxChars,
     });
     if (views.full) this.context.memorySnapshot = views.full;

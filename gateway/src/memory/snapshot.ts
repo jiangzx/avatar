@@ -52,6 +52,7 @@ export function renderMemoryViews(input: {
   facts: readonly string[];
   tail: readonly { role?: 'user' | 'assistant'; text: string }[];
   skipPatterns?: readonly string[];
+  lightAcks?: readonly string[];
   maxChars: number;
 }): MemoryViews {
   const nameFacts = input.addressing.filter(Boolean).map((text) => ({ category: 'addressing', text }));
@@ -59,7 +60,7 @@ export function renderMemoryViews(input: {
   const skipPatterns = input.skipPatterns ?? [];
   // Recent-session rows have no role; assistant rows are never evidence.
   const userTail = input.tail
-    .filter((entry) => entry.role !== 'assistant' && isMemoryEvidence(entry.text, skipPatterns))
+    .filter((entry) => entry.role !== 'assistant' && isMemoryEvidence(entry.text, skipPatterns, input.lightAcks ?? []))
     .map((entry) => ({ role: 'user' as const, text: entry.text }));
   return {
     full: renderSnapshot({ facts: [...nameFacts, ...factLines], notes: [], tail: userTail, maxChars: input.maxChars }),

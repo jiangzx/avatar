@@ -50,6 +50,10 @@ const MemoryBudgetSchema = z.object({
   recallClipChars: z.number().int().min(20).max(500),
   recallEmptyText: z.string().min(1).max(200).optional(),
   recallFoundPrefix: z.string().min(1).max(100).optional(),
+  /** The notice counts as delivered only when its transcript (or verbatim fallback) contains one. */
+  memoryNoticeKeywords: z.array(z.string().min(1).max(20)).min(1).max(20).optional(),
+  /** Whole-utterance acknowledgements ("好的") are not recall evidence; substrings are. */
+  lightAcks: z.array(z.string().min(1).max(20)).max(50).optional(),
   /** Lines that challenge or deny an earlier memory are not recall evidence. */
   recallSkipPatterns: z.array(z.string().min(1).max(30)).max(50).optional(),
   /** Vague "what did we talk about" queries answer from recent user statements. */

@@ -54,6 +54,7 @@ interface ActiveResponse {
 
 export class MockAdapter extends EventEmitter<AdapterEvents> implements RealtimeAdapter {
   readonly supportsPlaybackTruncate = false;
+  readonly verbatimFallback = false;
   instructions = '';
   readonly notes: string[] = [];
   readonly toolResults: Array<{ callId: string; result: unknown }> = [];

@@ -29,6 +29,12 @@ const pacing = loadPacing(`${root}config/pacing.json`);
 const memory = loadMemoryBudget(`${root}config/memory.json`);
 const budgetReport = validateBudgets(pacing, memory, config.ledger, roles.pairs().map((p) => roles.buildPersona(p.roleId, p.styleId)));
 log('instruction_budget', { totalChars: budgetReport.budget.totalChars, minHistoryChars: budgetReport.minHistoryChars, ledgerCapped: budgetReport.ledgerCapped });
+if (memory.memoryNoticeKeywords) {
+  const noticeTexts = new Set(roles.pairs().map((pair) => roles.director(pair.roleId).memoryNoticeText));
+  for (const text of noticeTexts) {
+    if (!memory.memoryNoticeKeywords.some((keyword) => text.includes(keyword))) throw new Error('memory_notice_keyword_missing');
+  }
+}
 const emotion = loadEmotionConfig(`${root}config/emotion.json`);
 const safety = loadSafetyConfig(`${root}config/safety.json`);
 log('safety_rules', {
@@ -44,6 +50,11 @@ if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh
 const identityConfig = loadIdentityConfig(process.env, fileURLToPath(new URL('../..', import.meta.url)));
 const memoryDb = identityConfig.memoryDbPath ? openDatabase(identityConfig.memoryDbPath, { busyTimeoutMs: identityConfig.busyTimeoutMs }) : null;
 const store = memoryDb ? new SqliteMemoryStore(memoryDb) : null;
+if (store) {
+  // This process is the only gateway for the DB: any row still open belongs to a dead process.
+  const reconciled = store.closeOpenSessions(Date.now());
+  if (reconciled > 0) log('sessions_reconciled', { count: reconciled });
+}
 const registry = store
   ? new DeviceRegistry({
       store,
@@ -97,6 +108,8 @@ const manager = new SessionManager(
       modelOwnsTurns: config.adapter === 'qwen',
       budget: budgetReport.budget,
       recallSkipPatterns: memory.recallSkipPatterns,
+      ...(memory.lightAcks ? { lightAcks: memory.lightAcks } : {}),
+      ...(memory.memoryNoticeKeywords ? { noticeKeywords: memory.memoryNoticeKeywords } : {}),
       modelContextTokenLimit: pacing.rebuild.contextChars,
       rebuildTriggerRatio: pacing.rebuild.triggerRatio,
       rebuildAfterTurns: pacing.rebuild.afterTurns,

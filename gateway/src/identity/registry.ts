@@ -51,12 +51,14 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
   private readonly now: () => number;
   private readonly snapshotMaxChars: number;
   private readonly recallSkipPatterns: readonly string[];
+  private readonly lightAcks: readonly string[];
 
   constructor(private readonly deps: DeviceRegistryDeps) {
     const memory = loadMemoryBudget(fileURLToPath(new URL('../../config/memory.json', import.meta.url)));
     this.now = deps.now ?? Date.now;
     this.snapshotMaxChars = deps.snapshotMaxChars ?? memory.instructions.snapshotMaxChars;
     this.recallSkipPatterns = deps.recallSkipPatterns ?? memory.recallSkipPatterns ?? [];
+    this.lightAcks = memory.lightAcks ?? [];
     this.lifecycle = {
       started: (sessionId, ctx) => {
         if (ctx.agentId !== undefined) deps.store.recordSessionStart(sessionId, ctx.agentId, this.now());
@@ -106,6 +108,7 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
       facts: store.listProactiveFacts(device.ownerId).map((fact) => fact.text),
       tail: store.recentUserMessages(device.ownerId, 12).slice().reverse(),
       skipPatterns: this.recallSkipPatterns,
+      lightAcks: this.lightAcks,
       maxChars: this.snapshotMaxChars,
     });
     if (views.full) ctx.memorySnapshot = views.full;

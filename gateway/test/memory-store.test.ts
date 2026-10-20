@@ -131,6 +131,17 @@ describe('SqliteMemoryStore', () => {
     expect(store.listSessions(a.ownerId)[0]?.endedAt).toBe(30);
   });
 
+  it('closes sessions left open by a previous process', () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'ha');
+    store.recordSessionStart('s-crash', a.agentId, 10);
+    store.insertMessage({ id: 'm-crash', sessionId: 's-crash', ownerId: a.ownerId, role: 'user', text: '昨天去了公园', bigrams: '', now: 11 });
+    expect(store.recentUserMessages(a.ownerId, 10)).toEqual([]);
+    expect(store.closeOpenSessions(20)).toBe(1);
+    expect(store.recentUserMessages(a.ownerId, 10)).toEqual([{ text: '昨天去了公园' }]);
+    expect(store.closeOpenSessions(30)).toBe(0);
+  });
+
   it('reads the latest episode by ended session, scoped to both owner and agent', () => {
     const db = open();
     const store = new SqliteMemoryStore(db);

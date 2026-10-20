@@ -14,6 +14,7 @@ import { Session, type SessionDeps, type TranscriptWriter, type Transport } from
 const script: MockScript = {
   greeting: '你好呀',
   followup: '还在吗',
+  memoryNotice: '我会记着',
   fallbackReply: '我在听',
   turns: [
     { user: '我叫老王', reply: '王叔好' },
@@ -84,6 +85,7 @@ function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessi
     },
     summarizer: new MockSummarizer(),
     roles: fixedRoleCatalog('P', director),
+    noticeKeywords: ['记着', '记住'],
     ...overrides,
   }, ctx, sessionId, noticePending);
   return { session, mocks, ...collector() };
@@ -857,6 +859,24 @@ describe('Session', () => {
     const noticeSeq = of(s.sent, 'response.start').at(-1)!.responseSeq;
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: noticeSeq, playedMs: 80, reason: 'interrupted' });
     expect(markNotified).not.toHaveBeenCalled();
+  });
+
+  it('does not mark notified when the notice transcript lacks a keyword', async () => {
+    const markNotified = vi.fn();
+    const writer: TranscriptWriter = { append: () => 'stored', markNotified };
+    const s = setup({
+      writer,
+      adapterFactory: () => new MockAdapter({
+        script: { ...script, memoryNotice: '好的' },
+        replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+      }),
+    }, ownedCtx, 'notice-unverified', true);
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(1000);
+    const notice = of(s.sent, 'response.start').at(-1)!;
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: notice.responseSeq, playedMs: 300, reason: 'ended' });
+    expect(markNotified).not.toHaveBeenCalled();
+    s.session.end();
   });
 
   it('retries a notice that ends without playback ended, then marks notified once', async () => {

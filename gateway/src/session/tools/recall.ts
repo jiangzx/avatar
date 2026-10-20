@@ -30,6 +30,11 @@ function clip(text: string, maxChars: number): string {
   return chars.length <= maxChars ? text : chars.slice(0, maxChars).join('');
 }
 
+/** Escape LIKE wildcards for a bound pattern. */
+function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
 /** Punctuation-insensitive comparison so the current question never becomes its own memory hit. */
 function sameUtterance(a: string, b: string): boolean {
   const normalize = (text: string) => text.replace(/[\s，。！？、,.!?~～]/g, '');
@@ -43,6 +48,8 @@ export interface RecallCopy {
   foundPrefix: string;
   /** Challenge or denial lines are not evidence that the user said the thing. */
   skipPatterns: readonly string[];
+  /** Whole-utterance acknowledgements are not evidence; substrings are. */
+  lightAcks: readonly string[];
   /** Vague "what did we talk about" queries answer from recent user statements instead of FTS. */
   recentQueryPatterns: readonly string[];
   /** System prompt for natural phrasing of a grounded line. */
@@ -80,22 +87,26 @@ async function recall(args: unknown, ctx: ToolContext, rules: SafetyRules, clipC
   if (copy.recentQueryPatterns.some((pattern) => pattern.length > 0 && normalized.includes(pattern))) {
     const recent = ctx.store.recentUserMessages(ctx.ownerId, 12)
       .map((row) => stripInvisible(row.text, rules.invisibleCodePoints))
-      .filter((text) => text.length > 0 && scanText(text, rules) !== 'reject' && isMemoryEvidence(text, copy.skipPatterns))
+      .filter((text) => text.length > 0 && scanText(text, rules) !== 'reject' && isMemoryEvidence(text, copy.skipPatterns, copy.lightAcks))
       .slice(0, 3)
       .map((text) => clip(text, clipChars));
     return outcome(recent, copy, await phrase(ctx.textClient, recent[0], copy, rules));
   }
   const match = ftsMatch(query);
-  if (!match) return outcome([], copy);
-  // Over-fetch so rejected questions/denials do not shrink the page of three.
-  const rows = ctx.store.searchMessages(ctx.ownerId, match, 50);
+  // A single character has no bigrams; fall back to LIKE within this owner's user lines.
+  const rows = match
+    ? ctx.store.searchMessages(ctx.ownerId, match, 50)
+    : [...query].length === 1
+      ? ctx.store.searchMessagesLike(ctx.ownerId, `%${escapeLike(query)}%`, 50)
+      : [];
+  if (rows.length === 0) return outcome([], copy);
   const trigger = ctx.triggerText?.trim();
   const lines: string[] = [];
   for (const row of rows) {
     const stripped = stripInvisible(row.text, rules.invisibleCodePoints);
     if (!stripped || scanText(stripped, rules) === 'reject') continue;
     if (trigger && sameUtterance(stripped, trigger)) continue;
-    if (!isMemoryEvidence(stripped, copy.skipPatterns)) continue;
+    if (!isMemoryEvidence(stripped, copy.skipPatterns, copy.lightAcks)) continue;
     lines.push(clip(stripped, clipChars));
     if (lines.length === 3) break;
   }

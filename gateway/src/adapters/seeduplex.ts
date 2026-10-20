@@ -16,6 +16,8 @@ type Json = Record<string, unknown>;
 
 export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements RealtimeAdapter {
   readonly supportsPlaybackTruncate = false;
+  /** speech_text_buffer.commit synthesizes fallbackText directly; no transcript follows. */
+  readonly verbatimFallback = true;
   private ws: WebSocket | null = null;
   private closed = false;
   private connected = false;

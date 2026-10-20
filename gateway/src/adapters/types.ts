@@ -54,6 +54,8 @@ export type AdapterEvents = {
 export interface RealtimeAdapter extends EventEmitter<AdapterEvents> {
   /** True if the model can trim its own context to the played portion after an interruption. */
   readonly supportsPlaybackTruncate: boolean;
+  /** True when createResponse plays fallbackText verbatim (direct TTS, no transcript events). */
+  readonly verbatimFallback: boolean;
   connect(config: SessionConfig): Promise<void>;
   sendAudio(pcm16k: Int16Array): void;
   /** Debug path: treat text as a finished user turn and reply to it. */

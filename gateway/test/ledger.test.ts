@@ -19,6 +19,17 @@ describe('ConversationLedger', () => {
     expect(l.recent).toEqual([{ role: 'assistant', text: '说到一半', ts: 3, interrupted: true }]);
   });
 
+  it('forget() drops one topic and keeps unrelated entries', () => {
+    const l = new ConversationLedger();
+    l.addUser('我喜欢喝茶', 1);
+    l.addAssistant('好的', 1);
+    l.addUser('今天天气不错', 2);
+    l.addAssistant('是啊', 2);
+    l.forget('喝茶', '我喜欢喝茶');
+    expect(l.recent.map((entry) => entry.text)).toEqual(['好的', '今天天气不错', '是啊']);
+    expect(l.summary).toBe('');
+  });
+
   it('needs a summary after the turn threshold', () => {
     const l = new ConversationLedger(opts);
     fill(l, 3);

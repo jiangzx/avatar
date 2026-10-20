@@ -98,6 +98,17 @@ export class ConversationLedger {
     this.generation++;
   }
 
+  /**
+   * Forget one topic: drop the summary and any line naming it, keep the rest of this
+   * session so unrelated context survives. The generation bump discards a summary in flight.
+   */
+  forget(query: string, triggerText?: string | null): void {
+    const forgotten = (text: string) => text.includes(query) || (triggerText != null && text === triggerText);
+    this.entries = this.entries.filter((entry) => !forgotten(entry.text));
+    this.summaryText = '';
+    this.generation++;
+  }
+
   private keepFromIndex(): number {
     let seen = 0;
     for (let i = this.entries.length - 1; i >= 0; i--) {

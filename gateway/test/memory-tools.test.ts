@@ -130,6 +130,17 @@ describe('memory tool registry', () => {
     expect(result.text).not.toContain('另一位用户');
   });
 
+  it('recalls a single-character keyword with LIKE', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-one-char');
+    say(store, a.ownerId, 'tea', '我喜欢喝茶', 10);
+    say(store, a.ownerId, 'walk', '我喜欢散步', 11);
+    const result = await createToolRegistry().handle('recall_memory', { query: '茶' }, ctxFor(store, worker(store), a));
+    expect(result.ok).toBe(true);
+    expect(result.text).toContain('我喜欢喝茶');
+    expect(result.text).not.toContain('我喜欢散步');
+  });
+
   it('does not broaden forgetting to unrelated messages sharing only one token', async () => {
     const store = new SqliteMemoryStore(open());
     const a = owner(store, 'forget-all');
@@ -333,7 +344,8 @@ describe('memory tool registry', () => {
     expect(result).toMatchObject({ ok: true, rebuild: 'forget', confirmText: memory.forgetConfirmText });
     expect(await pending).toBe(false);
     expect(ledger.summary).toBe('');
-    expect(ledger.recent).toEqual([]);
+    // Unrelated turns survive; only the forgotten line is removed.
+    expect(ledger.recent.map((entry) => entry.text)).toEqual(['问1', '答1', '问2', '答2', '问3', '答3']);
     expect(store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
     expect(ftsTexts(db, a.ownerId, '王叔')).toEqual([]);
     expect(store.listFacts(a.ownerId)).toEqual([]);
@@ -510,7 +522,8 @@ describe('session memory tools', () => {
     expect(sent.filter((message) => message.type === 'error').map((message) => message.code)).not.toContain('model_reconnecting');
     expect(mocks.length).toBeGreaterThan(1);
     expect(store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
-    expect(session.ledger.recent).toEqual([]);
+    expect(session.ledger.recent.map((entry) => entry.text)).not.toContain('忘掉王叔');
+    expect(session.ledger.recent.map((entry) => entry.text)).toContain('你好呀');
     expect(session.ledger.summary).toBe('');
     session.end();
   });

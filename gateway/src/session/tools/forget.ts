@@ -28,7 +28,7 @@ export function forgetTool(confirmText: string): ToolHandler {
       // Forgetting stays precise even though recall accepts any keyword.
       const deleted = runAfterEpochBump(store, ownerId, () => {
         const result = store.forgetMatches(ownerId, query, ftsMatch(query, 'all'), sessionId, ctx.triggerText);
-        ctx.ledger.clear();
+        ctx.ledger.forget(query, ctx.triggerText);
         return result;
       });
       const total = deleted.messages + deleted.facts + deleted.notes + deleted.episodes + deleted.followups;

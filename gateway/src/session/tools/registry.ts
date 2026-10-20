@@ -86,6 +86,7 @@ export function createToolRegistry(): ToolRegistry {
       emptyText: copy.recallEmptyText ?? '我这边暂时找不到上次的记录，您想接着说点什么？',
       foundPrefix: copy.recallFoundPrefix ?? '我这边记着，您之前说过：',
       skipPatterns: copy.recallSkipPatterns ?? ['我什么时候', '什么时候说', '没说过', '没讲过', '记错', '记岔', '胡扯', '瞎说', '乱说', '你是不是'],
+      lightAcks: copy.lightAcks ?? [],
       recentQueryPatterns: copy.recallRecentQueries ?? ['上次聊过什么', '上次说了什么', '之前聊过什么', '咱们聊过什么', '我们聊过什么', '聊到哪', '还记得上次', '上次咱们'],
       phraseInstruction: recallPhraseInstruction,
       phraseMaxChars: copy.recallPhraseMaxChars ?? 60,

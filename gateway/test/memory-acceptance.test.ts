@@ -15,10 +15,12 @@ import type { SessionContext } from '../src/session/context.ts';
 import { buildInstructions } from '../src/session/instructions.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { SessionManager } from '../src/session/manager.ts';
+import { loadMemoryBudget } from '../src/session/pacing.ts';
 import { Session, type Transport } from '../src/session/session.ts';
 import { ftsMatch } from '../src/session/tools/recall.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
+const memoryConfig = loadMemoryBudget(`${root}config/memory.json`);
 const roles = loadRoleCatalog(`${root}roles`);
 const director = roles.director('elder-companion');
 const policy = { timeoutMs: 1_000, retries: 0, backoffMs: 0, maxBackoffMs: 0 };
@@ -27,7 +29,7 @@ const limits = { maxOwners: 10, dailyCap: 10, orphanOwnerDays: 7, orphanCleanupB
 const script: MockScript = {
   greeting: '你好呀',
   followup: '还在吗',
-  memoryNotice: '嗯',
+  memoryNotice: '我会记着。',
   fallbackReply: '我在听',
   turns: [
     {
@@ -143,6 +145,7 @@ describe('Plan C memory acceptance', () => {
         store,
         budget: { totalChars: 8_000, snapshotMaxChars: 600, summaryMaxChars: 800 },
         extractEveryUserTurns: 10,
+        ...(memoryConfig.memoryNoticeKeywords ? { noticeKeywords: memoryConfig.memoryNoticeKeywords } : {}),
       }, ctx, sessionId, noticePending),
       60_000,
       300_000,
@@ -183,7 +186,7 @@ describe('Plan C memory acceptance', () => {
     // Played-out notice seq. The spoken line is not the memory sentence.
     const playedNotice = await finishCurrent(sessionA.session);
     expect(playedNotice).toBe(noticeSeq);
-    expect(assistantText(sessionA.sent, playedNotice)).toBe('嗯');
+    expect(assistantText(sessionA.sent, playedNotice)).toBe('我会记着。');
     expect(store.getOwner(ownerId)?.notifiedAt).not.toBeNull();
 
     await say(sessionA.session, '我喜欢喝茶');
@@ -252,7 +255,8 @@ describe('Plan C memory acceptance', () => {
     sessionForget.session.handleClientMessage({ type: 'debug.userText', text: '忘掉这件事' });
     await vi.advanceTimersByTimeAsync(1_000);
     expect(sessionForget.session.ledger.summary).toBe('');
-    expect(sessionForget.session.ledger.recent).toEqual([]);
+    expect(sessionForget.session.ledger.recent.map((entry) => entry.text)).not.toContain('忘掉这件事');
+    expect(sessionForget.session.ledger.recent.map((entry) => entry.text)).toContain('先前1');
     const forgotten = opened(registeredA.deviceToken);
     expect(forgotten.ctx.memorySnapshot ?? '').not.toContain('喜欢喝茶');
     expect(instructions.at(-1)).not.toContain('泡茶的杯子');

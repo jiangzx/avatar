@@ -38,6 +38,8 @@ export interface MemoryStore {
   setAgentStyle(ownerId: string, agentId: string, styleId: string): boolean;
   recordSessionStart(sessionId: string, agentId: string, now: number): void;
   recordSessionEnd(sessionId: string, agentId: string, now: number): void;
+  /** Closes sessions that a previous process left open (crash/SIGKILL). Returns the count. */
+  closeOpenSessions(now: number): number;
   listSessions(ownerId: string): SessionRecord[];
   /** Cascades to devices, agents, sessions (and Plan C memory tables). */
   deleteOwner(ownerId: string): boolean;
@@ -85,6 +87,8 @@ export interface MemoryStore {
   writeExtraction(ownerId: string, change: ExtractionChange): void;
   /** Owner-scoped FTS over user messages only. `match` is an FTS5 expression; empty when invalid. */
   searchMessages(ownerId: string, match: string, limit: number): { text: string }[];
+  /** Owner-scoped LIKE fallback for a single-character query (bigrams are empty). */
+  searchMessagesLike(ownerId: string, pattern: string, limit: number): { text: string }[];
   /**
    * Deletes facts, notes, episodes, and followups whose text contains `query`.
    * Blanks FTS hits, the triggering user line when its text is given, and related diffs.
@@ -195,6 +199,7 @@ function prepareStatements(db: DatabaseSync) {
     setAgentStyle: p('UPDATE agents SET style_id = ? WHERE id = ? AND owner_id = ?'),
     insertSession: p('INSERT INTO sessions (id, agent_id, started_at) VALUES (?, ?, ?)'),
     endSession: p('UPDATE sessions SET ended_at = ? WHERE id = ? AND agent_id = ? AND ended_at IS NULL'),
+    closeOpenSessions: p('UPDATE sessions SET ended_at = ? WHERE ended_at IS NULL'),
     listSessions: p('SELECT s.id, s.agent_id, s.started_at, s.ended_at FROM sessions s JOIN agents a ON a.id = s.agent_id WHERE a.owner_id = ? ORDER BY s.started_at'),
     deleteOwner: p('DELETE FROM owners WHERE id = ?'),
     countOwners: p('SELECT count(*) AS n FROM owners'),
@@ -263,6 +268,10 @@ function prepareStatements(db: DatabaseSync) {
       JOIN messages m ON m.rowid = messages_fts.rowid
       WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.role = 'user' AND m.excluded = 0
       ORDER BY bm25(messages_fts)
+      LIMIT ?`),
+    searchMessagesLike: p(`SELECT text FROM messages
+      WHERE owner_id = ? AND role = 'user' AND excluded = 0 AND text LIKE ? ESCAPE '\\'
+      ORDER BY created_at DESC, rowid DESC
       LIMIT ?`),
     matchRowids: p(`SELECT m.rowid AS rowid FROM messages_fts
       JOIN messages m ON m.rowid = messages_fts.rowid
@@ -353,6 +362,10 @@ export class SqliteMemoryStore implements MemoryStore {
 
   recordSessionEnd(sessionId: string, agentId: string, now: number): void {
     this.q.endSession.run(now, sessionId, agentId);
+  }
+
+  closeOpenSessions(now: number): number {
+    return Number(this.q.closeOpenSessions.run(now).changes);
   }
 
   listSessions(ownerId: string): SessionRecord[] {
@@ -468,6 +481,10 @@ export class SqliteMemoryStore implements MemoryStore {
     } catch {
       return [];
     }
+  }
+
+  searchMessagesLike(ownerId: string, pattern: string, limit: number): { text: string }[] {
+    return this.q.searchMessagesLike.all(ownerId, pattern, limit).map((row) => ({ text: row.text as string }));
   }
 
   forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): ForgetResult {

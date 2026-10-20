@@ -13,4 +13,18 @@ describe('memory evidence', () => {
   it('keeps a declarative user statement', () => {
     expect(isMemoryEvidence('我记得我之前看过一部电影叫咒怨。', patterns)).toBe(true);
   });
+
+  it('drops a light acknowledgement only when it is the whole utterance', () => {
+    const skip = ['我什么时候'];
+    const light = ['好的', '我知道了'];
+    expect(isMemoryEvidence('好的', skip, light)).toBe(false);
+    expect(isMemoryEvidence('好的。', skip, light)).toBe(false);
+    expect(isMemoryEvidence('好的，我平时喜欢听京剧。', skip, light)).toBe(true);
+    expect(isMemoryEvidence('我知道了，我孙子在上大学。', skip, light)).toBe(true);
+  });
+
+  it('rejects questions whose question mark was dropped', () => {
+    expect(isMemoryEvidence('你吃饭了吗。', patterns)).toBe(false);
+    expect(isMemoryEvidence('上次那个电影叫什么来着。', patterns)).toBe(false);
+  });
 });
