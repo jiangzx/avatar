@@ -21,6 +21,7 @@ import { QwenTextClient } from './memory/textClient.ts';
 import { MemoryWorker, withExtraction } from './memory/worker.ts';
 import { SqliteTranscriptWriter } from './memory/writer.ts';
 import { loadEmotionConfig } from './session/emotion.ts';
+import { loadI18n } from './i18n/load.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
@@ -28,6 +29,7 @@ const config = loadConfig();
 const roles = loadRoleCatalog(`${root}roles`);
 const pacing = loadPacing(`${root}config/pacing.json`);
 const memory = loadMemoryBudget(`${root}config/memory.json`);
+const i18n = loadI18n(`${root}config`);
 const personasByLanguage: Partial<Record<Language, string[]>> = {};
 for (const pair of roles.languagePairs()) {
   (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
@@ -132,6 +134,7 @@ const manager = new SessionManager(
       slim: pacing.slim,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
       emotion,
+      languageRules: i18n.language,
       ...(store ? { store } : {}),
       ...(writer ? { writer } : {}),
       ...(worker ? {

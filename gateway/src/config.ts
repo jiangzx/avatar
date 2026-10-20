@@ -343,3 +343,50 @@ export type SafetyRules = z.infer<typeof SafetyRulesSchema>;
 export function loadSafetyConfig(path: string): SafetyRules {
   return SafetyRulesSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
 }
+
+/** Shared safety rules: numeric thresholds and code points.
+ *  The phrase lists stay until the migration to config/i18n lands; after that they become optional. */
+export interface SharedSafetyConfig {
+  minMaskedDigits: number;
+  chineseDigits: Record<string, string>;
+  invisibleCodePoints: number[];
+  rejectPhrases?: string[];
+  degradePhrases?: string[];
+  markPhrases?: string[];
+}
+
+const SharedSafetyConfigSchema = z.object({
+  minMaskedDigits: z.number().int().min(1).max(64),
+  chineseDigits: z.record(SingleChar, DigitChar).refine((map) => Object.keys(map).length > 0, { message: 'chineseDigits must not be empty' }),
+  invisibleCodePoints: z.array(z.number().int().min(0).max(0x10FFFF)).min(1),
+  rejectPhrases: PhraseList.optional(),
+  degradePhrases: PhraseList.optional(),
+  markPhrases: PhraseList.optional(),
+}).strict();
+
+/** Localized phrase lists from config/i18n/<lang>/safety.json. */
+export interface SafetyPhrases {
+  rejectPhrases: readonly string[];
+  degradePhrases: readonly string[];
+  markPhrases: readonly string[];
+}
+
+export function loadSharedSafety(path: string): SharedSafetyConfig {
+  return SharedSafetyConfigSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+}
+
+/** Shared rules plus localized phrases. Preserves order and drops duplicates across languages. */
+export function mergeSafety(shared: SharedSafetyConfig, phrases: SafetyPhrases): SafetyRules {
+  return {
+    minMaskedDigits: shared.minMaskedDigits,
+    chineseDigits: shared.chineseDigits,
+    invisibleCodePoints: shared.invisibleCodePoints,
+    rejectPhrases: unique([...(shared.rejectPhrases ?? []), ...phrases.rejectPhrases]),
+    degradePhrases: unique([...(shared.degradePhrases ?? []), ...phrases.degradePhrases]),
+    markPhrases: unique([...(shared.markPhrases ?? []), ...phrases.markPhrases]),
+  };
+}
+
+function unique<T>(items: readonly T[]): T[] {
+  return [...new Set(items)];
+}

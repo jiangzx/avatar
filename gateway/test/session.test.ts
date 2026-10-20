@@ -1,7 +1,9 @@
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Language, ServerMessage } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
 import type { SessionConfig } from '../src/adapters/types.ts';
+import { loadI18n } from '../src/i18n/load.ts';
 import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
 import type { SessionContext } from '../src/session/context.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
@@ -10,6 +12,8 @@ import type { ReplyMetrics } from '../src/session/metrics.ts';
 import { InterruptCoordinator } from '../src/session/interrupt.ts';
 import type { PacingConfig } from '../src/session/pacing.ts';
 import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
+
+const languageRules = loadI18n(`${fileURLToPath(new URL('..', import.meta.url))}config`).language;
 
 const script: MockScript = {
   greeting: '你好呀',
@@ -127,6 +131,7 @@ function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessi
     summarizer: new MockSummarizer(),
     roles: fixedRoleCatalog('P', director),
     noticeKeywords: ['记着', '记住'],
+    languageRules,
     ...overrides,
   }, ctx, sessionId, noticePending);
   return { session, mocks, ...collector() };

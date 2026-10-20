@@ -1,70 +1,32 @@
 import type { Language } from '@anyidea/protocol';
+import type { LanguageRules } from '../i18n/types.ts';
 
 const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const HAN = /\p{Script=Han}/u;
 const LATIN = /\p{Script=Latin}/u;
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 
-// M1 keeps the phrase and acknowledgement lists in code; M2 moves them to language config.
-const SHORT_ACKS = new Set([
-  '嗯', '嗯嗯', '哦', '好', '好的', '好好', '行', '行吧', '对对', '是是',
-  'ok', 'okay', 'yes', 'yeah', 'yep', 'no', 'nope',
-  'はい', 'うん', 'ええ', 'いいえ', 'そう', 'そうですね',
-]);
-
 const EDGE_PUNCTUATION = /^[\s\p{P}]+|[\s\p{P}]+$/gu;
 const QUESTION_MARK = /[?？]\s*$/u;
-const QUESTION_PARTICLE = /[吗呢么嘛][\p{P}\s]*$/u;
 
-// Language names used by request patterns; M1 keeps them in code.
-const LANGUAGE_NAMES: Record<Language, string> = {
-  en: '英文|英语|english',
-  ja: '日语|日文|日本語|japanese',
-  zh: '中文|汉语|普通话|chinese',
+/** Fallback for callers without loaded config: detection uses the script heuristic only. */
+export const EMPTY_LANGUAGE_RULES: LanguageRules = {
+  shortAcks: new Set(),
+  explicitRequests: [],
+  questionSuffixes: [],
 };
 
-const CHINESE_REQUEST_TAIL = '说|讲|回答|聊天|跟我说话|跟我聊天|跟我交流|跟我讲';
-
-/** Request forms anchored to the whole utterance, so mentions ("我在学英语") do not switch. */
-function requestPatterns(names: string): readonly RegExp[] {
-  return [
-    // Bare language name: "中文", "English".
-    new RegExp(`^(?:${names})$`, 'iu'),
-    // "English please".
-    new RegExp(`^(?:${names})\\s+please$`, 'iu'),
-    // "speak English", "talk in Japanese", "switch to Chinese".
-    new RegExp(
-      `^(?:please\\s+)?(?:speak|talk|reply|answer|switch)(?:\\s+(?:to|in))?(?:\\s+in)?\\s+(?:${names})(?:\\s+please)?$`,
-      'iu',
-    ),
-    // "请用英语说", "说英语", "用日语", "请说中文", "用普通话".
-    new RegExp(
-      `^(?:请|麻烦)?(?:用|说|讲|切换(?:到|成)?)(?:${names})(?:${CHINESE_REQUEST_TAIL})?$`,
-      'u',
-    ),
-  ];
-}
-
-const EXPLICIT: readonly { language: Language; patterns: readonly RegExp[] }[] = [
-  { language: 'en', patterns: requestPatterns(LANGUAGE_NAMES.en) },
-  {
-    language: 'ja',
-    patterns: [...requestPatterns(LANGUAGE_NAMES.ja), /^日本語で(?:お願いします)?$/u],
-  },
-  { language: 'zh', patterns: requestPatterns(LANGUAGE_NAMES.zh) },
-];
-
 /** A question about a language ("你会说日语吗") is not a request to switch. */
-function isQuestion(text: string): boolean {
-  return QUESTION_MARK.test(text) || QUESTION_PARTICLE.test(text);
+function isQuestion(text: string, rules: LanguageRules): boolean {
+  if (QUESTION_MARK.test(text)) return true;
+  const trimmed = text.replace(EDGE_PUNCTUATION, '');
+  return rules.questionSuffixes.some((suffix) => suffix.length > 0 && trimmed.endsWith(suffix));
 }
 
-/** Match request patterns against the utterance with edge punctuation and whitespace trimmed. */
-function explicitRequest(text: string): Language | null {
+/** Match configured request templates against the utterance with edge punctuation and whitespace trimmed. */
+function explicitRequest(text: string, rules: LanguageRules): Language | null {
   const trimmed = text.replace(EDGE_PUNCTUATION, '');
-  for (const rule of EXPLICIT) {
-    for (const pattern of rule.patterns) if (pattern.test(trimmed)) return rule.language;
-  }
+  for (const rule of rules.explicitRequests) if (rule.pattern.test(trimmed)) return rule.language;
   return null;
 }
 
@@ -84,15 +46,15 @@ export function resolveLanguage(value: unknown, fallback: Language = 'zh'): Lang
  * Script heuristic for system copy only. It never overrides the model's own reply language.
  * Short/ambiguous utterances keep the previous language.
  */
-export function detectLanguage(text: string, previous: Language = 'zh'): Language {
+export function detectLanguage(text: string, previous: Language = 'zh', rules: LanguageRules = EMPTY_LANGUAGE_RULES): Language {
   // Explicit requests win over every other rule, except when phrased as a question.
-  if (!isQuestion(text)) {
-    const requested = explicitRequest(text);
+  if (!isQuestion(text, rules)) {
+    const requested = explicitRequest(text, rules);
     if (requested) return requested;
   }
 
   // Short acknowledgements keep the previous language even when their script would switch.
-  if (SHORT_ACKS.has(ackKey(text))) return previous;
+  if (rules.shortAcks.has(ackKey(text))) return previous;
 
   const chars = [...text];
   if (chars.filter((ch) => LETTER_OR_DIGIT.test(ch)).length < 2) return previous;
@@ -109,4 +71,18 @@ export function detectLanguage(text: string, previous: Language = 'zh'): Languag
   if (latin > 0 && han === 0) return 'en';
   if (han > 0 && latin === 0) return previous === 'ja' ? 'ja' : 'zh';
   return latin > han ? 'en' : previous;
+}
+
+/** Batch language for extraction: any kana means ja; otherwise the dominant script decides. */
+export function dominantLanguage(texts: readonly string[]): Language {
+  let han = 0;
+  let latin = 0;
+  for (const text of texts) {
+    if (KANA.test(text)) return 'ja';
+    for (const ch of text) {
+      if (HAN.test(ch)) han++;
+      else if (LATIN.test(ch)) latin++;
+    }
+  }
+  return latin > han ? 'en' : 'zh';
 }

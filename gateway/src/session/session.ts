@@ -18,6 +18,7 @@ import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
 import type { TranscriptWriter } from '../memory/writer.ts';
+import type { LanguageRules } from '../i18n/types.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { PROMPT_LABELS } from '../roles/labels.ts';
 import { devContext, type SessionContext } from './context.ts';
@@ -113,6 +114,8 @@ export interface SessionDeps {
   extractSilenceMs?: number;
   /** Default voice for the current language when the role/style does not override. */
   voiceFor?: (language: Language) => string | undefined;
+  /** Loaded language rules (gateway/config/i18n). Undefined = script heuristic only (tests). */
+  languageRules?: LanguageRules;
 }
 
 interface ResponseState {
@@ -792,7 +795,7 @@ export class Session {
   }
 
   private onUserFinal(text: string, echo: boolean): void {
-    const nextLanguage = detectLanguage(text, this.language);
+    const nextLanguage = detectLanguage(text, this.language, this.deps.languageRules);
     if (nextLanguage !== this.language) this.applyLanguage(nextLanguage, true);
     if (echo) this.send({ type: 'transcript.user', text, final: true });
     if (this.dropUserFinals) return;

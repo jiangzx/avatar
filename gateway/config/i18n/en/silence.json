@@ -1,0 +1,6 @@
+{
+  "greeting": ["hello", "hi", "good morning", "good afternoon", "good evening", "nice to see", "welcome back", "hey"],
+  "listening": ["still there", "are you there", "can you hear", "listening", "with me"],
+  "anytime": ["anytime", "any time", "whenever", "no rush", "happy to talk"],
+  "maxCheckinChars": 80
+}
