@@ -338,7 +338,10 @@ class _AvatarPageState extends State<AvatarPage> {
     } else {
       unawaited(_send({'type': 'end'}));
     }
-    setState(() => _status = _statusLabels['closed']!);
+    setState(() {
+      _status = _statusLabels['closed']!;
+      _error = null; // the session is over; a retry button must not stay active
+    });
   }
 
   Widget _debugPanel() {
