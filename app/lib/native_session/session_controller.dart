@@ -256,6 +256,11 @@ class NativeSessionController implements GatewayClientEvents {
       case ResponseStart(:final responseSeq, :final kind):
         if (responseSeq <= _seqFloor) return;
         _clearModelReconnecting();
+        // Bound per-response bookkeeping on long calls; late frames for older seqs are dropped.
+        final keepFrom = responseSeq - 16;
+        _assistantText.removeWhere((seq, _) => seq < keepFrom);
+        _audioReceivedMs.removeWhere((seq, _) => seq < keepFrom);
+        _responseKinds.removeWhere((seq, _) => seq < keepFrom);
         _closeOpenSpeech();
         _activeSeq = responseSeq;
         _assistantText[responseSeq] = '';

@@ -22,6 +22,7 @@ import 'native_gateway/gateway_client.dart';
 import 'native_gateway/transports.dart';
 import 'native_session/events.dart';
 import 'native_session/session_controller.dart';
+import 'native_session/session_start_guard.dart';
 import 'native_session/thinking_config.dart';
 import 'overlay.dart';
 
@@ -108,8 +109,7 @@ class _AvatarPageState extends State<AvatarPage> {
   bool _muted = false;
   bool _debug = false;
   /// End/dispose invalidates an in-flight session start; it must not leave a live mic.
-  bool _ending = false;
-  int _sessionEpoch = 0;
+  final _sessionGuard = SessionStartGuard();
 
   @override
   void initState() {
@@ -146,12 +146,12 @@ class _AvatarPageState extends State<AvatarPage> {
         await platform.setAllowFileAccess(false);
         await AndroidWebViewController.enableDebugging(kDebugMode);
       }
-      if (!mounted || _ending) return;
+      if (!mounted || _sessionGuard.ended) return;
       // Assign before loading: the page may post 'ready' before loadRequest returns, and _send needs the controller.
       setState(() => _controller = controller);
       await controller.loadRequest(base.resolve(AppConfig.page));
     } catch (_) {
-      if (mounted && !_ending) setState(() => _error = '初始化失败，请重试');
+      if (mounted && !_sessionGuard.ended) setState(() => _error = '初始化失败，请重试');
     }
   }
 
@@ -203,9 +203,10 @@ class _AvatarPageState extends State<AvatarPage> {
   }
 
   Future<void> _startNativeSession() async {
-    if (_session != null || _startingSession || _ending) return;
+    if (_session != null || _startingSession || _sessionGuard.ended) return;
+    final token = _sessionGuard.begin();
+    if (token < 0) return;
     _startingSession = true;
-    final epoch = ++_sessionEpoch;
     final thinking = await _loadThinking();
     String? saved;
     try {
@@ -225,7 +226,7 @@ class _AvatarPageState extends State<AvatarPage> {
             thinking,
             fillerStyle(thinking, saved),
           );
-    if (!mounted || epoch != _sessionEpoch || _ending) {
+    if (!mounted || !_sessionGuard.isCurrent(token)) {
       _startingSession = false;
       return; // ended or restarted while loading
     }
@@ -252,14 +253,14 @@ class _AvatarPageState extends State<AvatarPage> {
     } finally {
       _startingSession = false;
     }
-    if (!mounted || epoch != _sessionEpoch || _ending) {
+    if (!mounted || !_sessionGuard.isCurrent(token)) {
       if (identical(_session, session)) _session = null;
       await session.stop(); // End/dispose won the race: release the mic and gateway
     }
   }
 
   void _retry() {
-    if (_startingSession || _ending) return;
+    if (_startingSession || _sessionGuard.ended) return;
     setState(() => _error = null);
     if (_controller == null) {
       unawaited(_init());
@@ -331,8 +332,7 @@ class _AvatarPageState extends State<AvatarPage> {
   }
 
   void _end() {
-    _ending = true;
-    _sessionEpoch++;
+    _sessionGuard.end();
     if (AppConfig.audioMode == 'native') {
       unawaited(_session?.stop() ?? Future<void>.value());
     } else {
@@ -404,8 +404,7 @@ class _AvatarPageState extends State<AvatarPage> {
 
   @override
   void dispose() {
-    _ending = true;
-    _sessionEpoch++;
+    _sessionGuard.end();
     unawaited(_session?.stop() ?? Future<void>.value());
     _server.stop();
     _debugText.dispose();
