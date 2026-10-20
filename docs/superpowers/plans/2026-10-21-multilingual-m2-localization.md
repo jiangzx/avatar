@@ -423,6 +423,11 @@ it('gives ja/en their own instruction budget while zh stays unchanged', () => {
 
 若 en persona 在 0.6 比例下仍超预算，优先压缩英文人设；最多把 en 提到 0.75，不得改 zh 的 `budgetRatio` 或 `pacing.rebuild`。
 
+同时更新 `pacing.test.ts`：
+- “smallest history room”不再假设 zh 最小，改为 `report.minHistoryChars === Math.min(...Object.values(report.perLanguage).map(x => x.minHistoryChars))`。
+- “rejects an overlong persona in any language”的 en 长度必须超过 en 预算（用 `'P'.repeat(8000)` 之类的明显超长值），不要用 2000（在 0.6 比例下会合法）。
+- `.budget` 仍等于 zh 的预算，保留旧断言。
+
 - [ ] **Step 4: 写 ja/en 内容包**
 
 **内容原则**：本地化改写，不逐字翻译。保留“小暖”、AI 身份、无身体、不能做现实动作、危机处理、不索要验证码/转账、不鼓励只依赖 AI 的边界。日语用です・ます体、少敬语堆叠、短句；英语用简单温暖短句，避免网络流行语和幼态称呼。
