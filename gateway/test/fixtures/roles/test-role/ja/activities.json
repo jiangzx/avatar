@@ -1,0 +1,4 @@
+{
+  "intro": "## FIXTURE ACTIVITIES JA",
+  "activities": [{ "id": "one", "title": "活動一", "summary": "最初の活動" }]
+}

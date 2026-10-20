@@ -48,7 +48,7 @@ export interface ToolHandler {
 
 const copy = loadMemoryBudget(fileURLToPath(new URL('../../../config/memory.json', import.meta.url)));
 const rules = loadSafetyConfig(fileURLToPath(new URL('../../../config/safety.json', import.meta.url)));
-const recallPhraseInstruction = readFileSync(fileURLToPath(new URL('../../../roles/_shared/recall.md', import.meta.url)), 'utf8').trim();
+const recallPhraseInstruction = readFileSync(fileURLToPath(new URL('../../../roles/_shared/zh/recall.md', import.meta.url)), 'utf8').trim();
 
 function performActionTool(): ToolHandler {
   return {

@@ -1,0 +1,11 @@
+{
+  "followupAfterMs": 8000, "idleNoticeAfterMs": 25000, "maxConsecutive": 2, "maxPerWindow": 3, "windowMs": 300000,
+  "quietPhrases": ["やめて"],
+  "greetingInstruction": "G-ja", "greetingText": "greeting-ja",
+  "followupInstruction": "F-ja", "followupText": "followup-ja",
+  "idleNoticeInstruction": "I-ja", "idleNoticeText": "idle-ja",
+  "resumeInstruction": "R-ja", "resumeText": "resume-ja",
+  "toolContinueInstruction": "C-ja", "toolContinueText": "はい。",
+  "memoryNoticeInstruction": "N-ja", "memoryNoticeText": "覚えておきます。",
+  "topicInstruction": "T-ja {topic}"
+}

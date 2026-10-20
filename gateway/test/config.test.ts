@@ -58,7 +58,7 @@ describe('config', () => {
   });
 
   it('rejects unknown director keys', () => {
-    const cfg = JSON.parse(readFileSync(join(root, 'roles/elder-companion/director.json'), 'utf8')) as Record<string, unknown>;
+    const cfg = JSON.parse(readFileSync(join(root, 'roles/elder-companion/zh/director.json'), 'utf8')) as Record<string, unknown>;
     expect(() => DirectorSchema.parse(cfg)).not.toThrow();
     expect(() => DirectorSchema.parse({ ...cfg, typoKey: true })).toThrow();
   });
@@ -111,7 +111,7 @@ describe('config', () => {
   });
 
   it('loads the shipped role director config through the shared schema', () => {
-    const d = loadDirectorConfig(`${root}roles/elder-companion/director.json`);
+    const d = loadDirectorConfig(`${root}roles/elder-companion/zh/director.json`);
     expect(d.maxConsecutive).toBe(2);
     expect(d.maxPerWindow).toBe(8);
     expect(d.companyAfterMs).toBe(45000);
@@ -161,7 +161,7 @@ describe('config', () => {
   });
 
   it('rejects optional speech retries and a speak template that cannot carry the approved line', () => {
-    const cfg = loadDirectorConfig(`${root}roles/elder-companion/director.json`);
+    const cfg = loadDirectorConfig(`${root}roles/elder-companion/zh/director.json`);
     const decision = cfg.silenceDecision!;
     expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
       ...decision, policy: { ...decision.policy, retries: 1 },

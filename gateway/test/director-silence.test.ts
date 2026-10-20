@@ -5,7 +5,7 @@ import type { ProactiveRequest } from '../src/adapters/types.ts';
 import { Director, type DirectorDeps } from '../src/session/director.ts';
 
 const { silenceDecision: _decisionConfig, ...base } = loadDirectorConfig(
-  fileURLToPath(new URL('../roles/elder-companion/director.json', import.meta.url)),
+  fileURLToPath(new URL('../roles/elder-companion/zh/director.json', import.meta.url)),
 );
 const cfg = {
   ...base,
