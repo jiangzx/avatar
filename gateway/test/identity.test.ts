@@ -80,6 +80,14 @@ describe('DeviceRegistry', () => {
     expect(ctx.agentId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it('does not ask for the memory notice after consent is declined', () => {
+    const { store, registry } = setup();
+    const token = register(registry);
+    const ctx = ctxOf(registry, token);
+    store.setConsent(ctx.ownerId!, 'declined', BASE);
+    expect(registry.resolve(token)).toMatchObject({ ok: true, noticePending: false });
+  });
+
   it('updates last-seen on resolve', () => {
     const { store, registry } = setup();
     const token = register(registry);

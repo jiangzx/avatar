@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { enqueueThenBump } from './forget.ts';
+import { runAfterEpochBump } from './forget.ts';
 import type { ToolContext, ToolHandler, ToolOutcome } from './registry.ts';
 
 const ConsentSchema = z.object({
@@ -32,11 +32,10 @@ export function consentTool(prompt: string, confirmedText: string): ToolHandler 
         return { ok: true };
       }
       if (!parsed.data.confirmed) return { ok: true, confirmText: prompt };
-      const stored = await enqueueThenBump(ctx.worker, store, ownerId, async () => {
+      runAfterEpochBump(store, ownerId, () => {
         store.wipeOwnerMemory(ownerId);
         ctx.ledger.clear();
       });
-      if (!stored) return { ok: false, error: 'forget_failed' };
       return { ok: true, rebuild: 'decline', confirmText: confirmedText };
     },
   };

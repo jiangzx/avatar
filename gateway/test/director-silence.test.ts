@@ -61,6 +61,15 @@ describe('substantive conversation silence', () => {
     s.d.stop();
   });
 
+  it('drops a pending memory notice when consent is declined', () => {
+    const requests: ProactiveRequest[] = [];
+    const d = new Director(cfg, { requestResponse: (_kind, request) => requests.push(request) }, true);
+    d.cancelNotice();
+    d.onAiTurnEnded();
+    expect(requests).toHaveLength(0);
+    d.stop();
+  });
+
   it('speaks the configured four-step ladder when the planner declines', async () => {
     const contexts: Array<{ stage: string; previousTexts: readonly string[] }> = [];
     const s = setup((context) => { contexts.push(context); return null; });

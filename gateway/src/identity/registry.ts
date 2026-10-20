@@ -117,7 +117,8 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     return {
       ok: true,
       ctx,
-      noticePending: owner !== undefined && owner.notifiedAt === null,
+      // Declining memory also ends the notice obligation: asking again would contradict the choice.
+      noticePending: owner !== undefined && owner.notifiedAt === null && owner.memoryConsent !== 'declined',
     };
   }
 

@@ -286,6 +286,19 @@ describe('Session', () => {
     expect(of(s.sent, 'response.cancelled')).toEqual([{ type: 'response.cancelled', responseSeq: 2 }]);
   });
 
+  it('rearms the silence ladder after a gateway-confirmed barge-in cancel', async () => {
+    const s = setup();
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
+    await vi.advanceTimersByTimeAsync(100);
+    s.mocks[0]!.emit('userSpeechStarted'); // the model hears the user first
+    s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 0 }); // local VAD confirms in the window
+    expect(of(s.sent, 'response.cancelled')).toEqual([{ type: 'response.cancelled', responseSeq: 2 }]);
+    s.session.handleClientMessage({ type: 'vad', state: 'silent', t: 400 });
+    await vi.advanceTimersByTimeAsync(2600); // the barge-miss line waits 2.5 s
+    expect(of(s.sent, 'response.start').at(-1)!.responseSeq).toBeGreaterThan(2);
+  });
+
   it('cancels and records a still-playing response when the model starts a new one', async () => {
     const s = setup();
     await s.session.start(s.transport);

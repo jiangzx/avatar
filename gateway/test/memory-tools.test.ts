@@ -139,6 +139,29 @@ describe('memory tool registry', () => {
     expect(store.snapshotRows(a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我喜欢散步' }]);
   });
 
+  it('does not confirm a forget that matched nothing', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'forget-none');
+    say(store, a.ownerId, 'tea', '我喜欢喝茶', 10);
+    const result = await createToolRegistry().handle(
+      'forget_memory',
+      { query: '上次说我喜欢喝茶的事' },
+      ctxFor(store, worker(store), a),
+    );
+    expect(result).toEqual({ ok: false, error: 'not_found' });
+    expect(store.snapshotRows(a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我喜欢喝茶' }]);
+  });
+
+  it('rejects a single-character forget query before it can mass-delete facts', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'forget-short');
+    plant(db, a.ownerId, a.agentId, 'a');
+    const result = await createToolRegistry().handle('forget_memory', { query: '茶' }, ctxFor(store, worker(store), a));
+    expect(result).toEqual({ ok: false, error: 'invalid_args' });
+    expect(store.listFacts(a.ownerId)).toHaveLength(1);
+  });
+
   it('recalls only the caller, with the two-character name first', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
@@ -593,7 +616,56 @@ describe('session memory tools', () => {
     session.end();
   });
 
-  it('rebuilds after a forget that waited out the origin reply', async () => {
+  it('cancels the pending memory notice when the user declines', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'h-decline-notice');
+    store.markNotified(a.ownerId, 2);
+    say(store, a.ownerId, 'name', '我叫王叔', 11);
+    const calls: Array<{ cue?: string; instruction?: string; fallbackText?: string }> = [];
+    const mocks: MockAdapter[] = [];
+    const session = new Session({
+      adapterFactory: () => {
+        const mock = new MockAdapter({
+          script: {
+            greeting: '你好呀', followup: '还在吗', fallbackReply: '我在听',
+            turns: [{ match: '别记', user: '别记了', reply: '好呀', tool: { name: 'set_memory_consent', args: { granted: 'declined', confirmed: true } } }],
+          },
+          replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+        });
+        const create = mock.createResponse.bind(mock);
+        mock.createResponse = (request) => {
+          if (request) calls.push(request);
+          return create(request);
+        };
+        mocks.push(mock);
+        return mock;
+      },
+      summarizer: new MockSummarizer(),
+      roles: fixedRoleCatalog('P', director),
+      writer: new SqliteTranscriptWriter(store),
+      worker: worker(store),
+      store,
+    }, { ownerId: a.ownerId, agentId: a.agentId, roleId: 'elder-companion', styleId: 'grandchild' } satisfies SessionContext, 'live-decline-notice', true);
+    const box = collector();
+
+    await session.start(box.transport);
+    await vi.advanceTimersByTimeAsync(100); // the notice has not played yet
+    session.handleClientMessage({ type: 'debug.userText', text: '别记了' });
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(calls).toContainEqual({
+      cue: 'toolContinue',
+      instruction: memory.declineConfirmedText,
+      fallbackText: memory.declineConfirmedText,
+    });
+    expect(calls.some((call) => call.cue === 'memoryNotice')).toBe(false);
+    expect(mocks.length).toBeGreaterThan(1);
+    expect(store.getOwner(a.ownerId)?.memoryConsent).toBe('declined');
+    session.end();
+  });
+
+  it('rebuilds after a forget without waiting for an in-flight extraction', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
     const a = owner(store, 'h-queued');
@@ -611,7 +683,7 @@ describe('session memory tools', () => {
         complete: async () => {
           markEntered();
           await gate;
-          return '{"ops":[]}';
+          return JSON.stringify({ ops: [{ op: 'add', table: 'user_facts', category: 'preference', text: '喜欢喝茶', sensitive: false }] });
         },
       },
       systemPrompt: '陈述。',
@@ -651,23 +723,38 @@ describe('session memory tools', () => {
     await vi.advanceTimersByTimeAsync(1000);
     session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
     session.handleClientMessage({ type: 'debug.userText', text: '忘掉王叔' });
-    await vi.advanceTimersByTimeAsync(400);
-    mocks[0]!.emit('userTranscript', '晚点才到的那句', true);
-    expect(calls.some((call) => call.fallbackText === memory.forgetConfirmText)).toBe(false);
+    await vi.advanceTimersByTimeAsync(1000);
 
-    release();
-    await extract;
-    await vi.advanceTimersByTimeAsync(500);
-
+    // The gated extraction is still running; forget and its confirmation do not wait for it.
     expect(calls).toContainEqual({
       cue: 'toolContinue',
       instruction: memory.forgetConfirmText,
       fallbackText: memory.forgetConfirmText,
     });
     expect(mocks.length).toBeGreaterThan(1);
-    expect(store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text)).toEqual(['今天天气不错', '今天想喝茶']);
+
+    // A late final without a new speaking edge stays out of the store.
+    const current = mocks.at(-1)!;
+    current.emit('userTranscript', '晚点才到的那句', true);
+    await vi.advanceTimersByTimeAsync(50);
     const late = db.prepare('SELECT text FROM messages WHERE owner_id = ? AND text = ?').get(a.ownerId, '晚点才到的那句');
     expect(late).toBeUndefined();
+
+    // The next speaking edge is a new utterance and is stored again.
+    session.handleClientMessage({ type: 'vad', state: 'speaking', t: 500 });
+    session.handleClientMessage({ type: 'vad', state: 'silent', t: 600 });
+    current.emit('userTranscript', '新的问题', true);
+    const fresh = db.prepare('SELECT text FROM messages WHERE owner_id = ? AND text = ?').get(a.ownerId, '新的问题');
+    expect(fresh).toBeDefined();
+
+    release();
+    await extract;
+    // The extraction started before the epoch bump and must not write after it.
+    expect(store.listFacts(a.ownerId)).toEqual([]);
+    const rows = store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text);
+    expect(rows).toContain('今天天气不错');
+    expect(rows).toContain('今天想喝茶');
+    expect(rows).not.toContain('我叫王叔');
     session.end();
   });
 

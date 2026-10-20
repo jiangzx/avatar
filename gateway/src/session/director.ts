@@ -256,6 +256,13 @@ export class Director {
     // Keep playback ownership until onAiTurnEnded consumes it.
   }
 
+  /** The user declined memory; drop any notice that has not played yet. */
+  cancelNotice(): void {
+    this.noticePending = false;
+    this.noticeRetry = false;
+    if (this.pending === 'notice') this.pending = null;
+  }
+
   /** The notice was not started, or its seq was cancelled before playback ended. */
   onNoticeMissed(): void {
     if (!this.noticePending) return;

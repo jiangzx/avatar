@@ -329,6 +329,9 @@ export class Session {
       case 'vad': {
         const speaking = msg.state === 'speaking';
         this.userSpeaking = speaking;
+        // A new speaking edge marks a new utterance: late finals of the memory-tool turn
+        // arrived before this edge and stay dropped, while this utterance is stored.
+        if (speaking) this.dropUserFinals = false;
         // Cancel only a continuation that was already requested. The origin ends on the client path.
         if (speaking && this.toolTurn.active && this.continuationAsked) {
           this.adapter.cancelResponse();
@@ -347,8 +350,13 @@ export class Session {
           this.streamBarge = true;
           this.flushBargePreroll();
         }
+        const activeBefore = this.interrupt.active;
         this.interrupt.onLocalVad(speaking);
+        // A gateway-side cancel (local VAD confirmed during the model's confirm window) never
+        // produces a client playback.stopped, so tell the Director after its speaking edge.
+        const gatewayCancelled = speaking && activeBefore !== null && this.interrupt.active === null;
         this.director.onUserSpeech(speaking);
+        if (gatewayCancelled) this.director.onAssistantInterrupted();
         if (!speaking) {
           this.metrics.onLocalVadSilent();
           this.tickSlim();
@@ -404,6 +412,7 @@ export class Session {
         break;
       case 'debug.userText':
         this.interrupt.cancelActive('local');
+        this.dropUserFinals = false; // a deliberate new turn, not a late transcript
         this.onUserFinal(msg.text, true);
         this.adapter.sendUserText(msg.text);
         break;
@@ -772,6 +781,7 @@ export class Session {
       this.pendingToolSpeak = { text: outcome.spokenText, found: outcome.spokenFound === true };
     }
     if (outcome.rebuild) {
+      if (outcome.rebuild === 'decline') this.director.cancelNotice();
       this.pendingToolRebuild = outcome.rebuild;
       if (s) this.dropTranscriptSeqs.add(s.seq);
     }
@@ -860,7 +870,7 @@ export class Session {
     this.pendingToolSpeak = null;
     this.pendingToolRebuild = null;
     this.confirmLine = null;
-    this.dropUserFinals = false;
+    // Keep dropping late finals until the next speaking edge; see the vad handler.
     this.memoryToolWaiting = false;
     this.turnUserText = null;
     if (this.ended) return;
@@ -910,6 +920,7 @@ export class Session {
       this.send({ type: 'error', code: 'model_reconnecting', retryable: true });
     }
     this.interrupt.cancelActive('local'); // uses the old adapter
+    this.director.onAssistantInterrupted(); // paused: clears aiBusy and any notice claim
     // The old adapter's responseDone/cancel will never arrive; drop in-flight generation state.
     this.modelGenerating = false;
     this.responseLive = false;

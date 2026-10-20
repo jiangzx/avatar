@@ -88,8 +88,10 @@ export interface MemoryStore {
   /**
    * Deletes facts, notes, episodes, and followups whose text contains `query`.
    * Blanks FTS hits, the triggering user line when its text is given, and related diffs.
+   * Returns how many user-visible rows were removed or blanked so the caller can
+   * avoid confirming a delete that matched nothing.
    */
-  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): void;
+  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): ForgetResult;
   /** Deletes this owner's messages, memory rows, and audit diffs, then marks consent declined. */
   wipeOwnerMemory(ownerId: string): void;
   /**
@@ -106,6 +108,14 @@ export interface PendingMessage {
   role: 'user' | 'assistant';
   text: string;
   sessionId: string;
+}
+
+export interface ForgetResult {
+  messages: number;
+  facts: number;
+  notes: number;
+  episodes: number;
+  followups: number;
 }
 
 export interface ExtractMemory {
@@ -460,16 +470,18 @@ export class SqliteMemoryStore implements MemoryStore {
     }
   }
 
-  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): void {
+  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): ForgetResult {
     const rowids = match ? this.matchRowids(ownerId, match) : [];
-    this.tx(() => {
-      for (const rowid of rowids) this.q.blankMessage.run(ownerId, rowid);
-      if (triggerText) this.q.blankTrigger.run(ownerId, sessionId, triggerText);
-      this.q.deleteFactsInstr.run(ownerId, query);
-      this.q.deleteNotesInstr.run(ownerId, query);
-      this.q.deleteEpisodesInstr.run(ownerId, query);
-      this.q.deleteFollowupsInstr.run(ownerId, query);
+    return this.tx(() => {
+      let messages = 0;
+      for (const rowid of rowids) messages += Number(this.q.blankMessage.run(ownerId, rowid).changes);
+      if (triggerText) messages += Number(this.q.blankTrigger.run(ownerId, sessionId, triggerText).changes);
+      const facts = Number(this.q.deleteFactsInstr.run(ownerId, query).changes);
+      const notes = Number(this.q.deleteNotesInstr.run(ownerId, query).changes);
+      const episodes = Number(this.q.deleteEpisodesInstr.run(ownerId, query).changes);
+      const followups = Number(this.q.deleteFollowupsInstr.run(ownerId, query).changes);
       this.q.blankDiffs.run(ownerId, query);
+      return { messages, facts, notes, episodes, followups };
     });
   }
 

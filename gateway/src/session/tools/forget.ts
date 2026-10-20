@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import type { MemoryStore } from '../../memory/store.ts';
-import type { MemoryWorker } from '../../memory/worker.ts';
 import { ftsMatch } from './recall.ts';
 import type { ToolContext, ToolHandler, ToolOutcome } from './registry.ts';
 
-const ForgetSchema = z.object({ query: z.string().min(1).max(2_000) }).strict();
+/** Two characters minimum: a single-character substring can match unrelated facts and notes. */
+const ForgetSchema = z.object({ query: z.string().trim().min(2).max(2_000) }).strict();
 
 export function forgetTool(confirmText: string): ToolHandler {
   return {
@@ -25,30 +25,25 @@ export function forgetTool(confirmText: string): ToolHandler {
       const ownerId = ctx.ownerId;
       const query = parsed.data.query;
       const sessionId = ctx.sessionId;
-      const stored = await enqueueThenBump(ctx.worker, store, ownerId, async () => {
-        // Forgetting stays precise even though recall accepts any keyword.
-        store.forgetMatches(ownerId, query, ftsMatch(query, 'all'), sessionId, ctx.triggerText);
+      // Forgetting stays precise even though recall accepts any keyword.
+      const deleted = runAfterEpochBump(store, ownerId, () => {
+        const result = store.forgetMatches(ownerId, query, ftsMatch(query, 'all'), sessionId, ctx.triggerText);
         ctx.ledger.clear();
+        return result;
       });
-      if (!stored) return { ok: false, error: 'forget_failed' };
+      const total = deleted.messages + deleted.facts + deleted.notes + deleted.episodes + deleted.followups;
+      // Do not confirm a delete that matched nothing; the model must not claim success.
+      if (total === 0) return { ok: false, error: 'not_found' };
       return { ok: true, rebuild: 'forget', confirmText };
     },
   };
 }
 
-/** Enqueue the wipe, then bump the epoch so an in-flight extract returns stale. */
-export async function enqueueThenBump(
-  worker: MemoryWorker | undefined,
-  store: MemoryStore,
-  ownerId: string,
-  job: () => Promise<void>,
-): Promise<boolean> {
-  if (!worker) {
-    store.bumpEpoch(ownerId);
-    await job();
-    return true;
-  }
-  const id = worker.enqueue(ownerId, job);
+/**
+ * Forget/decline must not wait behind extraction (spec §6): bumping the epoch makes
+ * an in-flight extraction return stale, so the synchronous memory change can run now.
+ */
+export function runAfterEpochBump<T>(store: MemoryStore, ownerId: string, job: () => T): T {
   store.bumpEpoch(ownerId);
-  return worker.waitForJob(id);
+  return job();
 }
