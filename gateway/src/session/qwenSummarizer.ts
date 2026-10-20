@@ -23,6 +23,7 @@ export class QwenSummarizer implements Summarizer {
     if (!options.endpoint) throw new Error('SUMMARIZER_ENDPOINT is required');
     if (!options.model) throw new Error('SUMMARIZER_MODEL is required');
     this.opts = { language: 'zh', timeoutMs: 10000, ...options };
+    if (!this.opts.language) this.opts.language = 'zh';
   }
 
   async summarize(previous: string, entries: readonly LedgerEntry[]): Promise<string> {

@@ -16,6 +16,8 @@ describe('QwenSummarizer', () => {
         const payload = JSON.parse(body) as { model: string; messages: Array<{ role: string; content: string }> };
         expect(payload.model).toBe('fixture-model');
         expect(payload.messages.map((message) => message.role)).toEqual(['system', 'user']);
+        expect(payload.messages[0]?.content).toContain('中文摘要');
+        expect(payload.messages[1]?.content).toContain('fixture user');
         res.setHeader('content-type', 'application/json');
         res.end(JSON.stringify({ choices: [{ message: { content: 'fixture summary' } }] }));
       });
