@@ -6,6 +6,7 @@ dist/
 build/
 .dart_tool/
 .superpowers/
+.worktrees/
 !.env.example
 
 # generated / third-party assets
@@ -25,3 +26,5 @@ docs/Qwen/*
 docs/seeduplex/*
 !docs/Qwen/.gitkeep
 !docs/seeduplex/.gitkeep
+# local screenshots only; probe scripts and reports stay trackable
+docs/testing/*.png
