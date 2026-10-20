@@ -13,6 +13,40 @@ void main() {
     expect(q.activeResponseSeq, 2);
   });
 
+  test('holds playback until the start cushion fills', () {
+    final q = PlaybackQueue(startCushionSamples: 2400);
+    q.start(3);
+    expect(q.startHeld, isTrue);
+    expect(q.accept(3, Int16List(1200)), isTrue);
+    expect(q.startHeld, isTrue);
+    expect(q.accept(3, Int16List(1200)), isTrue);
+    expect(q.startHeld, isFalse);
+  });
+
+  test('releaseStart plays a short reply without waiting for the cushion', () {
+    final q = PlaybackQueue(startCushionSamples: 2400);
+    q.start(3);
+    q.accept(3, Int16List(240));
+    expect(q.startHeld, isTrue);
+    q.releaseStart();
+    expect(q.startHeld, isFalse);
+  });
+
+  test('a new response refills the cushion', () {
+    final q = PlaybackQueue(startCushionSamples: 1200);
+    q.start(1);
+    q.accept(1, Int16List(2400));
+    expect(q.startHeld, isFalse);
+    q.start(2);
+    expect(q.startHeld, isTrue);
+  });
+
+  test('zero cushion never holds', () {
+    final q = PlaybackQueue();
+    q.start(1);
+    expect(q.startHeld, isFalse);
+  });
+
   test('stop returns played time once and rejects later chunks', () {
     final q = PlaybackQueue(sampleRate: 24000);
     q.start(7);

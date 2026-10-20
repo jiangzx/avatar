@@ -15,6 +15,8 @@ import 'playback_queue.dart';
 const int nativePlaybackSampleRate = 24000;
 const int nativePlaybackChannels = 1;
 const int nativePlaybackFeedThreshold = 12000; // TUNABLE: 500 ms at 24 kHz
+const int nativePlaybackStartCushionMs = 1000; // TUNABLE: cover upstream pauses right after the first words
+const int nativePlaybackStartWaitMaxMs = 1200; // TUNABLE: start anyway when the stream ramps slower than this
 
 class PluginNativeAudioIO implements NativeAudioIO {
   PluginNativeAudioIO({AudioRecorder? recorder, FillerAudioConfig? filler})
@@ -27,8 +29,11 @@ class PluginNativeAudioIO implements NativeAudioIO {
       ? null
       : FillerPlayer(sink: _FillerSink(this), cfg: _fillerCfg, sampleRate: nativePlaybackSampleRate, onError: _onFillerError);
   Timer? _fillerTimer;
+  Timer? _startTimer;
   final PlaybackQueue _queue = PlaybackQueue(
     sampleRate: nativePlaybackSampleRate,
+    startCushionSamples:
+        nativePlaybackSampleRate * nativePlaybackStartCushionMs ~/ 1000,
   );
   final PcmFrameAccumulator _frames = PcmFrameAccumulator(320);
   final Queue<_PendingChunk> _pending = Queue<_PendingChunk>();
@@ -98,6 +103,8 @@ class PluginNativeAudioIO implements NativeAudioIO {
   Future<void> startResponse(int responseSeq) async {
     if (responseSeq <= 0) return;
     await _ensurePlayback();
+    _startTimer?.cancel();
+    _startTimer = null;
     _pending.clear();
     _activeSeq = responseSeq;
     _queue.start(responseSeq);
@@ -119,13 +126,34 @@ class PluginNativeAudioIO implements NativeAudioIO {
       }
     }
     _pending.add(_PendingChunk(responseSeq, Int16List.fromList(pcm24k)));
+    if (_queue.startHeld) {
+      // Wait for the cushion; the cap keeps a slow or short stream from stalling playback.
+      _startTimer ??= Timer(
+        const Duration(milliseconds: nativePlaybackStartWaitMaxMs),
+        () {
+          _startTimer = null;
+          _releaseStart();
+          unawaited(_drainPending());
+        },
+      );
+    } else {
+      _releaseStart();
+    }
     await _drainPending();
     FlutterPcmSound.start();
+  }
+
+  /// Lets queued audio start playing before the cushion filled.
+  void _releaseStart() {
+    _startTimer?.cancel();
+    _startTimer = null;
+    _queue.releaseStart();
   }
 
   @override
   Future<void> endResponse(int responseSeq) async {
     if (_activeSeq != responseSeq) return;
+    _releaseStart();
     _queue.end(responseSeq);
     await _drainPending();
     if (!_queue.hasFedSamples && _pending.isEmpty) _finishPlaybackIfReady();
@@ -144,6 +172,8 @@ class PluginNativeAudioIO implements NativeAudioIO {
     if (_activeSeq == null) {
       return const PlayedAudio(responseSeq: 0, playedMs: 0);
     }
+    _startTimer?.cancel();
+    _startTimer = null;
     _filler?.stop();
     final result = _queue.stop(reason);
     _activeSeq = null;
@@ -203,6 +233,8 @@ class PluginNativeAudioIO implements NativeAudioIO {
   Future<void> stop() async {
     _fillerTimer?.cancel();
     _fillerTimer = null;
+    _startTimer?.cancel();
+    _startTimer = null;
     _filler?.stop();
     await _subscription?.cancel();
     _subscription = null;
@@ -269,6 +301,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
   }
 
   Future<void> _drainPending() async {
+    if (_queue.startHeld) return;
     if (_feedInFlight) return;
     if (_pending.isEmpty) return;
     final next = _pending.removeFirst();

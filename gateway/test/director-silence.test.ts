@@ -83,7 +83,6 @@ describe('substantive conversation silence', () => {
       { stage: 'context', previousTexts: [] },
       { stage: 'check', previousTexts: [cfg.contextText] },
       { stage: 'leave', previousTexts: [cfg.contextText, cfg.checkContextText] },
-      { stage: 'checkin', previousTexts: [cfg.contextText, cfg.checkContextText, cfg.leaveText] },
     ]);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded(cfg.checkinText);
@@ -112,12 +111,12 @@ describe('substantive conversation silence', () => {
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('leave承接');
     await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
-    expect(s.requests.at(-1)?.fallbackText).toBe('checkin承接');
+    // The fourth stage is configured copy, never a topic-continuation plan.
+    expect(s.requests.at(-1)).toEqual({ cue: 'followup', instruction: cfg.checkinInstruction, fallbackText: cfg.checkinText });
     expect(contexts).toEqual([
       { stage: 'context', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: [] },
       { stage: 'check', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: ['context承接'] },
       { stage: 'leave', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: ['context承接', 'check承接'] },
-      { stage: 'checkin', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: ['context承接', 'check承接', 'leave承接'] },
     ]);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('checkin承接');
@@ -167,13 +166,14 @@ describe('substantive conversation silence', () => {
     s.d.onAiTurnEnded('leave承接');
     await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
     expect(s.requests).toHaveLength(4);
-    // Qwen renders `instruction`; Seeduplex speaks `fallbackText`. Both carry the planned line.
-    expect(s.requests.at(-1)).toEqual({ cue: 'followup', instruction: 'READ "checkin承接"', fallbackText: 'checkin承接' });
+    // Qwen renders `instruction`; Seeduplex speaks `fallbackText`. Both carry the configured
+    // check-in so neither adapter can drift into topic continuation.
+    expect(s.requests.at(-1)).toEqual({ cue: 'followup', instruction: cfg.checkinInstruction, fallbackText: cfg.checkinText });
     s.d.onAiTurnStarted();
-    s.d.onAiTurnEnded('checkin承接');
+    s.d.onAiTurnEnded(cfg.checkinText);
     await vi.advanceTimersByTimeAsync(cfg.restAfterMs);
     expect(s.restCount()).toBe(1);
-    expect(contexts.map((c) => c.stage)).toEqual(['context', 'check', 'leave', 'checkin']);
+    expect(contexts.map((c) => c.stage)).toEqual(['context', 'check', 'leave']);
     s.d.stop();
   });
 
@@ -219,7 +219,7 @@ describe('substantive conversation silence', () => {
     s.d.onAiTurnEnded(cfg.leaveText);
     await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
     expect(s.requests.map((r) => r.fallbackText)).toEqual([cfg.contextText, cfg.checkContextText, cfg.leaveText, cfg.checkinText]);
-    expect(calls).toBe(4);
+    expect(calls).toBe(3);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded(cfg.checkinText);
     await vi.advanceTimersByTimeAsync(cfg.restAfterMs);
@@ -295,7 +295,7 @@ describe('substantive conversation silence', () => {
       '走累了，脚酸着也不好受。',
       'check承接',
       'leave承接',
-      'checkin承接',
+      cfg.checkinText,
     ]);
     s.d.stop();
   });

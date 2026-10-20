@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的主动链已在 2026-10-20 完成两轮修正，当前为四段式：context/check/leave/checkin 分别约 6/8/10/10 秒，四段都由共享文本模型按阶段生成与上下文相关的主动接话（带前文去重和明确收尾判定），失败时回退配置文案；第四段客气确认用户是否还在听并说明随时可以接着聊。Qwen 与 Seeduplex 共用同一 Director 行为（详见下文）。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，真机首句恢复为短问候，用户已确认首句正常、不再念提示词。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
+Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的主动链已在 2026-10-20 完成三轮修正，当前为四段式：context/check/leave/checkin 分别约 6/8/10/10 秒；前三段由共享文本模型按阶段生成与上下文相关的主动接话（带前文去重和明确收尾判定），失败时回退配置文案；第四段固定使用配置文案，客气确认用户是否还在听并说明随时可以接着聊（第四轮真机反馈后不再经过接话规划器）。Qwen 与 Seeduplex 共用同一 Director 行为（详见下文）。客户端在每轮回复起播前先缓冲约 1 秒音频（最多等 1.2 秒），压住 Seeduplex 首块音频后的上游顿挫。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，真机首句恢复为短问候，用户已确认首句正常、不再念提示词。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
 
 ## 打断与沉默：已踩过的坑
 
@@ -304,6 +304,16 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - TDD：`silence.test.ts` 覆盖新 `SilencePlan`、stage/previousTexts、`close`、空 `assistantText`、预算与取消；`director-silence.test.ts` 覆盖三段都规划、前文累积、`close` 停止、规划异常回退、迟到结果丢弃；`director.test.ts`、`session.test.ts` 同步新输入形状。`npm test -w gateway` → 39 files / 440 tests passed；根 `npm test` → protocol 6、gateway 440、avatar-core 103 passed；`npm run typecheck -w gateway` 与 `git diff --check` 通过。
 - 待办：重启 8787 需再次征得用户同意；真机复验重点听三段是否顺着刚才的话题、是否避免重复、leave 是否自然收束。用户听感确认前不算完成。
 - 2026-10-20 后续：用户确认三段听感与预期完全一致，但要求改为四段式（6/8/10/10 秒），本节的“三段”方案由下一节取代。
+
+## 四段主动链真机反馈与根因修正（2026-10-20 第四轮）
+
+- 用户反馈：第四段没有听到“是否还在听、随时可以聊”之类的话；另外回复有时先出一个字“好”，停一下才继续说。要求仔细排查并找到根因。
+- 根因一（第四段内容）：checkin 也走了通用接话规划器。该提示词的第一条规则要求“从 userText 里抓住具体细节继续回应”，优先级压过埋在第三条里的 checkin 要求。用真实 qwen-plus 对合成场景连跑 3 次，checkin 输出全部是继续话题（例如“腿酸是活动开了…”），没有一次包含“还在听/随时可聊”。这是提示词设计冲突，不是适配器缺陷。
+- 修正一（共享 Director，适配器无关）：`fire()` 只对 context/check/leave 调用 `planSilenceLine`；checkin 直接走配置文案 `checkinInstruction`（Qwen 渲染）与 `checkinText`（Seeduplex 直说）。规划提示词中删除 checkin 阶段，避免规则冲突。`SilenceContext.stage` 收窄为实际会规划的三个阶段。
+- 根因二（“好”后停顿）：用合成中文语音直连真实 Seeduplex 探测（不涉及真实对话内容），两轮里第一段音频之后到第二段音频的间隔分别为 231 ms 和 472 ms，后续间隔明显更小；而客户端 `FlutterPcmSound` 在收到第一块音频时立刻 `play()`，没有起播缓冲，插件内部只有最小缓冲。上游一起播顿挫就直接成为可听见的“一个字后停一下”。属于“上游流式起播间隔 + 客户端无起播缓冲”的组合根因，不是适配器丢包，也不是网关转发延迟。
+- 修正二（客户端，Qwen/Seeduplex 共用）：`PlaybackQueue` 增加 `startCushionSamples`，`PluginNativeAudioIO` 在每轮回复起播前先攒约 1000 ms 音频（`nativePlaybackStartCushionMs`）再喂给播放器；缓冲足够立即起播，短回复在 `response.end` 时立即释放，若上游起播明显慢于实时则由 1200 ms 定时器兜底（`nativePlaybackStartWaitMaxMs`），不会无限等待。起播缓冲只影响首个声音，不改变后续播放。探针 6 轮中首段大停顿均出现在前 3 块音频内（最大 472 ms），1000 ms 缓冲可覆盖。
+- TDD/验证：`native_playback_queue_test.dart` 新增 4 个缓冲用例，`flutter test` → 165 passed；`director-silence.test.ts` 改为“前三段规划、checkin 固定文案”，`npm test -w gateway` → 39 files / 440 tests passed；`npm run typecheck -w gateway` 通过。
+- 待办：客户端起播缓冲需重新构建 APK 才能上机；重启 8787 与安装新 APK 都需用户同意，真机确认前不算完成。
 
 ## 四段主动链（2026-10-20 第三轮）
 

@@ -21,14 +21,14 @@ export interface SilencePlan {
 
 export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
-  /** Plans one silence line. Null or no text falls back to the configured copy; close stops the ladder. */
+  /** Plans one of the first three silence lines; checkin and rest use configured copy. */
   planSilenceLine?(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null>;
   /** Once per quiet stretch, when silence reaches the rest step. */
   onQuietRest?(): void;
 }
 
 type SilenceStep = 'context' | 'check' | 'leave' | 'checkin' | 'rest';
-type PlannedSilenceStep = Exclude<SilenceStep, 'rest'>;
+type PlannedSilenceStep = Exclude<SilenceStep, 'rest' | 'checkin'>;
 
 /** Agreed defaults when a fixture omits the silence fields. Shipped roles set them in director.json. */
 const DEFAULT_CONTEXT_AFTER_MS = 6_000;
@@ -432,8 +432,10 @@ export class Director {
       this.left = true;
       return;
     }
-    // After real chat every stage is planned; a failed plan falls back to the configured copy.
-    if (step !== 'rest' && this.hadContent && this.deps.planSilenceLine) {
+    // After real chat the first three stages are planned; the fourth is a fixed, configured
+    // check-in, because a topic-continuation planner tends to keep talking instead of asking
+    // whether the user is still there. A failed plan falls back to the configured copy.
+    if (step !== 'rest' && step !== 'checkin' && this.hadContent && this.deps.planSilenceLine) {
       this.planSilenceLine(step);
       return;
     }
