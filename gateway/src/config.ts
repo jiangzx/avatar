@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve, sep } from 'node:path';
 import { z } from 'zod';
+import type { Language } from '@anyidea/protocol';
 import type { DirectorConfig } from './roles/types.ts';
 import type { LedgerOptions } from './session/ledger.ts';
 
@@ -12,10 +13,12 @@ export interface GatewayConfig {
   seeduplexEndpoint: string;
   seeduplexModel: string;
   seeduplexVoice: string;
+  seeduplexVoices: Record<'zh' | 'en', string>;
   qwenApiKey?: string;
   qwenEndpoint: string;
   qwenModel: string;
   qwenVoice: string;
+  qwenVoices: Record<Language, string>;
   summarizer: 'mock' | 'qwen';
   summarizerEndpoint: string;
   summarizerModel: string;
@@ -99,6 +102,17 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const rebuildBackoffBaseMs = integerEnv(env, 'REBUILD_BACKOFF_BASE_MS', 1_000, 100, 60_000);
   const rebuildBackoffMaxMs = integerEnv(env, 'REBUILD_BACKOFF_MAX_MS', 8_000, 100, 10 * 60_000);
   if (rebuildBackoffMaxMs < rebuildBackoffBaseMs) throw new Error('REBUILD_BACKOFF_MAX_MS must be at least REBUILD_BACKOFF_BASE_MS');
+  const qwenVoice = env.QWEN_VOICE ?? 'longanlingxin';
+  const qwenVoices: Record<Language, string> = {
+    zh: env.QWEN_VOICE_ZH ?? qwenVoice,
+    ja: env.QWEN_VOICE_JA ?? 'Tina',
+    en: env.QWEN_VOICE_EN ?? 'Tina',
+  };
+  const seeduplexVoice = env.SEEDUPLEX_VOICE ?? 'zh_male_xiaotian_jupiter_bigtts';
+  const seeduplexVoices: Record<'zh' | 'en', string> = {
+    zh: env.SEEDUPLEX_VOICE_ZH ?? seeduplexVoice,
+    en: env.SEEDUPLEX_VOICE_EN ?? 'en_male_tim_uranus_bigtts',
+  };
   return {
     port,
     appSecret,
@@ -106,11 +120,13 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     ...(seeduplexApiKey ? { seeduplexApiKey } : {}),
     seeduplexEndpoint,
     seeduplexModel: env.SEEDUPLEX_MODEL ?? '1.2.6.1',
-    seeduplexVoice: env.SEEDUPLEX_VOICE ?? 'zh_male_xiaotian_jupiter_bigtts',
+    seeduplexVoice: seeduplexVoices.zh,
+    seeduplexVoices,
     ...(qwenApiKey ? { qwenApiKey } : {}),
     qwenEndpoint,
     qwenModel: env.QWEN_MODEL ?? 'qwen3.8-omni-flash-realtime',
-    qwenVoice: env.QWEN_VOICE ?? 'longanlingxin',
+    qwenVoice: qwenVoices.zh,
+    qwenVoices,
     summarizer,
     summarizerEndpoint,
     summarizerModel: env.QWEN_SUMMARIZER_MODEL ?? 'qwen-flash',

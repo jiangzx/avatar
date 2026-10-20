@@ -106,6 +106,11 @@ const manager = new SessionManager(
       rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,
       rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
       modelOwnsTurns: config.adapter === 'qwen',
+      voiceFor: (language) => {
+        if (config.adapter === 'qwen') return config.qwenVoices[language];
+        if (config.adapter === 'seeduplex') return language === 'ja' ? undefined : config.seeduplexVoices[language];
+        return undefined;
+      },
       budget: budgetReport.budget,
       recallSkipPatterns: memory.recallSkipPatterns,
       ...(memory.lightAcks ? { lightAcks: memory.lightAcks } : {}),
