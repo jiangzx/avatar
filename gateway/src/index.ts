@@ -97,7 +97,7 @@ const manager = new SessionManager(
           ? new QwenAdapter({ apiKey: config.qwenApiKey!, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice })
           : new MockAdapter({ script, speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor }),
       summarizer: config.summarizer === 'qwen'
-        ? new QwenSummarizer({ apiKey: config.qwenApiKey!, endpoint: config.summarizerEndpoint, model: config.summarizerModel, language: pacing.slim.enabled ? pacing.slim.summaryLanguage : 'zh' })
+        ? new QwenSummarizer({ apiKey: config.qwenApiKey!, endpoint: config.summarizerEndpoint, model: config.summarizerModel })
         : new MockSummarizer(),
       roles,
       ledger: config.ledger,

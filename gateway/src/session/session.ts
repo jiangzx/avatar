@@ -1015,7 +1015,7 @@ export class Session {
     if (!this.ledger.needsSummary() || this.summarizeInFlight) return;
     if (Date.now() < this.summarizeRetryAt) return;
     this.summarizeInFlight = true;
-    void runWithPolicy('summarize', this.deps.summarizePolicy ?? DEFAULT_SUMMARIZE_POLICY, () => this.ledger.summarize(this.deps.summarizer)).then((r) => {
+    void runWithPolicy('summarize', this.deps.summarizePolicy ?? DEFAULT_SUMMARIZE_POLICY, () => this.ledger.summarize(this.deps.summarizer, this.language)).then((r) => {
       this.summarizeInFlight = false;
       if (r.ok) {
         this.summarizeRetryAt = 0;
@@ -1115,7 +1115,7 @@ export class Session {
       return false;
     }
     const slim = this.deps.slim;
-    const line = slim ? slim.bridge[slim.summaryLanguage] : '';
+    const line = slim ? slim.bridge[this.language] : '';
     if (line && shouldSpeakBridge(this.now() - startedAt, slim!.bridgeAfterMs, slim!.enabled)) {
       // Do not send presence ready: the bridge audio is what ends the thinking pose.
       this.adapter.createResponse({ cue: 'contextBridge', instruction: line, fallbackText: line });

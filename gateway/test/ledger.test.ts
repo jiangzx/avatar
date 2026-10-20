@@ -55,6 +55,14 @@ describe('ConversationLedger', () => {
     expect(l.recent.map((e) => e.text)).toEqual(['问3', '答3', '问4', '答4']);
   });
 
+  it('passes the language to the summarizer', async () => {
+    const l = new ConversationLedger(opts);
+    fill(l, 4);
+    let seen: string | undefined;
+    await l.summarize({ summarize: async (_prev, _entries, language) => { seen = language; return 'S'; } }, 'ja');
+    expect(seen).toBe('ja');
+  });
+
   it('keeps entries appended while the summary is running', async () => {
     const l = new ConversationLedger(opts);
     fill(l, 4);

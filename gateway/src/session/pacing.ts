@@ -25,10 +25,10 @@ const PacingSchema = z.object({
     intervalMs: z.number().int().min(60_000).max(3_600_000),
     maxDeferMs: z.number().int().min(0).max(600_000),
     bridgeAfterMs: z.number().int().min(0).max(10_000),
-    summaryLanguage: z.enum(['zh', 'ja']),
     bridge: z.object({
       zh: z.string().min(1).max(80),
       ja: z.string().min(1).max(80),
+      en: z.string().min(1).max(80),
     }).strict(),
   }).strict(),
 }).strict();

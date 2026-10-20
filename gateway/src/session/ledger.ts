@@ -9,7 +9,7 @@ export interface LedgerEntry {
 }
 
 export interface Summarizer {
-  summarize(previous: string, entries: readonly LedgerEntry[]): Promise<string>;
+  summarize(previous: string, entries: readonly LedgerEntry[], language?: Language): Promise<string>;
 }
 
 export interface LedgerOptions {
@@ -67,14 +67,14 @@ export class ConversationLedger {
   }
 
   /** Compresses everything before the last `keepRecentTurns` user turns. Returns true if applied. */
-  async summarize(summarizer: Summarizer): Promise<boolean> {
+  async summarize(summarizer: Summarizer, language: Language = 'zh'): Promise<boolean> {
     if (this.summarizing) return false;
     const cut = this.keepFromIndex();
     if (cut === 0) return false;
     this.summarizing = true;
     const generation = this.generation;
     try {
-      const next = await summarizer.summarize(this.summaryText, this.entries.slice(0, cut));
+      const next = await summarizer.summarize(this.summaryText, this.entries.slice(0, cut), language);
       if (generation !== this.generation) return false;
       this.summaryText = next;
       this.entries.splice(0, cut);

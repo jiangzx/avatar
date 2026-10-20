@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ServerMessage } from '@anyidea/protocol';
+import type { Language, ServerMessage } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
 import type { SessionConfig } from '../src/adapters/types.ts';
 import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
@@ -113,8 +113,7 @@ const slimOn: NonNullable<PacingConfig['slim']> = {
   intervalMs: 1_500,
   maxDeferMs: 5_000,
   bridgeAfterMs: 400,
-  summaryLanguage: 'zh',
-  bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。' },
+  bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。', en: 'Let me think about where we were.' },
 };
 
 function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessionId?: string, noticePending = false) {
@@ -393,6 +392,27 @@ describe('Session', () => {
     expect(s.session.ledger.summary).toBe('助手：你好呀；用户：第一句；助手：我在听');
     expect(s.mocks[0].instructions).toContain('助手：你好呀；用户：第一句；助手：我在听');
     expect(s.mocks[0].instructions).toContain('用户：第二句');
+  });
+
+  it('summarizes in the session language', async () => {
+    const languages: Array<Language | undefined> = [];
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'ja'], defaultLanguage: 'zh' });
+    const s = setup(
+      {
+        roles,
+        ledger: { keepRecentTurns: 1, summarizeAfterTurns: 1, summarizeAfterTokens: 10_000 },
+        summarizer: { summarize: async (_prev, _entries, language) => { languages.push(language); return 'S'; } },
+      },
+      { ...ownedCtx, language: 'ja' },
+    );
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第一句' });
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第二句' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(languages).toEqual(['ja']);
+    s.session.end();
   });
 
   it('backs off repeated summarizer failures', async () => {
@@ -1264,6 +1284,35 @@ describe('Session', () => {
     expect(assistantText(s.sent, 2)).toBe(slimOn.bridge.zh);
     expect(of(s.sent, 'presence')).toEqual([{ type: 'presence', phase: 'refreshing' }]);
     expect(of(s.sent, 'error')).toEqual([]);
+    s.session.end();
+  });
+
+  it('speaks the bridge line in the session language', async () => {
+    let created = 0;
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'ja'], defaultLanguage: 'zh' });
+    const s = setup(
+      {
+        roles,
+        slim: slimOn,
+        adapterFactory: () => {
+          const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+          created++;
+          if (created === 2) {
+            const connect = m.connect.bind(m);
+            vi.spyOn(m, 'connect').mockImplementation(async (c) => {
+              await new Promise<void>((resolve) => setTimeout(resolve, 500));
+              return connect(c);
+            });
+          }
+          return m;
+        },
+      },
+      { ...ownedCtx, language: 'ja' },
+    );
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(600); // the delayed reconnect lands past bridgeAfterMs
+    await vi.advanceTimersByTimeAsync(2500); // the longer ja line needs more mock streaming time
+    expect(assistantText(s.sent, 2)).toBe(slimOn.bridge.ja);
     s.session.end();
   });
 

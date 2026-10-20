@@ -10,10 +10,10 @@
     "intervalMs": 1200000,
     "maxDeferMs": 120000,
     "bridgeAfterMs": 400,
-    "summaryLanguage": "zh",
     "bridge": {
       "zh": "我想想刚才聊到哪。",
-      "ja": "さっきの続きを思い出すね。"
+      "ja": "さっきの続きを思い出すね。",
+      "en": "Let me think about where we were."
     }
   }
 }
