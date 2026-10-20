@@ -621,10 +621,10 @@ describe('Session', () => {
   it('restarts silence after a proactive line is cut off while nobody is speaking', async () => {
     const s = setup();
     await greetAndFinish(s);
-    await vi.advanceTimersByTimeAsync(5100);
+    await vi.advanceTimersByTimeAsync(6100);
     expect(of(s.sent, 'response.start').map((m) => m.kind)).toEqual(['greeting', 'followup']);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
-    await vi.advanceTimersByTimeAsync(5100);
+    await vi.advanceTimersByTimeAsync(6100);
     expect(of(s.sent, 'response.start').map((m) => m.kind)).toEqual(['greeting', 'followup', 'followup']);
   });
 

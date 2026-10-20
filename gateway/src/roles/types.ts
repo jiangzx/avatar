@@ -25,13 +25,15 @@ export interface DirectorConfig {
   windowMs: number;
   /** After maxConsecutive quick beats, keep offering a light topic at this interval. Absent means stay quiet. */
   companyAfterMs?: number;
-  /** Silence step 1, after playback ends. Default 5000 when omitted. */
+  /** Silence step 1, after playback ends. Default 6000 when omitted. */
   contextAfterMs?: number;
-  /** Silence step 2. Default 10000 when omitted. */
+  /** Silence step 2. Default 8000 when omitted. */
   checkAfterMs?: number;
-  /** Silence step 3, and the wait after a light reply. Default 10000 when omitted. */
+  /** Silence step 3. Default 10000 when omitted. */
   leaveAfterMs?: number;
-  /** After the short leave, wait this long still silent, then one looser line. Default 180000. */
+  /** Silence step 4, the final polite check-in. Default 10000 when omitted. */
+  checkinAfterMs?: number;
+  /** After the final check-in, wait this long still silent, then one looser line. Default 180000. */
   restAfterMs?: number;
   /** Legacy/test template. Production uses silenceDecision.speakInstruction. */
   contextInstruction?: string;
@@ -60,6 +62,9 @@ export interface DirectorConfig {
   /** Short leave after tens of seconds. Gives the user room to not reply. */
   leaveInstruction?: string;
   leaveText?: string;
+  /** Final polite check-in: are you still there, chat any time. */
+  checkinInstruction?: string;
+  checkinText?: string;
   /** Looser line after a few quiet minutes. Then proactive speech stops. */
   restInstruction?: string;
   restText?: string;

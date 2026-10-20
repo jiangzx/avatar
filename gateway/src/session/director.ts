@@ -27,15 +27,18 @@ export interface DirectorDeps {
   onQuietRest?(): void;
 }
 
-type SilenceStep = 'context' | 'check' | 'leave' | 'rest';
+type SilenceStep = 'context' | 'check' | 'leave' | 'checkin' | 'rest';
 type PlannedSilenceStep = Exclude<SilenceStep, 'rest'>;
 
 /** Agreed defaults when a fixture omits the silence fields. Shipped roles set them in director.json. */
-const DEFAULT_CONTEXT_AFTER_MS = 5_000;
-const DEFAULT_CHECK_AFTER_MS = 10_000;
+const DEFAULT_CONTEXT_AFTER_MS = 6_000;
+const DEFAULT_CHECK_AFTER_MS = 8_000;
 const DEFAULT_LEAVE_AFTER_MS = 10_000;
-/** A few quiet minutes after the short leave, then one looser line. */
+const DEFAULT_CHECKIN_AFTER_MS = 10_000;
+/** A few quiet minutes after the final check-in, then one looser line. */
 const DEFAULT_REST_AFTER_MS = 180_000;
+const DEFAULT_CHECKIN_INSTRUCTION = '用户仍然没有回应。请客气、亲切地轻声问一句用户是否还在听，并说明随时都可以接着聊，不催促、不追问。不超过 30 个字。';
+const DEFAULT_CHECKIN_TEXT = '您还在听吗？不着急，您随时想聊都可以，我一直都在。';
 const DEFAULT_REST_INSTRUCTION = '用户已经安静了好几分钟。只说「你可以先自己放空一会儿，不用急着回我。」不要提问，不要再起话题。';
 const DEFAULT_REST_TEXT = '你可以先自己放空一会儿，不用急着回我。';
 const DEFAULT_GREETING_RETRY_MS = 800;
@@ -49,6 +52,7 @@ interface SilenceCopy {
   contextAfterMs: number;
   checkAfterMs: number;
   leaveAfterMs: number;
+  checkinAfterMs: number;
   contextInstruction: string;
   contextText: string;
   presenceInstruction: string;
@@ -61,6 +65,8 @@ interface SilenceCopy {
   checkMemoryText?: string;
   leaveInstruction: string;
   leaveText: string;
+  checkinInstruction: string;
+  checkinText: string;
   restAfterMs: number;
   restInstruction: string;
   restText: string;
@@ -274,8 +280,20 @@ export class Director {
       return;
     }
     if (done === 'leave') {
-      this.eased = true;
       this.lightHold = false;
+      if (this.hadContent) {
+        // After real chat, one final polite check-in before a longer quiet stretch.
+        this.next = 'checkin';
+        this.arm();
+        return;
+      }
+      this.eased = true;
+      this.next = 'rest';
+      this.arm();
+      return;
+    }
+    if (done === 'checkin') {
+      this.eased = true;
       this.next = 'rest';
       this.arm();
       return;
@@ -492,8 +510,9 @@ export class Director {
     const s = this.silence();
     if (step === 'context') return s.contextAfterMs;
     if (step === 'check') return s.checkAfterMs;
-    if (step === 'rest') return s.restAfterMs;
-    return s.leaveAfterMs;
+    if (step === 'leave') return s.leaveAfterMs;
+    if (step === 'checkin') return s.checkinAfterMs;
+    return s.restAfterMs;
   }
 
   private silenceRequest(step: SilenceStep): ProactiveRequest {
@@ -509,6 +528,7 @@ export class Director {
     }
     if (step === 'context') return this.openingFollow(s);
     if (step === 'check') return this.checkRequest(s);
+    if (step === 'checkin') return { cue: 'followup', instruction: s.checkinInstruction, fallbackText: s.checkinText };
     if (step === 'rest') return { cue: 'followup', instruction: s.restInstruction, fallbackText: s.restText };
     return { cue: 'followup', instruction: s.leaveInstruction, fallbackText: s.leaveText };
   }
@@ -543,6 +563,7 @@ export class Director {
       contextAfterMs: c.contextAfterMs ?? DEFAULT_CONTEXT_AFTER_MS,
       checkAfterMs: c.checkAfterMs ?? DEFAULT_CHECK_AFTER_MS,
       leaveAfterMs: c.leaveAfterMs ?? DEFAULT_LEAVE_AFTER_MS,
+      checkinAfterMs: c.checkinAfterMs ?? DEFAULT_CHECKIN_AFTER_MS,
       contextInstruction: c.contextInstruction ?? c.followupInstruction,
       contextText: c.contextText ?? c.followupText,
       presenceInstruction: c.presenceInstruction ?? c.idleNoticeInstruction,
@@ -555,6 +576,8 @@ export class Director {
       checkMemoryText: c.checkMemoryText,
       leaveInstruction: c.leaveInstruction ?? c.idleNoticeInstruction,
       leaveText: c.leaveText ?? c.idleNoticeText,
+      checkinInstruction: c.checkinInstruction ?? DEFAULT_CHECKIN_INSTRUCTION,
+      checkinText: c.checkinText ?? DEFAULT_CHECKIN_TEXT,
       restAfterMs: this.restAfterMs ?? c.restAfterMs ?? DEFAULT_REST_AFTER_MS,
       restInstruction: c.restInstruction ?? DEFAULT_REST_INSTRUCTION,
       restText: c.restText ?? DEFAULT_REST_TEXT,

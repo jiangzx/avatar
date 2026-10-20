@@ -12,6 +12,7 @@ const cfg: DirectorConfig = {
   contextAfterMs: 5000,
   checkAfterMs: 10000,
   leaveAfterMs: 10000,
+  checkinAfterMs: 10000,
   quietPhrases: ['别说了'],
   greetingInstruction: 'G',
   greetingText: 'greeting',
@@ -250,6 +251,8 @@ describe('Director', () => {
     d.onUserFinal('今天去公园了');
     d.onAiTurnEnded();
     vi.advanceTimersByTime(5000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
     d.onAiTurnEnded();
     vi.advanceTimersByTime(10000);
     d.onAiTurnEnded();

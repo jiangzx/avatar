@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链已在 2026-10-20 统一修正，并按同日第二轮听感反馈继续改进：context/check/leave 三段都由共享文本模型按阶段生成与上下文相关的主动接话（带前文去重和明确收尾判定），失败时回退配置文案；Qwen 与 Seeduplex 共用同一 Director 行为（详见下文）。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，真机首句恢复为短问候，用户已确认首句正常、不再念提示词。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
+Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的主动链已在 2026-10-20 完成两轮修正，当前为四段式：context/check/leave/checkin 分别约 6/8/10/10 秒，四段都由共享文本模型按阶段生成与上下文相关的主动接话（带前文去重和明确收尾判定），失败时回退配置文案；第四段客气确认用户是否还在听并说明随时可以接着聊。Qwen 与 Seeduplex 共用同一 Director 行为（详见下文）。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，真机首句恢复为短问候，用户已确认首句正常、不再念提示词。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
 
 ## 打断与沉默：已踩过的坑
 
@@ -303,3 +303,14 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - 配置：`gateway/roles/elder-companion/director.json` 的 `silenceDecision.instruction` 改为分阶段、主动接话提示词；`speakInstruction` 允许已规划句子里的小问题（不再要求“不加问句”）。Qwen 按 instruction 生成，Seeduplex 按 `fallbackText` 直接播报，两种适配器走同一套阶段与回退逻辑。
 - TDD：`silence.test.ts` 覆盖新 `SilencePlan`、stage/previousTexts、`close`、空 `assistantText`、预算与取消；`director-silence.test.ts` 覆盖三段都规划、前文累积、`close` 停止、规划异常回退、迟到结果丢弃；`director.test.ts`、`session.test.ts` 同步新输入形状。`npm test -w gateway` → 39 files / 440 tests passed；根 `npm test` → protocol 6、gateway 440、avatar-core 103 passed；`npm run typecheck -w gateway` 与 `git diff --check` 通过。
 - 待办：重启 8787 需再次征得用户同意；真机复验重点听三段是否顺着刚才的话题、是否避免重复、leave 是否自然收束。用户听感确认前不算完成。
+- 2026-10-20 后续：用户确认三段听感与预期完全一致，但要求改为四段式（6/8/10/10 秒），本节的“三段”方案由下一节取代。
+
+## 四段主动链（2026-10-20 第三轮）
+
+- 用户要求：三段式沉默追问改为四段式，前三段间隔分别约 6、8、10 秒，再加一段约 10 秒；第四段要客气、亲切地询问用户是否还在听，并友好表示随时都可以接着聊；改动要同时应用到 Qwen 适配器，以后同类改动都要适配两种适配器。
+- 修正（仍在共享 `Director`，不区分适配器）：新增 `checkin` 阶段，顺序为 context → check → leave → checkin → rest。四段都由 `planSilenceLine` 生成；前三段的定位沿用第二轮，checkin 的语气要求是客气、亲切、轻声确认“是否还在听”，并说明随时可聊，不催促、不追问、不起新话题。
+- 时序：`contextAfterMs` 3000 → 6000，`checkAfterMs` 12000 → 8000，`leaveAfterMs` 12000 → 10000，新增 `checkinAfterMs: 10000`；`restAfterMs` 仍为 180000，在 checkin 播完后开始计时。开场后尚无实质用户话的路径仍保留三步，不进入 checkin。
+- 配置：`gateway/roles/elder-companion/director.json` 新增 `checkinInstruction` 与 `checkinText`（“您还在听吗？不着急，您随时想聊都可以，我一直都在。”）；`DirectorSchema`、`DirectorConfig` 同步，启动时校验。规划提示词加入各阶段的新间隔和 checkin 的语气规则。
+- 适配器：Qwen 与 Seeduplex 都从同一个 Director 接收同一份 `ProactiveRequest`。Qwen 的 `proactiveEvents` 使用 `instruction`（其中已由 `speakInstruction` 带上规划好的第四段句子），Seeduplex 直接播 `fallbackText`；两边的阶段、生成与回退逻辑完全一致，没有适配器专属分支。
+- TDD：`director-silence.test.ts` 覆盖四段时序、四段都规划、`previousTexts` 累积、close、异常回退、取消；`config.test.ts` 校验新时序与 checkin 文案；`director.test.ts`、`session.test.ts` 同步默认时长与四段推进。`npm test -w gateway` → 39 files / 440 tests passed；根 `npm test` → protocol 6、gateway 440、avatar-core 103 passed；`npm run typecheck -w gateway` 与 `git diff --check` 通过。
+- 待办：重启 8787 需再次征得用户同意；真机复验四段间隔和第四段的客气亲切感，用户听感确认前不算完成。

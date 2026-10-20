@@ -154,6 +154,7 @@ const DirectorSchema = z.object({
   contextAfterMs: z.number().int().positive().optional(),
   checkAfterMs: z.number().int().positive().optional(),
   leaveAfterMs: z.number().int().positive().optional(),
+  checkinAfterMs: z.number().int().positive().optional(),
   restAfterMs: z.number().int().positive().optional(),
   contextInstruction: z.string().min(1).optional(),
   /** Spoken step 1 fallback when the judged continuation is declined. */
@@ -173,6 +174,8 @@ const DirectorSchema = z.object({
   checkMemoryText: z.string().min(1).optional(),
   leaveInstruction: z.string().min(1).optional(),
   leaveText: z.string().min(1).optional(),
+  checkinInstruction: z.string().min(1).optional(),
+  checkinText: z.string().min(1).optional(),
   restInstruction: z.string().min(1).optional(),
   restText: z.string().min(1).optional(),
   lightPhrases: z.array(z.string().min(1)).optional(),
