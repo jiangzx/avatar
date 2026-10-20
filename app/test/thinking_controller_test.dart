@@ -186,6 +186,42 @@ void main() {
     expect(t.tick(9000), isEmpty);
   });
 
+  test('a context refresh shows thinking and never a filler, even with fillers enabled', () {
+    final t = make();
+    expect(states(t.onContextRefresh()), ['thinking']);
+    t.onUserTranscript();
+    t.onResponseStart(500, reply: true);
+    t.onFillerDone(600);
+    expect(t.tick(9000).whereType<PlayFiller>(), isEmpty);
+    expect(t.fillersThisTurn, 0);
+  });
+
+  test('a context refresh does not enable the long-wait filler path', () {
+    final t = make();
+    t.onContextRefresh();
+    expect(t.tick(9000).whereType<PlayFiller>(), isEmpty);
+    expect(t.fillersThisTurn, 0);
+  });
+
+  test('onContextRefreshDone only leaves thinking; later calls are no-ops', () {
+    final t = make();
+    expect(t.onContextRefreshDone(), isEmpty); // not thinking yet
+    t.onContextRefresh();
+    expect(states(t.onContextRefreshDone()), ['idle']);
+    expect(t.onContextRefreshDone(), isEmpty);
+  });
+
+  test('a filler turn is untouched by a refresh that arrives before speech', () {
+    final t = make();
+    t.onContextRefresh();
+    t.onContextRefreshDone();
+    t.onVadSpeaking(0);
+    t.onUserTranscript();
+    t.onVadSilent(1000);
+    t.tick(1180);
+    expect(t.tick(2380).whereType<PlayFiller>(), hasLength(1)); // a real user turn still fills
+  });
+
   test('gives up thinking after thinkingMaxMs', () {
     final t = withFiller();
     final c = t.tick(21180);

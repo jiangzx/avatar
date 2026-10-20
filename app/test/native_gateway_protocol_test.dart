@@ -24,4 +24,14 @@ void main() {
     expect(parseServerMessage({'type': 'transcript.user', 'text': 'text', 'final': true}), isA<TranscriptUser>());
     expect(parseServerMessage({'type': 'unknown'}), isNull);
   });
+
+  test('parses presence phases and drops unknown ones', () {
+    final refreshing = parseServerMessage({'type': 'presence', 'phase': 'refreshing'});
+    expect(refreshing, isA<Presence>());
+    expect((refreshing! as Presence).phase, 'refreshing');
+    final ready = parseServerMessage({'type': 'presence', 'phase': 'ready'});
+    expect((ready! as Presence).phase, 'ready');
+    expect(parseServerMessage({'type': 'presence', 'phase': 'warming-up'}), isNull);
+    expect(parseServerMessage({'type': 'presence'}), isNull);
+  });
 }

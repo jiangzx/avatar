@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@anyidea/protocol';
-import { AppController, type AppConfig, type AppDeps, type ClientLike, type PlaybackLike } from '../src/app.ts';
+import { AppController, THINKING_TIMEOUT_MS, type AppConfig, type AppDeps, type ClientLike, type PlaybackLike } from '../src/app.ts';
 import { PlaybackGate } from '../src/audio/playbackGate.ts';
 import type { PlaybackEvents } from '../src/audio/player.ts';
 import type { VadCallbacks } from '../src/audio/vad.ts';
@@ -237,5 +237,48 @@ describe('AppController', () => {
       expect(subs.at(-1)?.final, finish).toBe(true);
       expect(subs.filter((s) => s.final), finish).toHaveLength(1);
     }
+  });
+
+  it('shows thinking on a context refresh without a reconnect status', async () => {
+    const t = await started();
+    t.server({ type: 'presence', phase: 'refreshing' });
+    expect(t.states().at(-1)).toBe('thinking');
+    expect(t.posted.filter((m) => m.type === 'status' && m.status === 'model_reconnecting')).toEqual([]);
+  });
+
+  it('leaves the refresh thinking on presence ready', async () => {
+    const t = await started();
+    t.server({ type: 'presence', phase: 'refreshing' });
+    t.server({ type: 'presence', phase: 'ready' });
+    expect(t.states().at(-1)).toBe('idle');
+  });
+
+  it('does not snap back to idle on the thinking timeout during a refresh', async () => {
+    const t = await started();
+    t.server({ type: 'presence', phase: 'refreshing' });
+    await vi.advanceTimersByTimeAsync(THINKING_TIMEOUT_MS + 1000);
+    expect(t.states().at(-1)).toBe('thinking');
+    t.server({ type: 'presence', phase: 'ready' });
+    expect(t.states().at(-1)).toBe('idle');
+  });
+
+  it('a refresh never cuts off audio that is already playing', async () => {
+    const t = await started();
+    playing(t, 1);
+    t.server({ type: 'presence', phase: 'refreshing' });
+    t.server({ type: 'presence', phase: 'ready' });
+    expect(t.states().at(-1)).toBe('speaking');
+    expect(t.pb().activeSeq).toBe(1);
+  });
+
+  it('the thinking timeout still works after a refresh completes', async () => {
+    const t = await started();
+    t.server({ type: 'presence', phase: 'refreshing' });
+    t.server({ type: 'presence', phase: 'ready' });
+    t.vadCb().onStart(performance.now());
+    t.vadCb().onEnd();
+    expect(t.states().at(-1)).toBe('thinking');
+    await vi.advanceTimersByTimeAsync(THINKING_TIMEOUT_MS + 1000);
+    expect(t.states().at(-1)).toBe('idle');
   });
 });

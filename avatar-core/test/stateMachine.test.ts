@@ -34,4 +34,19 @@ describe('avatar state machine', () => {
     expect(nextState('speaking', 'thinkingTimeout')).toBe('speaking');
     expect(nextState('thinking', 'thinkingTimeout')).toBe('idle');
   });
+
+  it('shows thinking while the gateway refreshes its context', () => {
+    expect(nextState('idle', 'refreshStart')).toBe('thinking');
+    expect(nextState('listening', 'refreshStart')).toBe('thinking');
+    expect(nextState('thinking', 'refreshStart')).toBe('thinking');
+    // A refresh never cuts off audio that is already playing.
+    expect(nextState('speaking', 'refreshStart')).toBe('speaking');
+  });
+
+  it('leaves thinking only when the refresh confirms ready', () => {
+    expect(nextState('thinking', 'refreshEnd')).toBe('idle');
+    expect(nextState('idle', 'refreshEnd')).toBe('idle');
+    expect(nextState('listening', 'refreshEnd')).toBe('listening');
+    expect(nextState('speaking', 'refreshEnd')).toBe('speaking');
+  });
 });

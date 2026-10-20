@@ -6,7 +6,9 @@ export type AvatarInput =
   | 'playbackEnded'
   | 'interrupted'
   | 'cancelled'
-  | 'thinkingTimeout';
+  | 'thinkingTimeout'
+  | 'refreshStart'
+  | 'refreshEnd';
 
 export function nextState(state: AvatarState, input: AvatarInput): AvatarState {
   switch (input) {
@@ -22,6 +24,10 @@ export function nextState(state: AvatarState, input: AvatarInput): AvatarState {
     case 'cancelled':
       return state === 'speaking' || state === 'thinking' ? 'idle' : state;
     case 'thinkingTimeout':
+      return state === 'thinking' ? 'idle' : state;
+    case 'refreshStart':
+      return state === 'speaking' ? state : 'thinking'; // never cut off playing audio
+    case 'refreshEnd':
       return state === 'thinking' ? 'idle' : state;
   }
 }

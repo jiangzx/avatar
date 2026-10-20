@@ -98,6 +98,18 @@ class ThinkingController {
 
   void onModelReconnecting() => _reconnecting = true;
 
+  /// A gateway-side context refresh: show thinking without arming any filler.
+  List<ThinkCommand> onContextRefresh() {
+    _phase = _Phase.thinking;
+    return const [SetAvatarState('thinking')];
+  }
+
+  List<ThinkCommand> onContextRefreshDone() {
+    if (_phase != _Phase.thinking) return const [];
+    _phase = _Phase.idle;
+    return const [SetAvatarState('idle')];
+  }
+
   List<ThinkCommand> onResponseStart(int now, {required bool reply}) {
     _anyResponseStarted = true;
     if (reply) _replyStarted = true;
