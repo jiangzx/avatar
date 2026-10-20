@@ -49,6 +49,20 @@ class PluginNativeAudioIO implements NativeAudioIO {
   bool _inputEnabled = true;
   int _acceptedChunks = 0;
   int _droppedChunks = 0;
+  // Content-free playback diagnostics: arrival gaps vs local feed waits show where a stall came from.
+  int _pushCount = 0;
+  int _acceptedSampleCount = 0;
+  int? _firstPushAtMs;
+  int? _previousPushAtMs;
+  int _arrivalGapMaxMs = 0;
+  int _arrivalGapMaxAtMs = 0;
+  int _arrivalGapOver500 = 0;
+  int? _startReportedAtMs;
+  int _feedWaitCount = 0;
+  int _feedWaitMaxMs = 0;
+  int _feedWaitMaxAtMs = 0;
+  int? _waitingSinceMs;
+  bool _endReported = false;
 
   @override
   AudioPlaybackSnapshot get playbackSnapshot => AudioPlaybackSnapshot(
@@ -106,6 +120,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
     _startTimer?.cancel();
     _startTimer = null;
     _pending.clear();
+    _resetPlaybackDiag();
     _activeSeq = responseSeq;
     _queue.start(responseSeq);
   }
@@ -117,6 +132,8 @@ class PluginNativeAudioIO implements NativeAudioIO {
       return;
     }
     _acceptedChunks++;
+    _acceptedSampleCount += pcm24k.length;
+    _noteArrival();
     // Safety net: the reply must never queue behind more than a short faded filler tail.
     if (_filler?.active ?? false) {
       try {
@@ -176,6 +193,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
     _startTimer = null;
     _filler?.stop();
     final result = _queue.stop(reason);
+    _reportPlaybackEnd(reason.name, result.playedMs);
     _activeSeq = null;
     _pending.clear();
     await _feedFuture;
@@ -294,6 +312,14 @@ class PluginNativeAudioIO implements NativeAudioIO {
     final seq = _activeSeq;
     if (seq == null) return;
     _queue.updateRemaining(seq, remainingFrames);
+    // The native queue is empty and nothing is waiting locally: the next fed chunk is the lead time.
+    if (remainingFrames == 0 &&
+        _pending.isEmpty &&
+        !_queue.isEnded &&
+        !_queue.startHeld &&
+        _queue.hasFedSamples) {
+      _waitingSinceMs ??= _nowMs();
+    }
     await _drainPending();
     if (_queue.isEnded && remainingFrames == 0 && _pending.isEmpty) {
       _finishPlaybackIfReady();
@@ -306,6 +332,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
     if (_pending.isEmpty) return;
     final next = _pending.removeFirst();
     if (next.responseSeq != _activeSeq) return _drainPending();
+    _noteFirstFeed(next.responseSeq);
     _feedInFlight = true;
     _queue.markFed(next.responseSeq, next.pcm.length);
     final feed = _feedChunk(next);
@@ -340,9 +367,96 @@ class PluginNativeAudioIO implements NativeAudioIO {
     final seq = _activeSeq;
     if (seq == null || !_queue.isEnded) return;
     final result = _queue.stop(StopReason.ended);
+    _reportPlaybackEnd('ended', result.playedMs);
     _activeSeq = null;
     _onPlaybackEnded?.call(result);
   }
+
+  static int _nowMs() => DateTime.now().millisecondsSinceEpoch;
+
+  void _resetPlaybackDiag() {
+    _pushCount = 0;
+    _acceptedSampleCount = 0;
+    _firstPushAtMs = null;
+    _previousPushAtMs = null;
+    _arrivalGapMaxMs = 0;
+    _arrivalGapMaxAtMs = 0;
+    _arrivalGapOver500 = 0;
+    _startReportedAtMs = null;
+    _feedWaitCount = 0;
+    _feedWaitMaxMs = 0;
+    _feedWaitMaxAtMs = 0;
+    _waitingSinceMs = null;
+    _endReported = false;
+  }
+
+  void _noteArrival() {
+    final now = _nowMs();
+    final first = _firstPushAtMs;
+    if (first == null) {
+      _firstPushAtMs = now;
+    } else {
+      final previous = _previousPushAtMs;
+      if (previous != null) {
+        final gap = now - previous;
+        if (gap > _arrivalGapMaxMs) {
+          _arrivalGapMaxMs = gap;
+          _arrivalGapMaxAtMs = now - first;
+        }
+        if (gap >= 500) _arrivalGapOver500++;
+      }
+    }
+    _previousPushAtMs = now;
+    _pushCount++;
+  }
+
+  /// Reports the start cushion result and closes any feed wait.
+  void _noteFirstFeed(int seq) {
+    final now = _nowMs();
+    final waiting = _waitingSinceMs;
+    if (waiting != null) {
+      _waitingSinceMs = null;
+      _feedWaitCount++;
+      final wait = now - waiting;
+      if (wait > _feedWaitMaxMs) {
+        _feedWaitMaxMs = wait;
+        _feedWaitMaxAtMs = now - (_firstPushAtMs ?? now);
+      }
+    }
+    if (_startReportedAtMs != null) return;
+    _startReportedAtMs = now;
+    final first = _firstPushAtMs;
+    _reportDiag('playback_start', {
+      'seq': seq,
+      'hold_ms': first == null ? 0 : now - first,
+      'lead_ms': (_acceptedSampleCount * 1000) ~/ nativePlaybackSampleRate,
+      'chunks': _pushCount,
+    });
+  }
+
+  void _reportPlaybackEnd(String outcome, int playedMs) {
+    if (_endReported || _pushCount == 0) return;
+    _endReported = true;
+    final seq = _activeSeq ?? 0;
+    final first = _firstPushAtMs;
+    final start = _startReportedAtMs;
+    _reportDiag('playback_end', {
+      'seq': seq,
+      'outcome': outcome,
+      'accepted_ms': (_acceptedSampleCount * 1000) ~/ nativePlaybackSampleRate,
+      'played_ms': playedMs,
+      'hold_ms': first == null || start == null ? -1 : start - first,
+      'arr_max_ms': _arrivalGapMaxMs,
+      'arr_at_ms': _arrivalGapMaxAtMs,
+      'arr_gt500': _arrivalGapOver500,
+      'feed_wait_count': _feedWaitCount,
+      'feed_wait_max_ms': _feedWaitMaxMs,
+      'feed_wait_at_ms': _feedWaitMaxAtMs,
+    });
+  }
+
+  void _reportDiag(String event, Map<String, Object> fields) =>
+      logcatDiagSink(formatDiag(event, fields));
 }
 
 class _PendingChunk {
