@@ -7,6 +7,7 @@ const config: SilenceDecisionConfig = {
   instruction: 'Return the silence decision as JSON.',
   speakInstruction: 'READ {continuation}',
   maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
+  variationHints: { greeting: ['先问候再提问'], checkin: ['先确认还在听，再说随时可以聊'] },
   policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
 };
 const context = {
@@ -39,6 +40,12 @@ describe('silence planner', () => {
     expect(JSON.parse(input.user)).toEqual(checkContext);
     expect(input.maxTokens).toBe(128);
     expect(input.temperature).toBe(0.8);
+    expect(input.jsonMode).toBe(true);
+  });
+
+  it('accepts a decision wrapped in a code fence', async () => {
+    const plan = createSilencePlanner(client('```json\n{"speak":true,"text":"您接着说。"}\n```'), config);
+    expect(await plan(context, signal())).toEqual({ text: '您接着说。' });
   });
 
   it('closes the ladder only when the model reports a clear ending', async () => {
@@ -56,7 +63,7 @@ describe('silence planner', () => {
 
   it('plans the opening from memory when the user has not spoken', async () => {
     let input!: Parameters<TextModelClient['complete']>[0];
-    const line = '您好呀，又见面了。上次说的公园后来去了吗？';
+    const line = '王叔好呀，又见面了。上次说的公园后来去了吗？';
     const plan = createSilencePlanner({ complete: async data => {
       input = data;
       return JSON.stringify({ speak: true, text: line });
@@ -64,6 +71,18 @@ describe('silence planner', () => {
     const opening = { ...context, stage: 'greeting' as const, userText: '', assistantText: '', memorySnapshot: '上次聊到想去公园。' };
     expect(await plan(opening, signal())).toEqual({ text: line });
     expect(JSON.parse(input.user)).toEqual(opening);
+    expect(input.system).toContain('先问候再提问');
+  });
+
+  it('varies the check-in angle from configured hints', async () => {
+    let system = '';
+    const line = '您还在听吗？随时都能接着聊。';
+    const plan = createSilencePlanner({ complete: async data => {
+      system = data.system;
+      return JSON.stringify({ speak: true, text: line });
+    } }, config);
+    expect(await plan({ ...context, stage: 'checkin' }, signal())).toEqual({ text: line });
+    expect(system).toContain('先确认还在听，再说随时可以聊');
   });
 
   it('keeps the check-in content and rejects a new topic instead', async () => {

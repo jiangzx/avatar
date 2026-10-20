@@ -128,9 +128,10 @@ describe('QwenTextClient', () => {
       expect(init?.method).toBe('POST');
       const headers = init?.headers as Record<string, string>;
       expect(headers.authorization).toBe('Bearer fixture-key');
-      const body = JSON.parse(String(init?.body)) as { model: string; max_tokens: number; messages: Array<{ role: string }> };
+      const body = JSON.parse(String(init?.body)) as { model: string; max_tokens: number; response_format?: unknown; messages: Array<{ role: string }> };
       expect(body.model).toBe('qwen-plus');
       expect(body.max_tokens).toBe(80);
+      expect(body.response_format).toBeUndefined();
       expect(body.messages.map((message) => message.role)).toEqual(['system', 'user']);
       return new Response(JSON.stringify({ choices: [{ message: { content: '{"ops":[]}' } }] }), { status: 200 });
     });
@@ -138,6 +139,19 @@ describe('QwenTextClient', () => {
     const client = new QwenTextClient({ apiKey: 'fixture-key', endpoint: 'https://example.test/chat', model: 'qwen-plus' });
     const signal = new AbortController().signal;
     await expect(client.complete({ system: 'sys', user: 'user', maxTokens: 80, signal })).resolves.toBe('{"ops":[]}');
+  });
+
+  it('asks for a JSON object only when json mode is requested', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { response_format?: unknown };
+      expect(body.response_format).toEqual({ type: 'json_object' });
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"speak":true}' } }] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new QwenTextClient({ apiKey: 'fixture-key', endpoint: 'https://example.test/chat', model: 'qwen-plus' });
+    await expect(client.complete({
+      system: 'sys', user: 'user', maxTokens: 80, jsonMode: true, signal: new AbortController().signal,
+    })).resolves.toBe('{"speak":true}');
   });
 
   it('hides upstream bodies behind an error code', async () => {

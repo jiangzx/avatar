@@ -8,6 +8,11 @@ export interface SilenceDecisionConfig {
   maxReplyChars: number;
   /** Sampling temperature for spoken lines; higher values vary the phrasing. */
   temperature: number;
+  /** Structural angles that push phrasing apart; hints only, never spoken verbatim. */
+  variationHints?: {
+    greeting?: readonly string[];
+    checkin?: readonly string[];
+  };
   policy: PolicySpec;
 }
 

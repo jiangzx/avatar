@@ -1,5 +1,6 @@
 export interface TextModelClient {
-  complete(input: { system: string; user: string; maxTokens: number; temperature?: number; signal: AbortSignal }): Promise<string>;
+  /** Ask the provider for one bare JSON object when jsonMode is set. */
+  complete(input: { system: string; user: string; maxTokens: number; temperature?: number; jsonMode?: boolean; signal: AbortSignal }): Promise<string>;
 }
 
 export interface QwenTextClientOptions {
@@ -16,7 +17,7 @@ export class QwenTextClient implements TextModelClient {
     if (!opts.model) throw new Error('extract_model_required');
   }
 
-  async complete(input: { system: string; user: string; maxTokens: number; temperature?: number; signal: AbortSignal }): Promise<string> {
+  async complete(input: { system: string; user: string; maxTokens: number; temperature?: number; jsonMode?: boolean; signal: AbortSignal }): Promise<string> {
     let response: Response;
     try {
       response = await fetch(this.opts.endpoint, {
@@ -30,6 +31,8 @@ export class QwenTextClient implements TextModelClient {
           ],
           temperature: input.temperature ?? 0,
           max_tokens: input.maxTokens,
+          // Supported by the OpenAI-compatible endpoint; keeps planning output parseable.
+          ...(input.jsonMode ? { response_format: { type: 'json_object' } } : {}),
         }),
         signal: input.signal,
       });

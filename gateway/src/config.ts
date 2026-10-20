@@ -139,6 +139,10 @@ const DirectorSchema = z.object({
     maxInputChars: z.number().int().min(100).max(20000),
     maxReplyChars: z.number().int().min(1).max(120),
     temperature: z.number().min(0).max(2),
+    variationHints: z.object({
+      greeting: z.array(z.string().min(1)).min(1).optional(),
+      checkin: z.array(z.string().min(1)).min(1).optional(),
+    }).strict().optional(),
     policy: z.object({
       timeoutMs: z.number().int().min(100).max(10000),
       retries: z.literal(0),

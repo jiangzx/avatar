@@ -116,6 +116,8 @@ describe('config', () => {
     expect(d.greetingMemoryText?.startsWith('您好')).toBe(true);
     expect(d.greetingMemoryText).toContain('？');
     expect(d.silenceDecision?.temperature).toBe(0.8);
+    expect(d.silenceDecision?.variationHints?.greeting).toHaveLength(3);
+    expect(d.silenceDecision?.variationHints?.checkin).toHaveLength(3);
     expect(d.silenceDecision?.instruction).toContain('greeting');
     expect(d.silenceDecision?.instruction).toContain('checkin');
     expect(d.greetingRetryMs).toBe(800);
@@ -140,6 +142,9 @@ describe('config', () => {
     } })).toThrow();
     expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
       ...decision, temperature: 3,
+    } })).toThrow();
+    expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
+      ...decision, variationHints: { checkin: [] },
     } })).toThrow();
   });
 });
