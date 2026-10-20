@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { AvatarLike } from '../src/app.ts';
 import { NativeAvatarController, type NativeAvatarDeps } from '../src/nativeAvatar.ts';
 
 function nativeAvatarFakes(): { deps: NativeAvatarDeps; avatar: { mouthCalls: unknown[] }; posts: unknown[]; removedListeners: number } {
@@ -35,6 +36,25 @@ describe('NativeAvatarController', () => {
     c.handleNativeEvent({ type: 'audio.level', rms: 9000, zcr: 0.2, dtMs: 20 });
     expect(lastState(f.posts)).toEqual({ type: 'state', state: 'thinking' });
     c.handleNativeEvent({ type: 'state', state: 'speaking' });
+    expect(lastState(f.posts)).toEqual({ type: 'state', state: 'speaking' });
+  });
+
+  it('keeps a state that arrived while the model was loading', async () => {
+    const f = nativeAvatarFakes();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const states: string[] = [];
+    f.deps.createAvatar = () => ({
+      ...f.avatar,
+      async load() { await gate; },
+      enterState(state: string) { states.push(state); },
+    }) as unknown as AvatarLike;
+    const c = new NativeAvatarController({} as HTMLElement, f.deps);
+    const started = c.start();
+    c.handleNativeEvent({ type: 'state', state: 'speaking' });
+    release();
+    await started;
+    expect(states).toContain('speaking');
     expect(lastState(f.posts)).toEqual({ type: 'state', state: 'speaking' });
   });
 

@@ -66,6 +66,8 @@ export class ActionPlayer {
   private actingDepth = 0;
   private readonly actingTimers = new Set<ReturnType<typeof setTimeout>>();
   private framingTurn = false;
+  /** Rotation captured when the turn started, restored if the turn is cancelled. */
+  private turnStartY: number | null = null;
 
   constructor(
     private readonly head: TalkingHead,
@@ -99,6 +101,16 @@ export class ActionPlayer {
     if (this.nodFrame !== null) cancelAnimationFrame(this.nodFrame);
     this.turnFrame = null;
     this.nodFrame = null;
+    // Cancelling mid-action must restore the resting pose: the head channel overrides
+    // every frame, and a half-turn would leave the avatar facing sideways.
+    const nodTarget = this.head.mtAvatar.headRotateX;
+    if (this.nodding && nodTarget) {
+      nodTarget.realtime = null;
+      nodTarget.needsUpdate = true;
+    }
+    const root = this.head.armature;
+    if (this.turning && root && this.turnStartY !== null) root.rotation.y = this.turnStartY;
+    this.turnStartY = null;
     this.turning = false;
     this.nodding = false;
     if (this.smileTimer !== null) {
@@ -195,6 +207,7 @@ export class ActionPlayer {
     this.frameTurn();
     this.pushActing(ACTION_TUNING.turn.durationMs);
     const start = root.rotation.y;
+    this.turnStartY = start;
     const duration = ACTION_TUNING.turn.durationMs;
     const t0 = performance.now();
     const generation = this.generation;
@@ -207,6 +220,7 @@ export class ActionPlayer {
         this.turnFrame = requestAnimationFrame(step);
       } else {
         root.rotation.y = start;
+        this.turnStartY = null;
         this.turning = false;
         this.releaseTurnFrame();
       }

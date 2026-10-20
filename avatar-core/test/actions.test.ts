@@ -74,10 +74,12 @@ describe('ActionPlayer lifecycle', () => {
     target.realtime = 42;
     target.needsUpdate = false;
     actions.stopAll();
+    // The cancelled nod must restore the resting head pose, not leave the last frame.
+    expect(target.realtime).toBeNull();
+    expect(target.needsUpdate).toBe(true);
     staleFrame(100);
 
-    expect(target.realtime).toBe(42);
-    expect(target.needsUpdate).toBe(false);
+    expect(target.realtime).toBeNull();
     vi.unstubAllGlobals();
   });
 
@@ -96,9 +98,11 @@ describe('ActionPlayer lifecycle', () => {
     const staleFrame = callbacks[0];
     root.rotation.y = 42;
     actions.stopAll();
+    // Restore the rotation captured when the turn started instead of freezing mid-spin.
+    expect(root.rotation.y).toBe(0);
     staleFrame(100);
 
-    expect(root.rotation.y).toBe(42);
+    expect(root.rotation.y).toBe(0);
     expect(head.setView).toHaveBeenLastCalledWith('mid', { cameraDistance: 0 });
     vi.unstubAllGlobals();
   });

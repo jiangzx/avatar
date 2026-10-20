@@ -55,12 +55,17 @@ export class NativeAvatarController {
     this.deps.post({ type: 'status', status: 'loading' });
     const avatar = this.deps.createAvatar(this.el);
     await avatar.load(this.avatarUrl, () => this.deps.post({ type: 'diag', key: 'avatar_fallback', value: '1' }));
+    if (this.ended) {
+      avatar.setRendering(false);
+      return;
+    }
     this.avatar = avatar;
     this.actions = this.deps.createActions(avatar);
     avatar.setRendering(true);
     this.deps.doc.addEventListener('visibilitychange', this.onVisibilityChange);
     this.visibilityListenerAttached = true;
-    this.transition('idle');
+    // Apply whatever state arrived while the GLB loaded; do not overwrite it with idle.
+    avatar.enterState(this.state);
   }
 
   handleNativeEvent(raw: unknown): void {
