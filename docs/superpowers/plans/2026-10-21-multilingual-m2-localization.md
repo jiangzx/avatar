@@ -862,6 +862,7 @@ git commit -m "feat(gateway): localize recall, extraction, and summaries"
 - Modify: `gateway/src/identity/registry.ts`
 - Modify: `gateway/src/config.ts`（删除旧整对象 `loadSafetyConfig`，`SafetyRules` 改为 shared + phrase；`loadSharedSafety` 成为唯一读取）
 - Modify: `gateway/src/session/emotion.ts`（删除旧整对象 `loadEmotionConfig`，`loadSharedEmotion` + `mergeEmotion` 成为唯一读取）
+- Modify: `gateway/src/i18n/load.ts`（改用 `loadSharedSafety`/`loadSharedEmotion` 与新 type）
 - Modify: `gateway/src/session/pacing.ts`（`MemoryBudgetSchema` 删除已迁走的文本字段，新增 `kanaBackfillBatch?`）
 - Modify: `gateway/config/{memory,safety,emotion}.json`（删除已迁入 `config/i18n/zh/` 的字段）
 - Test: `gateway/test/silence.test.ts`
@@ -974,7 +975,7 @@ if (stage === 'rest') return !/[？?]/.test(text);
 
 1. `gateway/config/memory.json` 删除 `forgetConfirmText`、`declineConfirmPrompt`、`declineConfirmedText`、`recallEmptyText`、`recallFoundPrefix`、`memoryNoticeKeywords`、`lightAcks`、`recallSkipPatterns`、`recallRecentQueries`；`MemoryBudgetSchema` 同步删除这些字段，保留 `recallClipChars`、`recallPhraseMaxChars`、`recallPhraseTimeoutMs`、抽取数值等，新增可选 `kanaBackfillBatch`（1–5000，默认 500）。
 2. `gateway/config/safety.json` 只保留 `minMaskedDigits`、`chineseDigits`、`invisibleCodePoints`；`gateway/src/config.ts` 删除旧 `loadSafetyConfig`，`loadSharedSafety` + `mergeSafety` 成为唯一读取；`SafetyRules` 仍为 shared + 三数组（供 `scanText`）。
-3. `gateway/config/emotion.json` 只保留 `defaultEmotion`、`debounceMs`、`revertAfterMs`、`firstSentenceMaxChars`、`priority`；`gateway/src/session/emotion.ts` 删除旧 `loadEmotionConfig`，`loadSharedEmotion` + `mergeEmotion` 成为唯一读取。
+3. `gateway/config/emotion.json` 只保留 `defaultEmotion`、`debounceMs`、`revertAfterMs`、`firstSentenceMaxChars`、`priority`；`gateway/src/session/emotion.ts` 删除旧 `loadEmotionConfig`，`loadSharedEmotion` + `mergeEmotion` 成为唯一读取。`gateway/src/i18n/load.ts` 改用 `loadSharedSafety`/`loadSharedEmotion`，不要引用已删除的旧 loader。
 4. 更新 `memory-text.test.ts`：`scanText` 用 `DEFAULT_I18N.safety`；`loadSafetyConfig` 断言改为 `loadSharedSafety` + i18n 合并词表。`emotion.test.ts` 用 `DEFAULT_I18N.emotion`。`memory-acceptance.test.ts` 的 `memoryConfig.memoryNoticeKeywords`/`recallSkipPatterns` 改用 `i18n`。
 5. `gateway/test/fixtures/**` 中若有旧的完整 safety/emotion JSON，改为 shared + i18n 两段或直接使用生产 `DEFAULT_I18N`。
 
