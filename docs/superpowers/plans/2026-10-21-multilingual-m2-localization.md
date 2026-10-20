@@ -309,6 +309,7 @@ git commit -m "feat(gateway): add i18n config loader and language rules"
 - Modify: `gateway/src/index.ts`（启动校验 elder-companion 三语；传 `budgets`）
 - Modify: `gateway/test/fixtures/roles/**`
 - Test: `gateway/test/fileCatalog.test.ts`
+- Test: `gateway/test/pacing.test.ts`
 - Test: `gateway/test/config.test.ts`
 
 **Interfaces:**
@@ -488,7 +489,7 @@ it('gives ja/en their own instruction budget while zh stays unchanged', () => {
 
 - [ ] **Step 6: 跑聚焦测试与 typecheck**
 
-Run: `npm test -w gateway -- test/fileCatalog.test.ts test/config.test.ts test/director.test.ts test/director-silence.test.ts`
+Run: `npm test -w gateway -- test/fileCatalog.test.ts test/pacing.test.ts test/config.test.ts test/director.test.ts test/director-silence.test.ts`
 Expected: PASS。
 
 Run: `npm run typecheck -w gateway`
@@ -497,7 +498,7 @@ Expected: PASS。
 - [ ] **Step 7: 提交**
 
 ```bash
-git add gateway/roles gateway/src/roles gateway/src/session/pacing.ts gateway/src/session/session.ts gateway/config/memory.json gateway/src/index.ts gateway/test/fixtures/roles gateway/test/fileCatalog.test.ts gateway/test/config.test.ts
+git add gateway/roles gateway/src/roles gateway/src/session/pacing.ts gateway/src/session/session.ts gateway/config/memory.json gateway/src/index.ts gateway/test/fixtures/roles gateway/test/fileCatalog.test.ts gateway/test/pacing.test.ts gateway/test/config.test.ts
 git commit -m "feat(gateway): add ja/en elder-companion language packs"
 ```
 
