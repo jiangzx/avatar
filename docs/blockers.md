@@ -149,3 +149,13 @@
 - 第二个状态缺口是规划器有内容时始终写入 `pending = 'context'`，即使当前阶段是 `check` 或 `leave`；播放结束后 Director 会把它误判为第一阶段并重新排 `check`，阶段状态无法可靠推进。
 - 本地修复：Director 为 `context/check/leave` 传递当前阶段；规划器返回空值或失败时只跳过当前阶段并继续下一段，成功时保留当前 `pending` 阶段；取消、过期结果、安静/打断/暂停/停止门控保持有效。Seeduplex 主动回复提交 `instruction`，由上游按上下文生成，不再直接提交 `fallbackText`。
 - 验证：`npm test -w gateway` 通过（39 个测试文件、436 项），`npm run typecheck -w gateway` 通过，`git diff --check` 通过。未重启网关、未安装 APK；当前运行网关版本和手机听感仍未验证。
+
+## 2026-10-19/20 slim-rebuild 计划执行：子代理额度耗尽
+
+- 计划 `docs/superpowers/plans/2026-10-19-slim-rebuild.md` 按 subagent-driven-development 执行，工作树 `.worktrees/slim-rebuild`（分支 `feat/slim-rebuild`）。
+- Task 1（`69e2d7d`）与 Task 2（`1382089`）已完成并通过任务复查。
+- Task 3 派发三次（composer-2.5-fast、deepseek-ai/DeepSeek-V4.1-Flash、inherit）均被账号级限流拒绝：`User Provided API Key Rate Limit Exceeded`。另有一次 reviewer 返回 `Weekly usage limit reached. It resets in 2 days.`
+- 手动验证：工作树 `git status --porcelain` 为空，HEAD 停在 `1382089`，Task 3 无任何改动落盘；主工作区无相关残留。
+- 跳过的影响：Task 3–6（摘要语言、会话接线、客户端感知、路线图）未实现；Task 1–2 的代码已在分支上，未合并。
+- 解除条件：额度恢复后继续按计划派发，或经用户同意改为其它执行方式。
+- 2026-10-21 更新：额度恢复后计划已继续执行，Task 1–5 均已落地（`69e2d7d`、`1382089`、`ef889a9`、`d0e1994`、`581d7e0` 等），Task 6 的路线图说明见 `docs/project/roadmap.md` 文首；本阻塞已解除。
