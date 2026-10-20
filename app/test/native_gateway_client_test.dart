@@ -167,6 +167,35 @@ void main() {
     expect(identity.renewCalls, 0);
   });
 
+  test('backs off when fresh session creation keeps failing after the resume window', () async {
+    final transport = FakeGatewayTransport(tokens: firstTokens);
+    final events = RecordingGatewayEvents();
+    final c = NativeGatewayClient(
+      baseUri: Uri.parse('http://gw.test'),
+      appSecret: 'secret-123456789',
+      transport: transport,
+      events: events,
+      maxResume: const Duration(milliseconds: 80),
+      reconnectBase: const Duration(milliseconds: 1),
+      reconnectMax: const Duration(milliseconds: 2),
+    );
+    await c.start();
+    transport.lastSocket.emitText(
+      '{"type":"session.ready","sessionId":"first"}',
+    );
+    transport.failResume = true;
+    transport.failFresh = true;
+    transport.lastSocket.closeUnexpectedly();
+    // Let the resume window expire with both endpoints failing.
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    final before = transport.postedPaths.where((p) => p == '/session').length;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final after = transport.postedPaths.where((p) => p == '/session').length;
+    // A hot loop would issue hundreds of POST /session calls in this window.
+    expect(after - before, lessThanOrEqualTo(5));
+    await c.close();
+  });
+
   test('resume never sends the bearer', () async {
     final transport = FakeGatewayTransport(
       tokens: firstTokens,
@@ -218,6 +247,10 @@ class FakeGatewayTransport implements GatewayTransport {
   final postedBearers = <String?>[];
   final sockets = <FakeSocket>[];
   bool hangPosts = false;
+  /// POST /session answers 401; used to test fresh-session failure handling.
+  bool failFresh = false;
+  /// POST /session/resume answers 500; used to keep the client in its retry loop.
+  bool failResume = false;
 
   FakeSocket get lastSocket => sockets.last;
 
@@ -232,12 +265,15 @@ class FakeGatewayTransport implements GatewayTransport {
     postedPaths.add(uri.path);
     if (uri.path == '/session') {
       postedBearers.add(bearer);
-      if (rejectedBearers.contains(bearer)) {
+      if (rejectedBearers.contains(bearer) || failFresh) {
         return const GatewayHttpResponse(
           statusCode: 401,
           body: {'error': 'unauthorized'},
         );
       }
+    }
+    if (uri.path == '/session/resume' && failResume) {
+      return const GatewayHttpResponse(statusCode: 500, body: null);
     }
     final SessionTokens next = uri.path == '/session/resume'
         ? _resumeTokens.removeFirst()

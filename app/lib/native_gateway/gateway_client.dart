@@ -260,7 +260,9 @@ class NativeGatewayClient implements GatewayClientLike {
       await _startFresh();
       _disconnectedAt = null;
     } catch (_) {
-      _disconnectedAt ??= DateTime.now();
+      // Start a fresh retry window. Keeping the old timestamp makes _scheduleResume
+      // enter the expired branch again immediately, spinning without backoff.
+      _disconnectedAt = DateTime.now();
       _scheduleResume();
     }
   }

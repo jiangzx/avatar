@@ -18,6 +18,23 @@ const int nativePlaybackFeedThreshold = 12000; // TUNABLE: 500 ms at 24 kHz
 const int nativePlaybackStartCushionMs = 1000; // TUNABLE: cover upstream pauses right after the first words
 const int nativePlaybackStartWaitMaxMs = 1200; // TUNABLE: start anyway when the stream ramps slower than this
 
+/// Capture config for the native path. Resume after audio-focus loss: a call or
+/// navigation prompt must not leave the microphone paused for the rest of the session.
+RecordConfig nativeRecordConfig() => const RecordConfig(
+  encoder: AudioEncoder.pcm16bits,
+  sampleRate: 16000,
+  numChannels: 1,
+  echoCancel: true,
+  noiseSuppress: true,
+  autoGain: true,
+  audioInterruption: AudioInterruptionMode.pauseResume,
+  androidConfig: AndroidRecordConfig(
+    audioSource: AndroidAudioSource.voiceCommunication,
+    audioManagerMode: AudioManagerMode.modeInCommunication,
+    speakerphone: true,
+  ),
+);
+
 class PluginNativeAudioIO implements NativeAudioIO {
   PluginNativeAudioIO({AudioRecorder? recorder, FillerAudioConfig? filler})
     : _recorder = recorder ?? AudioRecorder(),
@@ -95,21 +112,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
     _onPlaybackEnded = onPlaybackEnded;
     _onPlaybackError = onPlaybackError;
     await _setupPlayback();
-    final stream = await _recorder.startStream(
-      const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: 16000,
-        numChannels: 1,
-        echoCancel: true,
-        noiseSuppress: true,
-        autoGain: true,
-        androidConfig: AndroidRecordConfig(
-          audioSource: AndroidAudioSource.voiceCommunication,
-          audioManagerMode: AudioManagerMode.modeInCommunication,
-          speakerphone: true,
-        ),
-      ),
-    );
+    final stream = await _recorder.startStream(nativeRecordConfig());
     _subscription = stream.listen(_onRecorderBytes);
   }
 
