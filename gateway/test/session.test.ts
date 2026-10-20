@@ -105,7 +105,7 @@ describe('Session', () => {
       }),
       roles: fixedRoleCatalog('P', { ...director, contextAfterMs: 3000, silenceDecision: {
         instruction: 'DECIDE', speakInstruction: 'READ {continuation}',
-        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60,
+        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
         policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
       } }),
       textClient: { complete: async input => { inputs.push(JSON.parse(input.user)); return '{"speak":false}'; } },
@@ -117,10 +117,13 @@ describe('Session', () => {
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(5000);
     expect(assistantText(s.sent, 3)).toBe(director.memoryNoticeText);
-    expect(inputs).toEqual([]);
+    expect(inputs).toEqual([{ stage: 'greeting', userText: '', assistantText: '', previousTexts: [], memorySnapshot: '' }]);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 3, playedMs: 5000, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(3000);
-    expect(inputs).toEqual([{ stage: 'context', userText: '我叫老王', assistantText: '王叔好', previousTexts: [] }]);
+    expect(inputs).toEqual([
+      { stage: 'greeting', userText: '', assistantText: '', previousTexts: [], memorySnapshot: '' },
+      { stage: 'context', userText: '我叫老王', assistantText: '王叔好', previousTexts: [], memorySnapshot: '' },
+    ]);
     await vi.advanceTimersByTimeAsync(600000);
     expect(of(s.sent, 'response.start')).toHaveLength(4);
     s.session.end();
@@ -131,7 +134,7 @@ describe('Session', () => {
     const s = setup({
       roles: fixedRoleCatalog('P', { ...director, contextAfterMs: 3000, silenceDecision: {
         instruction: 'DECIDE', speakInstruction: 'READ {continuation}',
-        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60,
+        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
         policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
       } }),
       textClient: { complete: async input => { inputs.push(JSON.parse(input.user)); return '{"speak":false}'; } },
@@ -140,13 +143,16 @@ describe('Session', () => {
     for (let i = 0; i < 10; i++) s.session.handleMicAudio(loud());
     for (let i = 0; i < 40; i++) s.session.handleMicAudio(quiet());
     await vi.advanceTimersByTimeAsync(5000);
-    expect(inputs).toEqual([]);
+    expect(inputs).toHaveLength(1);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(3000);
-    expect(inputs).toEqual([{ stage: 'context', userText: '我叫老王', assistantText: '王叔好', previousTexts: [] }]);
+    expect(inputs).toEqual([
+      { stage: 'greeting', userText: '', assistantText: '', previousTexts: [], memorySnapshot: '' },
+      { stage: 'context', userText: '我叫老王', assistantText: '王叔好', previousTexts: [], memorySnapshot: '' },
+    ]);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(600000);
-    expect(inputs).toHaveLength(1);
+    expect(inputs).toHaveLength(2);
     // A declined context line still speaks the configured fallback; the duplicate receipt adds nothing.
     expect(of(s.sent, 'response.start')).toHaveLength(3);
     s.session.end();
@@ -158,10 +164,12 @@ describe('Session', () => {
     const s = setup({
       roles: fixedRoleCatalog('P', { ...director, contextAfterMs: 3000, silenceDecision: {
         instruction: 'DECIDE', speakInstruction: 'READ {continuation}',
-        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60,
+        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
         policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
       } }),
       textClient: { complete: input => {
+        const context = JSON.parse(input.user) as { stage: string };
+        if (context.stage === 'greeting') return Promise.resolve('{"speak":false}');
         decisionSignal = input.signal;
         return new Promise(resolve => { finish = resolve; });
       } },

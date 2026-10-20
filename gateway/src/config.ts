@@ -138,6 +138,7 @@ const DirectorSchema = z.object({
     maxTokens: z.number().int().min(32).max(512),
     maxInputChars: z.number().int().min(100).max(20000),
     maxReplyChars: z.number().int().min(1).max(120),
+    temperature: z.number().min(0).max(2),
     policy: z.object({
       timeoutMs: z.number().int().min(100).max(10000),
       retries: z.literal(0),

@@ -5,11 +5,15 @@ import { log } from '../log.ts';
 
 export type { DirectorConfig, TopicCard } from '../roles/types.ts';
 
+export type ProactivePlanStage = SilenceStep | 'greeting';
+
 export interface SilenceContext {
-  stage: PlannedSilenceStep;
+  stage: ProactivePlanStage;
   userText: string;
   assistantText: string;
   previousTexts: readonly string[];
+  /** Rendered memory snapshot; empty when this session has none. */
+  memorySnapshot: string;
 }
 
 export interface SilencePlan {
@@ -21,14 +25,15 @@ export interface SilencePlan {
 
 export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
-  /** Plans one of the first three silence lines; checkin and rest use configured copy. */
-  planSilenceLine?(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null>;
+  /** Plans any conversational proactive line from memory and context; all stages fall back to configured copy. */
+  planProactiveLine?(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null>;
+  /** Current rendered memory for this session, read at planning time. */
+  getMemorySnapshot?(): string;
   /** Once per quiet stretch, when silence reaches the rest step. */
   onQuietRest?(): void;
 }
 
 type SilenceStep = 'context' | 'check' | 'leave' | 'checkin' | 'rest';
-type PlannedSilenceStep = Exclude<SilenceStep, 'rest' | 'checkin'>;
 
 /** Agreed defaults when a fixture omits the silence fields. Shipped roles set them in director.json. */
 const DEFAULT_CONTEXT_AFTER_MS = 6_000;
@@ -95,6 +100,8 @@ export class Director {
   /** Lines already spoken in the current silence ladder, so the planner can avoid repeats. */
   private ladderTexts: string[] = [];
   private decision: AbortController | null = null;
+  /** A greeting plan survives model-side noise; only a real user turn cancels it. */
+  private greetingDecision: AbortController | null = null;
   private silentStretch = false;
   /** True after the opening line has played to the end. Until then, do not say the presence line. */
   private opened = false;
@@ -121,7 +128,8 @@ export class Director {
 
   onSessionStart(hasMemory = false): void {
     this.hasMemory = hasMemory;
-    this.deps.requestResponse('greeting', this.greetingRequest());
+    this.cancelGreeting();
+    this.requestGreeting();
   }
 
   /** Local VAD state from the client. */
@@ -130,6 +138,7 @@ export class Director {
     this.userSpeaking = speaking;
     if (speaking) {
       if (this.aiBusy || this.pending !== null) this.bargeIn = true;
+      this.cancelGreeting();
       this.clear();
       if (this.pending !== 'notice') this.pending = null;
     } else if (wasSpeaking) {
@@ -155,6 +164,7 @@ export class Director {
   }
 
   onUserFinal(text: string): void {
+    this.cancelGreeting();
     if (this.cfg.quietPhrases.some((p) => text.includes(p))) {
       this.quiet = true;
       this.clear();
@@ -203,6 +213,7 @@ export class Director {
   onAiTurnStarted(): void {
     this.aiBusy = true;
     this.bargeIn = false;
+    this.cancelGreeting();
     this.clear();
   }
 
@@ -324,11 +335,15 @@ export class Director {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
-    if (muted) this.clear();
+    if (muted) {
+      this.cancelGreeting();
+      this.clear();
+    }
   }
 
   pause(): void {
     this.paused = true;
+    this.cancelGreeting();
     this.clear();
   }
 
@@ -367,6 +382,7 @@ export class Director {
 
   stop(): void {
     this.stopped = true;
+    this.cancelGreeting();
     this.clear();
   }
 
@@ -378,7 +394,7 @@ export class Director {
     this.timer = setTimeout(() => {
       this.timer = null;
       if (this.blocked() || this.left || this.opened) return;
-      this.deps.requestResponse('greeting', this.greetingRequest());
+      this.requestGreeting();
     }, wait);
   }
 
@@ -432,18 +448,15 @@ export class Director {
       this.left = true;
       return;
     }
-    // After real chat the first three stages are planned; the fourth is a fixed, configured
-    // check-in, because a topic-continuation planner tends to keep talking instead of asking
-    // whether the user is still there. A failed plan falls back to the configured copy.
-    if (step !== 'rest' && step !== 'checkin' && this.hadContent && this.deps.planSilenceLine) {
-      this.planSilenceLine(step);
+    if (this.deps.planProactiveLine) {
+      this.planProactiveLine(step);
       return;
     }
     this.requestSilenceStep(step);
   }
 
-  /** Plan one stage before requesting audio. A cancelled plan can never speak. */
-  private planSilenceLine(step: PlannedSilenceStep): void {
+  /** Plan one line before requesting audio. A cancelled plan can never speak. */
+  private planProactiveLine(step: SilenceStep): void {
     const controller = new AbortController();
     this.decision = controller;
     const accept = (plan: SilencePlan | null) => {
@@ -461,10 +474,10 @@ export class Director {
         return;
       }
       this.pending = step;
-      this.rememberLadderText(text);
+      if (step !== 'rest') this.rememberLadderText(text);
       this.deps.requestResponse('followup', {
         cue: 'followup',
-        instruction: (this.cfg.silenceDecision?.speakInstruction ?? this.silence().contextInstruction)
+        instruction: this.planSpeakInstruction(step)
           .replaceAll('{utterance}', this.lastContent)
           .replaceAll('{continuation}', JSON.stringify(text)),
         fallbackText: text,
@@ -472,16 +485,11 @@ export class Director {
     };
     const failed = () => {
       if (this.decision !== controller) return;
-      log('silence_decision_failed', { code: 'decision_error' });
+      log('proactive_decision_failed', { stage: step, code: 'decision_error' });
       accept(null);
     };
     try {
-      const result = this.deps.planSilenceLine?.({
-        stage: step,
-        userText: this.lastContent,
-        assistantText: this.lastAnswer,
-        previousTexts: [...this.ladderTexts],
-      }, controller.signal) ?? null;
+      const result = this.deps.planProactiveLine?.(this.planContext(step), controller.signal) ?? null;
       if (result instanceof Promise) void result.then(accept, failed);
       else accept(result);
     } catch {
@@ -489,10 +497,72 @@ export class Director {
     }
   }
 
+  /** The opening is planned like every other conversational line; configured copy is the failure fallback. */
+  private requestGreeting(): void {
+    const plan = this.deps.planProactiveLine;
+    if (!plan) {
+      this.deps.requestResponse('greeting', this.greetingRequest());
+      return;
+    }
+    this.cancelGreeting();
+    const controller = new AbortController();
+    this.greetingDecision = controller;
+    const accept = (result: SilencePlan | null) => {
+      if (this.greetingDecision !== controller) return;
+      if (controller.signal.aborted || this.blocked() || this.left || this.opened) {
+        this.greetingDecision = null;
+        return;
+      }
+      this.greetingDecision = null;
+      const text = result?.text?.trim();
+      if (!text) {
+        this.deps.requestResponse('greeting', this.greetingRequest());
+        return;
+      }
+      this.deps.requestResponse('greeting', {
+        cue: 'greeting',
+        instruction: this.planSpeakInstruction('greeting')
+          .replaceAll('{utterance}', '')
+          .replaceAll('{continuation}', JSON.stringify(text)),
+        fallbackText: text,
+      });
+    };
+    const failed = () => {
+      if (this.greetingDecision !== controller) return;
+      log('proactive_decision_failed', { stage: 'greeting', code: 'decision_error' });
+      accept(null);
+    };
+    try {
+      const result = plan(this.planContext('greeting'), controller.signal);
+      if (result instanceof Promise) void result.then(accept, failed);
+      else accept(result);
+    } catch {
+      failed();
+    }
+  }
+
+  private planContext(stage: ProactivePlanStage): SilenceContext {
+    return {
+      stage,
+      userText: stage === 'greeting' ? '' : this.lastContent,
+      assistantText: stage === 'greeting' ? '' : this.lastAnswer,
+      previousTexts: [...this.ladderTexts],
+      memorySnapshot: this.deps.getMemorySnapshot?.() ?? '',
+    };
+  }
+
+  private planSpeakInstruction(stage: ProactivePlanStage): string {
+    const c = this.cfg;
+    if (c.silenceDecision?.speakInstruction) return c.silenceDecision.speakInstruction;
+    return stage === 'greeting'
+      ? (c.greetingInstruction ?? this.silence().contextInstruction)
+      : this.silence().contextInstruction;
+  }
+
   private requestSilenceStep(step: SilenceStep): void {
     this.pending = step;
     const request = this.silenceRequest(step);
-    if (this.hadContent && step !== 'rest') this.rememberLadderText(request.fallbackText);
+    if (step !== 'rest') this.rememberLadderText(request.fallbackText);
     this.deps.requestResponse('followup', request);
   }
 
@@ -622,6 +692,11 @@ export class Director {
     if (!this.timer) return;
     clearTimeout(this.timer);
     this.timer = null;
+  }
+
+  private cancelGreeting(): void {
+    this.greetingDecision?.abort();
+    this.greetingDecision = null;
   }
 }
 

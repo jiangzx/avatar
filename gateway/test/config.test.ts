@@ -113,8 +113,11 @@ describe('config', () => {
     expect(d.greetingText).toContain('小暖');
     expect(d.greetingMemoryInstruction).toContain('记忆');
     // A new session greets first and then asks.
-    expect(d.greetingMemoryText.startsWith('您好')).toBe(true);
+    expect(d.greetingMemoryText?.startsWith('您好')).toBe(true);
     expect(d.greetingMemoryText).toContain('？');
+    expect(d.silenceDecision?.temperature).toBe(0.8);
+    expect(d.silenceDecision?.instruction).toContain('greeting');
+    expect(d.silenceDecision?.instruction).toContain('checkin');
     expect(d.greetingRetryMs).toBe(800);
     expect(d.openingFollowText).toBe('您要是方便，告诉我怎么称呼您就好。');
     expect(d.openingFollowInstruction).toContain('称呼');
@@ -134,6 +137,9 @@ describe('config', () => {
     } })).toThrow();
     expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
       ...decision, speakInstruction: 'generic presence',
+    } })).toThrow();
+    expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
+      ...decision, temperature: 3,
     } })).toThrow();
   });
 });

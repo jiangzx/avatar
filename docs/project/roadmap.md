@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的主动链已在 2026-10-20 完成三轮修正，当前为四段式：context/check/leave/checkin 分别约 6/8/10/10 秒；前三段由共享文本模型按阶段生成与上下文相关的主动接话（带前文去重和明确收尾判定），失败时回退配置文案；第四段固定使用配置文案，客气确认用户是否还在听并说明随时可以接着聊（第四轮真机反馈后不再经过接话规划器）。Qwen 与 Seeduplex 共用同一 Director 行为（详见下文）。客户端在每轮回复起播前先缓冲约 1 秒音频（最多等 1.2 秒），压住 Seeduplex 首块音频后的上游顿挫。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，真机首句恢复为短问候，用户已确认首句正常、不再念提示词。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
+Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的主动链已在 2026-10-20 完成多轮修正，当前为四段式：context/check/leave/checkin 分别约 6/8/10/10 秒；第五轮起四段全部由共享文本模型按阶段规划，句式不固定，规划输入加入记忆快照，用户尚未开口时从记忆或日常话题找话头，不假设有一件没说完的事；配置文案只作规划失败兜底。第四段仍做内容校验（必须含“是否还在听”和“随时可以聊”，不超过 30 字，不合格即回退配置文案），兼顾第四轮真机反馈。开场也改为每次会话规划，不再固定问候语。Qwen 与 Seeduplex 共用同一 Director 行为（详见下文）。客户端在每轮回复起播前先缓冲约 1 秒音频（最多等 1.2 秒），压住 Seeduplex 首块音频后的上游顿挫。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，真机首句恢复为短问候，用户已确认首句正常、不再念提示词。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
 
 ## 打断与沉默：已踩过的坑
 
@@ -324,3 +324,13 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - 适配器：Qwen 与 Seeduplex 都从同一个 Director 接收同一份 `ProactiveRequest`。Qwen 的 `proactiveEvents` 使用 `instruction`（其中已由 `speakInstruction` 带上规划好的第四段句子），Seeduplex 直接播 `fallbackText`；两边的阶段、生成与回退逻辑完全一致，没有适配器专属分支。
 - TDD：`director-silence.test.ts` 覆盖四段时序、四段都规划、`previousTexts` 累积、close、异常回退、取消；`config.test.ts` 校验新时序与 checkin 文案；`director.test.ts`、`session.test.ts` 同步默认时长与四段推进。`npm test -w gateway` → 39 files / 440 tests passed；根 `npm test` → protocol 6、gateway 440、avatar-core 103 passed；`npm run typecheck -w gateway` 与 `git diff --check` 通过。
 - 待办：重启 8787 需再次征得用户同意；真机复验四段间隔和第四段的客气亲切感，用户听感确认前不算完成。
+
+## 主动话语自然化与去固定句式（2026-10-20 第五轮）
+
+- 用户反馈：每次开 App 都是同一句固定招呼，听起来像机器人；有记忆时紧跟的“我还想着刚才那件事，您要是想说，我就在。”没有上下文、没头没尾；要求所有句式都不能固定死，没有上下文就找话题聊。
+- 设计（共享 `Director`，适配器无关）：开场、开场后的第一句、context/check/leave/checkin/rest 全部交给同一个 `planProactiveLine`。`SilenceContext` 增加 `memorySnapshot`，`stage` 增加 `greeting`；规划器不再因 `userText` 为空而跳过。问候和四段沉默的 stage 规则都写进 `silenceDecision.instruction`；配置文案（`greeting*Text`、`openingFollowText`、`memoryFollowText`、四段 fallback）只在规划失败时兜底。功能提示（记忆告知、断线恢复、没听清、工具承接）内容固定，不在此列。
+- 无上下文：有记忆快照就从真实记忆里找话题；没有记忆就挑天气、吃饭、睡眠、散步、听戏听歌之类的轻松话题，不编造用户经历，不假设“刚才那件事”。`memoryFollowText` 改为“您慢慢来，我在这儿陪着您。”，避免兜底时再说空话。
+- 第四段内容保障：checkin 重新经过规划器，但规划结果必须同时含“在听/在吗”和“随时/都可以/接着聊/想聊”，且不超过 30 字；rest 结果不得含问句；greeting 必须有问候语和问句。不合格就丢弃并回退配置文案，日志只记 `silence_decision_rejected`、阶段和错误码，不含正文。
+- 变化度：`TextModelClient.complete` 增加可选 `temperature`，规划使用 `silenceDecision.temperature: 0.8`；记忆提取仍为 0，不受影响。记忆快照计入 `maxInputChars`，超出部分截断，仍超预算则回退。
+- TDD/验证：`silence.test.ts` 覆盖无用户文本的 greeting 规划、记忆快照入参、checkin/rest/greeting 内容校验、快照预算与温度；`director.test.ts` 覆盖开场规划与回退、本地开口取消开场规划、模型侧噪声不取消、五段全规划、开场后按记忆找话头；`director-silence.test.ts`、`session.test.ts` 同步新输入形状与第四段规划。`npm test` → protocol 6、gateway 449、avatar-core 103 passed；`npm run typecheck -w gateway`、`git diff --check` 通过。
+- 待办：本轮只改 gateway，无需重装 APK；重启 8787 仍需征得用户同意。真机复验重点：连续两次重开 App 的问候是否不同、没有旧话题时是否自然找话题、第四段是否仍含“是否还在听、随时可以聊”。用户听感确认前不算完成。

@@ -1,5 +1,5 @@
 export interface TextModelClient {
-  complete(input: { system: string; user: string; maxTokens: number; signal: AbortSignal }): Promise<string>;
+  complete(input: { system: string; user: string; maxTokens: number; temperature?: number; signal: AbortSignal }): Promise<string>;
 }
 
 export interface QwenTextClientOptions {
@@ -16,7 +16,7 @@ export class QwenTextClient implements TextModelClient {
     if (!opts.model) throw new Error('extract_model_required');
   }
 
-  async complete(input: { system: string; user: string; maxTokens: number; signal: AbortSignal }): Promise<string> {
+  async complete(input: { system: string; user: string; maxTokens: number; temperature?: number; signal: AbortSignal }): Promise<string> {
     let response: Response;
     try {
       response = await fetch(this.opts.endpoint, {
@@ -28,7 +28,7 @@ export class QwenTextClient implements TextModelClient {
             { role: 'system', content: input.system },
             { role: 'user', content: input.user },
           ],
-          temperature: 0,
+          temperature: input.temperature ?? 0,
           max_tokens: input.maxTokens,
         }),
         signal: input.signal,

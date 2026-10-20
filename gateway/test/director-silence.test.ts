@@ -17,13 +17,13 @@ const cfg = {
   restAfterMs: base.restAfterMs ?? 180_000,
 };
 
-function setup(planSilenceLine?: DirectorDeps['planSilenceLine']) {
+function setup(planProactiveLine?: DirectorDeps['planProactiveLine']) {
   const requests: ProactiveRequest[] = [];
   let rests = 0;
   const d = new Director(cfg, {
     requestResponse: (_kind, request) => requests.push(request),
     onQuietRest: () => { rests++; },
-    ...(planSilenceLine ? { planSilenceLine } : {}),
+    ...(planProactiveLine ? { planProactiveLine } : {}),
   });
   const answer = () => {
     d.onUserFinal('今天走了很多路，脚有点酸。');
@@ -83,6 +83,7 @@ describe('substantive conversation silence', () => {
       { stage: 'context', previousTexts: [] },
       { stage: 'check', previousTexts: [cfg.contextText] },
       { stage: 'leave', previousTexts: [cfg.contextText, cfg.checkContextText] },
+      { stage: 'checkin', previousTexts: [cfg.contextText, cfg.checkContextText, cfg.leaveText] },
     ]);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded(cfg.checkinText);
@@ -111,12 +112,13 @@ describe('substantive conversation silence', () => {
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('leave承接');
     await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
-    // The fourth stage is configured copy, never a topic-continuation plan.
-    expect(s.requests.at(-1)).toEqual({ cue: 'followup', instruction: cfg.checkinInstruction, fallbackText: cfg.checkinText });
+    // The fourth stage is planned too; its content check lives in the planner.
+    expect(s.requests.at(-1)).toEqual({ cue: 'followup', instruction: 'READ "checkin承接"', fallbackText: 'checkin承接' });
     expect(contexts).toEqual([
-      { stage: 'context', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: [] },
-      { stage: 'check', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: ['context承接'] },
-      { stage: 'leave', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: ['context承接', 'check承接'] },
+      { stage: 'context', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: [], memorySnapshot: '' },
+      { stage: 'check', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: ['context承接'], memorySnapshot: '' },
+      { stage: 'leave', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: ['context承接', 'check承接'], memorySnapshot: '' },
+      { stage: 'checkin', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: ['context承接', 'check承接', 'leave承接'], memorySnapshot: '' },
     ]);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('checkin承接');
@@ -148,7 +150,7 @@ describe('substantive conversation silence', () => {
     await vi.advanceTimersByTimeAsync(cfg.contextAfterMs - 1);
     expect(s.requests).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
-    expect(contexts[0]).toEqual({ stage: 'context', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: [] });
+    expect(contexts[0]).toEqual({ stage: 'context', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', previousTexts: [], memorySnapshot: '' });
     expect(s.requests).toEqual([{
       cue: 'followup', instruction: 'READ "走累了，脚酸着也不好受。"', fallbackText: '走累了，脚酸着也不好受。',
     }]);
@@ -166,14 +168,13 @@ describe('substantive conversation silence', () => {
     s.d.onAiTurnEnded('leave承接');
     await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
     expect(s.requests).toHaveLength(4);
-    // Qwen renders `instruction`; Seeduplex speaks `fallbackText`. Both carry the configured
-    // check-in so neither adapter can drift into topic continuation.
-    expect(s.requests.at(-1)).toEqual({ cue: 'followup', instruction: cfg.checkinInstruction, fallbackText: cfg.checkinText });
+    // Qwen renders `instruction`; Seeduplex speaks `fallbackText`. Both get the planned check-in.
+    expect(s.requests.at(-1)).toEqual({ cue: 'followup', instruction: 'READ "checkin承接"', fallbackText: 'checkin承接' });
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded(cfg.checkinText);
     await vi.advanceTimersByTimeAsync(cfg.restAfterMs);
     expect(s.restCount()).toBe(1);
-    expect(contexts.map((c) => c.stage)).toEqual(['context', 'check', 'leave']);
+    expect(contexts.map((c) => c.stage)).toEqual(['context', 'check', 'leave', 'checkin', 'rest']);
     s.d.stop();
   });
 
@@ -219,10 +220,11 @@ describe('substantive conversation silence', () => {
     s.d.onAiTurnEnded(cfg.leaveText);
     await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
     expect(s.requests.map((r) => r.fallbackText)).toEqual([cfg.contextText, cfg.checkContextText, cfg.leaveText, cfg.checkinText]);
-    expect(calls).toBe(3);
+    expect(calls).toBe(4);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded(cfg.checkinText);
     await vi.advanceTimersByTimeAsync(cfg.restAfterMs);
+    expect(calls).toBe(5);
     expect(s.restCount()).toBe(1);
     s.d.stop();
   });
@@ -295,7 +297,7 @@ describe('substantive conversation silence', () => {
       '走累了，脚酸着也不好受。',
       'check承接',
       'leave承接',
-      cfg.checkinText,
+      'checkin承接',
     ]);
     s.d.stop();
   });

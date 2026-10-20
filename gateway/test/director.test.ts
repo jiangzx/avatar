@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResponseKind } from '@anyidea/protocol';
 import type { ProactiveRequest } from '../src/adapters/types.ts';
-import { Director, type DirectorConfig } from '../src/session/director.ts';
+import { Director, type DirectorConfig, type SilenceContext, type SilencePlan } from '../src/session/director.ts';
 
 const cfg: DirectorConfig = {
   followupAfterMs: 8000,
@@ -40,7 +40,7 @@ const cfg: DirectorConfig = {
 
 function make(c: DirectorConfig = cfg) {
   const calls: Array<[ResponseKind, string]> = [];
-  const d = new Director(c, { requestResponse: (k, r) => calls.push([k, r.instruction]), planSilenceLine: () => ({ text: '承接' }) });
+  const d = new Director(c, { requestResponse: (k, r) => calls.push([k, r.instruction]) });
   return { d, calls };
 }
 
@@ -86,6 +86,110 @@ describe('Director', () => {
     expect(withMemory.calls).toEqual([['greeting', 'G']]);
   });
 
+  it('plans a varied greeting from memory instead of a fixed line', () => {
+    const contexts: SilenceContext[] = [];
+    const reqs: ProactiveRequest[] = [];
+    const line = '您好呀，又见面了。上次说的公园后来去了吗？';
+    const d = new Director({
+      ...cfg,
+      silenceDecision: {
+        instruction: 'D', speakInstruction: 'SAY {continuation}',
+        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
+        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
+      },
+    }, {
+      requestResponse: (_k, r) => reqs.push(r),
+      planProactiveLine: context => { contexts.push(context); return { text: line }; },
+      getMemorySnapshot: () => '上次聊到想去公园。',
+    });
+    d.onSessionStart(true);
+    expect(contexts).toEqual([{
+      stage: 'greeting', userText: '', assistantText: '', previousTexts: [], memorySnapshot: '上次聊到想去公园。',
+    }]);
+    expect(reqs).toEqual([{ cue: 'greeting', instruction: `SAY ${JSON.stringify(line)}`, fallbackText: line }]);
+  });
+
+  it('falls back to configured copy when a plan is declined, and drops a stale greeting plan', async () => {
+    const declined = make();
+    const noPlan = new Director(cfg, {
+      requestResponse: (k, r) => declined.calls.push([k, r.instruction]),
+      planProactiveLine: () => null,
+    });
+    noPlan.onSessionStart();
+    expect(declined.calls).toEqual([['greeting', 'G']]);
+
+    const reqs: ProactiveRequest[] = [];
+    let finish!: (plan: SilencePlan | null) => void;
+    const late = new Director(cfg, {
+      requestResponse: (_k, r) => reqs.push(r),
+      planProactiveLine: () => new Promise(resolve => { finish = resolve; }),
+    });
+    late.onSessionStart();
+    late.onUserSpeech(true);
+    finish({ text: '您好呀，又见面了。今天想聊点什么？' });
+    await Promise.resolve();
+    expect(reqs).toEqual([]);
+  });
+
+  it('keeps a greeting plan through model-side noise but drops it on a real user turn', async () => {
+    let finish!: (plan: SilencePlan | null) => void;
+    const reqs: ProactiveRequest[] = [];
+    const d = new Director(cfg, {
+      requestResponse: (_k, r) => reqs.push(r),
+      planProactiveLine: () => new Promise(resolve => { finish = resolve; }),
+    });
+    d.onSessionStart();
+    d.onUserActivity();
+    const line = '您好呀，又见面了。今天想聊点什么？';
+    finish({ text: line });
+    await Promise.resolve();
+    expect(reqs).toEqual([{ cue: 'greeting', instruction: 'G', fallbackText: line }]);
+  });
+
+  it('plans every conversational stage, including the check-in and rest', () => {
+    const stages: string[] = [];
+    const d = new Director({
+      ...cfg,
+      restAfterMs: 180000,
+      silenceDecision: {
+        instruction: 'D', speakInstruction: 'SAY {continuation}',
+        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
+        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
+      },
+    }, {
+      requestResponse: () => {},
+      planProactiveLine: context => { stages.push(context.stage); return { text: '接着聊' }; },
+    });
+    d.onSessionStart();
+    d.onUserFinal('今天去公园了');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(5000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(180000);
+    expect(stages).toEqual(['greeting', 'context', 'check', 'leave', 'checkin', 'rest']);
+  });
+
+  it('plans the opening follow from memory when the user has not spoken', () => {
+    const contexts: SilenceContext[] = [];
+    const d = new Director(cfg, {
+      requestResponse: () => {},
+      planProactiveLine: context => { contexts.push(context); return { text: '上次说的公园后来去了吗？' }; },
+      getMemorySnapshot: () => '上次聊到想去公园。',
+    });
+    d.onSessionStart();
+    d.onAiTurnEnded('greeting');
+    vi.advanceTimersByTime(5000);
+    expect(contexts[1]).toEqual({
+      stage: 'context', userText: '', assistantText: 'greeting', previousTexts: [], memorySnapshot: '上次聊到想去公园。',
+    });
+  });
+
   it('repeats the opening instead of the presence line when the greeting is cut off', () => {
     const { d, calls } = make();
     d.onSessionStart();
@@ -117,7 +221,10 @@ describe('Director', () => {
   });
 
   it('continues the opening instead of saying it is merely here', () => {
-    const { d, calls } = make({ ...cfg, openingFollowInstruction: 'OPEN', openingFollowText: '称呼', memoryFollowText: '接着' });
+    const calls: Array<[ResponseKind, string]> = [];
+    const d = new Director({ ...cfg, openingFollowInstruction: 'OPEN', openingFollowText: '称呼', memoryFollowText: '接着' }, {
+      requestResponse: (k, r) => calls.push([k, r.instruction]),
+    });
     d.onSessionStart(false);
     d.onAiTurnEnded();
     vi.advanceTimersByTime(5000);
@@ -147,7 +254,7 @@ describe('Director', () => {
 
   it('continues the last concrete thing instead of a topic card', () => {
     const reqs: ProactiveRequest[] = [];
-    const d = new Director(cfg, { requestResponse: (_k, r) => reqs.push(r), planSilenceLine: () => ({ text: '承接' }) });
+    const d = new Director(cfg, { requestResponse: (_k, r) => reqs.push(r), planProactiveLine: () => ({ text: '承接' }) });
     d.onUserFinal('孙子周末来看我');
     d.onAiTurnEnded();
     vi.advanceTimersByTime(5000);
@@ -199,7 +306,7 @@ describe('Director', () => {
       ...cfg,
       checkContextInstruction: '点到「{utterance}」，可以不回',
       checkContextText: '您还方便吗，刚才那件事先放着',
-    }, { requestResponse: (_k, r) => talked.push(r), planSilenceLine: context => ({ text: `${context.stage}承接` }) });
+    }, { requestResponse: (_k, r) => talked.push(r), planProactiveLine: context => ({ text: `${context.stage}承接` }) });
     d.onUserFinal('孙子周末来看我');
     d.onAiTurnEnded();
     vi.advanceTimersByTime(5000);

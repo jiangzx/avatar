@@ -6,6 +6,8 @@ export interface SilenceDecisionConfig {
   maxTokens: number;
   maxInputChars: number;
   maxReplyChars: number;
+  /** Sampling temperature for spoken lines; higher values vary the phrasing. */
+  temperature: number;
   policy: PolicySpec;
 }
 
