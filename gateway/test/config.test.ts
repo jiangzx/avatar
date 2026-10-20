@@ -49,6 +49,14 @@ describe('config', () => {
     expect(c.summarizerModel).toBe('qwen-flash');
   });
 
+  it('validates endpoint protocols at startup', () => {
+    const base = { APP_SECRET: 'x'.repeat(16) };
+    expect(() => loadConfig({ ...base, ADAPTER: 'qwen', DASHSCOPE_API_KEY: 'k', QWEN_ENDPOINT: 'https://workspace.example/realtime' })).toThrow(/QWEN_ENDPOINT/);
+    expect(() => loadConfig({ ...base, ADAPTER: 'qwen', DASHSCOPE_API_KEY: 'k', QWEN_ENDPOINT: 'not a url' })).toThrow(/QWEN_ENDPOINT/);
+    expect(() => loadConfig({ ...base, ADAPTER: 'seeduplex', SEEDUPLEX_API_KEY: 'k', SEEDUPLEX_ENDPOINT: 'http://openspeech.example' })).toThrow(/SEEDUPLEX_ENDPOINT/);
+    expect(() => loadConfig({ ...base, SUMMARIZER: 'qwen', DASHSCOPE_API_KEY: 'k', QWEN_SUMMARIZER_ENDPOINT: 'wss://workspace.example/chat' })).toThrow(/QWEN_SUMMARIZER_ENDPOINT/);
+  });
+
   it('validates the mock speech threshold', () => {
     expect(loadConfig({ APP_SECRET: 'x'.repeat(16), MOCK_SPEECH_THRESHOLD: '1500' }).mockSpeechThreshold).toBe(1500);
     expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), MOCK_SPEECH_THRESHOLD: 'loud' })).toThrow(/MOCK_SPEECH_THRESHOLD/);

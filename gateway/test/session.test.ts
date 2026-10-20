@@ -904,6 +904,21 @@ describe('Session', () => {
     expect(markNotified).not.toHaveBeenCalled();
   });
 
+  it('survives transcript store failures', async () => {
+    const writer: TranscriptWriter = {
+      append: () => { throw new Error('db down'); },
+      markNotified: () => { throw new Error('db down'); },
+    };
+    const s = setup({ writer }, ownedCtx, 'write-fail', true);
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(200);
+    const notice = of(s.sent, 'response.start').at(-1)!;
+    expect(() => s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: notice.responseSeq, playedMs: 300, reason: 'ended' })).not.toThrow();
+    expect(() => s.session.handleClientMessage({ type: 'debug.userText', text: '你好' })).not.toThrow();
+    expect(() => s.session.flush()).not.toThrow();
+    s.session.end();
+  });
+
   it('enqueues extraction every configured number of user turns when a worker is injected', () => {
     const reasons: string[] = [];
     const s = setup({

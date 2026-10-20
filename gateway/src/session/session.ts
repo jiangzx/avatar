@@ -432,14 +432,18 @@ export class Session {
         state.flushed = true;
         continue;
       }
-      this.writer.append({
-        ownerId: this.context.ownerId,
-        sessionId: this.sessionId,
-        role: 'assistant',
-        text: state.text,
-        now: Date.now(),
-      });
-      state.flushed = true;
+      try {
+        this.writer.append({
+          ownerId: this.context.ownerId,
+          sessionId: this.sessionId,
+          role: 'assistant',
+          text: state.text,
+          now: Date.now(),
+        });
+        state.flushed = true;
+      } catch {
+        log('transcript_write_failed', { role: 'assistant' });
+      }
     }
   }
 
@@ -499,7 +503,14 @@ export class Session {
   /** Playback ended for the notice seq is the only completion signal. */
   private finishNotice(seq: number): void {
     if (seq !== this.noticeSeq) return;
-    if (this.writer && this.context.ownerId) this.writer.markNotified(this.context.ownerId, Date.now());
+    if (this.writer && this.context.ownerId) {
+      try {
+        this.writer.markNotified(this.context.ownerId, Date.now());
+      } catch {
+        // The user heard it; failing to persist only means the next session asks again.
+        log('memory_notice_write_failed', {});
+      }
+    }
     this.noticeSeq = null;
     this.director.onNoticePlayed();
   }
@@ -667,13 +678,17 @@ export class Session {
     this.turnUserText = text;
     this.ledger.addUser(text, Date.now());
     if (this.writer && this.context.ownerId) {
-      this.writer.append({
-        ownerId: this.context.ownerId,
-        sessionId: this.sessionId,
-        role: 'user',
-        text,
-        now: Date.now(),
-      });
+      try {
+        this.writer.append({
+          ownerId: this.context.ownerId,
+          sessionId: this.sessionId,
+          role: 'user',
+          text,
+          now: Date.now(),
+        });
+      } catch {
+        log('transcript_write_failed', { role: 'user' });
+      }
     }
     this.turnsSinceRebuild++;
     this.charsSinceRebuild += text.length;

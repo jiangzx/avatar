@@ -70,6 +70,23 @@ describe('SessionManager owner invariant', () => {
     expect(terminate).toHaveBeenCalledOnce();
   });
 
+  it('destroys a claimed session that never sends session.start', () => {
+    const { manager: m } = setup();
+    const t = m.create(owned('o1'));
+    expect(m.claim(t.connectToken)).not.toBeNull();
+    vi.advanceTimersByTime(10_000);
+    expect(m.size).toBe(0);
+    expect(m.resume(t.sessionId, t.resumeToken)).toBeNull();
+  });
+
+  it('keeps a started session past the claim deadline', async () => {
+    const { manager: m } = setup();
+    const started = await startNew(m, owned('o1'));
+    vi.advanceTimersByTime(10_000);
+    expect(m.size).toBe(1);
+    m.end(started.t.sessionId);
+  });
+
   it('terminates every live socket on shutdown', async () => {
     const { manager: m } = setup();
     const first = await startNew(m, owned('o1'));
@@ -142,6 +159,15 @@ describe('SessionManager owner invariant', () => {
       now: 1,
     });
     expect(made[1]!.flush).not.toHaveBeenCalled();
+  });
+
+  it('destroys the session even when flush or end throws', async () => {
+    const { manager: m, made } = setup();
+    const started = await startNew(m, owned('o1'));
+    made[0]!.flush.mockImplementation(() => { throw new Error('db down'); });
+    made[0]!.end.mockImplementation(() => { throw new Error('adapter down'); });
+    expect(() => m.end(started.t.sessionId)).not.toThrow();
+    expect(m.size).toBe(0);
   });
 
   it('flushes before destroy when the client ends the session', async () => {

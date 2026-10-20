@@ -224,6 +224,13 @@ describe('gateway server', () => {
     await expect(connect(base, t.connectToken)).rejects.toThrow('http_401');
   });
 
+  it('rejects a connect token issued before a resume rotation', async () => {
+    const base = await boot();
+    const t = (await post(base, '/session')).json as unknown as SessionTokens;
+    expect((await post(base, '/session/resume', { sessionId: t.sessionId, resumeToken: t.resumeToken })).status).toBe(200);
+    await expect(connect(base, t.connectToken)).rejects.toThrow('http_401');
+  });
+
   it('starts a session and streams the greeting', async () => {
     const base = await boot();
     const t = (await post(base, '/session')).json as unknown as SessionTokens;
@@ -437,5 +444,23 @@ describe('TokenStore', () => {
     const stale = store.issue('s1');
     now += 1_001;
     expect(store.consumeConnect(stale.connectToken)).toBeNull();
+  });
+
+  it('revokes the previous connect token when the resume token rotates', () => {
+    const store = new TokenStore();
+    const first = store.issue('s1');
+    const second = store.rotate('s1', first.resumeToken)!;
+    expect(store.consumeConnect(first.connectToken)).toBeNull();
+    expect(store.consumeConnect(second.connectToken)).toBe('s1');
+  });
+
+  it('prunes expired connect tokens when issuing another', () => {
+    let now = 1_000;
+    const store = new TokenStore(1_000, () => now);
+    store.issue('s1');
+    expect(store.connectTokenCount).toBe(1);
+    now += 1_001;
+    store.issue('s2');
+    expect(store.connectTokenCount).toBe(1);
   });
 });

@@ -24,11 +24,17 @@ export class TokenStore {
   ) {}
 
   issue(sessionId: string): SessionTokens {
+    this.pruneExpired();
     const connectToken = newToken();
     const resumeToken = newToken();
     this.connect.set(connectToken, { sessionId, expiresAt: this.now() + this.connectTtlMs });
     this.resume.set(sessionId, resumeToken);
     return { sessionId, connectToken, resumeToken };
+  }
+
+  /** Visible for tests; expired entries are pruned on issue. */
+  get connectTokenCount(): number {
+    return this.connect.size;
   }
 
   /** One-time use. Returns the session id or null. */
@@ -39,15 +45,31 @@ export class TokenStore {
     return entry.sessionId;
   }
 
-  /** Validates and rotates the resume token; the old one stops working. */
+  /** Validates and rotates the resume token; the old resume and connect tokens stop working. */
   rotate(sessionId: string, resumeToken: string): SessionTokens | null {
     const current = this.resume.get(sessionId);
     if (!current || !safeEqual(current, resumeToken)) return null;
+    // An unconsumed connect token from an earlier attempt must not be able to claim the
+    // session after this rotation (a late socket could otherwise supersede the live one).
+    this.revokeConnect(sessionId);
     return this.issue(sessionId);
   }
 
   revoke(sessionId: string): void {
     this.resume.delete(sessionId);
-    for (const [token, entry] of this.connect) if (entry.sessionId === sessionId) this.connect.delete(token);
+    this.revokeConnect(sessionId);
+  }
+
+  private pruneExpired(): void {
+    const now = this.now();
+    for (const [token, entry] of this.connect) {
+      if (entry.expiresAt < now) this.connect.delete(token);
+    }
+  }
+
+  private revokeConnect(sessionId: string): void {
+    for (const [token, entry] of this.connect) {
+      if (entry.sessionId === sessionId) this.connect.delete(token);
+    }
   }
 }

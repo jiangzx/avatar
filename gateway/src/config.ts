@@ -55,6 +55,13 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (summarizer !== 'mock' && summarizer !== 'qwen') throw new Error(`Unsupported SUMMARIZER \"${summarizer}\"`);
   if (summarizer === 'qwen' && !qwenApiKey) throw new Error('DASHSCOPE_API_KEY must be set when SUMMARIZER=qwen');
   if (summarizer === 'qwen' && !env.QWEN_SUMMARIZER_ENDPOINT) throw new Error('QWEN_SUMMARIZER_ENDPOINT must be set when SUMMARIZER=qwen');
+  const seeduplexEndpoint = env.SEEDUPLEX_ENDPOINT ?? 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue';
+  const qwenEndpoint = env.QWEN_ENDPOINT ?? '';
+  const summarizerEndpoint = env.QWEN_SUMMARIZER_ENDPOINT ?? '';
+  // Fail at startup, not on the first session, for a wrong scheme or malformed URL.
+  if (adapter === 'seeduplex') requireProtocol('SEEDUPLEX_ENDPOINT', seeduplexEndpoint, ['ws:', 'wss:']);
+  if (adapter === 'qwen') requireProtocol('QWEN_ENDPOINT', qwenEndpoint, ['ws:', 'wss:']);
+  if (summarizer === 'qwen') requireProtocol('QWEN_SUMMARIZER_ENDPOINT', summarizerEndpoint, ['http:', 'https:']);
   const port = Number(env.PORT ?? 8787);
   if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('PORT must be a valid port number');
   const mockSpeechThreshold = Number(env.MOCK_SPEECH_THRESHOLD ?? 800);
@@ -90,15 +97,15 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     appSecret,
     adapter,
     ...(seeduplexApiKey ? { seeduplexApiKey } : {}),
-    seeduplexEndpoint: env.SEEDUPLEX_ENDPOINT ?? 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue',
+    seeduplexEndpoint,
     seeduplexModel: env.SEEDUPLEX_MODEL ?? '1.2.6.1',
     seeduplexVoice: env.SEEDUPLEX_VOICE ?? 'zh_male_xiaotian_jupiter_bigtts',
     ...(qwenApiKey ? { qwenApiKey } : {}),
-    qwenEndpoint: env.QWEN_ENDPOINT ?? '',
+    qwenEndpoint,
     qwenModel: env.QWEN_MODEL ?? 'qwen3.8-omni-flash-realtime',
     qwenVoice: env.QWEN_VOICE ?? 'longanlingxin',
     summarizer,
-    summarizerEndpoint: env.QWEN_SUMMARIZER_ENDPOINT ?? '',
+    summarizerEndpoint,
     summarizerModel: env.QWEN_SUMMARIZER_MODEL ?? 'qwen-flash',
     allowDebugText: env.ALLOW_DEBUG_TEXT === '1',
     devOrigins: (env.DEV_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
@@ -117,6 +124,16 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     rebuildBackoffBaseMs,
     rebuildBackoffMaxMs,
   };
+}
+
+function requireProtocol(key: string, value: string, protocols: readonly string[]): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${key} must be a valid URL`);
+  }
+  if (!protocols.includes(url.protocol)) throw new Error(`${key} must use ${protocols.join(' or ')}`);
 }
 
 function integerEnv(env: Record<string, string | undefined>, key: string, fallback: number, min: number, max: number): number {
