@@ -100,18 +100,14 @@
 - Create: `gateway/config/i18n/{zh,ja,en}/safety.json`
 - Create: `gateway/config/i18n/{zh,ja,en}/emotion.json`
 - Create: `gateway/config/i18n/{zh,ja,en}/silence.json`
-- Modify: `gateway/src/config.ts`
-- Modify: `gateway/src/session/emotion.ts`
-- Modify: `gateway/src/session/pacing.ts`（`MemoryBudgetSchema` 移除已迁走的文本字段，新增 `kanaBackfillBatch?`）
+- Modify: `gateway/src/config.ts`（只新增 `SharedSafetyConfig`/`loadSharedSafety`/`mergeSafety`；保留现有 `loadSafetyConfig` 与完整 `SafetyRules`，共享 JSON 字段本任务不动）
+- Modify: `gateway/src/session/emotion.ts`（只新增 `SharedEmotionConfig`/`loadSharedEmotion`/`mergeEmotion`；保留现有 `loadEmotionConfig`）
 - Modify: `gateway/src/session/language.ts`
 - Modify: `gateway/src/session/session.ts`（仅加 `languageRules` 依赖并传给 `detectLanguage`）
-- Modify: `gateway/src/index.ts`（加载 `loadI18n`，传 `languageRules`；其余接线留给 Task 5）
+- Modify: `gateway/src/index.ts`（加载 `loadI18n`，传 `languageRules`；其余接线留给 Task 4/5）
 - Test: `gateway/test/i18n.test.ts`
 - Test: `gateway/test/language.test.ts`
-- Test: `gateway/test/memory-text.test.ts`（safety loader 部分）
-- Test: `gateway/test/emotion.test.ts`
 - Test: `gateway/test/session.test.ts`（setup 传 `languageRules`）
-- Test: `gateway/test/memory-acceptance.test.ts`（memory.json 文本字段改用 i18n）
 
 **Interfaces:**
 - Produces:
@@ -211,14 +207,13 @@ Expected: FAIL（`gateway/src/i18n/load.ts` 不存在）。
 
 `gateway/src/i18n/types.ts`：按上面的 Interfaces 定义。注意 `MemoryCopy.recall.phraseInstruction` **不放在 JSON 里**，由 `RoleCatalog.recallPrompt(language)` 在 Task 4 注入；`RecallTextCopy` 不包含 `phraseInstruction`/`phraseTimeoutMs`。
 
-- [ ] **Step 4: 迁移共享配置并实现加载器**
+- [ ] **Step 4: 迁移共享配置并实现加载器（本任务不删除共享 JSON 字段）**
 
-1. `gateway/config/safety.json` 只保留 `minMaskedDigits`、`chineseDigits`、`invisibleCodePoints`；三个短语数组原样迁入 `config/i18n/zh/safety.json`。`gateway/src/config.ts` 拆成 `SharedSafetySchema`/`loadSharedSafety` 与 `SafetyRules`（shared + 三数组），删除 `loadSafetyConfig` 的旧整对象读取；`mergeSafety` 去重后合并。
-2. `gateway/config/emotion.json` 只保留 `defaultEmotion`、`debounceMs`、`revertAfterMs`、`firstSentenceMaxChars`、`priority`；`lexicon` 原样迁入 `config/i18n/zh/emotion.json`。`session/emotion.ts` 拆 `SharedEmotionConfig`/`loadSharedEmotion`/`mergeEmotion`。
-3. `gateway/config/memory.json` 删除 `forgetConfirmText`、`declineConfirmPrompt`、`declineConfirmedText`、`recallEmptyText`、`recallFoundPrefix`、`memoryNoticeKeywords`、`lightAcks`、`recallSkipPatterns`、`recallRecentQueries`；`MemoryBudgetSchema` 同步删除这些字段，保留 `recallClipChars`、`recallPhraseMaxChars`、`recallPhraseTimeoutMs`、抽取数值等，新增可选 `kanaBackfillBatch`（1–5000，默认 500）。
-4. `config/i18n/zh/memory.json` 原样保存中文文案与词表；`extractLabels` 使用现有 `worker.renderInput` 的中文标签逐字复制；`evidence.questionPatterns` 使用现有 `(?:吗|呢|么|嘛|来着)\s*[。.!！…~～]*$`；`addressingPatterns` 使用现有 `^(?:用户名叫|用户叫|我叫)(.+)$`。
-5. `language.json` 使用**模板**而非正则：`names`（本语言名称）、`shortAcks`、`questionSuffixes`、`requestTemplates: [{ language, template }]`。`{name}` 由目标语言的 `names` 展开；加载器锚定整句（`^(?:...)$`，`iu`），并保留现有“去边缘标点/空白”的语义。
-6. `load.ts` 读取 `config/i18n/<lang>/{language,memory,safety,emotion,silence}.json`，任何缺失抛 `i18n_missing:<lang>:<file>`；正则编译失败抛 `i18n_pattern_invalid:<lang>:<field>`；合并 `evidence`/`recentQueries`/`safety`/`emotion`；导出 `DEFAULT_I18N = loadI18n(<gateway/config>)`。
+1. `config/i18n/zh/safety.json` 原样保存 `config/safety.json` 的三个短语数组；ja/en 各写本地化词表。`gateway/src/config.ts` 新增 `SharedSafetyConfig`、`loadSharedSafety(path)`、`mergeSafety(shared, phrases)`；**保留**现有 `loadSafetyConfig`/`SafetyRules` 不动，避免本任务打断 writer/tools。`load.ts` 用 `mergeSafety(loadSafetyConfig(sharedPath), i18nPhrases)` 得到 `I18nBundle.safety`，去重。
+2. `config/i18n/zh/emotion.json` 原样保存 `config/emotion.json` 的 `lexicon`；ja/en 各写本地化词表。`session/emotion.ts` 新增 `SharedEmotionConfig`、`loadSharedEmotion`、`mergeEmotion`；**保留**现有 `loadEmotionConfig`/`EmotionConfig` 不动。`load.ts` 把共享 `lexicon` 与三语词表合并去重。
+3. `config/i18n/zh/memory.json` 原样保存 `config/memory.json` 的中文文案与词表（这是 Task 4/5 切换前的副本）；`config/memory.json` 本任务**不改**。`memory.json` 里的 `extractLabels` 使用现有 `worker.renderInput` 的中文标签逐字复制；`evidence.questionPatterns` 使用现有 `(?:吗|呢|么|嘛|来着)\s*[。.!！…~～]*$`；`addressingPatterns` 使用现有 `^(?:用户名叫|用户叫|我叫)(.+)$`。
+4. `language.json` 使用**模板**而非正则：`names`（本语言名称）、`shortAcks`、`questionSuffixes`、`requestTemplates: [{ language, template }]`。`{name}` 由目标语言的 `names` 展开；加载器锚定整句（`^(?:...)$`，`iu`），并保留现有“去边缘标点/空白”的语义；短应答在加载时归一化（去边缘标点、小写）后并入一个 Set。
+5. `load.ts` 读取 `config/i18n/<lang>/{language,memory,safety,emotion,silence}.json`，任何缺失抛 `i18n_missing:<lang>:<file>`；正则编译失败抛 `i18n_pattern_invalid:<lang>:<field>`；合并 `evidence`/`recentQueries`/`safety`/`emotion`；导出 `DEFAULT_I18N = loadI18n(<gateway/config>)`。
 
 `zh/language.json` 参考内容（必须覆盖 M1 全部显式换语用例）：
 
@@ -242,7 +237,7 @@ Expected: FAIL（`gateway/src/i18n/load.ts` 不存在）。
 }
 ```
 
-`ja/language.json` 至少包含 `names: ["日语","日文","日本語","japanese"]`、日语短应答（はい/うん/ええ/いいえ/そう/そうですね）、`questionSuffixes: ["か","かな","かしら"]`、模板 `"日本語で"`、`"日本語でお願いします"`、`"英語で"`、`"中国語で"`。`en/language.json` 至少包含 `names: ["英文","英语","english"]`、短应答（ok/okay/yes/yeah/yep/no/nope）、模板 `"{name} please"`、`"speak {name}"`、`"talk in {name}"`、`"switch to {name}"`、`"reply in {name}"`、`"answer in {name}"`。
+`ja/language.json` 至少包含 `names: ["日语","日文","日本語","japanese"]`、日语短应答（はい/うん/ええ/いいえ/そう/そうですね）、`questionSuffixes: ["か","かな","かしら"]`、模板 `"日本語で"`、`"日本語でお願いします"`、`"英語で"`、`"中国語で"`。`en/language.json` 至少包含 `names: ["英文","英语","english"]`、短应答（ok/okay/yes/yeah/yep/no/nope）、模板 `"{name} please"`、`"speak {name}"`、`"speak in {name}"`、`"talk in {name}"`、`"switch to {name}"`、`"reply in {name}"`、`"answer in {name}"`。
 
 - [ ] **Step 5: 把 `detectLanguage` 改为配置驱动**
 
@@ -273,15 +268,15 @@ export function detectLanguage(text: string, previous: Language = 'zh', rules: L
 
 - `language.test.ts` 改为 `const rules = loadI18n(config).language;`，所有 `detectLanguage(x, y)` 变 `detectLanguage(x, y, rules)`；M1 全部用例必须保持通过。
 - `session.test.ts` 的 `setup()` 增加 `languageRules: loadI18n(config).language`；`multilingual.test.ts` 后续同样。
-- `memory-text.test.ts` 的 `scanText` 规则改为 `loadI18n(config).safety`；`loadSafetyConfig` 断言改为 `loadSharedSafety` + i18n 合并词表。
-- `emotion.test.ts` 使用 `loadI18n(config).emotion`；如测试直接 `loadEmotionConfig`，改为 `loadSharedEmotion` + `mergeEmotion`。
-- `memory-acceptance.test.ts` 的 `memoryConfig.memoryNoticeKeywords` 改为 `i18n.memory.zh.noticeKeywords`；`recallSkipPatterns` 等改用 `i18n.evidence`/`i18n.memory.zh.recall`。
-- `index.ts`：`const i18n = loadI18n(`${root}config`)`；传 `languageRules: i18n.language`。此任务不接线其它 i18n 字段。
+- `index.ts`：`const i18n = loadI18n(`${root}config`)`；传 `languageRules: i18n.language`。此任务不接线其它 i18n 字段，`config/memory.json`、`config/safety.json`、`config/emotion.json` 保持原样。
 
 - [ ] **Step 7: 跑聚焦测试与 typecheck**
 
-Run: `npm test -w gateway -- test/i18n.test.ts test/language.test.ts test/memory-text.test.ts test/emotion.test.ts test/session.test.ts`
+Run: `npm test -w gateway -- test/i18n.test.ts test/language.test.ts test/session.test.ts`
 Expected: PASS。
+
+Run: `npm test -w gateway -- test/memory-text.test.ts test/emotion.test.ts`
+Expected: PASS（本任务未改共享 safety/emotion 配置，旧测试应保持通过）。
 
 Run: `npm run typecheck -w gateway`
 Expected: PASS。
@@ -289,7 +284,7 @@ Expected: PASS。
 - [ ] **Step 8: 提交**
 
 ```bash
-git add gateway/src/i18n gateway/config gateway/src/config.ts gateway/src/session/emotion.ts gateway/src/session/pacing.ts gateway/src/session/language.ts gateway/src/session/session.ts gateway/src/index.ts gateway/test/i18n.test.ts gateway/test/language.test.ts gateway/test/memory-text.test.ts gateway/test/emotion.test.ts gateway/test/session.test.ts gateway/test/memory-acceptance.test.ts
+git add gateway/src/i18n gateway/config/i18n gateway/src/config.ts gateway/src/session/emotion.ts gateway/src/session/language.ts gateway/src/session/session.ts gateway/src/index.ts gateway/test/i18n.test.ts gateway/test/language.test.ts gateway/test/session.test.ts
 git commit -m "feat(gateway): add i18n config loader and language rules"
 ```
 
@@ -471,7 +466,7 @@ git commit -m "feat(gateway): add ja/en elder-companion language packs"
 - Modify: `gateway/src/memory/store.ts`
 - Modify: `gateway/src/session/tools/recall.ts`（`sameUtterance`/`grounded` 标点与假名 token）
 - Modify: `gateway/src/index.ts`（startup 有界回填）
-- Modify: `gateway/src/session/session.ts`（快照渲染传 labels/rules；语言切换重渲染）
+- Modify: `gateway/src/session/session.ts`（新增 `i18n?: I18nBundle` 依赖；快照渲染传 labels/rules；语言切换重渲染；`safeGreeting` 用标签）
 - Modify: `gateway/src/identity/registry.ts`（初始快照 labels/rules）
 - Test: `gateway/test/memory-text.test.ts`
 - Test: `gateway/test/evidence.test.ts`
@@ -616,10 +611,12 @@ export function isMemoryEvidence(text: string, rules: EvidenceRules = EMPTY_EVID
 
 - [ ] **Step 5: 会话/注册表接线**
 
+- `SessionDeps` 增加 `i18n?: I18nBundle`（Task 4/5 复用；默认 `DEFAULT_I18N`）。
 - `Session.refreshMemorySnapshot` 使用 `PROMPT_LABELS[this.language]` 和 `i18n` 规则。
 - 构造函数在确定 `this.language` 后调用一次 `refreshMemorySnapshot()`（有 store 时）；`applyLanguage` 在语言变化时调用。
 - `safeGreeting` 的硬编码 `'称呼：'` 改为 `PROMPT_LABELS[this.language].addressing + separator`（此步先改标签读取；模板仍是配置）。
 - `DeviceRegistry` 增加 `i18n?: I18nBundle`；`resolve` 用 `roles.defaultLanguage(roleId)` 的 labels/rules 渲染；`index.ts` 传入 i18n。
+- 更新仍以旧签名调用 `renderMemoryViews`/`isMemoryEvidence` 的 `docs/testing/*.mjs` 探针：传入 `DEFAULT_I18N.evidence` 和 `memory.<lang>.addressingPatterns`，保持原有中文断言。
 - 保持 `renderMemoryViews` 的三种视图、预算、用户尾部过滤逻辑不变。
 
 - [ ] **Step 6: 跑高风险中文回归**
@@ -739,7 +736,7 @@ Expected: FAIL（`createToolRegistry` 不接受 options / worker 无 systemPromp
 
 - [ ] **Step 4: Session 按语言构造工具**
 
-`SessionDeps` 增加 `i18n?: I18nBundle`、`recallClipChars?: number`、`recallPhraseTimeoutMs?: number`。
+`SessionDeps` 已由 Task 3 增加 `i18n?: I18nBundle`；本任务增加 `recallClipChars?: number`、`recallPhraseTimeoutMs?: number`。
 `Session` 删除 `private readonly tools = createToolRegistry()`，改为：
 
 ```ts
@@ -811,12 +808,18 @@ git commit -m "feat(gateway): localize recall, extraction, and summaries"
 - Modify: `gateway/src/roles/fileCatalog.ts`（若 Task 2 未完成 activity 分隔符）
 - Modify: `gateway/src/index.ts`
 - Modify: `gateway/src/identity/registry.ts`
+- Modify: `gateway/src/config.ts`（删除旧整对象 `loadSafetyConfig`，`SafetyRules` 改为 shared + phrase；`loadSharedSafety` 成为唯一读取）
+- Modify: `gateway/src/session/emotion.ts`（删除旧整对象 `loadEmotionConfig`，`loadSharedEmotion` + `mergeEmotion` 成为唯一读取）
+- Modify: `gateway/src/session/pacing.ts`（`MemoryBudgetSchema` 删除已迁走的文本字段，新增 `kanaBackfillBatch?`）
+- Modify: `gateway/config/{memory,safety,emotion}.json`（删除已迁入 `config/i18n/zh/` 的字段）
 - Test: `gateway/test/silence.test.ts`
 - Test: `gateway/test/director-silence.test.ts`
 - Test: `gateway/test/session.test.ts`
 - Test: `gateway/test/snapshot.test.ts`
 - Test: `gateway/test/fileCatalog.test.ts`
 - Test: `gateway/test/memory-text.test.ts`
+- Test: `gateway/test/emotion.test.ts`
+- Test: `gateway/test/memory-acceptance.test.ts`
 
 **Interfaces:**
 - Consumes: Task 1 `I18nBundle.safety/emotion/silence`、Task 3 `refreshMemorySnapshot`、Task 4 `toolsFor`。
@@ -913,6 +916,19 @@ if (stage === 'rest') return !/[？?]/.test(text);
 - `DeviceRegistry`：`i18n` 依赖用于初始快照 labels/evidence（Task 3）；本步在 `index.ts` 传入。
 - `fileCatalog.ts`：确认 activityDirectory 用 `PROMPT_LABELS[language].separator`（Task 2），本步只补测试。
 
+- [ ] **Step 4b: 完成共享配置迁移（单一事实来源）**
+
+此时所有消费者（writer、tools、Session、index、worker）已经读 `I18nBundle`，可以删除共享 JSON 里的旧字段：
+
+1. `gateway/config/memory.json` 删除 `forgetConfirmText`、`declineConfirmPrompt`、`declineConfirmedText`、`recallEmptyText`、`recallFoundPrefix`、`memoryNoticeKeywords`、`lightAcks`、`recallSkipPatterns`、`recallRecentQueries`；`MemoryBudgetSchema` 同步删除这些字段，保留 `recallClipChars`、`recallPhraseMaxChars`、`recallPhraseTimeoutMs`、抽取数值等，新增可选 `kanaBackfillBatch`（1–5000，默认 500）。
+2. `gateway/config/safety.json` 只保留 `minMaskedDigits`、`chineseDigits`、`invisibleCodePoints`；`gateway/src/config.ts` 删除旧 `loadSafetyConfig`，`loadSharedSafety` + `mergeSafety` 成为唯一读取；`SafetyRules` 仍为 shared + 三数组（供 `scanText`）。
+3. `gateway/config/emotion.json` 只保留 `defaultEmotion`、`debounceMs`、`revertAfterMs`、`firstSentenceMaxChars`、`priority`；`gateway/src/session/emotion.ts` 删除旧 `loadEmotionConfig`，`loadSharedEmotion` + `mergeEmotion` 成为唯一读取。
+4. 更新 `memory-text.test.ts`：`scanText` 用 `DEFAULT_I18N.safety`；`loadSafetyConfig` 断言改为 `loadSharedSafety` + i18n 合并词表。`emotion.test.ts` 用 `DEFAULT_I18N.emotion`。`memory-acceptance.test.ts` 的 `memoryConfig.memoryNoticeKeywords`/`recallSkipPatterns` 改用 `i18n`。
+5. `gateway/test/fixtures/**` 中若有旧的完整 safety/emotion JSON，改为 shared + i18n 两段或直接使用生产 `DEFAULT_I18N`。
+
+Run: `npm test -w gateway -- test/memory-text.test.ts test/emotion.test.ts test/memory-acceptance.test.ts test/memory-tools.test.ts test/session.test.ts`
+Expected: PASS。
+
 - [ ] **Step 5: 跑高风险回归**
 
 Run: `npm test -w gateway -- test/silence.test.ts test/director-silence.test.ts test/director.test.ts test/session.test.ts test/memory-text.test.ts test/snapshot.test.ts test/memory-tools.test.ts test/memory-acceptance.test.ts`
@@ -924,7 +940,7 @@ Expected: PASS。
 - [ ] **Step 6: 提交**
 
 ```bash
-git add gateway/src/memory/writer.ts gateway/src/session/silence.ts gateway/src/session/session.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/src/identity/registry.ts gateway/test/silence.test.ts gateway/test/director-silence.test.ts gateway/test/session.test.ts gateway/test/snapshot.test.ts gateway/test/fileCatalog.test.ts gateway/test/memory-text.test.ts
+git add gateway/src/memory/writer.ts gateway/src/session/silence.ts gateway/src/session/session.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/src/identity/registry.ts gateway/src/config.ts gateway/src/session/emotion.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/config/safety.json gateway/config/emotion.json gateway/test/silence.test.ts gateway/test/director-silence.test.ts gateway/test/session.test.ts gateway/test/snapshot.test.ts gateway/test/fileCatalog.test.ts gateway/test/memory-text.test.ts gateway/test/emotion.test.ts gateway/test/memory-acceptance.test.ts
 git commit -m "feat(gateway): localize safety, emotion, silence, and notice checks"
 ```
 
