@@ -412,6 +412,8 @@ export class AppController {
   private transition(input: AvatarInput): void {
     const next = nextState(this.state, input);
     if (next === this.state) return;
+    // A refresh only guards the timeout while it owns the thinking pose; any other pose ends it.
+    if (next !== 'thinking') this.refreshing = false;
     this.state = next;
     this.avatar?.enterState(next);
     this.post({ type: 'state', state: next });

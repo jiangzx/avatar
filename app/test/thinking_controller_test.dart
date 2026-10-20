@@ -203,6 +203,13 @@ void main() {
     expect(t.fillersThisTurn, 0);
   });
 
+  test('a context refresh never arms the reconnect long-wait filler', () {
+    final t = withFiller();
+    t.onFillerDone(3400);
+    t.onContextRefresh();
+    expect(t.tick(6500).whereType<PlayFiller>(), isEmpty);
+  });
+
   test('onContextRefreshDone only leaves thinking; later calls are no-ops', () {
     final t = make();
     expect(t.onContextRefreshDone(), isEmpty); // not thinking yet

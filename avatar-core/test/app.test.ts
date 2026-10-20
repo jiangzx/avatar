@@ -281,4 +281,22 @@ describe('AppController', () => {
     await vi.advanceTimersByTimeAsync(THINKING_TIMEOUT_MS + 1000);
     expect(t.states().at(-1)).toBe('idle');
   });
+
+  it('a slow refresh bridged by audio does not leave the thinking timeout disabled', async () => {
+    const t = await started();
+    t.server({ type: 'presence', phase: 'refreshing' });
+    // Slow reconnect: the bridge audio takes the thinking pose away, so no presence ready follows.
+    playing(t, 1);
+    expect(t.states().at(-1)).toBe('speaking');
+    t.server({ type: 'response.end', responseSeq: 1 });
+    t.pb().gate.finish(1);
+    t.pb().ev.onEnded(1, 600);
+    expect(t.states().at(-1)).toBe('idle');
+    // The next silent turn must regain the timeout.
+    t.vadCb().onStart(performance.now());
+    t.vadCb().onEnd();
+    expect(t.states().at(-1)).toBe('thinking');
+    await vi.advanceTimersByTimeAsync(THINKING_TIMEOUT_MS + 1000);
+    expect(t.states().at(-1)).toBe('idle');
+  });
 });
