@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PROMPT_LABELS } from '../src/roles/labels.ts';
 import { buildInstructions } from '../src/session/instructions.ts';
 import { renderMemoryViews, renderSnapshot } from '../src/memory/snapshot.ts';
 
@@ -139,6 +140,18 @@ describe('renderSnapshot', () => {
       maxChars: 200,
     });
     expect(text).toBe('称呼：王叔');
+  });
+
+  it('renders English labels when requested', () => {
+    const text = renderSnapshot({
+      facts: [{ category: 'other', text: 'likes tea' }],
+      notes: [],
+      tail: [{ role: 'user', text: 'hello' }],
+      maxChars: 600,
+      labels: PROMPT_LABELS.en,
+    });
+    expect(text).toContain('Fact: likes tea');
+    expect(text).toContain('User: hello');
   });
 });
 

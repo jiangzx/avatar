@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PROMPT_LABELS } from '../src/roles/labels.ts';
 import { buildInstructions, historyBudget } from '../src/session/instructions.ts';
 import { ConversationLedger, type LedgerEntry } from '../src/session/ledger.ts';
 
@@ -34,6 +35,18 @@ describe('buildInstructions', () => {
     expect(text).toContain('M'.repeat(5));
     expect(text).not.toContain('M'.repeat(20));
     expect(text.length).toBeLessThanOrEqual(70 + 4); // '（暂无）' placeholder may replace an emptied section
+  });
+
+  it('renders English section labels when requested', () => {
+    const text = buildInstructions(
+      { persona: 'P', memorySnapshot: 'Name: Wang', summary: 'S', recent: [entry('user', 'U')] },
+      { totalChars: 1000, snapshotMaxChars: 100, summaryMaxChars: 100 },
+      PROMPT_LABELS.en,
+    );
+    expect(text).toContain('## Memory reference');
+    expect(text).toContain('## Conversation summary');
+    expect(text).toContain('## Recent conversation');
+    expect(text).toContain('User: U');
   });
 
   it('computes the room left for summary plus recent turns', () => {

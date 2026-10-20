@@ -19,6 +19,7 @@ import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
 import type { TranscriptWriter } from '../memory/writer.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
+import { PROMPT_LABELS } from '../roles/labels.ts';
 import { devContext, type SessionContext } from './context.ts';
 import { Director, type SilenceContext, type SilencePlan } from './director.ts';
 import { EmotionTagger, type EmotionConfig } from './emotion.ts';
@@ -233,7 +234,7 @@ export class Session {
     const initialPersona = this.personaFor(this.language);
     const ledgerOpts = deps.ledger ?? DEFAULT_LEDGER_OPTIONS;
     // Summarize before the instruction budget would have to drop unsummarized turns.
-    const history = deps.budget ? historyBudget(initialPersona, deps.budget) : Number.POSITIVE_INFINITY;
+    const history = deps.budget ? historyBudget(initialPersona, deps.budget, PROMPT_LABELS[this.language]) : Number.POSITIVE_INFINITY;
     this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
     const extractor = deps.worker;
     const ownerId = ctx.ownerId;
@@ -544,9 +545,11 @@ export class Session {
   }
 
   private instructions(): string {
+    const labels = PROMPT_LABELS[this.language];
     return buildInstructions(
       { persona: this.personaFor(this.language), memorySnapshot: this.context.memorySnapshot, summary: this.ledger.summary, recent: this.ledger.recent },
       this.deps.budget,
+      labels,
     );
   }
 
