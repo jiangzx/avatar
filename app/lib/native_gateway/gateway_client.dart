@@ -44,6 +44,7 @@ class NativeGatewayClient implements GatewayClientLike {
     required this.events,
     this.platform = 'android',
     this.audioPath = 'B',
+    this.language,
     this.maxResume = const Duration(seconds: 55),
     this.reconnectBase = const Duration(milliseconds: 500),
     this.reconnectMax = const Duration(seconds: 4),
@@ -59,6 +60,7 @@ class NativeGatewayClient implements GatewayClientLike {
   GatewayClientEvents events;
   final String platform;
   final String audioPath;
+  final String? language;
   final Duration maxResume;
   final Duration reconnectBase;
   final Duration reconnectMax;
@@ -177,7 +179,7 @@ class NativeGatewayClient implements GatewayClientLike {
     if (resume) {
       send(SessionResume(tokens.sessionId));
     } else {
-      send(SessionStart(platform: platform, audioPath: audioPath));
+      send(SessionStart(platform: platform, audioPath: audioPath, language: language));
       _startSent = true;
     }
     _readyTimer?.cancel();

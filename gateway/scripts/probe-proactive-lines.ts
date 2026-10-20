@@ -8,7 +8,7 @@ import { createSilencePlanner } from '../src/session/silence.ts';
 import type { SilenceContext } from '../src/session/director.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const cfg = loadDirectorConfig(`${root}roles/elder-companion/director.json`);
+const cfg = loadDirectorConfig(`${root}roles/elder-companion/zh/director.json`);
 const decision = cfg.silenceDecision;
 if (!decision) throw new Error('silence_decision_missing');
 const memory = JSON.parse(readFileSync(`${root}config/memory.json`, 'utf8')) as { extractModel?: string };

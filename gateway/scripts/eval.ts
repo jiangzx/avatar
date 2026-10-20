@@ -31,7 +31,12 @@ const roleId = roles.defaultRole();
 const styleId = args.style ?? roles.defaultStyle(roleId);
 if (!roles.hasStyle(roleId, styleId)) throw new Error(`unknown style ${styleId}`);
 const pacing = loadPacing(`${root}config/pacing.json`);
-const report = validateBudgets(pacing, loadMemoryBudget(`${root}config/memory.json`), config.ledger, roles.pairs().map((p) => roles.buildPersona(p.roleId, p.styleId)));
+const memoryConfig = loadMemoryBudget(`${root}config/memory.json`);
+const personasByLanguage: Partial<Record<'zh' | 'ja' | 'en', string[]>> = {};
+for (const pair of roles.languagePairs()) {
+  (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
+}
+const report = validateBudgets(pacing, memoryConfig, config.ledger, personasByLanguage);
 const evalCfg = loadEvalConfig(`${root}config/eval.json`);
 const script = loadMockScript(`${root}mock/script.json`);
 const only = args.only;
@@ -46,6 +51,7 @@ const make: SessionMaker = (onReplyMetrics) => new Session({
   ledger: config.ledger,
   modelOwnsTurns: adapter === 'qwen',
   budget: report.budget,
+  maxHistoryChars: report.minHistoryChars,
   modelContextTokenLimit: pacing.rebuild.contextChars,
   rebuildTriggerRatio: pacing.rebuild.triggerRatio,
   rebuildAfterTurns: pacing.rebuild.afterTurns,

@@ -50,8 +50,26 @@ describe('QwenSummarizer', () => {
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const port = (server.address() as { port: number }).port;
-    const summarizer = new QwenSummarizer({ apiKey: 'fixture-key', endpoint: `http://127.0.0.1:${port}/chat/completions`, model: 'fixture-model', language: 'ja' });
-    await expect(summarizer.summarize('', [{ role: 'user', text: 'fixture user', ts: 1 }])).resolves.toBe('fixture summary');
+    const summarizer = new QwenSummarizer({ apiKey: 'fixture-key', endpoint: `http://127.0.0.1:${port}/chat/completions`, model: 'fixture-model' });
+    await expect(summarizer.summarize('', [{ role: 'user', text: 'fixture user', ts: 1 }], 'ja')).resolves.toBe('fixture summary');
+  });
+
+  it('uses the English system prompt when language is en', async () => {
+    const server = createServer((req, res) => {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', () => {
+        const payload = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+        expect(payload.messages[0]?.content).toContain('English');
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ choices: [{ message: { content: 'fixture summary' } }] }));
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as { port: number }).port;
+    const summarizer = new QwenSummarizer({ apiKey: 'fixture-key', endpoint: `http://127.0.0.1:${port}/chat/completions`, model: 'fixture-model' });
+    await expect(summarizer.summarize('', [{ role: 'user', text: 'fixture user', ts: 1 }], 'en')).resolves.toBe('fixture summary');
   });
 
   it('keeps the Chinese system prompt when language is zh', async () => {
@@ -68,8 +86,8 @@ describe('QwenSummarizer', () => {
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const port = (server.address() as { port: number }).port;
-    const summarizer = new QwenSummarizer({ apiKey: 'fixture-key', endpoint: `http://127.0.0.1:${port}/chat/completions`, model: 'fixture-model', language: 'zh' });
-    await expect(summarizer.summarize('', [{ role: 'user', text: 'fixture user', ts: 1 }])).resolves.toBe('fixture summary');
+    const summarizer = new QwenSummarizer({ apiKey: 'fixture-key', endpoint: `http://127.0.0.1:${port}/chat/completions`, model: 'fixture-model' });
+    await expect(summarizer.summarize('', [{ role: 'user', text: 'fixture user', ts: 1 }], 'zh')).resolves.toBe('fixture summary');
   });
 
   it('rejects malformed or unsuccessful responses without exposing payloads', async () => {

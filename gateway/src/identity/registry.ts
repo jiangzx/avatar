@@ -100,7 +100,8 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     store.touchDevice(device.ownerId, device.deviceId, now);
     log('device_resolved', { agent: shortHash(agent.id), style: styleId });
     const owner = store.getOwner(device.ownerId);
-    const ctx: SessionContext = { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: roles.voiceFor(roleId, styleId) };
+    const language = roles.defaultLanguage(roleId);
+    const ctx: SessionContext = { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: roles.voiceFor(roleId, styleId, language), language };
     // Read the store, not the live Session. The server flushes the previous owner before this resolve is used.
     // Only user-grounded memory enters prompts: no episodes, notes, sensitive facts, or assistant lines.
     const views = renderMemoryViews({

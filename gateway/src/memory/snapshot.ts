@@ -1,22 +1,35 @@
 // High-risk memory-view contract: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
+import { PROMPT_LABELS, type PromptLabels } from '../roles/labels.ts';
 import { isMemoryEvidence } from './evidence.ts';
 
 export function renderSnapshot(input: {
-  facts: readonly { category: string; text: string }[]
-  notes: readonly { text: string }[]
-  episode?: { summary: string }
-  tail: readonly { role: 'user' | 'assistant'; text: string }[]
-  maxChars: number
+  facts: readonly { category: string; text: string }[];
+  notes: readonly { text: string }[];
+  episode?: { summary: string };
+  tail: readonly { role: 'user' | 'assistant'; text: string }[];
+  maxChars: number;
+  labels?: PromptLabels;
 }): string {
-  const addressing = input.facts.filter((f) => f.category === 'addressing' && f.text).map((f) => addressingText(oneLine(f.text)));
-  const other = input.facts.filter((f) => f.category !== 'addressing' && f.text).map((f) => `事实：${oneLine(f.text)}`);
-  const notes = input.notes.filter((n) => n.text).map((n) => `关系：${oneLine(n.text)}`);
-  const tail = input.tail.filter((t) => t.text).map((t) => `${t.role === 'user' ? '用户' : '助手'}：${oneLine(t.text)}`);
+  const labels = input.labels ?? PROMPT_LABELS.zh;
+  const addressing = input.facts
+    .filter((f) => f.category === 'addressing' && f.text)
+    .map((f) => addressingText(oneLine(f.text), labels));
+  const other = input.facts
+    .filter((f) => f.category !== 'addressing' && f.text)
+    .map((f) => `${labels.fact}${labels.separator}${oneLine(f.text)}`);
+  const notes = input.notes
+    .filter((n) => n.text)
+    .map((n) => `${labels.relationship}${labels.separator}${oneLine(n.text)}`);
+  const tail = input.tail
+    .filter((t) => t.text)
+    .map((t) => `${t.role === 'user' ? labels.user : labels.assistant}${labels.separator}${oneLine(t.text)}`);
   const head = addressing.join('\n');
   // Names stay whole even when the addressing block itself exceeds the budget.
   if (head.length > input.maxChars) return head;
   const kept = [...addressing];
-  const episode = input.episode?.summary ? `上次话题（概括，非原话）：${input.episode.summary}` : '';
+  const episode = input.episode?.summary
+    ? `${labels.episode}${labels.separator}${input.episode.summary}`
+    : '';
   if (episode && joinedLength([...kept, episode]) <= input.maxChars) kept.push(episode);
   for (const line of [...other, ...notes]) {
     if (joinedLength([...kept, line]) > input.maxChars) break;
@@ -54,6 +67,7 @@ export function renderMemoryViews(input: {
   skipPatterns?: readonly string[];
   lightAcks?: readonly string[];
   maxChars: number;
+  labels?: PromptLabels;
 }): MemoryViews {
   const nameFacts = input.addressing.filter(Boolean).map((text) => ({ category: 'addressing', text }));
   const factLines = input.facts.filter(Boolean).map((text) => ({ category: 'other', text }));
@@ -63,9 +77,9 @@ export function renderMemoryViews(input: {
     .filter((entry) => entry.role !== 'assistant' && isMemoryEvidence(entry.text, skipPatterns, input.lightAcks ?? []))
     .map((entry) => ({ role: 'user' as const, text: entry.text }));
   return {
-    full: renderSnapshot({ facts: [...nameFacts, ...factLines], notes: [], tail: userTail, maxChars: input.maxChars }),
-    greeting: renderSnapshot({ facts: [...nameFacts, ...factLines], notes: [], tail: [], maxChars: input.maxChars }),
-    proactive: renderSnapshot({ facts: factLines, notes: [], tail: [], maxChars: input.maxChars }),
+    full: renderSnapshot({ facts: [...nameFacts, ...factLines], notes: [], tail: userTail, maxChars: input.maxChars, labels: input.labels }),
+    greeting: renderSnapshot({ facts: [...nameFacts, ...factLines], notes: [], tail: [], maxChars: input.maxChars, labels: input.labels }),
+    proactive: renderSnapshot({ facts: factLines, notes: [], tail: [], maxChars: input.maxChars, labels: input.labels }),
     hasTopic: factLines.length > 0,
   };
 }
@@ -76,9 +90,9 @@ function oneLine(text: string): string {
 }
 
 /** Renders a stored self-introduction as a short label so the model does not mirror the whole sentence. */
-function addressingText(text: string): string {
+function addressingText(text: string, labels: PromptLabels): string {
   const match = /^(?:用户名叫|用户叫|我叫)(.+)$/.exec(text.trim());
-  return match ? `称呼：${match[1]}` : text;
+  return match ? `${labels.addressing}${labels.separator}${match[1]}` : text;
 }
 
 function joinedLength(lines: readonly string[]): number {

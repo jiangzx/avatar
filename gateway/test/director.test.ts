@@ -74,6 +74,28 @@ describe('Director', () => {
     expect(calls).toEqual([['greeting', 'G']]);
   });
 
+  it('swaps the copy pack on setLanguage without resetting ladder state', () => {
+    const zh = { ...cfg, greetingText: 'zh-greeting', presenceText: 'zh-presence', checkText: 'zh-check' };
+    const en = { ...cfg, greetingText: 'en-greeting', presenceText: 'en-presence', checkText: 'en-check' };
+    const reqs: ProactiveRequest[] = [];
+    const d = new Director((language) => language === 'en' ? en : zh, { requestResponse: (_k, r) => reqs.push(r) });
+
+    d.onSessionStart();
+    expect(reqs.at(-1)).toEqual({ cue: 'greeting', instruction: 'G', fallbackText: 'zh-greeting' });
+
+    // Arm the first silence step after the opening, then swap the pack mid-ladder.
+    d.onAiTurnEnded();
+    d.setLanguage('en');
+    vi.advanceTimersByTime(5000);
+    expect(reqs.at(-1)).toEqual({ cue: 'followup', instruction: 'HERE', fallbackText: 'en-presence' });
+
+    // The ladder moved on to its next stage instead of restarting at the greeting.
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(10000);
+    expect(reqs.at(-1)).toEqual({ cue: 'followup', instruction: 'CHECK', fallbackText: 'en-check' });
+    expect(reqs.filter((r) => r.cue === 'greeting')).toHaveLength(1);
+  });
+
   it('opens from memory when a snapshot exists, and introduces itself when it does not', () => {
     const withMemory = make({ ...cfg, greetingMemoryInstruction: 'MEM', greetingMemoryText: '又见到您了' });
     const reqs: ProactiveRequest[] = [];

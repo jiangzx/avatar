@@ -24,7 +24,21 @@ describe('config', () => {
 
   it('parses defaults and dev origins', () => {
     const c = loadConfig({ APP_SECRET: 'x'.repeat(16), DEV_ORIGINS: 'http://localhost:5173, http://a.test' });
-    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', qwenEndpoint: '', qwenModel: 'qwen3.8-omni-flash-realtime', qwenVoice: 'longanlingxin', summarizer: 'mock', summarizerEndpoint: '', summarizerModel: 'qwen-flash', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, mockPaceFactor: 2, sessionStartTimeoutMs: 10000, confirmWindowMs: 300, ledger: { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6000 }, sessionGraceMs: 60000, sessionUnclaimedMs: 300000, wsHeartbeatMs: 10000, wsMaxFramesPerSecond: 100, maxSessions: 100, sessionRateLimitMax: 10, sessionRateLimitWindowMs: 60000, resumeRateLimitMax: 30, resumeRateLimitWindowMs: 60000, trustProxy: false, rebuildBackoffBaseMs: 1000, rebuildBackoffMaxMs: 8000 });
+    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', seeduplexVoices: { zh: 'zh_male_xiaotian_jupiter_bigtts', en: 'en_male_tim_uranus_bigtts' }, qwenEndpoint: '', qwenModel: 'qwen3.8-omni-flash-realtime', qwenVoice: 'longanlingxin', qwenVoices: { zh: 'longanlingxin', ja: 'Tina', en: 'Tina' }, summarizer: 'mock', summarizerEndpoint: '', summarizerModel: 'qwen-flash', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, mockPaceFactor: 2, sessionStartTimeoutMs: 10000, confirmWindowMs: 300, ledger: { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6000 }, sessionGraceMs: 60000, sessionUnclaimedMs: 300000, wsHeartbeatMs: 10000, wsMaxFramesPerSecond: 100, maxSessions: 100, sessionRateLimitMax: 10, sessionRateLimitWindowMs: 60000, resumeRateLimitMax: 30, resumeRateLimitWindowMs: 60000, trustProxy: false, rebuildBackoffBaseMs: 1000, rebuildBackoffMaxMs: 8000 });
+  });
+
+  it('parses per-language voice maps with zh fallbacks', () => {
+    const c = loadConfig({
+      APP_SECRET: 'x'.repeat(16),
+      QWEN_VOICE: 'qwen-zh',
+      QWEN_VOICE_JA: 'Tina',
+      SEEDUPLEX_VOICE: 'seed-zh',
+      SEEDUPLEX_VOICE_EN: 'seed-en',
+    });
+    expect(c.qwenVoices).toEqual({ zh: 'qwen-zh', ja: 'Tina', en: 'Tina' });
+    expect(c.seeduplexVoices).toEqual({ zh: 'seed-zh', en: 'seed-en' });
+    expect(c.qwenVoice).toBe('qwen-zh');
+    expect(c.seeduplexVoice).toBe('seed-zh');
   });
 
   it('requires a key only when Seeduplex is explicitly selected', () => {
@@ -58,7 +72,7 @@ describe('config', () => {
   });
 
   it('rejects unknown director keys', () => {
-    const cfg = JSON.parse(readFileSync(join(root, 'roles/elder-companion/director.json'), 'utf8')) as Record<string, unknown>;
+    const cfg = JSON.parse(readFileSync(join(root, 'roles/elder-companion/zh/director.json'), 'utf8')) as Record<string, unknown>;
     expect(() => DirectorSchema.parse(cfg)).not.toThrow();
     expect(() => DirectorSchema.parse({ ...cfg, typoKey: true })).toThrow();
   });
@@ -111,7 +125,7 @@ describe('config', () => {
   });
 
   it('loads the shipped role director config through the shared schema', () => {
-    const d = loadDirectorConfig(`${root}roles/elder-companion/director.json`);
+    const d = loadDirectorConfig(`${root}roles/elder-companion/zh/director.json`);
     expect(d.maxConsecutive).toBe(2);
     expect(d.maxPerWindow).toBe(8);
     expect(d.companyAfterMs).toBe(45000);
@@ -161,7 +175,7 @@ describe('config', () => {
   });
 
   it('rejects optional speech retries and a speak template that cannot carry the approved line', () => {
-    const cfg = loadDirectorConfig(`${root}roles/elder-companion/director.json`);
+    const cfg = loadDirectorConfig(`${root}roles/elder-companion/zh/director.json`);
     const decision = cfg.silenceDecision!;
     expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
       ...decision, policy: { ...decision.policy, retries: 1 },

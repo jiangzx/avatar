@@ -19,8 +19,8 @@ const voice = process.env.SEEDUPLEX_VOICE ?? 'zh_male_xiaotian_jupiter_bigtts';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const style = process.env.PROBE_STYLE ?? 'grandchild';
 const persona = [
-  readFileSync(`${root}roles/_shared/safety.md`, 'utf8'),
-  readFileSync(`${root}roles/elder-companion/styles/${style}.md`, 'utf8'),
+  readFileSync(`${root}roles/_shared/zh/safety.md`, 'utf8'),
+  readFileSync(`${root}roles/elder-companion/zh/styles/${style}.md`, 'utf8'),
 ].join('\n\n');
 const out = (o: Record<string, unknown>) => process.stdout.write(`${JSON.stringify(o)}\n`);
 

@@ -383,7 +383,13 @@ function bindConnection(ws: WebSocket, sessionId: string, connId: number, opts: 
       }
       begun = true;
       manager
-        .begin(sessionId, connId, msg.type === 'session.start' ? 'start' : 'resume', transport)
+        .begin(
+          sessionId,
+          connId,
+          msg.type === 'session.start' ? 'start' : 'resume',
+          transport,
+          msg.type === 'session.start' ? msg.clientInfo.language : undefined,
+        )
         .then((ok) => {
           if (!ok) ws.close(4002, 'bad_state');
         })

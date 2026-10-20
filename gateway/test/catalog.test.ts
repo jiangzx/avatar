@@ -22,15 +22,44 @@ describe('fixedRoleCatalog', () => {
     expect(roles.director(DEFAULT_ROLE)).toBe(director);
   });
 
+  it('exposes language-specific personas and directors', () => {
+    const roles = fixedRoleCatalog('P-zh', director, {
+      languages: ['zh', 'en'],
+      defaultLanguage: 'zh',
+      personas: { zh: 'P-zh', en: 'P-en' },
+      directors: { en: { ...director, greetingText: 'hello' } },
+    });
+    expect(roles.supportedLanguages(DEFAULT_ROLE)).toEqual(['zh', 'en']);
+    expect(roles.defaultLanguage(DEFAULT_ROLE)).toBe('zh');
+    expect(roles.buildPersona(DEFAULT_ROLE, 'grandchild', 'en')).toBe('P-en');
+    expect(roles.director(DEFAULT_ROLE, 'en').greetingText).toBe('hello');
+    expect(roles.director(DEFAULT_ROLE).greetingText).toBe('greeting');
+  });
+
   it('builds a dev context from the catalog defaults', () => {
-    expect(devContext(fixedRoleCatalog('P', director))).toEqual({ roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined });
+    expect(devContext(fixedRoleCatalog('P', director))).toEqual({ roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'zh' });
+  });
+
+  it('builds a dev context in the role default language', () => {
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'en'], defaultLanguage: 'en' });
+    expect(devContext(roles)).toEqual({ roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'en' });
+  });
+
+  it('keeps the stub default language inside its supported languages', () => {
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh'], defaultLanguage: 'en' });
+    expect(roles.supportedLanguages(DEFAULT_ROLE)).toEqual(['en', 'zh']);
+    expect(roles.defaultLanguage(DEFAULT_ROLE)).toBe('en');
+
+    const noList = fixedRoleCatalog('P', director, { defaultLanguage: 'en' });
+    expect(noList.supportedLanguages(DEFAULT_ROLE)).toEqual(['en']);
+    expect(noList.defaultLanguage(DEFAULT_ROLE)).toBe('en');
   });
 });
 
 describe('devContextResolver', () => {
   it('accepts requests without a bearer and rejects any bearer until identity exists', () => {
     const resolver = devContextResolver(fixedRoleCatalog('P', director));
-    expect(resolver.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined }, noticePending: false });
+    expect(resolver.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'zh' }, noticePending: false });
     expect(resolver.resolve('device-token-0123456789')).toEqual({ ok: false });
   });
 });

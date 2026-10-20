@@ -4,6 +4,7 @@ import {
   MIC_FRAME_SAMPLES,
   truncateByPlayback,
   type ClientMessage,
+  type Language,
   type ResponseKind,
   type ServerMessage,
 } from '@anyidea/protocol';
@@ -18,11 +19,13 @@ import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
 import type { TranscriptWriter } from '../memory/writer.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
+import { PROMPT_LABELS } from '../roles/labels.ts';
 import { devContext, type SessionContext } from './context.ts';
-import { Director } from './director.ts';
+import { Director, type SilenceContext, type SilencePlan } from './director.ts';
 import { EmotionTagger, type EmotionConfig } from './emotion.ts';
 import { InterruptCoordinator } from './interrupt.ts';
 import { buildInstructions, historyBudget, type InstructionBudget } from './instructions.ts';
+import { detectLanguage } from './language.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
 import { DEFAULT_TOOL_TURN_TIMEOUT_MS, type PacingConfig } from './pacing.ts';
@@ -82,6 +85,8 @@ export interface SessionDeps {
   toolTurnTimeoutMs?: number;
   /** Instruction size budget (gateway/config/memory.json); undefined = unbounded (tests). */
   budget?: InstructionBudget;
+  /** Smallest history room across supported languages (startup validation). */
+  maxHistoryChars?: number;
   /** Lines that challenge or deny an earlier memory; undefined = no denial filtering (tests). */
   recallSkipPatterns?: readonly string[];
   /** Whole-utterance acknowledgements that are not user statements. */
@@ -106,6 +111,8 @@ export interface SessionDeps {
   extractEveryUserTurns?: number;
   /** Rest delay used when a worker is injected. Matches extractSilenceMs. */
   extractSilenceMs?: number;
+  /** Default voice for the current language when the role/style does not override. */
+  voiceFor?: (language: Language) => string | undefined;
 }
 
 interface ResponseState {
@@ -136,7 +143,10 @@ export class Session {
   readonly ledger: ConversationLedger;
   readonly context: SessionContext;
   private readonly writer: TranscriptWriter | undefined;
-  private readonly persona: string;
+  private language: Language;
+  private readonly personas = new Map<Language, string>();
+  private readonly silencePlanners = new Map<Language, ReturnType<typeof createSilencePlanner>>();
+  private languagePushPending = false;
   private adapter: RealtimeAdapter;
   private transport: Transport | null = null;
   private readonly director: Director;
@@ -222,20 +232,22 @@ export class Session {
   ) {
     this.writer = deps.writer;
     this.context = ctx;
-    this.persona = deps.roles.buildPersona(ctx.roleId, ctx.styleId);
+    this.language = this.resolveLanguage(ctx.language ?? deps.roles.defaultLanguage(ctx.roleId));
+    const initialPersona = this.personaFor(this.language);
     const ledgerOpts = deps.ledger ?? DEFAULT_LEDGER_OPTIONS;
     // Summarize before the instruction budget would have to drop unsummarized turns.
-    const history = deps.budget ? historyBudget(this.persona, deps.budget) : Number.POSITIVE_INFINITY;
+    const history = deps.maxHistoryChars ?? (deps.budget ? historyBudget(initialPersona, deps.budget) : Number.POSITIVE_INFINITY);
     this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
     const extractor = deps.worker;
     const ownerId = ctx.ownerId;
-    const directorConfig = deps.roles.director(ctx.roleId);
+    const hasSilencePlanner = deps.roles.supportedLanguages(ctx.roleId)
+      .some((language) => deps.roles.director(ctx.roleId, language).silenceDecision !== undefined);
     this.director = new Director(
-      directorConfig,
+      (language) => deps.roles.director(ctx.roleId, language),
       {
         requestResponse: (kind, request) => this.requestResponse(kind, request),
-        ...(deps.textClient && directorConfig.silenceDecision ? {
-          planProactiveLine: createSilencePlanner(deps.textClient, directorConfig.silenceDecision),
+        ...(deps.textClient && hasSilencePlanner ? {
+          planProactiveLine: (context, signal) => this.planProactiveLine(context, signal),
           getMemorySnapshot: (stage) => stage === 'greeting'
             ? this.context.greetingMemorySnapshot ?? ''
             : this.context.proactiveMemorySnapshot ?? '',
@@ -245,6 +257,7 @@ export class Session {
       },
       this.noticePending,
       extractor ? deps.extractSilenceMs : undefined,
+      this.language,
     );
     this.emotion = deps.emotion ? new EmotionTagger(deps.emotion, (emotion) => this.send({ type: 'avatar.emotion', emotion })) : null;
     this.interrupt = new InterruptCoordinator({
@@ -266,6 +279,7 @@ export class Session {
   async start(transport: Transport): Promise<void> {
     this.transport = transport;
     await this.adapter.connect(this.sessionConfig());
+    this.languagePushPending = false;
     if (this.ended) {
       this.adapter.close();
       return;
@@ -478,21 +492,76 @@ export class Session {
     this.transport = null;
   }
 
+  get currentLanguage(): Language {
+    return this.language;
+  }
+
+  /** Initial language from session.start; pushed once the adapter has connected. */
+  setInitialLanguage(language: Language): void {
+    this.applyLanguage(language, true);
+  }
+
+  private applyLanguage(language: Language, push: boolean): void {
+    const next = this.resolveLanguage(language);
+    if (next === this.language) return;
+    this.language = next;
+    this.director.setLanguage(next);
+    this.languagePushPending = push;
+  }
+
+  private resolveLanguage(language: Language): Language {
+    const supported = this.deps.roles.supportedLanguages(this.context.roleId);
+    if (supported.includes(language)) return language;
+    log('language_unsupported', { roleId: this.context.roleId, language });
+    return this.deps.roles.defaultLanguage(this.context.roleId);
+  }
+
+  private personaFor(language: Language): string {
+    const cached = this.personas.get(language);
+    if (cached !== undefined) return cached;
+    const persona = this.deps.roles.buildPersona(this.context.roleId, this.context.styleId, language);
+    this.personas.set(language, persona);
+    return persona;
+  }
+
+  private planProactiveLine(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null> {
+    const config = this.deps.roles.director(this.context.roleId, this.language).silenceDecision;
+    const client = this.deps.textClient;
+    if (!config || !client) return null;
+    let planner = this.silencePlanners.get(this.language);
+    if (!planner) {
+      planner = createSilencePlanner(client, config);
+      this.silencePlanners.set(this.language, planner);
+    }
+    return planner(context, signal);
+  }
+
+  private maybePushLanguage(): void {
+    if (!this.languagePushPending || this.ended || this.modelGenerating || !this.slimSeamOpen()) return;
+    this.languagePushPending = false;
+    this.pushInstructions();
+  }
+
   private send(msg: ServerMessage): void {
     this.transport?.send(msg);
   }
 
   private instructions(): string {
+    const labels = PROMPT_LABELS[this.language];
     return buildInstructions(
-      { persona: this.persona, memorySnapshot: this.context.memorySnapshot, summary: this.ledger.summary, recent: this.ledger.recent },
+      { persona: this.personaFor(this.language), memorySnapshot: this.context.memorySnapshot, summary: this.ledger.summary, recent: this.ledger.recent },
       this.deps.budget,
+      labels,
     );
   }
 
   private sessionConfig(): SessionConfig {
     const instructions = this.instructions();
     this.lastInstructionsChars = instructions.length;
-    return { instructions, tools: this.tools.specs(), voice: this.context.voice, ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
+    const voice = this.deps.roles.voiceFor(this.context.roleId, this.context.styleId, this.language)
+      ?? this.deps.voiceFor?.(this.language)
+      ?? (this.language === this.deps.roles.defaultLanguage(this.context.roleId) ? this.context.voice : undefined);
+    return { instructions, tools: this.tools.specs(), voice, ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
   }
 
   /** Sends fresh instructions to the live model session and remembers their size. */
@@ -514,6 +583,7 @@ export class Session {
       this.noticeVerbatim = this.adapter.verbatimFallback;
     }
     this.pendingKind = kind;
+    this.maybePushLanguage();
     this.adapter.createResponse(request);
   }
 
@@ -717,9 +787,13 @@ export class Session {
     // Do not session.update here. An instructions refresh in the middle of a barge-in
     // drops the audio the server is still hearing, so the next question never lands.
     this.maybeSummarize();
+    // An interrupted reply keeps the pending push for the next safe seam.
+    if (!interrupted) this.maybePushLanguage();
   }
 
   private onUserFinal(text: string, echo: boolean): void {
+    const nextLanguage = detectLanguage(text, this.language);
+    if (nextLanguage !== this.language) this.applyLanguage(nextLanguage, true);
     if (echo) this.send({ type: 'transcript.user', text, final: true });
     if (this.dropUserFinals) return;
     this.turnUserText = text;
@@ -885,7 +959,7 @@ export class Session {
       });
       return;
     }
-    const cfg = this.deps.roles.director(this.context.roleId);
+    const cfg = this.deps.roles.director(this.context.roleId, this.language);
     this.adapter.createResponse({
       cue: 'toolContinue',
       instruction: cfg.toolContinueInstruction,
@@ -944,7 +1018,7 @@ export class Session {
     if (!this.ledger.needsSummary() || this.summarizeInFlight) return;
     if (Date.now() < this.summarizeRetryAt) return;
     this.summarizeInFlight = true;
-    void runWithPolicy('summarize', this.deps.summarizePolicy ?? DEFAULT_SUMMARIZE_POLICY, () => this.ledger.summarize(this.deps.summarizer)).then((r) => {
+    void runWithPolicy('summarize', this.deps.summarizePolicy ?? DEFAULT_SUMMARIZE_POLICY, () => this.ledger.summarize(this.deps.summarizer, this.language)).then((r) => {
       this.summarizeInFlight = false;
       if (r.ok) {
         this.summarizeRetryAt = 0;
@@ -1004,6 +1078,7 @@ export class Session {
       if (reason === 'forget' || reason === 'decline') this.refreshMemorySnapshot();
       await this.adapter.connect(this.sessionConfig());
       connected = true;
+      this.languagePushPending = false;
       this.syncInputMute();
       const buffered = this.rebuildMicBuffer.splice(0);
       if (!this.muted) for (const pcm of buffered) this.adapter.sendAudio(pcm);
@@ -1043,7 +1118,7 @@ export class Session {
       return false;
     }
     const slim = this.deps.slim;
-    const line = slim ? slim.bridge[slim.summaryLanguage] : '';
+    const line = slim ? slim.bridge[this.language] : '';
     if (line && shouldSpeakBridge(this.now() - startedAt, slim!.bridgeAfterMs, slim!.enabled)) {
       // Do not send presence ready: the bridge audio is what ends the thinking pose.
       this.adapter.createResponse({ cue: 'contextBridge', instruction: line, fallbackText: line });
@@ -1140,10 +1215,11 @@ export class Session {
   private safeGreeting(): string | null {
     const snapshot = this.context.greetingMemorySnapshot;
     if (!snapshot) return null;
-    const nameLine = snapshot.split('\n').find((line) => line.startsWith('称呼：'));
-    const name = nameLine?.slice('称呼：'.length).trim();
+    const namePrefix = '称呼：';
+    const nameLine = snapshot.split('\n').find((line) => line.startsWith(namePrefix));
+    const name = nameLine?.slice(namePrefix.length).trim();
     if (!name) return null;
-    const config = this.deps.roles.director(this.context.roleId);
+    const config = this.deps.roles.director(this.context.roleId, this.language);
     const templates = config.greetingNameTexts;
     if (!templates || templates.length === 0) return config.greetingMemoryText ?? null;
     return templates[Math.floor(Math.random() * templates.length)]!.replaceAll('{name}', name);

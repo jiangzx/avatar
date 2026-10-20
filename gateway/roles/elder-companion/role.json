@@ -1,15 +1,11 @@
 {
   "id": "elder-companion",
   "defaultStyle": "grandchild",
-  "styles": {
-    "grandchild": { "file": "styles/grandchild.md", "voice": null },
-    "old-friend": { "file": "styles/old-friend.md", "voice": null }
-  },
-  "activityIntro": "## 可以一起做的事\n\n用户想找点事做、或者聊天冷场时，可以轻轻提议下面的一件事，一次只提一个：",
-  "activities": [
-    { "id": "reminisce", "title": "回忆往事", "summary": "陪用户慢慢讲过去的事", "file": "activities/reminisce.md" },
-    { "id": "story", "title": "讲故事", "summary": "讲一个短小温暖的故事", "file": "activities/story.md" },
-    { "id": "riddle", "title": "猜谜语", "summary": "出简单的生活谜语", "file": "activities/riddle.md" },
-    { "id": "old-songs", "title": "聊老歌老戏", "summary": "聊年轻时爱听的歌和戏", "file": "activities/old-songs.md" }
-  ]
+  "defaultLanguage": "zh",
+  "supportedLanguages": ["zh"],
+  "styles": ["grandchild", "old-friend"],
+  "activities": ["reminisce", "story", "riddle", "old-songs"],
+  "voices": {
+    "zh": { "grandchild": null, "old-friend": null }
+  }
 }

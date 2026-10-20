@@ -14,6 +14,7 @@ function fakeSession() {
     attachTransport: vi.fn(),
     detachTransport: vi.fn(),
     flush: vi.fn(),
+    setInitialLanguage: vi.fn(),
   };
 }
 
@@ -187,6 +188,16 @@ describe('SessionManager owner invariant', () => {
     expect(m.endOwner('o1', 'owner_deleted')).toBe(0);
     expect(m.size).toBe(1);
     expect(events).toContain('ended:o1:owner_deleted');
+  });
+});
+
+describe('SessionManager start language', () => {
+  it('passes the initial language to a new session', async () => {
+    const { manager: m, made } = setup();
+    const t = m.create(owned('o1'));
+    const claim = m.claim(t.connectToken)!;
+    expect(await m.begin(t.sessionId, claim.connId, 'start', transport, 'ja')).toBe(true);
+    expect(made[0]!.setInitialLanguage).toHaveBeenCalledWith('ja');
   });
 });
 

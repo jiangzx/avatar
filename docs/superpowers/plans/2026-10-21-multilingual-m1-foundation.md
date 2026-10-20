@@ -2629,9 +2629,11 @@ it('validates personas for every language and reports the smallest history room'
 it('rejects an overlong persona in any language', () => {
   const pacing = loadPacing(`${root}config/pacing.json`);
   const memory = loadMemoryBudget(`${root}config/memory.json`);
-  expect(() => validateBudgets(pacing, memory, ledger, { zh: ['P'], en: ['P'.repeat(600)] })).toThrow('instruction_budget_too_small:en');
+  expect(() => validateBudgets(pacing, memory, ledger, { zh: ['P'], en: ['P'.repeat(2000)] })).toThrow('instruction_budget_too_small:en');
 });
 ```
+
+> 注：随仓库配置（`totalChars` 3840）下 600 字符人设仍有足够历史空间，不会触发该错误；因此这里用 2000。
 
 - [ ] **Step 2: 跑测试确认失败**
 

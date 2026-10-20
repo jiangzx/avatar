@@ -1,3 +1,6 @@
+import type { Language } from '@anyidea/protocol';
+import { PROMPT_LABELS, type PromptLabels } from '../roles/labels.ts';
+
 export interface LedgerEntry {
   role: 'user' | 'assistant';
   text: string;
@@ -6,7 +9,7 @@ export interface LedgerEntry {
 }
 
 export interface Summarizer {
-  summarize(previous: string, entries: readonly LedgerEntry[]): Promise<string>;
+  summarize(previous: string, entries: readonly LedgerEntry[], language?: Language): Promise<string>;
 }
 
 export interface LedgerOptions {
@@ -26,7 +29,7 @@ export function estimateTokens(text: string): number {
   return text.length;
 }
 
-const label = (e: LedgerEntry) => (e.role === 'user' ? '用户' : '助手');
+const label = (e: LedgerEntry, labels: PromptLabels) => (e.role === 'user' ? labels.user : labels.assistant);
 
 /** In-memory, model-agnostic conversation record. Never persisted, never logged. */
 export class ConversationLedger {
@@ -64,14 +67,14 @@ export class ConversationLedger {
   }
 
   /** Compresses everything before the last `keepRecentTurns` user turns. Returns true if applied. */
-  async summarize(summarizer: Summarizer): Promise<boolean> {
+  async summarize(summarizer: Summarizer, language: Language = 'zh'): Promise<boolean> {
     if (this.summarizing) return false;
     const cut = this.keepFromIndex();
     if (cut === 0) return false;
     this.summarizing = true;
     const generation = this.generation;
     try {
-      const next = await summarizer.summarize(this.summaryText, this.entries.slice(0, cut));
+      const next = await summarizer.summarize(this.summaryText, this.entries.slice(0, cut), language);
       if (generation !== this.generation) return false;
       this.summaryText = next;
       this.entries.splice(0, cut);
@@ -81,14 +84,14 @@ export class ConversationLedger {
     }
   }
 
-  buildInstructions(persona: string): string {
-    const lines = this.entries.map((e) => `${label(e)}：${e.text}`);
+  buildInstructions(persona: string, labels: PromptLabels = PROMPT_LABELS.zh): string {
+    const lines = this.entries.map((e) => `${label(e, labels)}${labels.separator}${e.text}`);
     return [
       persona.trim(),
-      '## 对话摘要',
-      this.summaryText || '（暂无）',
-      '## 最近对话',
-      lines.length > 0 ? lines.join('\n') : '（暂无）',
+      labels.summaryHeader,
+      this.summaryText || labels.empty,
+      labels.recentHeader,
+      lines.length > 0 ? lines.join('\n') : labels.empty,
     ].join('\n\n');
   }
 
@@ -120,8 +123,9 @@ export class ConversationLedger {
 
 /** Key-free stand-in for the LLM summarizer used in Plan 2. */
 export class MockSummarizer implements Summarizer {
-  async summarize(previous: string, entries: readonly LedgerEntry[]): Promise<string> {
-    const joined = [previous, ...entries.map((e) => `${label(e)}：${e.text}`)].filter(Boolean).join('；');
+  async summarize(previous: string, entries: readonly LedgerEntry[], _language?: Language): Promise<string> {
+    const labels = PROMPT_LABELS.zh;
+    const joined = [previous, ...entries.map((e) => `${label(e, labels)}${labels.separator}${e.text}`)].filter(Boolean).join('；');
     return joined.length > 800 ? joined.slice(joined.length - 800) : joined;
   }
 }

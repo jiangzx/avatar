@@ -90,7 +90,7 @@ export function parseExtractOps(raw: unknown): ExtractOp[] {
   return ExtractSchema.parse(wrapped).ops;
 }
 
-export function loadExtractPrompt(path = fileURLToPath(new URL('../../roles/_shared/extract.md', import.meta.url))): string {
+export function loadExtractPrompt(path = fileURLToPath(new URL('../../roles/_shared/zh/extract.md', import.meta.url))): string {
   const text = readFileSync(path, 'utf8').trim();
   if (!text) throw new Error('empty_extract_prompt');
   return text;

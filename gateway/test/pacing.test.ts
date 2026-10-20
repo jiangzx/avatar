@@ -24,6 +24,25 @@ describe('pacing and budget config', () => {
     expect(memory.retentionBatch).toBe(200);
   });
 
+  it('validates personas for every language and reports the smallest history room', () => {
+    const pacing = loadPacing(`${root}config/pacing.json`);
+    const memory = loadMemoryBudget(`${root}config/memory.json`);
+    const roles = loadRoleCatalog(`${root}roles`);
+    const byLanguage: Partial<Record<'zh' | 'ja' | 'en', string[]>> = {};
+    for (const pair of roles.languagePairs()) {
+      (byLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
+    }
+    const report = validateBudgets(pacing, memory, ledger, byLanguage);
+    expect(report.perLanguage.zh?.minHistoryChars).toBe(report.minHistoryChars);
+    expect(report.budget.totalChars).toBe(Math.floor(pacing.rebuild.contextChars * pacing.rebuild.triggerRatio * memory.instructions.budgetRatio));
+  });
+
+  it('rejects an overlong persona in any language', () => {
+    const pacing = loadPacing(`${root}config/pacing.json`);
+    const memory = loadMemoryBudget(`${root}config/memory.json`);
+    expect(() => validateBudgets(pacing, memory, ledger, { zh: ['P'], en: ['P'.repeat(2000)] })).toThrow('instruction_budget_too_small:en');
+  });
+
   it('rejects an instruction budget above 40% of the rebuild threshold', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mem-'));
     writeFileSync(join(dir, 'memory.json'), JSON.stringify({ instructions: { budgetRatio: 0.5, snapshotMaxChars: 0, summaryMaxChars: 100, minHistoryChars: 100 } }));
@@ -37,7 +56,7 @@ describe('pacing and budget config', () => {
     expect(() => loadMemoryBudget(join(dir, 'memory.json'))).toThrow();
   });
 
-  it('requires slim pacing config with zh or ja summary language', () => {
+  it('requires slim pacing config', () => {
     const dir = mkdtempSync(join(tmpdir(), 'pace-'));
     const base = {
       rebuild: { contextChars: 12_000, triggerRatio: 0.8, afterTurns: 30 },
@@ -57,27 +76,31 @@ describe('pacing and budget config', () => {
           intervalMs: 1_200_000,
           maxDeferMs: 120_000,
           bridgeAfterMs: 400,
-          summaryLanguage: 'zh',
-          bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。' },
+          bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。', en: 'Let me think about where we were.' },
         },
       }),
     );
     expect(loadPacing(join(dir, 'pacing.json')).slim.intervalMs).toBe(1_200_000);
+  });
 
-    writeFileSync(
-      join(dir, 'pacing.json'),
-      JSON.stringify({
-        ...base,
-        slim: {
-          enabled: true,
-          intervalMs: 1_200_000,
-          maxDeferMs: 120_000,
-          bridgeAfterMs: 400,
-          summaryLanguage: 'en',
-          bridge: { zh: 'x', ja: 'y' },
-        },
-      }),
-    );
+  it('requires all three bridge lines', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pace-'));
+    const base = {
+      rebuild: { contextChars: 12_000, triggerRatio: 0.8, afterTurns: 30 },
+      tailGuardMs: 400,
+      output: { maxTokens: null },
+      policies: { summarize: { timeoutMs: 15_000, retries: 1, backoffMs: 1000, maxBackoffMs: 4000 } },
+    };
+    writeFileSync(join(dir, 'pacing.json'), JSON.stringify({
+      ...base,
+      slim: {
+        enabled: true,
+        intervalMs: 1_200_000,
+        maxDeferMs: 120_000,
+        bridgeAfterMs: 400,
+        bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。' },
+      },
+    }));
     expect(() => loadPacing(join(dir, 'pacing.json'))).toThrow();
   });
 
@@ -87,8 +110,7 @@ describe('pacing and budget config', () => {
       intervalMs: 1_200_000,
       maxDeferMs: 120_000,
       bridgeAfterMs: 400,
-      summaryLanguage: 'zh' as const,
-      bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。' },
+      bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。', en: 'Let me think about where we were.' },
     };
     const pacing: PacingConfig = { rebuild: { contextChars: 2000, triggerRatio: 1, afterTurns: 30 }, tailGuardMs: 400, output: { maxTokens: null }, policies: { summarize: { timeoutMs: 1000, retries: 0, backoffMs: 0, maxBackoffMs: 0 } }, slim };
     const memory: MemoryBudgetConfig = {

@@ -1,3 +1,4 @@
+import type { Language } from '@anyidea/protocol';
 import type { RoleCatalog } from '../roles/catalog.ts';
 
 /** Per-session identity and role choice. Resolved on the server; never taken from client input. */
@@ -6,8 +7,9 @@ export interface SessionContext {
   agentId?: string;
   roleId: string;
   styleId: string;
-  /** undefined = the adapter's configured default voice. */
+  /** Resolved role/style override for the default language; M1 production uses zh. */
   voice?: string;
+  language?: Language;
   /** Frozen memory snapshot injected into normal replies: addressing, non-sensitive facts, user tail. */
   memorySnapshot?: string;
   /** Greeting planner: addressing and non-sensitive facts only. */
@@ -22,7 +24,8 @@ export interface SessionContext {
 export function devContext(roles: RoleCatalog): SessionContext {
   const roleId = roles.defaultRole();
   const styleId = roles.defaultStyle(roleId);
-  return { roleId, styleId, voice: roles.voiceFor(roleId, styleId) };
+  const language = roles.defaultLanguage(roleId);
+  return { roleId, styleId, voice: roles.voiceFor(roleId, styleId, language), language };
 }
 
 export type ResolveResult = { ok: true; ctx: SessionContext; noticePending: boolean } | { ok: false };

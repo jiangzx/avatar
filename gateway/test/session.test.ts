@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ServerMessage } from '@anyidea/protocol';
+import type { Language, ServerMessage } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
 import type { SessionConfig } from '../src/adapters/types.ts';
 import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
@@ -60,6 +60,48 @@ describe('Session context', () => {
     expect(session.context.styleId).toBe('old-friend');
     session.end();
   });
+
+  it('uses the session language for persona and voice', async () => {
+    const configs: SessionConfig[] = [];
+    const roles = fixedRoleCatalog('P-zh', director, {
+      languages: ['zh', 'en'],
+      defaultLanguage: 'zh',
+      personas: { zh: 'P-zh', en: 'P-en' },
+      directors: { en: { ...director, greetingText: 'hello' } },
+    });
+    const session = new Session(
+      {
+        adapterFactory: () => {
+          const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+          const connect = m.connect.bind(m);
+          vi.spyOn(m, 'connect').mockImplementation((c) => { configs.push(c); return connect(c); });
+          return m;
+        },
+        summarizer: new MockSummarizer(),
+        roles,
+        voiceFor: (language) => language === 'en' ? 'voice-en' : undefined,
+      },
+      { roleId: 'elder-companion', styleId: 'grandchild', language: 'en' },
+    );
+    await session.start(collector().transport);
+    expect(configs[0]?.instructions).toContain('P-en');
+    expect(configs[0]?.voice).toBe('voice-en');
+    expect(session.currentLanguage).toBe('en');
+
+    session.setInitialLanguage('zh');
+    expect(session.currentLanguage).toBe('zh');
+    session.end();
+  });
+
+  it('falls back to the role default when a language is unsupported', () => {
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh'], defaultLanguage: 'zh' });
+    const session = new Session(
+      { adapterFactory: () => new MockAdapter({ script }), summarizer: new MockSummarizer(), roles },
+      { roleId: 'elder-companion', styleId: 'grandchild', language: 'ja' },
+    );
+    expect(session.currentLanguage).toBe('zh');
+    session.end();
+  });
 });
 
 const ownedCtx: SessionContext = {
@@ -71,8 +113,7 @@ const slimOn: NonNullable<PacingConfig['slim']> = {
   intervalMs: 1_500,
   maxDeferMs: 5_000,
   bridgeAfterMs: 400,
-  summaryLanguage: 'zh',
-  bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。' },
+  bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。', en: 'Let me think about where we were.' },
 };
 
 function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessionId?: string, noticePending = false) {
@@ -90,6 +131,17 @@ function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessi
   }, ctx, sessionId, noticePending);
   return { session, mocks, ...collector() };
 }
+
+/** Two-language catalog used by the instruction-push tests. */
+const bilingualRoles = (): RoleCatalog => fixedRoleCatalog('P-zh', director, {
+  languages: ['zh', 'en'],
+  defaultLanguage: 'zh',
+  personas: { zh: 'P-zh', en: 'P-en' },
+});
+
+/** Narrow cast: the guard tests need one push attempt without a real model request. */
+const drivePush = (session: Session): void =>
+  (session as unknown as { maybePushLanguage(): void }).maybePushLanguage();
 
 const of = <T extends ServerMessage['type']>(sent: ServerMessage[], type: T) =>
   sent.filter((m): m is Extract<ServerMessage, { type: T }> => m.type === type);
@@ -351,6 +403,27 @@ describe('Session', () => {
     expect(s.session.ledger.summary).toBe('助手：你好呀；用户：第一句；助手：我在听');
     expect(s.mocks[0].instructions).toContain('助手：你好呀；用户：第一句；助手：我在听');
     expect(s.mocks[0].instructions).toContain('用户：第二句');
+  });
+
+  it('summarizes in the session language', async () => {
+    const languages: Array<Language | undefined> = [];
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'ja'], defaultLanguage: 'zh' });
+    const s = setup(
+      {
+        roles,
+        ledger: { keepRecentTurns: 1, summarizeAfterTurns: 1, summarizeAfterTokens: 10_000 },
+        summarizer: { summarize: async (_prev, _entries, language) => { languages.push(language); return 'S'; } },
+      },
+      { ...ownedCtx, language: 'ja' },
+    );
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第一句' });
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    s.session.handleClientMessage({ type: 'debug.userText', text: '第二句' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(languages).toEqual(['ja']);
+    s.session.end();
   });
 
   it('backs off repeated summarizer failures', async () => {
@@ -710,6 +783,45 @@ describe('Session', () => {
     expect(s.session.ledger.recent.at(-1)?.interrupted).toBe(true);
   });
 
+  it('pushes new-language instructions before the next proactive request', async () => {
+    const s = setup({ roles: bilingualRoles() }, { ...ownedCtx });
+    await greetAndFinish(s);
+    const push = vi.spyOn(s.mocks[0]!, 'updateInstructions');
+    s.session.setInitialLanguage('en');
+    expect(push).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(8_500); // silence follow-up goes through requestResponse
+    expect(push).toHaveBeenCalled();
+    expect(push.mock.calls.at(-1)?.[0]).toContain('P-en');
+    s.session.end();
+  });
+
+  it('defers new-language instructions while the user is speaking', async () => {
+    const s = setup({ roles: bilingualRoles() }, { ...ownedCtx });
+    await greetAndFinish(s);
+    const push = vi.spyOn(s.mocks[0]!, 'updateInstructions');
+    s.session.setInitialLanguage('en');
+    s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 0 });
+    drivePush(s.session);
+    expect(push).not.toHaveBeenCalled();
+    s.session.handleClientMessage({ type: 'vad', state: 'silent', t: 400 });
+    drivePush(s.session);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push.mock.calls[0]?.[0]).toContain('P-en');
+    s.session.end();
+  });
+
+  it('does not push new-language instructions when an interruption finalizes the reply', async () => {
+    const s = setup({ roles: bilingualRoles() }, { ...ownedCtx });
+    await greetAndFinish(s);
+    const push = vi.spyOn(s.mocks[0]!, 'updateInstructions');
+    s.session.setInitialLanguage('en');
+    s.session.handleClientMessage({ type: 'debug.userText', text: 'hello' });
+    await vi.advanceTimersByTimeAsync(150);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
+    expect(push).not.toHaveBeenCalled();
+    s.session.end();
+  });
+
   it('passes the configured output cap to the adapter', async () => {
     const seen: Array<number | undefined> = [];
     const s = setup({
@@ -758,6 +870,27 @@ describe('Session', () => {
       instruction: '用一句话接上刚才的动作。不要描述动作过程。',
       fallbackText: '好。',
     });
+  });
+
+  it('uses the current language for the generic tool-continue copy', async () => {
+    // The default stays en, so the zh copy proves the user's Chinese final switched the language.
+    const roles = fixedRoleCatalog('P', director, {
+      languages: ['zh', 'en'],
+      defaultLanguage: 'en',
+      directors: { en: { ...director, toolContinueInstruction: 'Say Continue.', toolContinueText: 'Continue.' } },
+    });
+    const s = setup({ roles }, { roleId: 'elder-companion', styleId: 'grandchild', language: 'en' }, 'tool-continue-en');
+    await greetAndFinish(s);
+    const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
+    s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
+    expect(s.session.currentLanguage).toBe('zh');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(creates).toHaveBeenCalledWith({
+      cue: 'toolContinue',
+      instruction: '用一句话接上刚才的动作。不要描述动作过程。',
+      fallbackText: '好。',
+    });
+    s.session.end();
   });
 
   it('continues after a tool action once playback ends and keeps the mic quiet', async () => {
@@ -1201,6 +1334,35 @@ describe('Session', () => {
     expect(assistantText(s.sent, 2)).toBe(slimOn.bridge.zh);
     expect(of(s.sent, 'presence')).toEqual([{ type: 'presence', phase: 'refreshing' }]);
     expect(of(s.sent, 'error')).toEqual([]);
+    s.session.end();
+  });
+
+  it('speaks the bridge line in the session language', async () => {
+    let created = 0;
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'ja'], defaultLanguage: 'zh' });
+    const s = setup(
+      {
+        roles,
+        slim: slimOn,
+        adapterFactory: () => {
+          const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+          created++;
+          if (created === 2) {
+            const connect = m.connect.bind(m);
+            vi.spyOn(m, 'connect').mockImplementation(async (c) => {
+              await new Promise<void>((resolve) => setTimeout(resolve, 500));
+              return connect(c);
+            });
+          }
+          return m;
+        },
+      },
+      { ...ownedCtx, language: 'ja' },
+    );
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(600); // the delayed reconnect lands past bridgeAfterMs
+    await vi.advanceTimersByTimeAsync(2500); // the longer ja line needs more mock streaming time
+    expect(assistantText(s.sent, 2)).toBe(slimOn.bridge.ja);
     s.session.end();
   });
 

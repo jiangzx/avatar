@@ -1,9 +1,11 @@
-import type { ResponseKind } from '@anyidea/protocol';
+import type { Language, ResponseKind } from '@anyidea/protocol';
 import type { DirectorCue, ProactiveRequest } from '../adapters/types.ts';
 import type { DirectorConfig } from '../roles/types.ts';
 import { log } from '../log.ts';
 
 export type { DirectorConfig, TopicCard } from '../roles/types.ts';
+
+export type DirectorConfigSource = DirectorConfig | ((language: Language) => DirectorConfig);
 
 export type ProactivePlanStage = SilenceStep | 'greeting';
 
@@ -118,14 +120,26 @@ export class Director {
   private noticeRetry = false;
   /** The rest step already enqueued extraction for this quiet stretch. */
   private restNoticed = false;
+  private readonly configFor: (language: Language) => DirectorConfig;
 
   constructor(
-    private readonly cfg: DirectorConfig,
+    config: DirectorConfigSource,
     private readonly deps: DirectorDeps,
     noticePending = false,
     private readonly restAfterMs?: number,
+    private language: Language = 'zh',
   ) {
+    this.configFor = typeof config === 'function' ? config : () => config;
     this.noticePending = noticePending;
+  }
+
+  /** Swaps copy without touching timers, ladder state, or pending decisions. */
+  setLanguage(language: Language): void {
+    this.language = language;
+  }
+
+  private get cfg(): DirectorConfig {
+    return this.configFor(this.language);
   }
 
   onSessionStart(hasMemory = false): void {
