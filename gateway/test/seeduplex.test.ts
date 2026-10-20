@@ -35,11 +35,11 @@ describe('SeeduplexAdapter', () => {
     adapter.on('toolCall', (_id, callId, name) => events.push(`tool:${callId}:${name}`));
     adapter.on('responseDone', (id) => events.push(`done:${id}`));
     adapter.on('responseCancelled', (id) => events.push(`cancel:${id}`));
-    await adapter.connect(config); await wait(); adapter.createResponse({ cue: 'greeting', instruction: 'GENERATE FROM CONTEXT', fallbackText: 'fixed fallback' }); await wait();
+    await adapter.connect(config); await wait(); adapter.createResponse({ cue: 'greeting', instruction: 'INTERNAL PROMPT DO NOT SPEAK', fallbackText: 'safe greeting' }); await wait();
     expect(events).toEqual(['start:r1', 'text:fixture text', 'tool:c1:perform_action', 'done:r1']);
     expect(samples).toBe(2);
-    // Seeduplex must generate from the instruction; fallbackText is for adapters without prompting.
-    expect(committed).toEqual(['GENERATE FROM CONTEXT']);
+    // speech_text_buffer.commit is direct TTS: only the spoken copy may be committed.
+    expect(committed).toEqual(['safe greeting']);
     adapter.cancelResponse(); await wait();
     expect(events).toContain('cancel:r1');
     adapter.close();

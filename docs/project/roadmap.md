@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链回归已在本地修复：规划器按 `context -> check -> leave` 阶段推进，失败只跳过当前段，Seeduplex 按 instruction 生成；手机验收尚未安排。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
+Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链回归已在本地修复：规划器按 `context -> check -> leave` 阶段推进，失败只跳过当前段。2026-10-20 手机首句播报完整提示词的问题已定位并修复：Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，主动响应只能提交 `fallbackText`；提交 `instruction` 的路径已回退，gateway 全量回归 436 项通过，真机首句恢复为短问候（详见下文）。手机听感仍待用户确认。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
 
 ## 打断与沉默：已踩过的坑
 
@@ -275,8 +275,10 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - Restarted the phone gateway on port 8787 after the previous Qwen process closed. Health returned 200, the startup event reported `adapter=seeduplex`, and the existing Android app reconnected through the preserved ADB reverse mapping.
 - The new gateway log recorded one session, 16 completed response pairs, 5 response cancellations, and 3 silence decisions with no error events. This verifies local session connectivity; full target-phone voice acceptance remains open.
 
-## 沉默固定文案修正（2026-10-19，当前状态更正）
+## 沉默固定文案修正（2026-10-19，2026-10-20 更正）
 
-- Seeduplex 的 `speech_text_buffer.commit` 需要提交 Director 的 `instruction` 才会让上游按上下文生成；此前提交 `fallbackText` 会把固定文案直接送进手机听感，固定文案问题与主动链阶段状态问题必须一起验收。
-- 2026-10-20 复测发现未批准的阶段规划改动会让 `speak:false`、超时或无效 JSON 直接跳过三段链，且通过结果的 `pending` 阶段不准确。现已在本地补齐阶段推进、失败跳过、实际播完上下文、取消/过期和 rest 停止回归，并修正 Seeduplex 的 instruction 路径。
+- **2026-10-20 更正：** Seeduplex 的 `speech_text_buffer.commit` 是直接文本合成，提交 Director 的 `instruction` 会把完整提示词原样播给用户。手机首句播报“当前没有…请礼貌…开场只用一句陈述…”即该回归，不是固定文案问题。主动响应路径只能提交可直接播报的 `fallbackText`。
+- 已修复 `gateway/src/adapters/seeduplex.ts`：`createResponse` 只提交 `fallbackText`；`gateway/test/seeduplex.test.ts` 断言 commit 文本既不是 instruction 也不是 cue。`npm test -w gateway` 436 项通过，`npm run typecheck -w gateway` 通过。
+- 2026-10-20 真机复验：重启 8787（`ADAPTER=seeduplex`）并重开 App 后，新会话 greeting 播放约 5.3 秒（修复前同一路径约 20.2 秒），随后两段沉默 followup 分别约 5.8 / 9.7 秒，均为短句时长；本轮无 `adapter_error`。内容正确性由适配器回归测试保证，最终听感仍待用户确认。
+- 2026-10-20 复测发现的阶段推进改动保留：`speak:false`、超时或无效 JSON 只跳过当前段，`context -> check -> leave` 继续推进，rest 仍只触发一次提取。已知风险：Seeduplex 直出 TTS 不回报 text，`lastAnswer` 不包含主动接话，`planContext` 在 check/leave 可能重复同一承接；需下一次手机听感复验时确认。
 - 当前没有新的部署动作；网关和 APK 均按用户要求暂停，手机复验等待用户安排。
