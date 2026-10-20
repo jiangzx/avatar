@@ -14,6 +14,7 @@ function fakeSession() {
     attachTransport: vi.fn(),
     detachTransport: vi.fn(),
     flush: vi.fn(),
+    setInitialLanguage: vi.fn(),
   };
 }
 

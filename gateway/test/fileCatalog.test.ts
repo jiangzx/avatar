@@ -36,6 +36,12 @@ describe('FileRoleCatalog', () => {
     expect(roles.buildPersona('test-role', 'second')).toBe('FIXTURE SAFETY RULES\n\nFIXTURE SECOND STYLE\n\nFIXTURE ACTIONS\n\n## FIXTURE ACTIVITIES\n- 活动一：第一个活动');
     expect(roles.activityText('test-role', 'one')).toBe('FIXTURE ACTIVITY ONE');
     expect(roles.pairs()).toEqual([{ roleId: 'test-role', styleId: 'plain' }, { roleId: 'test-role', styleId: 'second' }]);
+    expect(roles.defaultLanguage('test-role')).toBe('zh');
+    expect(roles.supportedLanguages('test-role')).toEqual(['zh']);
+    expect(roles.languagePairs()).toEqual([
+      { roleId: 'test-role', styleId: 'plain', language: 'zh' },
+      { roleId: 'test-role', styleId: 'second', language: 'zh' },
+    ]);
     const d = roles.director('test-role');
     expect(d.topicInstruction).toBe('T {topic}');
     expect(d.topics).toEqual([{ id: 't1', prompt: '天气', fallbackText: '今天天气不错。' }]);

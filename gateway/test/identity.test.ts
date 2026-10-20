@@ -67,7 +67,7 @@ describe('DeviceRegistry', () => {
 
   it('resolves dev, unknown and registered bearers', () => {
     const { store, registry } = setup();
-    expect(registry.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined }, noticePending: false });
+    expect(registry.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'zh' }, noticePending: false });
     expect(registry.resolve(newDeviceToken())).toEqual({ ok: false });
     const token = register(registry, 'old-friend');
     const device = store.findDevice(hashToken(token))!;
@@ -76,7 +76,7 @@ describe('DeviceRegistry', () => {
     store.markNotified(device.ownerId, 2_000);
     expect(registry.resolve(token)).toMatchObject({ ok: true, noticePending: false });
     const ctx = ctxOf(registry, token);
-    expect(ctx).toEqual({ ownerId: device.ownerId, agentId: ctx.agentId, roleId: DEFAULT_ROLE, styleId: 'old-friend', voice: undefined });
+    expect(ctx).toEqual({ ownerId: device.ownerId, agentId: ctx.agentId, roleId: DEFAULT_ROLE, styleId: 'old-friend', voice: undefined, language: 'zh' });
     expect(ctx.agentId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -182,7 +182,7 @@ describe('DeviceRegistry', () => {
     registry.lifecycle.started('s1', first);
     registry.lifecycle.ended('s1', first, 'client_end');
     expect(first.memorySnapshot).toBeUndefined();
-    expect(registry.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined }, noticePending: false });
+    expect(registry.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'zh' }, noticePending: false });
 
     db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'preference', '喜欢喝茶', 0.8, 1)`).run(`pref-${first.ownerId}`, first.ownerId);
     db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'addressing', '称呼：王叔', 0.9, 2)`).run(`addr-${first.ownerId}`, first.ownerId);

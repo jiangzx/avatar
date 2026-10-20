@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Language } from '@anyidea/protocol';
 import { z } from 'zod';
 import { DirectorSchema } from '../config.ts';
 import { DEFAULT_ROLE, type RoleCatalog } from './catalog.ts';
@@ -51,23 +52,32 @@ export class FileRoleCatalog implements RoleCatalog {
   }
 
   defaultRole(): string { return this.fallbackRole; }
+  defaultLanguage(_roleId: string): Language { return 'zh'; }
+  supportedLanguages(_roleId: string): readonly Language[] { return ['zh']; }
   defaultStyle(roleId: string): string { return this.role(roleId).defaultStyle; }
   hasStyle(roleId: string, styleId: string): boolean { return this.roles.get(roleId)?.styles.has(styleId) ?? false; }
-  voiceFor(roleId: string, styleId: string): string | undefined { return this.style(roleId, styleId).voice; }
-  director(roleId: string): DirectorConfig { return this.role(roleId).director; }
+  voiceFor(roleId: string, styleId: string, _language: Language = 'zh'): string | undefined {
+    return this.style(roleId, styleId).voice;
+  }
+  director(roleId: string, _language: Language = 'zh'): DirectorConfig { return this.role(roleId).director; }
 
-  buildPersona(roleId: string, styleId: string): string {
+  buildPersona(roleId: string, styleId: string, _language: Language = 'zh'): string {
     return [this.safety, this.style(roleId, styleId).text, this.actions, this.role(roleId).activityDirectory].join('\n\n');
   }
 
   /** Full activity card text (loaded on demand by a later start_activity tool). */
-  activityText(roleId: string, activityId: string): string | undefined {
+  activityText(roleId: string, activityId: string, _language: Language = 'zh'): string | undefined {
     return this.roles.get(roleId)?.activityTexts.get(activityId);
   }
 
   /** Every role/style combination, for startup budget checks. */
   pairs(): Array<{ roleId: string; styleId: string }> {
     return [...this.roles.entries()].flatMap(([roleId, r]) => [...r.styles.keys()].map((styleId) => ({ roleId, styleId })));
+  }
+
+  /** Every role/style/language combination; zh until roles are split into language directories (M1). */
+  languagePairs(): Array<{ roleId: string; styleId: string; language: Language }> {
+    return this.pairs().map((pair) => ({ ...pair, language: 'zh' }));
   }
 
   private role(roleId: string): LoadedRole {

@@ -60,6 +60,48 @@ describe('Session context', () => {
     expect(session.context.styleId).toBe('old-friend');
     session.end();
   });
+
+  it('uses the session language for persona and voice', async () => {
+    const configs: SessionConfig[] = [];
+    const roles = fixedRoleCatalog('P-zh', director, {
+      languages: ['zh', 'en'],
+      defaultLanguage: 'zh',
+      personas: { zh: 'P-zh', en: 'P-en' },
+      directors: { en: { ...director, greetingText: 'hello' } },
+    });
+    const session = new Session(
+      {
+        adapterFactory: () => {
+          const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+          const connect = m.connect.bind(m);
+          vi.spyOn(m, 'connect').mockImplementation((c) => { configs.push(c); return connect(c); });
+          return m;
+        },
+        summarizer: new MockSummarizer(),
+        roles,
+        voiceFor: (language) => language === 'en' ? 'voice-en' : undefined,
+      },
+      { roleId: 'elder-companion', styleId: 'grandchild', language: 'en' },
+    );
+    await session.start(collector().transport);
+    expect(configs[0]?.instructions).toContain('P-en');
+    expect(configs[0]?.voice).toBe('voice-en');
+    expect(session.currentLanguage).toBe('en');
+
+    session.setInitialLanguage('zh');
+    expect(session.currentLanguage).toBe('zh');
+    session.end();
+  });
+
+  it('falls back to the role default when a language is unsupported', () => {
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh'], defaultLanguage: 'zh' });
+    const session = new Session(
+      { adapterFactory: () => new MockAdapter({ script }), summarizer: new MockSummarizer(), roles },
+      { roleId: 'elder-companion', styleId: 'grandchild', language: 'ja' },
+    );
+    expect(session.currentLanguage).toBe('zh');
+    session.end();
+  });
 });
 
 const ownedCtx: SessionContext = {
