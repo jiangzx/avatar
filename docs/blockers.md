@@ -138,9 +138,9 @@
 - 按 Q9 直接记 FAIL，未用中文音色硬试日语（避免假阳性）。详情：`docs/research/seeduplex-japanese-probe.md`。
 - 影响：日语产品不走 `ADAPTER=seeduplex`。解除条件：换适配器/级联方案获批准并探针通过，或厂商日后提供日语端到端音色并复测通过。
 
-## 2026-10-20 主动三段式接话回归（根因已定位，未修复）
+## 2026-10-20 主动三段式接话回归（本地修复，待手机复验）
 
 - 复现根因在未提交的 Director 改动：`fire()` 对 `context/check/leave` 三个阶段都调用 `planContext(step)`；规划器在 `speak:false`、超时、无效 JSON、输入不完整或未配置时返回 `null`，`planContext` 随后只推进 `next` 并重新计时，不排队任何语音，所以三段主动追问会全部消失。
 - 第二个状态缺口是规划器有内容时始终写入 `pending = 'context'`，即使当前阶段是 `check` 或 `leave`；播放结束后 Director 会把它误判为第一阶段并重新排 `check`，阶段状态无法可靠推进。
-- 证据：该工作区实现的 focused 回归为 `101 passed, 7 failed`；撤回未批准改动后基线回归为 `108 passed`。未重启网关、未安装 APK。
-- 按用户要求，修复实现尚未开始。下一步必须先补失败测试：规划器拒绝/失败时保留配置兜底并继续阶梯，规划器通过时保留当前阶段状态；通过后再跑完整 gateway 回归和 typecheck，最后才安排手机复验。
+- 本地修复：Director 为 `context/check/leave` 传递当前阶段；规划器返回空值或失败时只跳过当前阶段并继续下一段，成功时保留当前 `pending` 阶段；取消、过期结果、安静/打断/暂停/停止门控保持有效。Seeduplex 主动回复提交 `instruction`，由上游按上下文生成，不再直接提交 `fallbackText`。
+- 验证：`npm test -w gateway` 通过（39 个测试文件、436 项），`npm run typecheck -w gateway` 通过，`git diff --check` 通过。未重启网关、未安装 APK；当前运行网关版本和手机听感仍未验证。

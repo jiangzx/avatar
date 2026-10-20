@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链回归根因已定位但尚未修复：未批准的 Director 改动会在规划器返回空值时跳过 `context -> check -> leave`，规划器通过时又把后续阶段误记为 `context`。代码实现和手机验收均暂停；恢复前先补失败测试并完成 gateway 全量验证。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
+Last updated: 2026-10-20. 定期静默重建尚未实现，计划在 `docs/superpowers/plans/2026-10-19-slim-rebuild.md`，未批准执行。垫话仍然关闭。#43 的三步主动链回归已在本地修复：规划器按 `context -> check -> leave` 阶段推进，失败只跳过当前段，Seeduplex 按 instruction 生成；手机验收尚未安排。Barge-in 现有回归保持通过，读取本节后的打断与沉默坑位再改动。
 
 ## 打断与沉默：已踩过的坑
 
@@ -70,7 +70,7 @@ See [docs/blockers.md](../blockers.md): #1/#3/#6/#7 are partially relieved by th
 
 ## Next steps
 
-0. Plan 3: Task 0、A1、B 的 8797 Mock 进程冒烟已通过（#11、#14、#31 已解除）；Plan C 的本地记忆门控、持久化快照、Mock 工具续答及 qwen-plus 真实提取（假设 7）已验证，记录见下文。2026-10-18 用户同意后，手机启动前置完成（#41 已解除）：保留原身份库，补齐文本端点并重启 8787，手机已解析原身份并收到开场。用户已确认真实第二次通话能记住称呼，但近期话题接续失败且接话重复。用户已批准 Plan C Task 12 的定向修正（#42）；最近会话摘要、OR 回忆检索和防重复接话指令已实现，单元回归、四场景合成真实模型逐句复核与独立审查已通过，用户随后已确认重启；8787 新版 Qwen 网关与原身份手机会话已启动，用户随后确认不再重复，但沉默主动话语缺少上下文。#43 已完成定向修正：三步主动链在有内容回复后继续，沉默判断不可用时回退到 context 话术；gateway 与全 JS 回归通过，待手机听感复验。近期话题接续仍未获用户确认；假设 8 仍无真机工具调用证据。后续重启 8787 仍须先征得用户同意。Plan A/B/A+B 的其他设备项仍未完成（#12–#25，排除已解除的 #14；#30、#32–#39）；本次启动不替代它们的完整清单。A+B 新音色门槛依赖 #17 和 #19；Plan D/S 尚无已批准实施计划。
+0. Plan 3: Task 0、A1、B 的 8797 Mock 进程冒烟已通过（#11、#14、#31 已解除）；Plan C 的本地记忆门控、持久化快照、Mock 工具续答及 qwen-plus 真实提取（假设 7）已验证，记录见下文。2026-10-18 用户同意后，手机启动前置完成（#41 已解除）：保留原身份库，补齐文本端点并重启 8787，手机已解析原身份并收到开场。用户已确认真实第二次通话能记住称呼，但近期话题接续失败且接话重复。用户已批准 Plan C Task 12 的定向修正（#42）；最近会话摘要、OR 回忆检索和防重复接话指令已实现，单元回归、四场景合成真实模型逐句复核与独立审查已通过，用户随后已确认重启；8787 新版 Qwen 网关与原身份手机会话已启动，用户随后确认不再重复，但沉默主动话语缺少上下文。#43 的本地修复已完成：三段规划按当前阶段推进，规划失败跳过当前段，Seeduplex 使用 instruction；gateway 全量回归 436 项、typecheck 和 diff 检查通过，待手机听感复验。近期话题接续仍未获用户确认；假设 8 仍无真机工具调用证据。后续重启 8787 仍须先征得用户同意。Plan A/B/A+B 的其他设备项仍未完成（#12–#25，排除已解除的 #14；#30、#32–#39）；本次启动不替代它们的完整清单。A+B 新音色门槛依赖 #17 和 #19；Plan D/S 尚无已批准实施计划。
 1. Keep the local Qwen gateway running for phone debugging (`ADAPTER=qwen` on port 8787, phone `APP_SECRET` from `app/dev.json`, `adb reverse tcp:8787`). Once local VAD says the user is barging in, mic audio streams while the reply is still open; do not restore the old full-playback drop. See the pitfalls section above. Silence follow-ups stay paused while the user is actually speaking. Local barge-in uses RMS 200 after 400 ms of playback; idle speech stays at RMS 1200. At 20:04 the user confirmed the conversation was fluent. At 20:08 avatar actions worked after gestures were no longer cancelled on `response.end`. Do not restart it as Mock. Do not resume interruption latency percentiles or multi-attempt interruption counts: the user skipped both on 2026-10-16, and that skip is not a pass. The 10-minute silence sample stays skipped as well. The latest interrupt rebuild is installed, but the user has not yet confirmed that a live shout stops playback.
 2. Continue the remaining Xiaomi/desktop checks that were not skipped: active-response stale-audio listening, network cases beyond the 2026-10-16 short resume and grace expiry, subtitle finalization once, remaining Task 18 checks, ADR-001, and desktop Chrome E2E. Five actions were already observed with Chinese keywords. Cloud WSS stays deferred.
 3. Seeduplex protocol docs and successful key validation are recorded in `docs/research/seeduplex-protocol-validation.md`; `ADAPTER=mock` remains the default, while `ADAPTER=seeduplex` requires an explicit environment key. Complete ADR-001 A/B measurement as a tracked follow-up.
@@ -277,6 +277,6 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 
 ## 沉默固定文案修正（2026-10-19，当前状态更正）
 
-- Seeduplex 的 `speech_text_buffer.commit` 是直接 TTS，因此 Director 传入的 `fallbackText` 就是手机实际听到的内容；固定文案问题与主动链阶段状态问题必须一起验收。
-- 2026-10-20 复测发现未批准的阶段规划改动会让 `speak:false`、超时或无效 JSON 直接跳过三段链，且通过结果的 `pending` 阶段不准确。上轮“已修正/已部署”的描述不再作为当前验收结论。
-- 当前没有新的部署动作；网关和 APK 均按用户要求暂停，待失败测试和实现审查完成后再安排。
+- Seeduplex 的 `speech_text_buffer.commit` 需要提交 Director 的 `instruction` 才会让上游按上下文生成；此前提交 `fallbackText` 会把固定文案直接送进手机听感，固定文案问题与主动链阶段状态问题必须一起验收。
+- 2026-10-20 复测发现未批准的阶段规划改动会让 `speak:false`、超时或无效 JSON 直接跳过三段链，且通过结果的 `pending` 阶段不准确。现已在本地补齐阶段推进、失败跳过、实际播完上下文、取消/过期和 rest 停止回归，并修正 Seeduplex 的 instruction 路径。
+- 当前没有新的部署动作；网关和 APK 均按用户要求暂停，手机复验等待用户安排。

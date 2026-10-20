@@ -32,8 +32,8 @@ describe('substantive conversation silence', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
-  it.each(['missing', 'skip'] as const)('keeps the three-step ladder after a %s decision', async mode => {
-    const s = setup(mode === 'skip' ? () => null : undefined);
+  it('keeps the configured ladder when no planner is available', async () => {
+    const s = setup();
     s.answer();
     await vi.advanceTimersByTimeAsync(3000);
     expect(s.requests).toHaveLength(1);
@@ -52,14 +52,62 @@ describe('substantive conversation silence', () => {
     s.d.stop();
   });
 
+  it('skips a declined context stage and still evaluates the later stages', async () => {
+    const steps: string[] = [];
+    const s = setup((_context, _signal, step) => { steps.push(step); return null; });
+    s.answer();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(s.requests).toEqual([]);
+    await vi.advanceTimersByTimeAsync(12000);
+    expect(s.requests).toEqual([]);
+    await vi.advanceTimersByTimeAsync(12000);
+    expect(s.requests).toEqual([]);
+    expect(steps).toEqual(['context', 'check', 'leave']);
+    await vi.advanceTimersByTimeAsync(180000);
+    expect(s.restCount()).toBe(1);
+    s.d.stop();
+  });
+
+  it('plans every stage from the last completed exchange and tracks its playback stage', async () => {
+    const contexts: Array<{ step: string; userText: string; assistantText: string }> = [];
+    const s = setup((context, _signal, step) => {
+      contexts.push({ step, ...context });
+      return `${step}承接`;
+    });
+    s.answer();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(s.requests.at(-1)?.fallbackText).toBe('context承接');
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('context承接');
+    await vi.advanceTimersByTimeAsync(12000);
+    expect(s.requests.at(-1)?.fallbackText).toBe('check承接');
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('check承接');
+    await vi.advanceTimersByTimeAsync(12000);
+    expect(s.requests.at(-1)?.fallbackText).toBe('leave承接');
+    expect(contexts).toEqual([
+      { step: 'context', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。' },
+      { step: 'check', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。' },
+      { step: 'leave', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。' },
+    ]);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('leave承接');
+    await vi.advanceTimersByTimeAsync(180000);
+    expect(s.restCount()).toBe(1);
+    s.d.stop();
+  });
+
   it('uses the actual last exchange and then continues the configured ladder', async () => {
     const contexts: unknown[] = [];
-    const s = setup(context => { contexts.push(context); return '走累了，脚酸着也不好受。'; });
+    const s = setup((context, _signal, step) => {
+      contexts.push({ step, ...context });
+      return step === 'context' ? '走累了，脚酸着也不好受。' : `${step}承接`;
+    });
     s.answer();
     await vi.advanceTimersByTimeAsync(2999);
     expect(s.requests).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
-    expect(contexts).toEqual([{ userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。' }]);
+    expect(contexts[0]).toEqual({ step: 'context', userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。' });
     expect(s.requests).toEqual([{
       cue: 'followup', instruction: 'READ "走累了，脚酸着也不好受。"', fallbackText: '走累了，脚酸着也不好受。',
     }]);
@@ -67,14 +115,17 @@ describe('substantive conversation silence', () => {
     s.d.onAiTurnEnded('走累了，脚酸着也不好受。');
     await vi.advanceTimersByTimeAsync(12000);
     expect(s.requests).toHaveLength(2);
+    expect(s.requests.at(-1)?.fallbackText).toBe('check承接');
     s.d.onAiTurnStarted();
-    s.d.onAiTurnEnded('您还方便吗，刚才那件事先放着，不急着回。');
+    s.d.onAiTurnEnded('check承接');
     await vi.advanceTimersByTimeAsync(12000);
     expect(s.requests).toHaveLength(3);
+    expect(s.requests.at(-1)?.fallbackText).toBe('leave承接');
     s.d.onAiTurnStarted();
-    s.d.onAiTurnEnded('我先安静一会儿，想聊随时喊我。');
+    s.d.onAiTurnEnded('leave承接');
     await vi.advanceTimersByTimeAsync(180000);
     expect(s.restCount()).toBe(1);
+    expect(contexts).toHaveLength(3);
     s.d.stop();
   });
 
@@ -106,11 +157,13 @@ describe('substantive conversation silence', () => {
     const s = setup(async () => { throw new Error('synthetic_failure'); });
     s.answer();
     await vi.advanceTimersByTimeAsync(3000);
-    expect(s.requests).toHaveLength(1);
-    s.d.onAiTurnStarted();
-    s.d.onAiTurnEnded('我在');
+    expect(s.requests).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(12000);
-    expect(s.requests).toHaveLength(2);
+    expect(s.requests).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(12000);
+    expect(s.requests).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(180000);
+    expect(s.restCount()).toBe(1);
     s.d.stop();
   });
 
@@ -156,7 +209,7 @@ describe('substantive conversation silence', () => {
 
   // Regression: a substantive reply must keep the configured three-step proactive ladder.
   it('continues context into check and leave after an approved context continuation', async () => {
-    const s = setup(() => '走累了，脚酸着也不好受。');
+    const s = setup((_context, _signal, step) => step === 'context' ? '走累了，脚酸着也不好受。' : `${step}承接`);
     s.answer();
     await vi.advanceTimersByTimeAsync(3000);
     expect(s.requests).toHaveLength(1);
@@ -174,8 +227,8 @@ describe('substantive conversation silence', () => {
     expect(s.requests).toHaveLength(3);
     expect(s.requests.map((request) => request.fallbackText)).toEqual([
       '走累了，脚酸着也不好受。',
-      '您还方便吗，刚才那件事先放着，不急着回。',
-      '我先安静一会儿，想聊随时喊我。',
+      'check承接',
+      'leave承接',
     ]);
     s.d.stop();
   });

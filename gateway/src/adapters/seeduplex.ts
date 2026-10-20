@@ -87,7 +87,7 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
   sendUserText(text: string): void { if (this.connected) this.send({ type: 'speech_text_buffer.commit', event_id: this.eventId(), text }); }
   updateInstructions(text: string): void { this.instructions = text; if (this.connected) this.send({ type: 'session.update', event_id: this.eventId(), session: this.sessionPayload() }); }
   createResponse(request?: ProactiveRequest): void {
-    if (this.connected && request?.fallbackText) this.send({ type: 'speech_text_buffer.commit', event_id: this.eventId(), text: request.fallbackText });
+    if (this.connected && request?.instruction) this.send({ type: 'speech_text_buffer.commit', event_id: this.eventId(), text: request.instruction });
   }
   cancelResponse(): void { if (this.connected) this.send({ type: 'response.cancel', event_id: this.eventId() }); }
   sendToolResult(callId: string, result: unknown): void { if (this.connected) this.send({ type: 'conversation.item.create', event_id: this.eventId(), items: [{ type: 'message', role: 'tool', call_id: callId, content: [{ type: 'input_text', text: JSON.stringify(result) }] }] }); }

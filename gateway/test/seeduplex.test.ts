@@ -35,11 +35,11 @@ describe('SeeduplexAdapter', () => {
     adapter.on('toolCall', (_id, callId, name) => events.push(`tool:${callId}:${name}`));
     adapter.on('responseDone', (id) => events.push(`done:${id}`));
     adapter.on('responseCancelled', (id) => events.push(`cancel:${id}`));
-    await adapter.connect(config); await wait(); adapter.createResponse({ cue: 'greeting', instruction: 'G', fallbackText: 'safe greeting' }); await wait();
+    await adapter.connect(config); await wait(); adapter.createResponse({ cue: 'greeting', instruction: 'GENERATE FROM CONTEXT', fallbackText: 'fixed fallback' }); await wait();
     expect(events).toEqual(['start:r1', 'text:fixture text', 'tool:c1:perform_action', 'done:r1']);
     expect(samples).toBe(2);
-    // Director request commits only the fallback text, not instruction or cue
-    expect(committed).toEqual(['safe greeting']);
+    // Seeduplex must generate from the instruction; fallbackText is for adapters without prompting.
+    expect(committed).toEqual(['GENERATE FROM CONTEXT']);
     adapter.cancelResponse(); await wait();
     expect(events).toContain('cancel:r1');
     adapter.close();
