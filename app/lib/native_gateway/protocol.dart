@@ -32,15 +32,20 @@ sealed class ClientMessage {
 }
 
 class SessionStart extends ClientMessage {
-  const SessionStart({this.platform = 'android', this.audioPath = 'B'});
+  const SessionStart({this.platform = 'android', this.audioPath = 'B', this.language});
 
   final String platform;
   final String audioPath;
+  final String? language;
 
   @override
   Map<String, Object> toJson() => {
         'type': 'session.start',
-        'clientInfo': {'platform': platform, 'audioPath': audioPath},
+        'clientInfo': {
+          'platform': platform,
+          'audioPath': audioPath,
+          'language': ?language,
+        },
       };
 }
 

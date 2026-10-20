@@ -34,4 +34,12 @@ void main() {
     expect(parseServerMessage({'type': 'presence', 'phase': 'warming-up'}), isNull);
     expect(parseServerMessage({'type': 'presence'}), isNull);
   });
+
+  test('session.start carries an optional language', () {
+    expect(const SessionStart(language: 'ja').toJson(), {
+      'type': 'session.start',
+      'clientInfo': {'platform': 'android', 'audioPath': 'B', 'language': 'ja'},
+    });
+    expect((const SessionStart().toJson()['clientInfo'] as Map), {'platform': 'android', 'audioPath': 'B'});
+  });
 }

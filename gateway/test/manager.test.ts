@@ -191,6 +191,16 @@ describe('SessionManager owner invariant', () => {
   });
 });
 
+describe('SessionManager start language', () => {
+  it('passes the initial language to a new session', async () => {
+    const { manager: m, made } = setup();
+    const t = m.create(owned('o1'));
+    const claim = m.claim(t.connectToken)!;
+    expect(await m.begin(t.sessionId, claim.connId, 'start', transport, 'ja')).toBe(true);
+    expect(made[0]!.setInitialLanguage).toHaveBeenCalledWith('ja');
+  });
+});
+
 describe('SessionManager lifecycle hook', () => {
   it('reports start and end only for started sessions', async () => {
     const { manager: m, events } = setup();

@@ -24,6 +24,7 @@ import { Director, type SilenceContext, type SilencePlan } from './director.ts';
 import { EmotionTagger, type EmotionConfig } from './emotion.ts';
 import { InterruptCoordinator } from './interrupt.ts';
 import { buildInstructions, historyBudget, type InstructionBudget } from './instructions.ts';
+import { detectLanguage } from './language.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
 import { DEFAULT_TOOL_TURN_TIMEOUT_MS, type PacingConfig } from './pacing.ts';
@@ -785,6 +786,8 @@ export class Session {
   }
 
   private onUserFinal(text: string, echo: boolean): void {
+    const nextLanguage = detectLanguage(text, this.language);
+    if (nextLanguage !== this.language) this.applyLanguage(nextLanguage, true);
     if (echo) this.send({ type: 'transcript.user', text, final: true });
     if (this.dropUserFinals) return;
     this.turnUserText = text;

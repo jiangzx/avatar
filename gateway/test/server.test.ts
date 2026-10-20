@@ -12,6 +12,7 @@ import { MockSummarizer } from '../src/session/ledger.ts';
 import { SessionManager } from '../src/session/manager.ts';
 import { Session } from '../src/session/session.ts';
 import { TokenStore } from '../src/session/tokens.ts';
+import { parseClientMessage } from '../src/server/schemas.ts';
 import { createGatewayServer } from '../src/server/server.ts';
 
 const SECRET = 'test-secret-0123456789';
@@ -454,6 +455,20 @@ describe('gateway server', () => {
     expect(manager!.size).toBe(1);
     c2.ws.send(JSON.stringify({ type: 'debug.userText', text: '你好' }));
     await c2.waitFor((m) => m.type === 'transcript.user');
+  });
+});
+
+describe('client message schema', () => {
+  it('accepts a language on session.start and rejects unknown languages', () => {
+    const valid = parseClientMessage(JSON.stringify({
+      type: 'session.start',
+      clientInfo: { platform: 'android', audioPath: 'B', language: 'ja' },
+    }));
+    expect(valid).toEqual({ type: 'session.start', clientInfo: { platform: 'android', audioPath: 'B', language: 'ja' } });
+    expect(parseClientMessage(JSON.stringify({
+      type: 'session.start',
+      clientInfo: { platform: 'android', audioPath: 'B', language: 'fr' },
+    }))).toBeNull();
   });
 });
 

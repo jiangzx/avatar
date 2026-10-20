@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { SessionTokens } from '@anyidea/protocol';
+import type { Language, SessionTokens } from '@anyidea/protocol';
 import { log } from '../log.ts';
 import type { SessionContext } from './context.ts';
 import type { Session, Transport } from './session.ts';
@@ -117,11 +117,18 @@ export class SessionManager {
     return true;
   }
 
-  async begin(sessionId: string, connId: number, kind: 'start' | 'resume', transport: Transport): Promise<boolean> {
+  async begin(
+    sessionId: string,
+    connId: number,
+    kind: 'start' | 'resume',
+    transport: Transport,
+    language?: Language,
+  ): Promise<boolean> {
     const entry = this.sessions.get(sessionId);
     if (!entry || entry.connId !== connId) return false;
     if (kind === 'start') {
       if (entry.started || entry.starting) return false;
+      if (language !== undefined) entry.session.setInitialLanguage(language);
       this.clearGrace(entry);
       entry.starting = true;
       try {

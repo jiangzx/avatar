@@ -803,20 +803,22 @@ describe('Session', () => {
   });
 
   it('uses the current language for the generic tool-continue copy', async () => {
+    // The default stays en, so the zh copy proves the user's Chinese final switched the language.
     const roles = fixedRoleCatalog('P', director, {
       languages: ['zh', 'en'],
-      defaultLanguage: 'zh',
+      defaultLanguage: 'en',
       directors: { en: { ...director, toolContinueInstruction: 'Say Continue.', toolContinueText: 'Continue.' } },
     });
     const s = setup({ roles }, { roleId: 'elder-companion', styleId: 'grandchild', language: 'en' }, 'tool-continue-en');
     await greetAndFinish(s);
     const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
     s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
+    expect(s.session.currentLanguage).toBe('zh');
     await vi.advanceTimersByTimeAsync(1000);
     expect(creates).toHaveBeenCalledWith({
       cue: 'toolContinue',
-      instruction: 'Say Continue.',
-      fallbackText: 'Continue.',
+      instruction: '用一句话接上刚才的动作。不要描述动作过程。',
+      fallbackText: '好。',
     });
     s.session.end();
   });

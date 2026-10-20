@@ -202,6 +202,16 @@ class _AvatarPageState extends State<AvatarPage> {
     await controller.runJavaScript(jsCall(message));
   }
 
+  String _deviceLanguage() {
+    final code = PlatformDispatcher.instance.locale.languageCode;
+    return switch (code) {
+      'zh' => 'zh',
+      'ja' => 'ja',
+      'en' => 'en',
+      _ => 'zh',
+    };
+  }
+
   Future<void> _startNativeSession() async {
     if (_session != null || _startingSession || _sessionGuard.ended) return;
     final token = _sessionGuard.begin();
@@ -239,6 +249,7 @@ class _AvatarPageState extends State<AvatarPage> {
         transport: const IoGatewayTransport(),
         events: _UnwiredGatewayEvents(),
         audioPath: AppConfig.audioPath,
+        language: _deviceLanguage(),
         identity: widget.identity,
       ),
       emit: _onNativeEvent,
