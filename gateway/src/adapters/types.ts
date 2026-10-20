@@ -56,6 +56,8 @@ export interface RealtimeAdapter extends EventEmitter<AdapterEvents> {
   readonly supportsPlaybackTruncate: boolean;
   /** True when createResponse plays fallbackText verbatim (direct TTS, no transcript events). */
   readonly verbatimFallback: boolean;
+  /** True when sendUserText starts a real model turn (debug input). */
+  readonly supportsUserText: boolean;
   connect(config: SessionConfig): Promise<void>;
   sendAudio(pcm16k: Int16Array): void;
   /** Debug path: treat text as a finished user turn and reply to it. */

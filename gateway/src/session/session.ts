@@ -419,6 +419,11 @@ export class Session {
         this.syncInputMute();
         break;
       case 'debug.userText':
+        if (!this.adapter.supportsUserText) {
+          log('debug_text_unsupported', {});
+          this.send({ type: 'error', code: 'debug_text_unsupported', retryable: false });
+          break;
+        }
         this.interrupt.cancelActive('local');
         this.dropUserFinals = false; // a deliberate new turn, not a late transcript
         this.onUserFinal(msg.text, true);
@@ -579,6 +584,14 @@ export class Session {
       this.pendingKind = null;
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
+      // Keep recent finalized ids so a late tool call can still see its cancelled state,
+      // but do not retain every adapter response id for the whole session.
+      if (this.byId.size > 128) {
+        for (const [oldId, oldState] of this.byId) {
+          if (this.byId.size <= 128) break;
+          if (oldState.finalized) this.byId.delete(oldId);
+        }
+      }
       if (this.noticePendingRequest) {
         this.noticePendingRequest = false;
         this.noticeSeq = s.seq;

@@ -50,6 +50,10 @@ export class EmotionTagger {
   }
 
   onResponseStart(seq: number): void {
+    // Audio-only replies never reach done(); bound both sets as the session grows.
+    const keepFrom = seq - 64;
+    for (const id of this.pending.keys()) if (id < keepFrom) this.pending.delete(id);
+    for (const id of this.done) if (id < keepFrom) this.done.delete(id);
     this.pending.set(seq, '');
   }
 

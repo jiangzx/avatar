@@ -288,6 +288,23 @@ describe('Session', () => {
     expect(of(s.sent, 'response.cancelled')).toEqual([{ type: 'response.cancelled', responseSeq: 2 }]);
   });
 
+  it('refuses debug text when the adapter cannot start a text turn', async () => {
+    let adapter!: MockAdapter;
+    const s = setup({
+      adapterFactory: () => {
+        adapter = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+        Object.defineProperty(adapter, 'supportsUserText', { value: false });
+        return adapter;
+      },
+    });
+    await s.session.start(s.transport);
+    const send = vi.spyOn(adapter, 'sendUserText');
+    s.session.handleClientMessage({ type: 'debug.userText', text: '你好' });
+    expect(send).not.toHaveBeenCalled();
+    expect(of(s.sent, 'error').at(-1)).toEqual({ type: 'error', code: 'debug_text_unsupported', retryable: false });
+    s.session.end();
+  });
+
   it('rearms the silence ladder after a gateway-confirmed barge-in cancel', async () => {
     const s = setup();
     await greetAndFinish(s);

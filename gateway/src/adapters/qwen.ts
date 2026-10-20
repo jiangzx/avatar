@@ -34,6 +34,7 @@ export function proactiveEvents(mode: ResponseInstructionMode, sessionInstructio
 export class QwenAdapter extends EventEmitter<AdapterEvents> implements RealtimeAdapter {
   readonly supportsPlaybackTruncate = false;
   readonly verbatimFallback = false;
+  readonly supportsUserText = true;
   private ws: WebSocket | null = null;
   private connected = false;
   private closed = false;

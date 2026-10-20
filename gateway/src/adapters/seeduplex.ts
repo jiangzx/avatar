@@ -18,6 +18,8 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
   readonly supportsPlaybackTruncate = false;
   /** speech_text_buffer.commit synthesizes fallbackText directly; no transcript follows. */
   readonly verbatimFallback = true;
+  /** Seeduplex has no text-triggered turn; a text commit would only be spoken back. */
+  readonly supportsUserText = false;
   private ws: WebSocket | null = null;
   private closed = false;
   private connected = false;
@@ -86,7 +88,9 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
     if (this.connected) this.send({ type: muted ? 'input_audio_mute.commit' : 'input_audio_unmute.commit', event_id: this.eventId() });
   }
 
-  sendUserText(text: string): void { if (this.connected) this.send({ type: 'speech_text_buffer.commit', event_id: this.eventId(), text }); }
+  sendUserText(_text: string): void {
+    // Debug-only path; the Session refuses it because commit is direct TTS, not a user turn.
+  }
   updateInstructions(text: string): void { this.instructions = text; if (this.connected) this.send({ type: 'session.update', event_id: this.eventId(), session: this.sessionPayload() }); }
   createResponse(request?: ProactiveRequest): void {
     // High-risk tool/proactive path: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
