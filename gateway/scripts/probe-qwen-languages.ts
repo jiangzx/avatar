@@ -1,6 +1,7 @@
 // gateway/scripts/probe-qwen-languages.ts
 // Manual multilingual probe. Synthetic prompts/audio only; prints flags and event counts, never transcript text.
 // Run from gateway/: node --env-file-if-exists=.env --import tsx scripts/probe-qwen-languages.ts text|audio|switch [--wav-zh f --wav-ja f --wav-en f]
+import { readFileSync } from 'node:fs';
 import {
   baseSession,
   probeEnv,
@@ -18,6 +19,25 @@ const flag = (name: string): string | undefined => {
   return i >= 0 ? rest[i + 1] : undefined;
 };
 const out = (o: Json) => process.stdout.write(`${JSON.stringify(o)}\n`);
+
+function assertWav16kMono(path: string): void {
+  const buf = readFileSync(path);
+  if (buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WAVE') throw new Error('wav_invalid');
+  let off = 12;
+  while (off + 8 <= buf.length) {
+    const id = buf.toString('ascii', off, off + 4);
+    const size = buf.readUInt32LE(off + 4);
+    if (id === 'fmt ') {
+      if (off + 24 > buf.length) throw new Error('wav_fmt_truncated');
+      if (buf.readUInt16LE(off + 8) !== 1 || buf.readUInt16LE(off + 10) !== 1 || buf.readUInt32LE(off + 12) !== 16000 || buf.readUInt16LE(off + 22) !== 16) {
+        throw new Error('wav_not_16k_mono_pcm16');
+      }
+      return;
+    }
+    off += 8 + size + (size % 2);
+  }
+  throw new Error('wav_fmt_missing');
+}
 
 const TEXTS = {
   zh: '你好，今天天气怎么样？',
@@ -89,15 +109,16 @@ async function probeAudio(): Promise<void> {
       out({ mode: 'audio', language, skipped: 'missing_wav' });
       continue;
     }
+    assertWav16kMono(wav);
     const pcm = readWavPcm16(wav);
     const c = await open(INSTRUCTIONS, env.voice);
     const start = c.events.length;
     await stream(c, pcm);
-    await c.waitFor((e) => e.type === 'response.done' || e.type === 'error', 25_000);
+    const terminal = await c.waitFor((e) => e.type === 'response.done' || e.type === 'error', 25_000);
     const events = c.events.slice(start).map((e) => e.event);
     const asr = events
       .filter((e) => e.type === 'conversation.item.input_audio_transcription.completed')
-      .map((e) => String(e.transcript ?? ''))
+      .map((e) => String(e.transcript ?? e.text ?? ''))
       .join(' ');
     const reply = events
       .filter((e) => e.type === 'response.audio_transcript.delta')
@@ -114,6 +135,7 @@ async function probeAudio(): Promise<void> {
       reply: flags(reply),
       audioBytes,
       errors: events.filter((e) => e.type === 'error').length,
+      done: terminal !== null,
     });
   }
 }

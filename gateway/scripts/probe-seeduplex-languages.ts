@@ -1,5 +1,7 @@
+// gateway/scripts/probe-seeduplex-languages.ts
 // Manual multilingual probe. Synthetic audio only; prints flags and event counts, never transcripts.
 // Run from gateway/: node --env-file-if-exists=.env --import tsx scripts/probe-seeduplex-languages.ts <zh|en|ja|switch> --wav <16k wav> [--wav2 f] [--voice2 en_voice]
+import { readFileSync } from 'node:fs';
 import WebSocket from 'ws';
 import { readWavPcm16, sleep, type Json } from './lib/qwen-raw.ts';
 
@@ -13,8 +15,29 @@ const flag = (name: string): string | undefined => {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
+
+function assertWav16kMono(path: string): void {
+  const buf = readFileSync(path);
+  if (buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WAVE') throw new Error('wav_invalid');
+  let off = 12;
+  while (off + 8 <= buf.length) {
+    const id = buf.toString('ascii', off, off + 4);
+    const size = buf.readUInt32LE(off + 4);
+    if (id === 'fmt ') {
+      if (off + 24 > buf.length) throw new Error('wav_fmt_truncated');
+      if (buf.readUInt16LE(off + 8) !== 1 || buf.readUInt16LE(off + 10) !== 1 || buf.readUInt32LE(off + 12) !== 16000 || buf.readUInt16LE(off + 22) !== 16) {
+        throw new Error('wav_not_16k_mono_pcm16');
+      }
+      return;
+    }
+    off += 8 + size + (size % 2);
+  }
+  throw new Error('wav_fmt_missing');
+}
+
 const wav = flag('wav');
 if (!wav) throw new Error('usage: probe-seeduplex-languages.ts <zh|en|ja|switch> --wav <16k wav> [--wav2 f] [--voice2 en_voice]');
+assertWav16kMono(wav);
 const speech = readWavPcm16(wav);
 const out = (o: Json) => process.stdout.write(`${JSON.stringify(o)}\n`);
 
@@ -31,6 +54,7 @@ function flags(text: string): Json {
 interface RunResult {
   updated: boolean;
   errors: number;
+  timedOut: boolean;
   asr: string;
   reply: string;
   audioBytes: number;
@@ -53,10 +77,13 @@ function runOnce(opts: {
     let updated = false;
     let phase: 'first' | 'switch' | 'second' = 'first';
     let finished = false;
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const done = () => {
       if (finished) return;
       finished = true;
-      resolve({ updated, errors, asr, reply, audioBytes, types });
+      if (timer) clearTimeout(timer);
+      resolve({ updated, errors, timedOut, asr, reply, audioBytes, types });
       ws.close();
     };
     const send = (event: Json) => {
@@ -82,7 +109,7 @@ function runOnce(opts: {
       const type = typeof event.type === 'string' ? event.type : '';
       types[type] = (types[type] ?? 0) + 1;
       if (type === 'session.created') void stream(opts.pcm);
-      else if (type === 'conversation.item.input_audio_transcription.completed') asr += String(event.transcript ?? '');
+      else if (type === 'conversation.item.input_audio_transcription.completed') asr += String(event.transcript ?? event.text ?? '');
       else if (type === 'response.output_text.delta') reply += String(event.delta ?? '');
       else if (type === 'response.output_audio.delta' && typeof event.delta === 'string') audioBytes += Buffer.from(event.delta, 'base64').length;
       else if (type === 'error') { errors++; done(); }
@@ -131,7 +158,7 @@ function runOnce(opts: {
           tools: [],
         },
       });
-      setTimeout(done, 30_000);
+      timer = setTimeout(() => { timedOut = true; done(); }, 30_000);
     });
   });
 }
@@ -143,14 +170,18 @@ const instructions: Record<string, string> = {
 };
 const voice = mode === 'en' ? (process.env.SEEDUPLEX_VOICE_EN ?? 'en_male_tim_uranus_bigtts') : defaultVoice;
 const instructionsFor = mode === 'switch' ? instructions.zh : (instructions[mode] ?? instructions.zh);
-const switchTo = mode === 'switch' && flag('wav2')
-  ? { voice: flag('voice2') ?? process.env.SEEDUPLEX_VOICE_EN ?? 'en_male_tim_uranus_bigtts', instructions: instructions.en, pcm: readWavPcm16(flag('wav2')!) }
+const wav2 = flag('wav2');
+if (wav2) assertWav16kMono(wav2);
+const switchTo = mode === 'switch' && wav2
+  ? { voice: flag('voice2') ?? process.env.SEEDUPLEX_VOICE_EN ?? 'en_male_tim_uranus_bigtts', instructions: instructions.en, pcm: readWavPcm16(wav2) }
   : undefined;
 const result = await runOnce({ voice, instructions: instructionsFor, pcm: speech, ...(switchTo ? { switchTo } : {}) });
 out({
   mode,
   voice,
+  targetVoice: switchTo?.voice ?? null,
   updated: result.updated,
+  timedOut: result.timedOut,
   errors: result.errors,
   asr: flags(result.asr),
   reply: flags(result.reply),
