@@ -52,8 +52,8 @@ export class FileRoleCatalog implements RoleCatalog {
   }
 
   defaultRole(): string { return this.fallbackRole; }
-  defaultLanguage(_roleId: string): Language { return 'zh'; }
-  supportedLanguages(_roleId: string): readonly Language[] { return ['zh']; }
+  defaultLanguage(roleId: string): Language { this.role(roleId); return 'zh'; }
+  supportedLanguages(roleId: string): readonly Language[] { this.role(roleId); return ['zh']; }
   defaultStyle(roleId: string): string { return this.role(roleId).defaultStyle; }
   hasStyle(roleId: string, styleId: string): boolean { return this.roles.get(roleId)?.styles.has(styleId) ?? false; }
   voiceFor(roleId: string, styleId: string, _language: Language = 'zh'): string | undefined {

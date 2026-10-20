@@ -802,6 +802,25 @@ describe('Session', () => {
     });
   });
 
+  it('uses the current language for the generic tool-continue copy', async () => {
+    const roles = fixedRoleCatalog('P', director, {
+      languages: ['zh', 'en'],
+      defaultLanguage: 'zh',
+      directors: { en: { ...director, toolContinueInstruction: 'Say Continue.', toolContinueText: 'Continue.' } },
+    });
+    const s = setup({ roles }, { roleId: 'elder-companion', styleId: 'grandchild', language: 'en' }, 'tool-continue-en');
+    await greetAndFinish(s);
+    const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
+    s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(creates).toHaveBeenCalledWith({
+      cue: 'toolContinue',
+      instruction: 'Say Continue.',
+      fallbackText: 'Continue.',
+    });
+    s.session.end();
+  });
+
   it('continues after a tool action once playback ends and keeps the mic quiet', async () => {
     const s = setup();
     const finished = vi.spyOn(InterruptCoordinator.prototype, 'onResponseFinished');

@@ -42,6 +42,8 @@ describe('FileRoleCatalog', () => {
       { roleId: 'test-role', styleId: 'plain', language: 'zh' },
       { roleId: 'test-role', styleId: 'second', language: 'zh' },
     ]);
+    expect(() => roles.defaultLanguage('other')).toThrow('unknown_role:other');
+    expect(() => roles.supportedLanguages('other')).toThrow('unknown_role:other');
     const d = roles.director('test-role');
     expect(d.topicInstruction).toBe('T {topic}');
     expect(d.topics).toEqual([{ id: 't1', prompt: '天气', fallbackText: '今天天气不错。' }]);

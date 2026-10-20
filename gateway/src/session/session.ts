@@ -492,9 +492,9 @@ export class Session {
     return this.language;
   }
 
-  /** Initial language from session.start; no instruction push is needed before the first connect. */
+  /** Initial language from session.start; pushed once the adapter has connected. */
   setInitialLanguage(language: Language): void {
-    this.applyLanguage(language, false);
+    this.applyLanguage(language, true);
   }
 
   private applyLanguage(language: Language, push: boolean): void {
@@ -535,7 +535,7 @@ export class Session {
   private maybePushLanguage(): void {
     if (!this.languagePushPending || this.ended || this.modelGenerating || this.responseLive) return;
     this.languagePushPending = false;
-    this.adapter.updateInstructions(this.instructions());
+    this.pushInstructions();
   }
 
   private send(msg: ServerMessage): void {
@@ -950,7 +950,7 @@ export class Session {
       });
       return;
     }
-    const cfg = this.deps.roles.director(this.context.roleId);
+    const cfg = this.deps.roles.director(this.context.roleId, this.language);
     this.adapter.createResponse({
       cue: 'toolContinue',
       instruction: cfg.toolContinueInstruction,

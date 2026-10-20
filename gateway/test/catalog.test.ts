@@ -44,6 +44,16 @@ describe('fixedRoleCatalog', () => {
     const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'en'], defaultLanguage: 'en' });
     expect(devContext(roles)).toEqual({ roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'en' });
   });
+
+  it('keeps the stub default language inside its supported languages', () => {
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh'], defaultLanguage: 'en' });
+    expect(roles.supportedLanguages(DEFAULT_ROLE)).toEqual(['en', 'zh']);
+    expect(roles.defaultLanguage(DEFAULT_ROLE)).toBe('en');
+
+    const noList = fixedRoleCatalog('P', director, { defaultLanguage: 'en' });
+    expect(noList.supportedLanguages(DEFAULT_ROLE)).toEqual(['en']);
+    expect(noList.defaultLanguage(DEFAULT_ROLE)).toBe('en');
+  });
 });
 
 describe('devContextResolver', () => {

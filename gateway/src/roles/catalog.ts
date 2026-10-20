@@ -32,8 +32,11 @@ export function fixedRoleCatalog(
   director: DirectorConfig,
   options: FixedRoleCatalogOptions = {},
 ): RoleCatalog {
-  const languages = options.languages ?? ['zh'];
-  const defaultLanguage = options.defaultLanguage ?? languages[0]!;
+  const defaultLanguage = options.defaultLanguage ?? options.languages?.[0] ?? 'zh';
+  // Keep the stub self-consistent: a declared default is always supported.
+  const languages = options.languages === undefined
+    ? [defaultLanguage]
+    : options.languages.includes(defaultLanguage) ? options.languages : [defaultLanguage, ...options.languages];
   const personas = options.personas ?? {};
   const directors = options.directors ?? {};
   return {
