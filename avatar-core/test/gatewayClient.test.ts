@@ -91,6 +91,38 @@ describe('GatewayClient', () => {
     expect(t.messages).toEqual([]);
   });
 
+  it('drops messages missing required fields', async () => {
+    const t = setup([{ status: 200, body: tokens(1) }]);
+    await t.client.start();
+    const ws = FakeWS.instances[0];
+    ws.open();
+    ws.onmessage?.({ data: JSON.stringify({ type: 'session.resumed' }) });
+    ws.onmessage?.({ data: JSON.stringify({ type: 'response.start', kind: 'reply' }) });
+    expect(t.messages).toEqual([]);
+    ws.onmessage?.({ data: JSON.stringify({ type: 'session.ready', sessionId: 's1' }) });
+    expect(t.messages).toEqual([{ type: 'session.ready', sessionId: 's1' }]);
+  });
+
+  it('closes instead of retrying when the app secret is rejected', async () => {
+    const t = setup([
+      { status: 200, body: tokens(1) },
+      { status: 401, body: { error: 'unauthorized' } },
+      { status: 401, body: { error: 'unauthorized' } },
+    ]);
+    await t.client.start();
+    FakeWS.instances[0].open();
+    FakeWS.instances[0].drop();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(t.statuses.at(-1)).toBe('closed');
+    expect(t.calls.map((c) => c.url)).toEqual([
+      'http://gw.test/session',
+      'http://gw.test/session/resume',
+      'http://gw.test/session',
+    ]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(t.calls).toHaveLength(3);
+  });
+
   it('ignores messages from a superseded socket', async () => {
     const t = setup([{ status: 200, body: tokens(1) }, { status: 200, body: tokens(2) }]);
     await t.client.start();

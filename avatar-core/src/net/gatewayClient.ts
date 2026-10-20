@@ -40,6 +40,26 @@ export interface GatewayClientEvents {
   onStatus(s: ClientStatus): void;
 }
 
+/** Reject protocol-skewed messages before they can poison the seq floor or playback gate. */
+function validServerMessage(m: ServerMessage): boolean {
+  const seq = (value: unknown) => Number.isInteger(value) && (value as number) >= 0;
+  switch (m.type) {
+    case 'session.ready': return typeof m.sessionId === 'string';
+    case 'session.resumed': return seq(m.lastResponseSeq);
+    case 'response.start': return seq(m.responseSeq) && (m.kind === 'reply' || m.kind === 'greeting' || m.kind === 'followup');
+    case 'response.end':
+    case 'response.cancelled': return seq(m.responseSeq);
+    case 'transcript.user': return typeof m.text === 'string' && typeof m.final === 'boolean';
+    case 'transcript.assistant': return seq(m.responseSeq) && typeof m.text === 'string';
+    case 'avatar.action': return typeof m.action === 'string' && (m.source === 'tool' || m.source === 'keyword');
+    case 'avatar.emotion': return typeof m.emotion === 'string';
+    case 'metric': return typeof m.name === 'string' && typeof m.ms === 'number';
+    case 'presence': return m.phase === 'refreshing' || m.phase === 'ready';
+    case 'error': return typeof m.code === 'string' && typeof m.retryable === 'boolean';
+    default: return false;
+  }
+}
+
 export class HttpError extends Error {
   constructor(readonly status: number) {
     super(`http_${status}`);
@@ -147,6 +167,8 @@ export class GatewayClient {
         }
         if (!raw || typeof raw !== 'object' || typeof (raw as { type?: unknown }).type !== 'string') return;
         const m = raw as ServerMessage;
+        // A missing seq would become NaN and reject every later audio frame.
+        if (!validServerMessage(m)) return;
         // Reset backoff only once the gateway accepted the session, not on mere socket open.
         if (m.type === 'session.ready' || m.type === 'session.resumed') {
           this.sessionStarted = true;
@@ -176,7 +198,7 @@ export class GatewayClient {
   }
 
   private scheduleResume(): void {
-    if (this.closedByUser) return;
+    if (this.closedByUser || this.closedEmitted) return;
     if (Date.now() - this.disconnectedAt > (this.o.maxResumeMs ?? DEFAULT_MAX_RESUME_MS)) {
       void this.restartFresh();
       return;
@@ -187,7 +209,7 @@ export class GatewayClient {
   }
 
   private async tryResume(): Promise<void> {
-    if (this.closedByUser || !this.tokens) return;
+    if (this.closedByUser || this.closedEmitted || !this.tokens) return;
     try {
       this.tokens = await this.post('/session/resume', { sessionId: this.tokens.sessionId, resumeToken: this.tokens.resumeToken });
       if (this.closedByUser) return;
@@ -201,7 +223,7 @@ export class GatewayClient {
   }
 
   private async restartFresh(): Promise<void> {
-    if (this.closedByUser) return;
+    if (this.closedByUser || this.closedEmitted) return;
     this.attempt = 0;
     this.sessionStarted = false;
     try {
@@ -209,8 +231,13 @@ export class GatewayClient {
       if (this.closedByUser) return;
       this.disconnectedAt = 0;
       this.open('session.start');
-    } catch {
-      if (this.closedByUser) return;
+    } catch (error) {
+      if (this.closedByUser || this.closedEmitted) return;
+      // A rejected app secret cannot be fixed by retrying; surface a closed state instead.
+      if (error instanceof HttpError && (error.status === 401 || error.status === 403)) {
+        this.emitClosed();
+        return;
+      }
       this.disconnectedAt = Date.now();
       this.scheduleResume();
     }
