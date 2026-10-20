@@ -26,6 +26,7 @@ import { buildInstructions, historyBudget, type InstructionBudget } from './inst
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
 import { DEFAULT_TOOL_TURN_TIMEOUT_MS, type PacingConfig } from './pacing.ts';
+import { shouldSpeakBridge, slimClockAction } from './slim.ts';
 import { ToolTurn } from './toolTurn.ts';
 import { createSilencePlanner } from './silence.ts';
 import { createToolRegistry, type ToolOutcome } from './tools/registry.ts';
@@ -85,6 +86,8 @@ export interface SessionDeps {
   rebuildTriggerRatio?: number;
   /** Interval slim rebuild (gateway/config/pacing.json slim). */
   slim?: PacingConfig['slim'];
+  /** Clock for tests; production uses Date.now. */
+  now?: () => number;
   /** Emotion lexicon (gateway/config/emotion.json); undefined = no avatar.emotion messages. */
   emotion?: EmotionConfig;
   /** Optional. flush() returns immediately when this is absent. */
@@ -156,6 +159,12 @@ export class Session {
   private responseLive = false;
   private rebuildTimer: NodeJS.Timeout | null = null;
   private rebuildAttempt = 0;
+  /** Interval slim clock: next due time, deferral start and its own timer. */
+  private slimDueAt = 0;
+  private slimDeferredSince: number | null = null;
+  private slimTimer: NodeJS.Timeout | null = null;
+  /** Local VAD speaking state; part of the slim seam. */
+  private userSpeaking = false;
   private readonly rebuildMicBuffer: Int16Array[] = [];
   private summarizeRetryAt = 0;
   private summarizeBackoffMs = 1_000;
@@ -246,6 +255,7 @@ export class Session {
       return;
     }
     this.director.onSessionStart(Boolean(this.context.memorySnapshot?.trim()));
+    this.armSlimInterval();
   }
 
   attachTransport(transport: Transport): void {
@@ -262,6 +272,7 @@ export class Session {
     // A 'vad silent' sent during the drop is lost: reset the speaking flags.
     this.interrupt.onLocalVad(false);
     this.director.onUserSpeech(false);
+    this.userSpeaking = false;
     this.startKeepalive();
   }
 
@@ -309,6 +320,7 @@ export class Session {
     switch (msg.type) {
       case 'vad': {
         const speaking = msg.state === 'speaking';
+        this.userSpeaking = speaking;
         // Cancel only a continuation that was already requested. The origin ends on the client path.
         if (speaking && this.toolTurn.active && this.continuationAsked) {
           this.adapter.cancelResponse();
@@ -329,7 +341,10 @@ export class Session {
         }
         this.interrupt.onLocalVad(speaking);
         this.director.onUserSpeech(speaking);
-        if (!speaking) this.metrics.onLocalVadSilent();
+        if (!speaking) {
+          this.metrics.onLocalVadSilent();
+          this.tickSlim();
+        }
         break;
       }
       case 'playback.progress': {
@@ -369,6 +384,7 @@ export class Session {
           } else {
             this.director.onAiTurnEnded(s.text);
             this.maybeSlimContext();
+            this.tickSlim();
           }
         }
         break;
@@ -414,6 +430,7 @@ export class Session {
     if (this.ended) return;
     this.ended = true;
     this.clearToolTimer();
+    this.stopSlimClock();
     if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
     this.rebuildTimer = null;
     this.rebuildMicBuffer.length = 0;
@@ -863,8 +880,9 @@ export class Session {
     if (!keepToolTurn && this.toolTurn.onRebuild()) this.releaseToolTurn(false);
     this.director.pause();
     this.rebuilding = true;
-    log('model_rebuild', { reason });
-    if (reason !== 'slim' && reason !== 'forget' && reason !== 'decline') {
+    const startedAt = this.now();
+    if (reason === 'slim') this.send({ type: 'presence', phase: 'refreshing' });
+    else if (reason !== 'forget' && reason !== 'decline') {
       this.send({ type: 'error', code: 'model_reconnecting', retryable: true });
     }
     this.interrupt.cancelActive('local'); // uses the old adapter
@@ -878,6 +896,7 @@ export class Session {
     old.removeAllListeners();
     old.close();
     let connected = false;
+    let bridge = false;
     try {
       if (reason === 'forget' || reason === 'decline') this.refreshMemorySnapshot();
       await this.adapter.connect(this.sessionConfig());
@@ -894,6 +913,10 @@ export class Session {
       this.scheduleRebuild(reason);
     } finally {
       this.rebuilding = false;
+      if (reason === 'slim') bridge = this.finishSlimRebuild(connected, startedAt);
+      this.armSlimInterval();
+      const elapsedMs = this.now() - startedAt;
+      log('model_rebuild', { reason, elapsedMs, bridge });
       const again = this.rebuildAgain;
       this.rebuildAgain = null;
       if (again && !this.ended) await this.rebuild(again, true);
@@ -902,6 +925,80 @@ export class Session {
         this.speakConfirm();
       }
     }
+  }
+
+  private now(): number {
+    return (this.deps.now ?? Date.now)();
+  }
+
+  /** Slim rebuild finished. Returns true when the bridge line covered the dead air. */
+  private finishSlimRebuild(connected: boolean, startedAt: number): boolean {
+    if (!connected) return false;
+    const slim = this.deps.slim;
+    const line = slim ? slim.bridge[slim.summaryLanguage] : '';
+    if (line && shouldSpeakBridge(this.now() - startedAt, slim!.bridgeAfterMs, slim!.enabled)) {
+      // Do not send presence ready: the bridge audio is what ends the thinking pose.
+      this.adapter.createResponse({ cue: 'contextBridge', instruction: line, fallbackText: line });
+      return true;
+    }
+    this.send({ type: 'presence', phase: 'ready' });
+    return false;
+  }
+
+  private slimSeamOpen(): boolean {
+    return !this.toolTurn.active && !this.userSpeaking && !this.responseLive && this.interrupt.active === null;
+  }
+
+  /** Registers the interval after the reconnect, or the deferral deadline while the seam stays closed. */
+  private armSlimClock(dueAt: number): void {
+    if (this.ended) return;
+    if (this.slimTimer) clearTimeout(this.slimTimer);
+    this.slimDueAt = dueAt;
+    this.slimTimer = setTimeout(() => {
+      this.slimTimer = null;
+      this.tickSlim();
+    }, Math.max(0, dueAt - this.now()));
+    this.slimTimer.unref?.();
+  }
+
+  /** The model session is fresh again: restart the interval, clear any deferral. */
+  private armSlimInterval(): void {
+    const slim = this.deps.slim;
+    if (!slim?.enabled) return;
+    this.slimDeferredSince = null;
+    this.armSlimClock(this.now() + slim.intervalMs);
+  }
+
+  private stopSlimClock(): void {
+    if (this.slimTimer) clearTimeout(this.slimTimer);
+    this.slimTimer = null;
+    this.slimDeferredSince = null;
+  }
+
+  /** One clock reading: defer while the seam is closed, rebuild when it opens or the deadline passes. */
+  private tickSlim(): void {
+    const slim = this.deps.slim;
+    if (!slim?.enabled || this.ended) return;
+    const now = this.now();
+    const action = slimClockAction({
+      enabled: slim.enabled,
+      now,
+      dueAt: this.slimDueAt,
+      deferredSince: this.slimDeferredSince,
+      maxDeferMs: slim.maxDeferMs,
+      seamOpen: this.slimSeamOpen(),
+    });
+    if (action === 'idle') return;
+    if (action === 'defer') {
+      // Idempotent: the deadline is always measured from the first deferral.
+      if (this.slimDeferredSince === null) this.slimDeferredSince = now;
+      this.armSlimClock(this.slimDeferredSince + slim.maxDeferMs);
+      return;
+    }
+    this.slimDeferredSince = null;
+    // Another rebuild in flight owns the rearming; its finally restarts the interval.
+    if (this.rebuilding || this.rebuildTimer) return;
+    void this.rebuild('slim');
   }
 
   /** Re-reads the store. An empty render removes the snapshot. Slim rebuilds skip this. */

@@ -1,5 +1,5 @@
 import type { ResponseKind } from '@anyidea/protocol';
-import type { ProactiveCue, ProactiveRequest } from '../adapters/types.ts';
+import type { DirectorCue, ProactiveRequest } from '../adapters/types.ts';
 import type { DirectorConfig } from '../roles/types.ts';
 import { log } from '../log.ts';
 
@@ -532,7 +532,8 @@ export class Director {
     return this.stopped || this.quiet || this.muted || this.paused || this.userSpeaking;
   }
 
-  private request(cue: ProactiveCue): ProactiveRequest {
+  /** The Director's own cues. `contextBridge` is spoken by the session, not the Director. */
+  private request(cue: DirectorCue): ProactiveRequest {
     const c = this.cfg;
     switch (cue) {
       case 'greeting': return { cue, instruction: c.greetingInstruction, fallbackText: c.greetingText };
