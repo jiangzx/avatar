@@ -24,6 +24,25 @@ describe('pacing and budget config', () => {
     expect(memory.retentionBatch).toBe(200);
   });
 
+  it('validates personas for every language and reports the smallest history room', () => {
+    const pacing = loadPacing(`${root}config/pacing.json`);
+    const memory = loadMemoryBudget(`${root}config/memory.json`);
+    const roles = loadRoleCatalog(`${root}roles`);
+    const byLanguage: Partial<Record<'zh' | 'ja' | 'en', string[]>> = {};
+    for (const pair of roles.languagePairs()) {
+      (byLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
+    }
+    const report = validateBudgets(pacing, memory, ledger, byLanguage);
+    expect(report.perLanguage.zh?.minHistoryChars).toBe(report.minHistoryChars);
+    expect(report.budget.totalChars).toBe(Math.floor(pacing.rebuild.contextChars * pacing.rebuild.triggerRatio * memory.instructions.budgetRatio));
+  });
+
+  it('rejects an overlong persona in any language', () => {
+    const pacing = loadPacing(`${root}config/pacing.json`);
+    const memory = loadMemoryBudget(`${root}config/memory.json`);
+    expect(() => validateBudgets(pacing, memory, ledger, { zh: ['P'], en: ['P'.repeat(2000)] })).toThrow('instruction_budget_too_small:en');
+  });
+
   it('rejects an instruction budget above 40% of the rebuild threshold', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mem-'));
     writeFileSync(join(dir, 'memory.json'), JSON.stringify({ instructions: { budgetRatio: 0.5, snapshotMaxChars: 0, summaryMaxChars: 100, minHistoryChars: 100 } }));

@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import type { Language } from '@anyidea/protocol';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
@@ -27,12 +28,18 @@ const config = loadConfig();
 const roles = loadRoleCatalog(`${root}roles`);
 const pacing = loadPacing(`${root}config/pacing.json`);
 const memory = loadMemoryBudget(`${root}config/memory.json`);
-const budgetReport = validateBudgets(pacing, memory, config.ledger, roles.pairs().map((p) => roles.buildPersona(p.roleId, p.styleId)));
+const personasByLanguage: Partial<Record<Language, string[]>> = {};
+for (const pair of roles.languagePairs()) {
+  (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
+}
+const budgetReport = validateBudgets(pacing, memory, config.ledger, personasByLanguage);
 log('instruction_budget', { totalChars: budgetReport.budget.totalChars, minHistoryChars: budgetReport.minHistoryChars, ledgerCapped: budgetReport.ledgerCapped });
 if (memory.memoryNoticeKeywords) {
-  const noticeTexts = new Set(roles.pairs().map((pair) => roles.director(pair.roleId).memoryNoticeText));
-  for (const text of noticeTexts) {
-    if (!memory.memoryNoticeKeywords.some((keyword) => text.includes(keyword))) throw new Error('memory_notice_keyword_missing');
+  for (const pair of roles.languagePairs()) {
+    const text = roles.director(pair.roleId, pair.language).memoryNoticeText;
+    if (!memory.memoryNoticeKeywords.some((keyword) => text.includes(keyword))) {
+      throw new Error(`memory_notice_keyword_missing:${pair.language}`);
+    }
   }
 }
 const emotion = loadEmotionConfig(`${root}config/emotion.json`);
@@ -112,6 +119,7 @@ const manager = new SessionManager(
         return undefined;
       },
       budget: budgetReport.budget,
+      maxHistoryChars: budgetReport.minHistoryChars,
       recallSkipPatterns: memory.recallSkipPatterns,
       ...(memory.lightAcks ? { lightAcks: memory.lightAcks } : {}),
       ...(memory.memoryNoticeKeywords ? { noticeKeywords: memory.memoryNoticeKeywords } : {}),

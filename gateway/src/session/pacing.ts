@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
+import type { Language } from '@anyidea/protocol';
 import { z } from 'zod';
+import { PROMPT_LABELS } from '../roles/labels.ts';
 import { historyBudget, type InstructionBudget } from './instructions.ts';
 import type { LedgerOptions } from './ledger.ts';
 
@@ -87,21 +89,37 @@ export function loadMemoryBudget(path: string): MemoryBudgetConfig {
 
 export interface BudgetReport {
   budget: InstructionBudget;
-  /** Smallest history room over all role/style personas. */
+  /** Smallest history room over all languages and personas. */
   minHistoryChars: number;
   /** True when sessions will summarize earlier than LEDGER_SUMMARIZE_AFTER_TOKENS. */
   ledgerCapped: boolean;
+  perLanguage: Partial<Record<Language, { minHistoryChars: number; ledgerCapped: boolean }>>;
 }
 
 /** Startup cross-check of pacing.json, memory.json, ledger thresholds and every persona. Throws on conflict. */
-export function validateBudgets(pacing: PacingConfig, memory: MemoryBudgetConfig, ledger: LedgerOptions, personas: string[]): BudgetReport {
+export function validateBudgets(
+  pacing: PacingConfig,
+  memory: MemoryBudgetConfig,
+  ledger: LedgerOptions,
+  personas: readonly string[] | Partial<Record<Language, readonly string[]>>,
+): BudgetReport {
   const m = memory.instructions;
   if (ledger.keepRecentTurns > pacing.rebuild.afterTurns) throw new Error('ledger_keep_exceeds_rebuild_turns');
   const rebuildChars = pacing.rebuild.contextChars * pacing.rebuild.triggerRatio;
   const budget: InstructionBudget = { totalChars: Math.floor(rebuildChars * m.budgetRatio), snapshotMaxChars: m.snapshotMaxChars, summaryMaxChars: m.summaryMaxChars };
-  const minHistoryChars = Math.min(...personas.map((p) => historyBudget(p, budget)));
-  if (minHistoryChars < m.summaryMaxChars + m.minHistoryChars) {
-    throw new Error(`instruction_budget_too_small: history ${minHistoryChars} < summary ${m.summaryMaxChars} + min ${m.minHistoryChars}`);
+  // Legacy array callers (docs/testing probes) only build zh personas.
+  const byLanguage = (Array.isArray(personas) ? { zh: personas } : personas) as Partial<Record<Language, readonly string[]>>;
+  const perLanguage: Partial<Record<Language, { minHistoryChars: number; ledgerCapped: boolean }>> = {};
+  let minHistoryChars = Number.POSITIVE_INFINITY;
+  for (const [language, list] of Object.entries(byLanguage) as Array<[Language, readonly string[] | undefined]>) {
+    if (!list || list.length === 0) continue;
+    const languageMin = Math.min(...list.map((persona) => historyBudget(persona, budget, PROMPT_LABELS[language])));
+    if (languageMin < m.summaryMaxChars + m.minHistoryChars) {
+      throw new Error(`instruction_budget_too_small:${language}: history ${languageMin} < summary ${m.summaryMaxChars} + min ${m.minHistoryChars}`);
+    }
+    perLanguage[language] = { minHistoryChars: languageMin, ledgerCapped: ledger.summarizeAfterTokens > languageMin };
+    minHistoryChars = Math.min(minHistoryChars, languageMin);
   }
-  return { budget, minHistoryChars, ledgerCapped: ledger.summarizeAfterTokens > minHistoryChars };
+  if (!Number.isFinite(minHistoryChars)) throw new Error('instruction_budget_no_personas');
+  return { budget, minHistoryChars, ledgerCapped: ledger.summarizeAfterTokens > minHistoryChars, perLanguage };
 }

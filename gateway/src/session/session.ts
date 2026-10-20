@@ -85,6 +85,8 @@ export interface SessionDeps {
   toolTurnTimeoutMs?: number;
   /** Instruction size budget (gateway/config/memory.json); undefined = unbounded (tests). */
   budget?: InstructionBudget;
+  /** Smallest history room across supported languages (startup validation). */
+  maxHistoryChars?: number;
   /** Lines that challenge or deny an earlier memory; undefined = no denial filtering (tests). */
   recallSkipPatterns?: readonly string[];
   /** Whole-utterance acknowledgements that are not user statements. */
@@ -234,7 +236,7 @@ export class Session {
     const initialPersona = this.personaFor(this.language);
     const ledgerOpts = deps.ledger ?? DEFAULT_LEDGER_OPTIONS;
     // Summarize before the instruction budget would have to drop unsummarized turns.
-    const history = deps.budget ? historyBudget(initialPersona, deps.budget, PROMPT_LABELS[this.language]) : Number.POSITIVE_INFINITY;
+    const history = deps.maxHistoryChars ?? (deps.budget ? historyBudget(initialPersona, deps.budget) : Number.POSITIVE_INFINITY);
     this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
     const extractor = deps.worker;
     const ownerId = ctx.ownerId;
