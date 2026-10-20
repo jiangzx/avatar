@@ -24,7 +24,7 @@ import { loadEmotionConfig } from './session/emotion.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
-// File-backed roles (Plan A): gateway/roles/<role>/ + gateway/roles/_shared/.
+// File-backed roles (M1): gateway/roles/<role>/<language>/ + gateway/roles/_shared/<language>/.
 const roles = loadRoleCatalog(`${root}roles`);
 const pacing = loadPacing(`${root}config/pacing.json`);
 const memory = loadMemoryBudget(`${root}config/memory.json`);
