@@ -17,7 +17,10 @@ export interface SessionConfig {
 }
 
 /** What the Director wants said. Qwen speaks from `instruction`; adapters that cannot prompt the model speak `fallbackText`. */
-export type ProactiveCue = 'greeting' | 'followup' | 'idleNotice' | 'resume' | 'toolContinue' | 'memoryNotice';
+export type ProactiveCue = 'greeting' | 'followup' | 'idleNotice' | 'resume' | 'toolContinue' | 'memoryNotice' | 'contextBridge';
+
+/** Cues the Director picks; `contextBridge` is spoken by the session after a slim reconnect. */
+export type DirectorCue = Exclude<ProactiveCue, 'contextBridge'>;
 
 export interface ProactiveRequest {
   cue: ProactiveCue;

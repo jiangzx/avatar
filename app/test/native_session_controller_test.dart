@@ -630,6 +630,27 @@ void main() {
       expect(f.audio.fillerStops, [false]);
       expect(states().last, 'idle');
     });
+
+    test('a context refresh shows thinking, not the reconnect status and no filler', () async {
+      f.client.emit(const Presence('refreshing'));
+      await pumpEvents();
+      expect(states().last, 'thinking');
+      expect(
+        f.events.whereType<UiStatus>().map((e) => e.status),
+        isNot(contains('model_reconnecting')),
+      );
+      await tickAt(6500);
+      expect(f.audio.fillerPlays, isEmpty);
+    });
+
+    test('presence ready leaves the refresh thinking on idle', () async {
+      f.client.emit(const Presence('refreshing'));
+      await pumpEvents();
+      expect(states().last, 'thinking');
+      f.client.emit(const Presence('ready'));
+      await pumpEvents();
+      expect(states().last, 'idle');
+    });
   });
 
   test('without a thinking config, speaking still follows the first audio frame', () async {

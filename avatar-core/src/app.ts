@@ -95,6 +95,7 @@ export class AppController {
   private userSpeechEndAt: number | null = null;
   private lastUserFinalAt: number | null = null;
   private progressTick = 0;
+  private refreshing = false; // gateway-side context rebuild in flight
   private thinkingTimer: ReturnType<typeof setTimeout> | null = null;
   private nodTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -314,6 +315,7 @@ export class AppController {
         this.closedSeqs.clear();
         this.seqFloor = 0;
         this.actions?.stopAll();
+        this.refreshing = false; // a new session has no refresh in flight
         this.resetSpeakingState();
         this.client?.send({ type: 'client.mute', muted: this.muted }); // a mute sent while offline was dropped
         break;
@@ -322,8 +324,14 @@ export class AppController {
         this.playback.resetAfterResume(m.lastResponseSeq);
         this.seqFloor = Math.max(this.seqFloor, m.lastResponseSeq);
         this.actions?.stopAll();
+        this.refreshing = false; // a resumed session has no refresh in flight
         this.resetSpeakingState();
         this.client?.send({ type: 'client.mute', muted: this.muted }); // a mute sent while offline was dropped
+        break;
+      case 'presence':
+        // Gateway rebuilds its live context silently; only the pose changes.
+        this.refreshing = m.phase === 'refreshing';
+        this.transition(m.phase === 'refreshing' ? 'refreshStart' : 'refreshEnd');
         break;
       case 'response.start':
         this.kinds.set(m.responseSeq, m.kind);
@@ -404,12 +412,19 @@ export class AppController {
   private transition(input: AvatarInput): void {
     const next = nextState(this.state, input);
     if (next === this.state) return;
+    // A refresh only guards the timeout while it owns the thinking pose; any other pose ends it.
+    if (next !== 'thinking') this.refreshing = false;
     this.state = next;
     this.avatar?.enterState(next);
     this.post({ type: 'state', state: next });
 
     if (this.thinkingTimer) clearTimeout(this.thinkingTimer);
-    this.thinkingTimer = next === 'thinking' ? setTimeout(() => this.transition('thinkingTimeout'), THINKING_TIMEOUT_MS) : null;
+    this.thinkingTimer =
+      next === 'thinking'
+        ? setTimeout(() => {
+            if (!this.refreshing) this.transition('thinkingTimeout'); // a refresh ends via presence ready
+          }, THINKING_TIMEOUT_MS)
+        : null;
 
     if (this.nodTimer) clearInterval(this.nodTimer);
     this.nodTimer = next === 'listening' ? setInterval(() => this.actions?.nod(true), LISTEN_NOD_EVERY_MS) : null;

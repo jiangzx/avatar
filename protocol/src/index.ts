@@ -37,6 +37,7 @@ export type ServerMessage =
   | { type: 'avatar.action'; action: ActionName; source: 'tool' | 'keyword' }
   | { type: 'avatar.emotion'; emotion: string }
   | { type: 'metric'; name: string; ms: number }
+  | { type: 'presence'; phase: 'refreshing' | 'ready' }
   | { type: 'error'; code: string; retryable: boolean };
 
 export interface AudioFrame {

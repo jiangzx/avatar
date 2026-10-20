@@ -4,5 +4,16 @@
   "output": { "maxTokens": null },
   "policies": {
     "summarize": { "timeoutMs": 15000, "retries": 1, "backoffMs": 1000, "maxBackoffMs": 4000 }
+  },
+  "slim": {
+    "enabled": true,
+    "intervalMs": 1200000,
+    "maxDeferMs": 120000,
+    "bridgeAfterMs": 400,
+    "summaryLanguage": "zh",
+    "bridge": {
+      "zh": "我想想刚才聊到哪。",
+      "ja": "さっきの続きを思い出すね。"
+    }
   }
 }

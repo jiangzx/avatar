@@ -125,6 +125,12 @@ class SessionResumed extends ServerMessage {
   final int lastResponseSeq;
 }
 
+class Presence extends ServerMessage {
+  const Presence(this.phase);
+
+  final String phase;
+}
+
 class ResponseStart extends ServerMessage {
   const ResponseStart(this.responseSeq, this.kind);
 
@@ -197,6 +203,9 @@ ServerMessage? parseServerMessage(Object? raw) {
     case 'session.resumed':
       final lastResponseSeq = _nonNegativeInt(raw['lastResponseSeq']);
       return lastResponseSeq == null ? null : SessionResumed(lastResponseSeq);
+    case 'presence':
+      final phase = raw['phase'];
+      return phase is String && {'refreshing', 'ready'}.contains(phase) ? Presence(phase) : null;
     case 'response.start':
       final kind = raw['kind'];
       return responseSeq == null || kind is! String || !{'reply', 'greeting', 'followup'}.contains(kind) ? null : ResponseStart(responseSeq, kind);

@@ -8,6 +8,7 @@ import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import type { ReplyMetrics } from '../src/session/metrics.ts';
 import { InterruptCoordinator } from '../src/session/interrupt.ts';
+import type { PacingConfig } from '../src/session/pacing.ts';
 import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
 
 const script: MockScript = {
@@ -62,6 +63,15 @@ describe('Session context', () => {
 
 const ownedCtx: SessionContext = {
   ownerId: 'owner-1', agentId: 'agent-1', roleId: 'elder-companion', styleId: 'grandchild',
+};
+
+const slimOn: NonNullable<PacingConfig['slim']> = {
+  enabled: true,
+  intervalMs: 1_500,
+  maxDeferMs: 5_000,
+  bridgeAfterMs: 400,
+  summaryLanguage: 'zh',
+  bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。' },
 };
 
 function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessionId?: string, noticePending = false) {
@@ -1032,5 +1042,207 @@ describe('Session', () => {
     s.mocks[0]!.emit('toolCall', 'cut-off', 'call-cut', 'perform_action', { action: 'wave' });
     await vi.advanceTimersByTimeAsync(0);
     expect(creates).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds slim on the interval once the seam is open, with presence and no reconnect error', async () => {
+    const s = setup({ slim: slimOn });
+    await greetAndFinish(s);
+    expect(s.mocks).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(900); // t=1900: the 1500 ms interval fired with nothing playing
+    expect(s.mocks).toHaveLength(2);
+    expect(of(s.sent, 'presence')).toEqual([
+      { type: 'presence', phase: 'refreshing' },
+      { type: 'presence', phase: 'ready' },
+    ]);
+    expect(of(s.sent, 'error')).toEqual([]);
+    expect(s.mocks[1]!.instructions).toContain('你好呀');
+    s.session.end();
+  });
+
+  it('defers the slim rebuild while the user is speaking and rebuilds on the silent edge', async () => {
+    const s = setup({ slim: slimOn });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 0 });
+    await vi.advanceTimersByTimeAsync(700); // t=1700: the interval fired with the seam closed
+    expect(s.mocks).toHaveLength(1);
+    s.session.handleClientMessage({ type: 'vad', state: 'silent', t: 1 });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(s.mocks).toHaveLength(2);
+    expect(of(s.sent, 'presence')).toEqual([
+      { type: 'presence', phase: 'refreshing' },
+      { type: 'presence', phase: 'ready' },
+    ]);
+    s.session.end();
+  });
+
+  it('forces the slim rebuild at the deferral deadline even while the seam stays closed', async () => {
+    const s = setup({ slim: { ...slimOn, maxDeferMs: 1_000 } });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 0 });
+    await vi.advanceTimersByTimeAsync(1_400); // t=2400: deferred at 1500, deadline is 2500
+    expect(s.mocks).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(200); // past the deadline, still speaking
+    expect(s.mocks).toHaveLength(2);
+    expect(of(s.sent, 'presence')).toContainEqual({ type: 'presence', phase: 'refreshing' });
+    expect(of(s.sent, 'error')).toEqual([]);
+    s.session.end();
+  });
+
+  it('keeps the slim rebuild off the clock when slim is disabled', async () => {
+    const s = setup({ slim: { ...slimOn, enabled: false } });
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(s.mocks).toHaveLength(1);
+    expect(of(s.sent, 'presence')).toEqual([]);
+    s.session.end();
+  });
+
+  it('keeps the turn-based slim thinking state but no bridge when slim is disabled', async () => {
+    const s = setup({ rebuildAfterTurns: 1, slim: { ...slimOn, enabled: false } });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '你好' });
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(s.mocks).toHaveLength(2);
+    expect(of(s.sent, 'error')).toEqual([]);
+    expect(of(s.sent, 'presence')).toEqual([
+      { type: 'presence', phase: 'refreshing' },
+      { type: 'presence', phase: 'ready' },
+    ]);
+    s.session.end();
+  });
+
+  it('speaks the configured bridge line only when the slim reconnect is slow', async () => {
+    let created = 0;
+    const s = setup({
+      slim: slimOn,
+      adapterFactory: () => {
+        const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+        created++;
+        if (created === 2) {
+          const connect = m.connect.bind(m);
+          vi.spyOn(m, 'connect').mockImplementation(async (c) => {
+            await new Promise<void>((resolve) => setTimeout(resolve, 500));
+            return connect(c);
+          });
+        }
+        return m;
+      },
+    });
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(600); // the delayed reconnect lands past bridgeAfterMs
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(assistantText(s.sent, 2)).toBe(slimOn.bridge.zh);
+    expect(of(s.sent, 'presence')).toEqual([{ type: 'presence', phase: 'refreshing' }]);
+    expect(of(s.sent, 'error')).toEqual([]);
+    s.session.end();
+  });
+
+  it('skips the bridge line when the slim reconnect is fast', async () => {
+    const s = setup({ slim: slimOn });
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(900); // interval fires at t=1500, the reconnect is immediate
+    expect(s.session.lastResponseSeq).toBe(1); // no bridge response was created
+    expect(of(s.sent, 'presence')).toEqual([
+      { type: 'presence', phase: 'refreshing' },
+      { type: 'presence', phase: 'ready' },
+    ]);
+    s.session.end();
+  });
+
+  it('still announces a dropped connection while slim is enabled', async () => {
+    const s = setup({ slim: slimOn });
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(100);
+    s.mocks[0]!.simulateDrop();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(of(s.sent, 'error')).toContainEqual({ type: 'error', code: 'model_reconnecting', retryable: true });
+    expect(of(s.sent, 'presence')).toEqual([]);
+    s.session.end();
+  });
+
+  it('keeps the slim rebuild out while a reply is in flight', async () => {
+    const s = setup({ slim: slimOn });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '你好' });
+    await vi.advanceTimersByTimeAsync(900); // t=1900: the interval fires with a live response
+    expect(s.mocks).toHaveLength(1);
+    expect(of(s.sent, 'presence')).toEqual([]);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(s.mocks).toHaveLength(2);
+    expect(of(s.sent, 'presence')).toContainEqual({ type: 'presence', phase: 'refreshing' });
+    s.session.end();
+  });
+
+  it('keeps the slim rebuild out while a response is still generating but playback already ended', async () => {
+    const long = '这是一段更长的回复，用来让响应在区间到期时仍然在生成过程中。';
+    let created = 0;
+    const s = setup({
+      slim: slimOn,
+      adapterFactory: () => {
+        created++;
+        return new MockAdapter({
+          script: { ...script, fallbackReply: long },
+          replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+        });
+      },
+    });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '你好' });
+    await vi.advanceTimersByTimeAsync(100); // seq 2 started; its generation is still in flight
+    // Playback ended early: interrupt.active clears, responseLive stays true until responseDone.
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 100, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(500); // t=1600: the interval fired while responseLive is still true
+    expect(created).toBe(1);
+    expect(of(s.sent, 'presence')).toEqual([]);
+    s.session.end();
+  });
+
+  it('releases the thinking pose when the slim rebuild cannot connect', async () => {
+    let created = 0;
+    const s = setup({
+      slim: slimOn,
+      adapterFactory: () => {
+        const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+        created++;
+        if (created === 2) {
+          vi.spyOn(m, 'connect').mockRejectedValue(new Error('fixture_connect_failed'));
+        }
+        return m;
+      },
+    });
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(900); // the interval fires and the replacement adapter rejects
+    expect(of(s.sent, 'presence')).toEqual([
+      { type: 'presence', phase: 'refreshing' },
+      { type: 'presence', phase: 'ready' },
+    ]);
+    expect(of(s.sent, 'error')).toEqual([]);
+    expect(assistantText(s.sent, 2)).toBe('');
+    s.session.end();
+  });
+
+  it('logs the slim rebuild without any line or conversation text', async () => {
+    const chunks: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      chunks.push(String(chunk));
+      return true;
+    });
+    try {
+      const s = setup({ slim: slimOn });
+      await greetAndFinish(s);
+      await vi.advanceTimersByTimeAsync(900); // the interval fires and the reconnect is immediate
+      s.session.end();
+    } finally {
+      spy.mockRestore();
+    }
+    const rebuilds = chunks
+      .filter((line) => line.includes('"event":"model_rebuild"'))
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(rebuilds).toHaveLength(1);
+    expect(Object.keys(rebuilds[0]!).sort()).toEqual(['bridge', 'elapsedMs', 'event', 'reason', 't']);
+    expect(chunks.join('')).not.toContain(slimOn.bridge.zh);
   });
 });

@@ -86,7 +86,7 @@ const manager = new SessionManager(
           ? new QwenAdapter({ apiKey: config.qwenApiKey!, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice })
           : new MockAdapter({ script, speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor }),
       summarizer: config.summarizer === 'qwen'
-        ? new QwenSummarizer({ apiKey: config.qwenApiKey!, endpoint: config.summarizerEndpoint, model: config.summarizerModel })
+        ? new QwenSummarizer({ apiKey: config.qwenApiKey!, endpoint: config.summarizerEndpoint, model: config.summarizerModel, language: pacing.slim.enabled ? pacing.slim.summaryLanguage : 'zh' })
         : new MockSummarizer(),
       roles,
       ledger: config.ledger,
@@ -103,6 +103,7 @@ const manager = new SessionManager(
       summarizePolicy: pacing.policies.summarize,
       ...(pacing.output.maxTokens !== null ? { maxOutputTokens: pacing.output.maxTokens } : {}),
       tailGuardMs: pacing.tailGuardMs,
+      slim: pacing.slim,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
       emotion,
       ...(store ? { store } : {}),

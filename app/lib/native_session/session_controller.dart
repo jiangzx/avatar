@@ -291,6 +291,21 @@ class NativeSessionController implements GatewayClientEvents {
         _emitAudioDiag('response.cancelled');
         final thinking = _thinking;
         if (thinking != null) await _apply(thinking.onCancelled(_now()));
+      case Presence(:final phase):
+        final thinking = _thinking;
+        if (phase == 'refreshing') {
+          if (thinking != null) {
+            await _apply(thinking.onContextRefresh());
+          } else {
+            emit(const UiState('thinking'));
+          }
+        } else {
+          if (thinking != null) {
+            await _apply(thinking.onContextRefreshDone());
+          } else {
+            emit(const UiState('idle'));
+          }
+        }
       case TranscriptUser(:final text, :final isFinal):
         _thinking?.onUserTranscript();
         emit(UiSubtitle(role: 'user', text: text, isFinal: isFinal));
