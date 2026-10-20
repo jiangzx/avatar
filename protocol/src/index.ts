@@ -5,6 +5,9 @@ export const AI_SAMPLE_RATE = 24000;
 /** 20 ms of 16 kHz audio. */
 export const MIC_FRAME_SAMPLES = 320;
 
+export const LANGUAGES = ['zh', 'ja', 'en'] as const;
+export type Language = (typeof LANGUAGES)[number];
+
 export type ActionName = 'wave' | 'nod' | 'smile' | 'turn' | 'heart';
 export const ACTION_NAMES: readonly ActionName[] = ['wave', 'nod', 'smile', 'turn', 'heart'];
 export type ResponseKind = 'reply' | 'greeting' | 'followup';
@@ -17,7 +20,7 @@ export interface SessionTokens {
 }
 
 export type ClientMessage =
-  | { type: 'session.start'; clientInfo: { platform: string; audioPath: AudioPath } }
+  | { type: 'session.start'; clientInfo: { platform: string; audioPath: AudioPath; language?: Language } }
   | { type: 'session.resume'; sessionId: string }
   | { type: 'vad'; state: 'speaking' | 'silent'; t: number }
   | { type: 'playback.progress'; responseSeq: number; playedMs: number }
