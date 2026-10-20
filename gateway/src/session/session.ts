@@ -933,7 +933,11 @@ export class Session {
 
   /** Slim rebuild finished. Returns true when the bridge line covered the dead air. */
   private finishSlimRebuild(connected: boolean, startedAt: number): boolean {
-    if (!connected) return false;
+    if (!connected) {
+      // Nothing was spoken and no adapter answered: release the client's thinking pose.
+      this.send({ type: 'presence', phase: 'ready' });
+      return false;
+    }
     const slim = this.deps.slim;
     const line = slim ? slim.bridge[slim.summaryLanguage] : '';
     if (line && shouldSpeakBridge(this.now() - startedAt, slim!.bridgeAfterMs, slim!.enabled)) {

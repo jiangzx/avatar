@@ -1130,4 +1130,42 @@ describe('Session', () => {
     expect(of(s.sent, 'presence')).toEqual([]);
     s.session.end();
   });
+
+  it('keeps the slim rebuild out while a reply is in flight', async () => {
+    const s = setup({ slim: slimOn });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '你好' });
+    await vi.advanceTimersByTimeAsync(900); // t=1900: the interval fires with a live response
+    expect(s.mocks).toHaveLength(1);
+    expect(of(s.sent, 'presence')).toEqual([]);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(s.mocks).toHaveLength(2);
+    expect(of(s.sent, 'presence')).toContainEqual({ type: 'presence', phase: 'refreshing' });
+    s.session.end();
+  });
+
+  it('releases the thinking pose when the slim rebuild cannot connect', async () => {
+    let created = 0;
+    const s = setup({
+      slim: slimOn,
+      adapterFactory: () => {
+        const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+        created++;
+        if (created === 2) {
+          vi.spyOn(m, 'connect').mockRejectedValue(new Error('fixture_connect_failed'));
+        }
+        return m;
+      },
+    });
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(900); // the interval fires and the replacement adapter rejects
+    expect(of(s.sent, 'presence')).toEqual([
+      { type: 'presence', phase: 'refreshing' },
+      { type: 'presence', phase: 'ready' },
+    ]);
+    expect(of(s.sent, 'error')).toContainEqual({ type: 'error', code: 'model_unavailable', retryable: true });
+    expect(assistantText(s.sent, 2)).toBe('');
+    s.session.end();
+  });
 });
