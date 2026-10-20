@@ -45,7 +45,26 @@ describe('detectLanguage', () => {
     expect(detectLanguage('English please', 'zh')).toBe('en');
     expect(detectLanguage('中文', 'en')).toBe('zh');
     expect(detectLanguage('日本語でお願いします', 'zh')).toBe('ja');
+    expect(detectLanguage('日本語で', 'zh')).toBe('ja');
     expect(detectLanguage('请说中文', 'en')).toBe('zh');
+    expect(detectLanguage('用普通话', 'ja')).toBe('zh');
+    expect(detectLanguage('speak in English', 'zh')).toBe('en');
+    expect(detectLanguage('switch to Japanese', 'zh')).toBe('ja');
+  });
+
+  it('does not switch on mere mentions of a language', () => {
+    expect(detectLanguage('我在学英语', 'zh')).toBe('zh');
+    expect(detectLanguage('我英语不好', 'zh')).toBe('zh');
+    expect(detectLanguage('我在学日语', 'zh')).toBe('zh');
+    expect(detectLanguage('I am learning Chinese', 'en')).toBe('en');
+    expect(detectLanguage('这个用英语怎么说', 'zh')).toBe('zh');
+  });
+
+  it('keeps the previous language for repeated acknowledgements', () => {
+    expect(detectLanguage('嗯嗯', 'en')).toBe('en');
+    expect(detectLanguage('好好', 'en')).toBe('en');
+    expect(detectLanguage('对对', 'en')).toBe('en');
+    expect(detectLanguage('是是', 'en')).toBe('en');
   });
 
   it('does not treat a language question as an explicit request', () => {
