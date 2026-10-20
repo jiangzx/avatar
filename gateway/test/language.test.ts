@@ -57,6 +57,21 @@ describe('detectLanguage', () => {
     expect(detectLanguage('switch to Japanese', 'zh', rules)).toBe('ja');
   });
 
+  it('preserves the M1 explicit-request forms', () => {
+    expect(detectLanguage('讲英语', 'zh', rules)).toBe('en');
+    expect(detectLanguage('麻烦用英语', 'zh', rules)).toBe('en');
+    expect(detectLanguage('麻烦说英语', 'zh', rules)).toBe('en');
+    expect(detectLanguage('切换英语', 'zh', rules)).toBe('en');
+    expect(detectLanguage('用英语回答', 'zh', rules)).toBe('en');
+    expect(detectLanguage('请用英语跟我说话', 'zh', rules)).toBe('en');
+    expect(detectLanguage('说英语跟我聊天', 'zh', rules)).toBe('en');
+    expect(detectLanguage('please speak English', 'zh', rules)).toBe('en');
+    expect(detectLanguage('talk English', 'zh', rules)).toBe('en');
+    expect(detectLanguage('reply English', 'zh', rules)).toBe('en');
+    expect(detectLanguage('switch English', 'zh', rules)).toBe('en');
+    expect(detectLanguage('我在学英语', 'zh', rules)).toBe('zh');
+  });
+
   it('does not switch on mere mentions of a language', () => {
     expect(detectLanguage('我在学英语', 'zh', rules)).toBe('zh');
     expect(detectLanguage('我英语不好', 'zh', rules)).toBe('zh');

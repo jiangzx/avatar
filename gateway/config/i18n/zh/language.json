@@ -2,18 +2,14 @@
   "names": ["中文", "汉语", "普通话", "chinese"],
   "shortAcks": ["嗯", "嗯嗯", "哦", "好", "好的", "好好", "行", "行吧", "对对", "是是", "我知道了", "知道了", "知道啦", "明白了", "明白啦"],
   "questionSuffixes": ["吗", "呢", "么", "嘛", "来着"],
-  "requestTemplates": [
-    { "language": "en", "template": "{name}" },
-    { "language": "en", "template": "请用{name}说" },
-    { "language": "en", "template": "说{name}" },
-    { "language": "en", "template": "用{name}" },
-    { "language": "en", "template": "切换到{name}" },
-    { "language": "en", "template": "切换成{name}" },
-    { "language": "ja", "template": "{name}" },
-    { "language": "ja", "template": "用{name}" },
-    { "language": "ja", "template": "请说{name}" },
-    { "language": "zh", "template": "{name}" },
-    { "language": "zh", "template": "请说{name}" },
-    { "language": "zh", "template": "用{name}" }
+  "explicitRequestPatterns": [
+    { "language": "en", "pattern": "^(?:英文|英语|english)$" },
+    { "language": "en", "pattern": "^(?:英文|英语|english)\\s+please$" },
+    { "language": "en", "pattern": "^(?:please\\s+)?(?:speak|talk|reply|answer|switch)(?:\\s+(?:to|in))?(?:\\s+in)?\\s+(?:英文|英语|english)(?:\\s+please)?$" },
+    { "language": "en", "pattern": "^(?:请|麻烦)?(?:用|说|讲|切换(?:到|成)?)(?:英文|英语|english)(?:说|讲|回答|聊天|跟我说话|跟我聊天|跟我交流|跟我讲)?$" },
+    { "language": "ja", "pattern": "^(?:日语|日文|日本語|japanese)$" },
+    { "language": "ja", "pattern": "^(?:请|麻烦)?(?:用|说|讲|切换(?:到|成)?)(?:日语|日文|日本語|japanese)(?:说|讲|回答|聊天|跟我说话|跟我聊天|跟我交流|跟我讲)?$" },
+    { "language": "zh", "pattern": "^(?:中文|汉语|普通话|chinese)$" },
+    { "language": "zh", "pattern": "^(?:请|麻烦)?(?:用|说|讲|切换(?:到|成)?)(?:中文|汉语|普通话|chinese)(?:说|讲|回答|聊天|跟我说话|跟我聊天|跟我交流|跟我讲)?$" }
   ]
 }

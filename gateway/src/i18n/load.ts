@@ -19,7 +19,6 @@ import type {
 } from './types.ts';
 
 const EDGE_PUNCTUATION = /^[\s\p{P}]+|[\s\p{P}]+$/gu;
-const TEMPLATE_NAME = '{name}';
 
 const StringList = z.array(z.string().min(1));
 const PhraseList = StringList.min(1);
@@ -28,9 +27,10 @@ const LanguageFileSchema = z.object({
   names: PhraseList,
   shortAcks: StringList,
   questionSuffixes: StringList,
-  requestTemplates: z.array(z.object({
+  // Complete anchored M1 regex sources, grouped by the language they request.
+  explicitRequestPatterns: z.array(z.object({
     language: z.enum(LANGUAGES),
-    template: z.string().min(1),
+    pattern: z.string().min(1),
   }).strict()),
 }).strict();
 
@@ -120,16 +120,6 @@ function compilePattern(source: string, language: Language, field: string): RegE
   }
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** A template is literal text; {name} expands to the target language's names. */
-function expandTemplate(template: string, names: readonly string[]): string {
-  const alternatives = `(?:${names.map(escapeRegExp).join('|')})`;
-  return template.split(TEMPLATE_NAME).map(escapeRegExp).join(alternatives);
-}
-
 function normalizeAck(text: string): string {
   return text.replace(EDGE_PUNCTUATION, '').toLowerCase();
 }
@@ -170,12 +160,11 @@ function mergeLanguageRules(files: Record<Language, LanguageFile>): LanguageRule
     for (const suffix of file.questionSuffixes) {
       if (!questionSuffixes.includes(suffix)) questionSuffixes.push(suffix);
     }
-    for (const request of file.requestTemplates) {
-      const source = expandTemplate(request.template, files[request.language].names);
+    for (const request of file.explicitRequestPatterns) {
       try {
-        explicitRequests.push({ language: request.language, pattern: new RegExp(`^(?:${source})$`, 'iu') });
+        explicitRequests.push({ language: request.language, pattern: new RegExp(request.pattern, 'iu') });
       } catch {
-        throw new Error(`i18n_pattern_invalid:${language}:requestTemplates`);
+        throw new Error(`i18n_pattern_invalid:${language}:explicitRequestPatterns`);
       }
     }
   }

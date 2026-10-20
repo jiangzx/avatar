@@ -2,11 +2,9 @@
   "names": ["日语", "日文", "日本語", "japanese"],
   "shortAcks": ["はい", "うん", "ええ", "いいえ", "そう", "そうですね"],
   "questionSuffixes": ["か", "かな", "かしら"],
-  "requestTemplates": [
-    { "language": "ja", "template": "{name}" },
-    { "language": "ja", "template": "日本語で" },
-    { "language": "ja", "template": "日本語でお願いします" },
-    { "language": "en", "template": "英語で" },
-    { "language": "zh", "template": "中国語で" }
+  "explicitRequestPatterns": [
+    { "language": "ja", "pattern": "^日本語で(?:お願いします)?$" },
+    { "language": "en", "pattern": "^英語で$" },
+    { "language": "zh", "pattern": "^中国語で$" }
   ]
 }

@@ -63,4 +63,13 @@ describe('loadI18n', () => {
     writeFileSync(path, JSON.stringify(value));
     expect(() => loadI18n(dir)).toThrow(/i18n_pattern_invalid:en:addressingPatterns/);
   });
+
+  it('fails fast on an invalid explicit request pattern', () => {
+    const dir = copyConfig();
+    const path = join(dir, 'i18n', 'en', 'language.json');
+    const value = JSON.parse(readFileSync(path, 'utf8')) as { explicitRequestPatterns: { language: string; pattern: string }[] };
+    value.explicitRequestPatterns[0]!.pattern = '^(';
+    writeFileSync(path, JSON.stringify(value));
+    expect(() => loadI18n(dir)).toThrow(/i18n_pattern_invalid:en:explicitRequestPatterns/);
+  });
 });

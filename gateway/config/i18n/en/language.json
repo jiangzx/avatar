@@ -2,28 +2,15 @@
   "names": ["英文", "英语", "english"],
   "shortAcks": ["ok", "okay", "yes", "yeah", "yep", "no", "nope"],
   "questionSuffixes": [],
-  "requestTemplates": [
-    { "language": "en", "template": "{name}" },
-    { "language": "en", "template": "{name} please" },
-    { "language": "ja", "template": "{name} please" },
-    { "language": "zh", "template": "{name} please" },
-    { "language": "en", "template": "speak {name}" },
-    { "language": "ja", "template": "speak {name}" },
-    { "language": "zh", "template": "speak {name}" },
-    { "language": "en", "template": "speak in {name}" },
-    { "language": "ja", "template": "speak in {name}" },
-    { "language": "zh", "template": "speak in {name}" },
-    { "language": "en", "template": "talk in {name}" },
-    { "language": "ja", "template": "talk in {name}" },
-    { "language": "zh", "template": "talk in {name}" },
-    { "language": "en", "template": "switch to {name}" },
-    { "language": "ja", "template": "switch to {name}" },
-    { "language": "zh", "template": "switch to {name}" },
-    { "language": "en", "template": "reply in {name}" },
-    { "language": "ja", "template": "reply in {name}" },
-    { "language": "zh", "template": "reply in {name}" },
-    { "language": "en", "template": "answer in {name}" },
-    { "language": "ja", "template": "answer in {name}" },
-    { "language": "zh", "template": "answer in {name}" }
+  "explicitRequestPatterns": [
+    { "language": "en", "pattern": "^(?:英文|英语|english)$" },
+    { "language": "en", "pattern": "^(?:英文|英语|english)\\s+please$" },
+    { "language": "en", "pattern": "^(?:please\\s+)?(?:speak|talk|reply|answer|switch)(?:\\s+(?:to|in))?(?:\\s+in)?\\s+(?:英文|英语|english)(?:\\s+please)?$" },
+    { "language": "ja", "pattern": "^(?:日语|日文|日本語|japanese)$" },
+    { "language": "ja", "pattern": "^(?:日语|日文|日本語|japanese)\\s+please$" },
+    { "language": "ja", "pattern": "^(?:please\\s+)?(?:speak|talk|reply|answer|switch)(?:\\s+(?:to|in))?(?:\\s+in)?\\s+(?:日语|日文|日本語|japanese)(?:\\s+please)?$" },
+    { "language": "zh", "pattern": "^(?:中文|汉语|普通话|chinese)$" },
+    { "language": "zh", "pattern": "^(?:中文|汉语|普通话|chinese)\\s+please$" },
+    { "language": "zh", "pattern": "^(?:please\\s+)?(?:speak|talk|reply|answer|switch)(?:\\s+(?:to|in))?(?:\\s+in)?\\s+(?:中文|汉语|普通话|chinese)(?:\\s+please)?$" }
   ]
 }
