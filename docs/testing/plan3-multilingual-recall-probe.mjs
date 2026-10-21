@@ -350,10 +350,19 @@ async function runTemp() {
     check(discussed.spokenFound === true, 'en_discussed_specific_found');
     check(historyLines(discussed, 'en').includes('I like watching old movies.'), 'en_discussed_specific_movie');
     check(!historyLines(discussed, 'en').includes('I went to the park yesterday.'), 'en_discussed_specific_park_excluded');
-    const yesterday = await en.handle('recall_memory', { query: 'What did we talk about yesterday?' }, vagueCtx());
-    check(yesterday.spokenFound === true, 'en_yesterday_specific_found');
-    check(historyLines(yesterday, 'en').includes('I went to the park yesterday.'), 'en_yesterday_specific_park');
-    check(!historyLines(yesterday, 'en').includes('I like watching old movies.'), 'en_yesterday_specific_movie_excluded');
+    for (const query of [
+      'And what did we talk about?',
+      'Okay, what did we talk about?',
+      'What did we talk about today?',
+      'What did we talk about earlier?',
+      'What did we talk about this morning?',
+      'What did we say just now?',
+      'What did we talk about? ❤️',
+    ]) {
+      const vague = await en.handle('recall_memory', { query }, vagueCtx());
+      check(vague.spokenFound === true, 'en_filler_vague_found');
+      check(historyLines(vague, 'en')[0] === 'I went to the park yesterday.', 'en_filler_vague_newest');
+    }
     for (const query of [
       'Do you remember?', 'What did we say?', 'What did we talk about?',
       'What did we say,', 'What did we say?"', 'Do you remember，',

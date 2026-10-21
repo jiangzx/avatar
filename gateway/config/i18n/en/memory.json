@@ -15,7 +15,7 @@
     "skipPatterns": ["didn't say", "did not say", "never said", "don't remember", "don't recall", "not true", "that's wrong", "you're wrong", "made that up", "when did i", "when did we", "did i say", "did we talk", "what did we talk", "not what i said", "no no"],
     "lightAcks": ["ok", "okay", "yes", "yeah", "yep", "no", "nope", "sure", "alright", "got it", "i see"],
     "recentQueryPatterns": [],
-    "recentQueryExactPatterns": ["what did we talk about", "what did we talk about last time", "what did we talk about before", "what were we talking about", "what were we talking about last time", "what did we discuss", "what did we discuss last time", "what did we say", "what did we say last time", "what did i say", "what did i say last time", "last time we talked", "last conversation", "talked about last time", "do you remember", "remember when", "did we talk"],
+    "recentQueryExactPatterns": ["what did we talk about", "what were we talking about", "what did we discuss", "what did we say", "what did i say", "last time we talked", "last conversation", "talked about last time", "do you remember", "remember when", "did we talk"],
     "queryFramePatterns": ["^(?:did|do|have)\\s+(?:i|you|we)\\s+(?:ever\\s+)?(?:say|said|tell|told|mention(?:ed)?|talk\\s+about)\\s+(?:(?:that|i|you|we)\\s+)*", "^(?:do|did)\\s+you\\s+remember\\s+(?:(?:that|what|when|where|who|how|if)\\s+)?", "^what\\s+(?:did|do|does)\\s+(?:i|you|we)\\s+(?:say|said|tell|told|mention(?:ed)?|talk\\s+about|discuss(?:ed)?)\\s+(?:about\\s+)?", "^i\\s+(?:said|told\\s+you|mentioned)\\s+(?:(?:that|i|you|we)\\s+)*"],
     "phraseMaxChars": 120
   },

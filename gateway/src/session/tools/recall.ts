@@ -40,6 +40,9 @@ function sameUtterance(a: string, b: string): boolean {
   return normalize(a) === normalize(b);
 }
 
+const LEADING_FILLERS = new Set(['and', 'so', 'okay', 'ok', 'well', 'now', 'um', 'uh', 'oh', 'hey', 'alright', 'then', 'but']);
+const TRAILING_FILLERS = new Set(['last', 'time', 'before', 'yesterday', 'today', 'earlier', 'morning', 'this', 'just', 'now', 'previously', 'recently', 'again', 'please']);
+
 /** Whole-utterance key: ignore whitespace and edge punctuation/symbols. */
 function utteranceKey(text: string): string {
   return text
@@ -48,11 +51,27 @@ function utteranceKey(text: string): string {
     .replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '');
 }
 
+/**
+ * Bare vague questions may carry a leading filler or a trailing time word.
+ * Anything else after the phrase is content and must go to FTS.
+ */
+function vagueKey(text: string): string {
+  const words = text
+    .toLowerCase()
+    .replace(/[\p{P}\p{S}\p{M}]+/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  while (words.length > 0 && LEADING_FILLERS.has(words[0]!)) words.shift();
+  while (words.length > 0 && TRAILING_FILLERS.has(words[words.length - 1]!)) words.pop();
+  return words.join('');
+}
+
 /** A bare vague question stays vague; "what did we say about X" must go to FTS instead. */
-function isRecentQuery(normalized: string, copy: RecallCopy): boolean {
-  const key = utteranceKey(normalized);
+function isRecentQuery(query: string, copy: RecallCopy): boolean {
+  const normalized = query.replace(/\s/g, '').toLowerCase();
+  const key = vagueKey(query);
   if (copy.recentQueryExactPatterns.some((pattern) => {
-    const value = utteranceKey(pattern);
+    const value = vagueKey(pattern);
     return value.length > 0 && key === value;
   })) return true;
   return copy.recentQueryPatterns.some((pattern) => {
@@ -125,9 +144,7 @@ async function recall(args: unknown, ctx: ToolContext, rules: SafetyRules, clipC
   const query = parsed.data.query;
   const evidence = { questionPatterns: copy.questionPatterns, skipPatterns: copy.skipPatterns, lightAcks: copy.lightAcks };
   // Vague "what did we talk about" questions have no useful FTS tokens; use recent user statements.
-  // Normalize whitespace and case on both sides: en patterns are lowercase and contain spaces.
-  const normalized = query.replace(/\s/g, '').toLowerCase();
-  if (isRecentQuery(normalized, copy)) {
+  if (isRecentQuery(query, copy)) {
     const recent = ctx.store.recentUserMessages(ctx.ownerId, 12)
       .map((row) => stripInvisible(row.text, rules.invisibleCodePoints))
       .filter((text) => text.length > 0 && scanText(text, rules) !== 'reject' && isMemoryEvidence(text, evidence))

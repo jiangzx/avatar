@@ -1,6 +1,6 @@
 # 多语言 M2：日语/英语语言包与记忆/安全本地化 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在不改变中文既有行为的前提下，交付 `elder-companion` 的 `ja`/`en` 生产语言包，并把记忆告知/召回、证据判定、假名分词、安全/情绪词表、四段沉默校验和抽取/摘要链路全部按语言配置化。
 

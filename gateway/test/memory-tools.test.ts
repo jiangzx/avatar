@@ -318,11 +318,19 @@ describe('memory tool registry', () => {
       expect(vague.text).toContain('I went to the park yesterday.');
     }
 
-    const yesterday = await registryFor('en').handle(
-      'recall_memory', { query: 'What did we talk about yesterday?' }, ctx(),
-    );
-    expect(yesterday.text).toContain('I went to the park yesterday.');
-    expect(yesterday.text).not.toContain('I like watching old movies.');
+    for (const query of [
+      'And what did we talk about?',
+      'Okay, what did we talk about?',
+      'What did we talk about today?',
+      'What did we talk about earlier?',
+      'What did we talk about this morning?',
+      'What did we say just now?',
+      'What did we talk about? ❤️',
+    ]) {
+      const vague = await registryFor('en').handle('recall_memory', { query }, ctx());
+      expect(vague.spokenFound).toBe(true);
+      expect(vague.text).toContain('I went to the park yesterday.');
+    }
 
     const discussed = await registryFor('en').handle(
       'recall_memory', { query: 'What did we discuss about movies?' }, ctx(),
