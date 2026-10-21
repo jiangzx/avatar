@@ -1,4 +1,5 @@
 // Usage (from gateway/): node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter mock|qwen [--style grandchild|old-friend] [--only id1,id2] [--out ../docs/testing/plan-a-eval/<file>.md]
+// Scenarios are zh-only; multilingual behavior is covered by gateway/test/multilingual.test.ts.
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,7 +53,14 @@ const make: SessionMaker = (onReplyMetrics) => new Session({
   ledger: config.ledger,
   modelOwnsTurns: adapter === 'qwen',
   budget: report.budget,
-  maxHistoryChars: report.minHistoryChars,
+  budgets: report.budgets,
+  i18n,
+  languageRules: i18n.language,
+  noticeKeywordsByLanguage: {
+    zh: i18n.memory.zh.noticeKeywords,
+    ja: i18n.memory.ja.noticeKeywords,
+    en: i18n.memory.en.noticeKeywords,
+  },
   modelContextTokenLimit: pacing.rebuild.contextChars,
   rebuildTriggerRatio: pacing.rebuild.triggerRatio,
   rebuildAfterTurns: pacing.rebuild.afterTurns,

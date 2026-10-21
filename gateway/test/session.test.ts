@@ -915,12 +915,42 @@ describe('Session', () => {
       { ...ownedCtx, language: 'en' },
     );
     await greetAndFinish(s);
-    for (const text of ['甲'.repeat(150), '乙'.repeat(150)]) {
+    // Keep the session in en: Han text would switch to zh and lower the threshold.
+    for (const text of ['A'.repeat(150), 'B'.repeat(150)]) {
       s.session.handleClientMessage({ type: 'debug.userText', text });
       await vi.advanceTimersByTimeAsync(1000);
     }
-    // The zh budget would leave ~60 chars of history room and trigger a summary immediately.
     expect(s.session.ledger.needsSummary()).toBe(false);
+    s.session.end();
+  });
+
+  it('ignores a smaller global history fallback when a language budget exists', () => {
+    const s = setup(
+      {
+        roles: fixedRoleCatalog('P', director, { languages: ['zh'], defaultLanguage: 'zh' }),
+        budget: { totalChars: 4_000, snapshotMaxChars: 0, summaryMaxChars: 60 },
+        maxHistoryChars: 500,
+      },
+      ownedCtx,
+    );
+    expect(s.session.ledger.summarizeThreshold).toBeGreaterThan(500);
+    s.session.end();
+  });
+
+  it('lowers the summary threshold when switching to a smaller language budget', () => {
+    const s = setup(
+      {
+        roles: fixedRoleCatalog('P', director, { languages: ['zh', 'ja'], defaultLanguage: 'zh' }),
+        budgets: {
+          zh: { totalChars: 4_000, snapshotMaxChars: 0, summaryMaxChars: 60 },
+          ja: { totalChars: 1_200, snapshotMaxChars: 0, summaryMaxChars: 60 },
+        },
+      },
+      ownedCtx,
+    );
+    const before = s.session.ledger.summarizeThreshold;
+    s.session.setInitialLanguage('ja');
+    expect(s.session.ledger.summarizeThreshold).toBeLessThan(before);
     s.session.end();
   });
 

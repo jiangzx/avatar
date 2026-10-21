@@ -139,7 +139,6 @@ const manager = new SessionManager(
       },
       budget: budgetReport.budget,
       budgets: budgetReport.budgets,
-      maxHistoryChars: budgetReport.minHistoryChars,
       i18n,
       ...(memory.recallClipChars !== undefined ? { recallClipChars: memory.recallClipChars } : {}),
       ...(memory.recallPhraseTimeoutMs !== undefined ? { recallPhraseTimeoutMs: memory.recallPhraseTimeoutMs } : {}),

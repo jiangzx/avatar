@@ -90,7 +90,7 @@ export interface SessionDeps {
   budget?: InstructionBudget;
   /** Per-language instruction budgets; the current language's entry wins over `budget`. */
   budgets?: Partial<Record<Language, InstructionBudget>>;
-  /** Smallest history room across supported languages (startup validation). */
+  /** Fallback history room when no per-language budget is available (tests). */
   maxHistoryChars?: number;
   /** Loaded language packs for memory views and evidence rules. Defaults to DEFAULT_I18N. */
   i18n?: I18nBundle;
@@ -255,8 +255,10 @@ export class Session {
     const ledgerOpts = deps.ledger ?? DEFAULT_LEDGER_OPTIONS;
     // Summarize before the instruction budget would have to drop unsummarized turns.
     const initialBudget = this.budgetFor(this.language);
-    const history = deps.maxHistoryChars
-      ?? (initialBudget ? historyBudget(initialPersona, initialBudget, PROMPT_LABELS[this.language]) : Number.POSITIVE_INFINITY);
+    const languageRoom = initialBudget
+      ? historyBudget(initialPersona, initialBudget, PROMPT_LABELS[this.language])
+      : undefined;
+    const history = languageRoom ?? deps.maxHistoryChars ?? Number.POSITIVE_INFINITY;
     this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
     const extractor = deps.worker;
     const ownerId = ctx.ownerId;
@@ -531,6 +533,11 @@ export class Session {
     if (next === this.language) return;
     this.language = next;
     this.director.setLanguage(next);
+    const budget = this.budgetFor(next);
+    if (budget) {
+      // Never postpone summarization for a smaller target-language budget.
+      this.ledger.setSummarizeAfterTokens(historyBudget(this.personaFor(next), budget, PROMPT_LABELS[next]));
+    }
     // Same store data, new labels, addressing patterns, and evidence rules.
     this.refreshMemorySnapshot();
     this.languagePushPending = push;

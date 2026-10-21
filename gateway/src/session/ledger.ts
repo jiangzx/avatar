@@ -37,11 +37,24 @@ export class ConversationLedger {
   private summaryText = '';
   private summarizing = false;
   private generation = 0;
+  private summarizeAfterTokens: number;
 
-  constructor(private readonly opts: LedgerOptions = DEFAULT_LEDGER_OPTIONS) {}
+  constructor(private readonly opts: LedgerOptions = DEFAULT_LEDGER_OPTIONS) {
+    this.summarizeAfterTokens = opts.summarizeAfterTokens;
+  }
 
   get summary(): string {
     return this.summaryText;
+  }
+
+  get summarizeThreshold(): number {
+    return this.summarizeAfterTokens;
+  }
+
+  /** Only lower it: a later language switch must never postpone summarization. */
+  setSummarizeAfterTokens(tokens: number): void {
+    if (!Number.isFinite(tokens)) return;
+    this.summarizeAfterTokens = Math.min(this.summarizeAfterTokens, tokens);
   }
 
   get recent(): readonly LedgerEntry[] {
@@ -63,7 +76,7 @@ export class ConversationLedger {
 
   needsSummary(): boolean {
     const tokens = estimateTokens(this.summaryText) + this.entries.reduce((n, e) => n + estimateTokens(e.text), 0);
-    return this.userTurns() > this.opts.summarizeAfterTurns || tokens > this.opts.summarizeAfterTokens;
+    return this.userTurns() > this.opts.summarizeAfterTurns || tokens > this.summarizeAfterTokens;
   }
 
   /** Compresses everything before the last `keepRecentTurns` user turns. Returns true if applied. */
