@@ -931,8 +931,10 @@ git commit -m "feat(gateway): localize recall, extraction, and summaries"
 - Modify: `gateway/src/index.ts`
 - Modify: `gateway/src/identity/registry.ts`
 - Modify: `gateway/src/config.ts`（删除旧整对象 `loadSafetyConfig`，`SafetyRules` 改为 shared + phrase；`loadSharedSafety` 成为唯一读取）
-- Modify: `gateway/src/session/emotion.ts`（删除旧整对象 `loadEmotionConfig`，`loadSharedEmotion` + `mergeEmotion` 成为唯一读取）
-- Modify: `gateway/src/i18n/load.ts`（改用 `loadSharedSafety`/`loadSharedEmotion` 与新 type）
+- Create: `gateway/src/i18n/emotion.ts`（`Emotion`/`EmotionLexicon`/`SharedEmotionConfig`/`EmotionConfig`、schema、`loadSharedEmotion`、`mergeEmotion`；中性层，避免 i18n→session）
+- Modify: `gateway/src/session/emotion.ts`（只保留 `tagEmotion`/`EmotionTagger`，从 `../i18n/emotion.ts` re-export 共享类型/函数）
+- Modify: `gateway/src/i18n/types.ts`（`EmotionConfig` 改从 `./emotion.ts` 引入）
+- Modify: `gateway/src/i18n/load.ts`（改用 `loadSharedSafety`/`loadSharedEmotion` 与新 type；emotion 从 `./emotion.ts` 引入）
 - Modify: `gateway/src/session/pacing.ts`（`MemoryBudgetSchema` 删除已迁走的文本字段，新增 `kanaBackfillBatch?`）
 - Modify: `gateway/config/{memory,safety,emotion}.json`（删除已迁入 `config/i18n/zh/` 的字段）
 - Test: `gateway/test/silence.test.ts`
@@ -1047,7 +1049,7 @@ if (stage === 'rest') return !/[？?]/.test(text);
 
 1. `gateway/config/memory.json` 删除 `forgetConfirmText`、`declineConfirmPrompt`、`declineConfirmedText`、`recallEmptyText`、`recallFoundPrefix`、`memoryNoticeKeywords`、`lightAcks`、`recallSkipPatterns`、`recallRecentQueries`；`MemoryBudgetSchema` 同步删除这些字段，保留 `recallClipChars`、`recallPhraseMaxChars`、`recallPhraseTimeoutMs`、`kanaBackfillBatch`（Task 3 已加）、抽取数值等。
 2. `gateway/config/safety.json` 只保留 `minMaskedDigits`、`chineseDigits`、`invisibleCodePoints`；`gateway/src/config.ts` 删除旧 `loadSafetyConfig`/`SafetyRulesSchema`，`loadSharedSafety` + `mergeSafety` 成为唯一读取；`SafetyRules` 为 `SharedSafetyConfig & SafetyPhrases`（供 `scanText`）。`gateway/src/memory/redact.ts` 的 `chineseDigits` 同步改用 `loadSharedSafety`。
-3. `gateway/config/emotion.json` 只保留 `defaultEmotion`、`debounceMs`、`revertAfterMs`、`firstSentenceMaxChars`、`priority`；`gateway/src/session/emotion.ts` 删除旧 `loadEmotionConfig`，`loadSharedEmotion` + `mergeEmotion` 成为唯一读取。`gateway/src/i18n/load.ts` 改用 `loadSharedSafety`/`loadSharedEmotion`，不要引用已删除的旧 loader。
+3. `gateway/config/emotion.json` 只保留 `defaultEmotion`、`debounceMs`、`revertAfterMs`、`firstSentenceMaxChars`、`priority`；新建 `gateway/src/i18n/emotion.ts` 承载 `Emotion`/`EmotionLexicon`/`SharedEmotionConfig`/`EmotionConfig`、`loadSharedEmotion`、`mergeEmotion`；`gateway/src/session/emotion.ts` 只保留 `tagEmotion`/`EmotionTagger` 并 re-export 共享类型/函数，避免 memory→session 的间接运行时依赖。`gateway/src/i18n/load.ts`/`types.ts` 从 `./emotion.ts` 引入，不要引用 `session/emotion.ts`；旧 `loadEmotionConfig` 删除。
 4. 更新 `memory-text.test.ts`：`scanText` 用 `DEFAULT_I18N.safety`；`loadSafetyConfig` 断言改为 `loadSharedSafety` + i18n 合并词表。`emotion.test.ts` 用 `DEFAULT_I18N.emotion`。`memory-acceptance.test.ts` 的 `memoryConfig.memoryNoticeKeywords`/`recallSkipPatterns` 改用 `i18n`。
 5. `gateway/test/fixtures/**` 中若有旧的完整 safety/emotion JSON，改为 shared + i18n 两段或直接使用生产 `DEFAULT_I18N`。
 
@@ -1065,7 +1067,7 @@ Expected: PASS。
 - [ ] **Step 6: 提交**
 
 ```bash
-git add gateway/src/memory/evidence.ts gateway/src/memory/redact.ts gateway/src/memory/writer.ts gateway/src/session/silence.ts gateway/src/session/session.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/src/identity/registry.ts gateway/src/config.ts gateway/src/session/emotion.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/config/safety.json gateway/config/emotion.json gateway/test/silence.test.ts gateway/test/director-silence.test.ts gateway/test/session.test.ts gateway/test/snapshot.test.ts gateway/test/fileCatalog.test.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/emotion.test.ts gateway/test/memory-acceptance.test.ts
+git add gateway/src/memory/evidence.ts gateway/src/memory/redact.ts gateway/src/memory/writer.ts gateway/src/session/silence.ts gateway/src/session/session.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/src/identity/registry.ts gateway/src/config.ts gateway/src/i18n gateway/src/session/emotion.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/config/safety.json gateway/config/emotion.json gateway/test/silence.test.ts gateway/test/director-silence.test.ts gateway/test/session.test.ts gateway/test/snapshot.test.ts gateway/test/fileCatalog.test.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/emotion.test.ts gateway/test/memory-acceptance.test.ts
 git commit -m "feat(gateway): localize safety, emotion, silence, and notice checks"
 ```
 
