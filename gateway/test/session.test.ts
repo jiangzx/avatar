@@ -1419,6 +1419,17 @@ describe('Session', () => {
     ]);
   });
 
+  it('builds the current language tool specs after a switch', async () => {
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'ja'], defaultLanguage: 'zh' });
+    const s = setup({ roles }, ownedCtx, 'tools-language');
+    await s.session.start(s.transport);
+    s.session.setInitialLanguage('ja');
+    const config = (s.session as unknown as { sessionConfig(): SessionConfig }).sessionConfig();
+    expect(config.tools.find((tool) => tool.name === 'recall_memory')?.description)
+      .toBe(i18n.memory.ja.recall.toolDescription);
+    s.session.end();
+  });
+
   it('does not enqueue extraction when no worker is injected', () => {
     const s = setup({}, ownedCtx, 'extract-dev');
     expect(() => s.session.handleClientMessage({ type: 'debug.userText', text: '第一句' })).not.toThrow();
