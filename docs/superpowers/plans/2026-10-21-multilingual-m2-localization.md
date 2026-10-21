@@ -697,6 +697,10 @@ git commit -m "feat(gateway): localize memory evidence, kana bigrams, and snapsh
 - Modify: `gateway/src/session/tools/registry.ts`
 - Modify: `gateway/src/session/tools/forget.ts`
 - Modify: `gateway/src/session/tools/consent.ts`
+- Modify: `gateway/src/adapters/types.ts`（`perform_action` spec 按语言）
+- Modify: `gateway/src/i18n/types.ts` / `gateway/src/i18n/load.ts`（`MemoryCopy.performAction`）
+- Modify: `gateway/config/i18n/{zh,ja,en}/memory.json`（perform_action 描述）
+- Modify: `gateway/src/roles/labels.ts`（`summaryJoiner`）
 - Modify: `gateway/src/session/session.ts`
 - Modify: `gateway/src/session/ledger.ts`
 - Modify: `gateway/src/memory/worker.ts`
@@ -712,7 +716,9 @@ git commit -m "feat(gateway): localize memory evidence, kana bigrams, and snapsh
 - Produces:
   - `createToolRegistry(options: ToolRegistryOptions): ToolRegistry`
   - `ToolRegistryOptions { language; memory: MemoryCopy; evidence: EvidenceRules; recentQueries: readonly string[]; recallPrompt: string; safety: SafetyRules; clipChars: number; phraseTimeoutMs: number }`
-  - `RecallCopy` 扩展 `wrapText`、`toolDescription`、`queryDescription`、`phraseMaxChars`。
+  - `RecallCopy` 扩展 `wrapText`、`toolDescription`、`queryDescription`、`phraseMaxChars`、`questionPatterns`。
+  - `MemoryCopy.performAction: { toolDescription: string; actionDescription: string }`
+  - `performActionSpec(copy): ToolSpec`（替换 `PERFORM_ACTION_TOOL` 常量）
   - `MemoryWorkerOptions.systemPrompts?: Partial<Record<Language, string>>`（保留 `systemPrompt?` 兼容测试）、`labels?: Partial<Record<Language, ExtractLabels>>`
   - `MemoryExtractor.extractOwner(ownerId, reason, language?: Language)`
   - `loadExtractPrompts(rolesRoot): Record<Language, string>`（`extract.ts`）
@@ -734,6 +740,7 @@ it('answers recall in the active language and uses kana tokens', async () => {
   expect(hit.ok).toBe(true);
   expect(hit.spokenText).toContain('ヨガ');
   expect(ja.specs().find((s) => s.name === 'recall_memory')?.description).toBe(i18n.memory.ja.recall.toolDescription);
+  expect(ja.specs().find((s) => s.name === 'perform_action')?.description).toBe(i18n.memory.ja.performAction.toolDescription);
   const miss = await ja.handle('recall_memory', { query: '存在しない言葉' }, ctx);
   expect(miss.spokenText).toBe(i18n.memory.ja.recall.emptyText);
 });
@@ -786,7 +793,8 @@ Expected: FAIL（`createToolRegistry` 不接受 options / worker 无 systemPromp
 - `createToolRegistry(options = defaultToolOptions())`，`defaultToolOptions()` 用 `DEFAULT_I18N.memory.zh`、`DEFAULT_I18N.evidence`、`DEFAULT_I18N.recentQueries`、`DEFAULT_I18N.safety`、`readFileSync(roles/_shared/zh/recall.md)`、`recallClipChars 80`、`phraseTimeoutMs 1500`。
 - 把 `options.evidence.skipPatterns/lightAcks` 与 `options.memory.recall.*` 合并传入 `recallTool`；`recentQueryPatterns` 用 `options.recentQueries`。
 - `forgetTool`/`consentTool` 增加描述参数，使用 `options.memory.recall.forgetToolDescription` 等。
-- `specs()` 返回当前语言的工具描述。
+- `perform_action`：把 `adapters/types.ts` 的 `PERFORM_ACTION_TOOL` 改成 `performActionSpec(copy: MemoryCopy['performAction'])`，用 `options.memory.performAction` 生成 description/action description；`zh` 逐字保留现有中文，ja/en 本地化。`i18n/types.ts` 的 `MemoryCopy` 加 `performAction`，`i18n/load.ts` 的 `MemoryFileSchema` 加同名字段，三个 `config/i18n/<lang>/memory.json` 补齐。
+- `specs()` 返回当前语言的工具描述（含 perform_action）。
 
 - [ ] **Step 4: Session 按语言构造工具**
 
@@ -847,7 +855,7 @@ Expected: PASS。
 - [ ] **Step 7: 提交**
 
 ```bash
-git add gateway/src/session/tools gateway/src/session/session.ts gateway/src/session/ledger.ts gateway/src/memory/worker.ts gateway/src/memory/extract.ts gateway/src/index.ts gateway/test/memory-tools.test.ts gateway/test/worker.test.ts gateway/test/memory-acceptance.test.ts gateway/test/session.test.ts gateway/test/ledger.test.ts
+git add gateway/src/session/tools gateway/src/adapters/types.ts gateway/src/i18n gateway/config/i18n gateway/src/roles/labels.ts gateway/src/session/session.ts gateway/src/session/ledger.ts gateway/src/memory/worker.ts gateway/src/memory/extract.ts gateway/src/index.ts gateway/test/memory-tools.test.ts gateway/test/worker.test.ts gateway/test/memory-acceptance.test.ts gateway/test/session.test.ts gateway/test/ledger.test.ts gateway/test/i18n.test.ts
 git commit -m "feat(gateway): localize recall, extraction, and summaries"
 ```
 
