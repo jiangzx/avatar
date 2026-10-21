@@ -365,6 +365,7 @@ async function runTemp() {
       'What did we talk about? ❤️',
       'You know, what did we talk about?',
       'Do you remember our last conversation?',
+      'Last conversation?',
     ]) {
       const vague = await en.handle('recall_memory', { query }, vagueCtx());
       check(vague.spokenFound === true, 'en_filler_vague_found');

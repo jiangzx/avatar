@@ -5,6 +5,7 @@ import { LANGUAGES, type Language } from '@anyidea/protocol';
 import { z } from 'zod';
 import { loadSharedSafety, mergeSafety, type SafetyPhrases } from '../config.ts';
 import { unique } from '../unique.ts';
+import { fillerWords, vagueKey } from './text.ts';
 import {
   EmotionLexiconSchema,
   loadSharedEmotion,
@@ -229,6 +230,17 @@ export function loadI18n(configRoot: string): I18nBundle {
 
   const memory = {} as Record<Language, MemoryCopy>;
   for (const code of LANGUAGES) memory[code] = loadMemoryCopy(configRoot, code);
+  // Exact patterns must stay reachable after the configured filler lists are applied.
+  for (const code of LANGUAGES) {
+    const copy = memory[code];
+    const leading = fillerWords(copy.recall.recentQueryLeadingFillers);
+    const trailing = fillerWords(copy.recall.recentQueryTrailingFillers);
+    for (const pattern of copy.recall.recentQueryExactPatterns) {
+      if (vagueKey(pattern, leading, trailing).length === 0) {
+        throw new Error(`i18n_pattern_empty:${code}:recentQueryExactPatterns`);
+      }
+    }
+  }
 
   const evidence: EvidenceRules = {
     questionPatterns: uniquePatterns(LANGUAGES.flatMap((code) => memory[code].evidence.questionPatterns)),

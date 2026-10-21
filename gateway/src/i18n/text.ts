@@ -22,3 +22,21 @@ export function containsPhrase(text: string, phrase: string): boolean {
 function isWordChar(char: string | undefined): boolean {
   return char !== undefined && WORD_CHAR.test(char);
 }
+
+/** Filler config may contain multi-word phrases; matching is token-based. */
+export function fillerWords(phrases: readonly string[]): Set<string> {
+  return new Set(phrases.flatMap((phrase) => phrase.toLowerCase().split(/\s+/)).filter(Boolean));
+}
+
+/** Key for a bare vague question: strip punctuation/marks, bounded leading fillers, bounded trailing fillers. */
+export function vagueKey(text: string, leading: ReadonlySet<string>, trailing: ReadonlySet<string>): string {
+  const words = text
+    .toLowerCase()
+    .replace(/[\p{P}\p{S}\p{M}]+/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  while (words.length > 0 && leading.has(words[0]!)) words.shift();
+  // Keep at least one token so a configured pattern can never normalize to an empty key.
+  while (words.length > 1 && trailing.has(words[words.length - 1]!)) words.pop();
+  return words.join('');
+}

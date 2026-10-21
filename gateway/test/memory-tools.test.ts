@@ -332,6 +332,7 @@ describe('memory tool registry', () => {
       'What did we talk about? ❤️',
       'You know, what did we talk about?',
       'Do you remember our last conversation?',
+      'Last conversation?',
     ]) {
       const vague = await registryFor('en').handle('recall_memory', { query }, ctx());
       expect(vague.spokenFound).toBe(true);
@@ -343,6 +344,19 @@ describe('memory tool registry', () => {
     );
     expect(discussed.text).toContain('I like watching old movies.');
     expect(discussed.text).not.toContain('I went to the park yesterday.');
+  });
+
+  it('keeps every configured en exact vague pattern reachable', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'en-exact-reachable');
+    store.recordSessionStart('s-old', a.agentId, 1);
+    say(store, a.ownerId, 'en-park', 'I went to the park yesterday.', 2, 's-old');
+    store.recordSessionEnd('s-old', a.agentId, 3);
+    for (const pattern of i18n.memory.en.recall.recentQueryExactPatterns) {
+      const result = await registryFor('en').handle('recall_memory', { query: pattern }, ctxFor(store, worker(store), a));
+      expect(result.spokenFound, pattern).toBe(true);
+      expect(result.text, pattern).toContain('I went to the park yesterday.');
+    }
   });
 
   it('accepts an en phrasing that keeps the source content words', async () => {

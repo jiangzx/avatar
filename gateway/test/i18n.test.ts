@@ -74,6 +74,15 @@ describe('loadI18n', () => {
     expect(() => loadI18n(dir)).toThrow(/i18n_missing:ja:memory/);
   });
 
+  it('fails fast when an exact vague pattern normalizes to nothing', () => {
+    const dir = copyConfig();
+    const path = join(dir, 'i18n', 'en', 'memory.json');
+    const value = JSON.parse(readFileSync(path, 'utf8')) as { recall: { recentQueryExactPatterns: string[] } };
+    value.recall.recentQueryExactPatterns = ['you know'];
+    writeFileSync(path, JSON.stringify(value));
+    expect(() => loadI18n(dir)).toThrow(/i18n_pattern_empty:en:recentQueryExactPatterns/);
+  });
+
   it('fails fast on an invalid pattern', () => {
     const dir = copyConfig();
     const path = join(dir, 'i18n', 'en', 'memory.json');

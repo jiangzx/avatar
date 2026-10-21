@@ -1,6 +1,7 @@
 // High-risk recall contract: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
 import { z } from 'zod';
 import type { SafetyRules } from '../../config.ts';
+import { fillerWords, vagueKey } from '../../i18n/text.ts';
 import { bigrams } from '../../memory/bigram.ts';
 import { isMemoryEvidence } from '../../memory/evidence.ts';
 import { scanText } from '../../memory/scan.ts';
@@ -40,32 +41,12 @@ function sameUtterance(a: string, b: string): boolean {
   return normalize(a) === normalize(b);
 }
 
-/** Config phrases may be multi-word; matching is token-based. */
-function fillerWords(phrases: readonly string[]): Set<string> {
-  return new Set(phrases.flatMap((phrase) => phrase.toLowerCase().split(/\s+/)).filter(Boolean));
-}
-
 /** Whole-utterance key: ignore whitespace and edge punctuation/symbols. */
 function utteranceKey(text: string): string {
   return text
     .replace(/\s/g, '')
     .toLowerCase()
     .replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '');
-}
-
-/**
- * Bare vague questions may carry a leading filler or a trailing time word.
- * Anything else after the phrase is content and must go to FTS.
- */
-function vagueKey(text: string, leading: ReadonlySet<string>, trailing: ReadonlySet<string>): string {
-  const words = text
-    .toLowerCase()
-    .replace(/[\p{P}\p{S}\p{M}]+/gu, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-  while (words.length > 0 && leading.has(words[0]!)) words.shift();
-  while (words.length > 0 && trailing.has(words[words.length - 1]!)) words.pop();
-  return words.join('');
 }
 
 /** A bare vague question stays vague; content after the phrase must go to FTS instead. */
