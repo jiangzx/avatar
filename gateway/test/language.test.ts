@@ -17,9 +17,13 @@ describe('detectLanguage', () => {
     expect(detectLanguage('東京は晴れです', undefined, rules)).toBe('ja');
   });
 
-  it('keeps Japanese for pure-kanji text when the previous language is ja', () => {
+  it('keeps short pure-kanji text in ja but returns to zh for a longer Han sentence', () => {
     expect(detectLanguage('東京', 'ja', rules)).toBe('ja');
+    expect(detectLanguage('大丈夫', 'ja', rules)).toBe('ja');
     expect(detectLanguage('東京', 'en', rules)).toBe('zh');
+    expect(detectLanguage('今天天气不错', 'ja', rules)).toBe('zh');
+    expect(detectLanguage('今天天气不错', 'en', rules)).toBe('zh');
+    expect(detectLanguage('今天天气不错', 'zh', rules)).toBe('zh');
   });
 
   it('uses the dominant script for mixed text', () => {

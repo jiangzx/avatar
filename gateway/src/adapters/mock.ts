@@ -57,6 +57,7 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
   readonly verbatimFallback = false;
   readonly supportsUserText = true;
   instructions = '';
+  voice: string | undefined;
   readonly notes: string[] = [];
   readonly toolResults: Array<{ callId: string; result: unknown }> = [];
 
@@ -76,6 +77,7 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
 
   async connect(config: SessionConfig): Promise<void> {
     this.instructions = config.instructions;
+    this.voice = config.voice;
   }
 
   sendAudio(pcm16k: Int16Array): void {
@@ -105,6 +107,10 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
 
   updateInstructions(text: string): void {
     this.instructions = text;
+  }
+
+  updateVoice(voice: string | undefined): void {
+    this.voice = voice;
   }
 
   createResponse(request?: ProactiveRequest): void {

@@ -532,6 +532,9 @@ export class Session {
     this.context.language = next;
     if (next === this.language) return;
     this.language = next;
+    // The adapter picks its voice at connect; move it now so a stale en/ja voice does not
+    // keep speaking the new language. Undefined falls back to the adapter's configured default.
+    this.adapter.updateVoice(this.voiceFor(next));
     this.director.setLanguage(next);
     const budget = this.budgetFor(next);
     if (budget) {
@@ -596,10 +599,14 @@ export class Session {
   private sessionConfig(): SessionConfig {
     const instructions = this.instructions();
     this.lastInstructionsChars = instructions.length;
-    const voice = this.deps.roles.voiceFor(this.context.roleId, this.context.styleId, this.language)
-      ?? this.deps.voiceFor?.(this.language)
-      ?? (this.language === this.deps.roles.defaultLanguage(this.context.roleId) ? this.context.voice : undefined);
-    return { instructions, tools: this.toolsFor(this.language).specs(), voice, ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
+    return { instructions, tools: this.toolsFor(this.language).specs(), voice: this.voiceFor(this.language), ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
+  }
+
+  /** Style voice, then the language default, then the context voice only for the role's default language. */
+  private voiceFor(language: Language): string | undefined {
+    return this.deps.roles.voiceFor(this.context.roleId, this.context.styleId, language)
+      ?? this.deps.voiceFor?.(language)
+      ?? (language === this.deps.roles.defaultLanguage(this.context.roleId) ? this.context.voice : undefined);
   }
 
   private toolsFor(language: Language): ToolRegistry {

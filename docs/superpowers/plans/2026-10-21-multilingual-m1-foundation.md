@@ -460,9 +460,11 @@ describe('detectLanguage', () => {
     expect(detectLanguage('東京は晴れです')).toBe('ja');
   });
 
-  it('keeps Japanese for pure-kanji text when the previous language is ja', () => {
+  it('keeps short pure-kanji text in ja but returns to zh for a longer Han sentence', () => {
     expect(detectLanguage('東京', 'ja')).toBe('ja');
+    expect(detectLanguage('大丈夫', 'ja')).toBe('ja');
     expect(detectLanguage('東京', 'en')).toBe('zh');
+    expect(detectLanguage('今天天气不错', 'ja')).toBe('zh');
   });
 
   it('uses the dominant script for mixed text', () => {

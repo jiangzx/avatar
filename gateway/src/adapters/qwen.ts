@@ -40,6 +40,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   private closed = false;
   private responseId: string | null = null;
   private instructions = '';
+  private voice = '';
   private eventCounter = 0;
   private completedResponses = new Set<string>();
   private startedResponses = new Set<string>();
@@ -54,6 +55,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   async connect(config: SessionConfig): Promise<void> {
     if (this.ws || this.closed) throw new Error('adapter_not_connectable');
     this.instructions = config.instructions;
+    this.voice = config.voice ?? this.opts.voice;
     const url = new URL(this.opts.endpoint); url.searchParams.set('model', this.opts.model);
     await new Promise<void>((resolve, reject) => {
       this.initialization = { resolve, reject };
@@ -69,7 +71,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
         else if (!this.closed) this.emit('closed');
       });
       this.connectTimer = setTimeout(() => this.failInitialization('qwen_connect_timeout'), this.opts.connectTimeoutMs);
-      ws.once('open', () => { if (!this.closed) this.send({ type: 'session.update', session: { modalities: ['text', 'audio'], instructions: config.instructions, turn_detection: { type: 'semantic_vad', silence_duration_ms: 800 }, input_audio_transcription: { model: 'qwen3-asr-flash-realtime' }, audio: { input: { format: { type: 'pcm', sample_rate: MIC_SAMPLE_RATE, sample_format: 's16le', channels: 1, packing: 'interleaved', channel_layout: 'mono' } }, output: { voice: config.voice ?? this.opts.voice, format: { type: 'pcm', sample_rate: AI_SAMPLE_RATE } } }, tools: config.tools.map(toQwenTool), ...(config.maxOutputTokens !== undefined ? { max_response_output_tokens: config.maxOutputTokens } : {}) } }); });
+      ws.once('open', () => { if (!this.closed) this.send({ type: 'session.update', session: { modalities: ['text', 'audio'], instructions: config.instructions, turn_detection: { type: 'semantic_vad', silence_duration_ms: 800 }, input_audio_transcription: { model: 'qwen3-asr-flash-realtime' }, audio: { input: { format: { type: 'pcm', sample_rate: MIC_SAMPLE_RATE, sample_format: 's16le', channels: 1, packing: 'interleaved', channel_layout: 'mono' } }, output: { voice: this.voice, format: { type: 'pcm', sample_rate: AI_SAMPLE_RATE } } }, tools: config.tools.map(toQwenTool), ...(config.maxOutputTokens !== undefined ? { max_response_output_tokens: config.maxOutputTokens } : {}) } }); });
     });
   }
 
@@ -90,6 +92,11 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   updateInstructions(text: string): void {
     this.instructions = text;
     if (this.connected) this.send({ type: 'session.update', session: { instructions: text } });
+  }
+  /** Voice updates apply to the next response; a partial session.update is accepted (probe 2026-10-21). */
+  updateVoice(voice: string | undefined): void {
+    this.voice = voice ?? this.opts.voice;
+    if (this.connected) this.send({ type: 'session.update', session: { audio: { output: { voice: this.voice } } } });
   }
   createResponse(request?: ProactiveRequest): void {
     if (!this.connected) return;

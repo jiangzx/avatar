@@ -42,6 +42,7 @@ class FakeAdapter extends EventEmitter<AdapterEvents> implements RealtimeAdapter
   readonly supportsUserText = true;
   readonly configs: SessionConfig[] = [];
   readonly pushes: string[] = [];
+  readonly voices: Array<string | undefined> = [];
   readonly requests: ProactiveRequest[] = [];
   private counter = 0;
   private activeId: string | null = null;
@@ -56,6 +57,10 @@ class FakeAdapter extends EventEmitter<AdapterEvents> implements RealtimeAdapter
 
   updateInstructions(text: string): void {
     this.pushes.push(text);
+  }
+
+  updateVoice(voice: string | undefined): void {
+    this.voices.push(voice);
   }
 
   createResponse(request?: ProactiveRequest): void {
@@ -198,6 +203,25 @@ describe('multilingual session', () => {
     await vi.advanceTimersByTimeAsync(8_100);
     expect(adapter.pushes).toHaveLength(1);
     expect(adapter.requests.at(-1)?.cue).toBe('followup');
+    session.end();
+  });
+
+  it('returns to zh and moves the voice when a ja session hears a longer Han sentence', async () => {
+    const adapter = new FakeAdapter();
+    const roles = fixedRoleCatalog('P-zh', director, {
+      languages: ['zh', 'ja', 'en'],
+      defaultLanguage: 'zh',
+      personas: trilingualPersonas,
+    });
+    const { session, transport } = makeSession(adapter, roles, ctxFor('ja'), { voiceFor: (language) => `voice-${language}` });
+    await session.start(transport);
+    adapter.done();
+    session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+
+    adapter.emit('userTranscript', '今天天气不错', true);
+
+    expect(session.currentLanguage).toBe('zh');
+    expect(adapter.voices).toContain('voice-zh');
     session.end();
   });
 

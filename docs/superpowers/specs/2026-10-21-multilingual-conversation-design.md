@@ -71,7 +71,7 @@ type Language = 'zh' | 'ja' | 'en';
 
 1. 含平假名或片假名 → `ja`。
 2. 无假名、含拉丁字母且不含汉字 → `en`。
-3. 只有汉字或汉字为主 → 上一轮是 `ja` 且本句没有假名时保留 `ja`；否则 `zh`。纯汉字无法可靠区分中文/日语，保留上一轮是更稳的选择。
+3. 只有汉字 → 上一轮是 `ja` 且本句汉字少于 4 个时保留 `ja`；否则 `zh`。日语正常语音几乎总带假名，长串纯汉字更可能是中文；若所有纯汉字都保留 `ja`，日语会话将永远回不到中文（2026-10-21 真机反馈：日语→中文后连续几句仍按 `ja` 播报，Tina 把 `～` 读成“横杠”）。
 4. 汉字和拉丁字母混合 → 比较两类字符数；拉丁更多判 `en`，否则保留上一轮；并列保留上一轮。
 5. 短应答（“嗯/好/OK/はい/yes”）、纯数字、纯标点、空文本 → 保留上一轮。
 6. 显式换语短语（“说英语/用日语/日本語で/English please/中文”）优先于以上规则；短语表放语言配置，可扩展。
@@ -80,7 +80,7 @@ type Language = 'zh' | 'ja' | 'en';
 
 - 判定只驱动**系统话术和提示词语言**，不试图纠正实时模型回复。模型回复里引用其他语言、翻译、专有名词不反过来改状态。
 - 首轮无法判定时用设备语言；设备语言不支持则 `zh`。
-- 语言变化时立即更新 `currentLanguage`；提示词在下一次模型请求前推送。当前回复正在生成时不打断，等回复结束后再做音色切换/重建。
+- 语言变化时立即更新 `currentLanguage` 并调用 `updateVoice` 热换音色；`session.update` 不打断当前回复，新音色从下一句生效。提示词在下一次模型请求前推送。
 - 当前回复仍由模型按用户语言生成；系统话术从下一次请求开始使用新语言。
 
 ### 2. 语言包与配置结构
@@ -144,7 +144,7 @@ voiceFor(roleId, styleId, language): string | undefined
 
 - 适配器配置改为按语言映射：`QWEN_VOICE_ZH/JA/EN`、`SEEDUPLEX_VOICE_ZH/EN`。
 - 角色/风格的 `voice` 仍是可选覆盖；`null` 表示使用适配器当前语言的默认音色。
-- 默认值：Qwen 三语优先用 `Tina`（已验证日语；中文/英语待探针），Seeduplex 中文 `zh_male_xiaotian_jupiter_bigtts`、英语 `en_male_tim_uranus_bigtts`。
+- 默认值：Qwen 中文 `longanlingxin`、日语/英语 `Tina`；Seeduplex 中文 `zh_male_xiaotian_jupiter_bigtts`、英语 `en_male_tim_uranus_bigtts`。中文不要用 `Tina`（会把 `～` 读成“横杠”）。
 
 文本模型链路：
 
@@ -164,16 +164,16 @@ voiceFor(roleId, styleId, language): string | undefined
 
 **Qwen**
 
-- 三语共用 `Tina`（或同等多语音色）。
-- 语言变化只调用 `updateInstructions`，不重建；语音不换。
-- 需验证 Tina 的中文、英语输出与日语一样可用。
+- 按语言映射音色：中文 `longanlingxin`（`QWEN_VOICE_ZH`），日语/英语 `Tina`。
+- 语言变化调用 `updateVoice` 发送部分 `session.update` 热换音色，不重建；2026-10-21 真实探针确认新音色从下一句生效。
+- 不要用 `Tina` 播中文：Tina 会把 `～` 读成“横杠”；中文必须使用 `longanlingxin`。
 
 **Seeduplex**
 
 - 中文用 `zh_*`，英语用 `en_*`；按语言映射音色。
 - 换语言先尝试 `session.update` 热换 voice；不支持就在安全缝重建。
 - 新增内部重建 reason `language`：走与 slim 相同的 `presence: refreshing` 静默流程；重连慢时用新语言说一句过渡句；**不发** `model_reconnecting`（那是“网络断开”话术）。
-- 切换时机：用户终稿后更新语言状态；若当前回复还在生成，不打断，等回复结束后切音色/重建。当前这句仍由模型按用户语言生成。
+- 切换时机：用户终稿后更新语言状态并热换音色；不打断当前回复，新音色从下一句生效。当前这句仍由模型按用户语言生成。Seeduplex 若不接受热换，则在安全缝重建。
 
 **适配器语言能力**
 
@@ -250,7 +250,7 @@ voiceFor(roleId, styleId, language): string | undefined
 - **检测不确定**：保留上一轮；首轮用设备语言。
 - **Seeduplex 日语 ASR 探针失败**：停止，不在实现里假装检测；按第 3 节三者重新决策。
 - **Seeduplex voice 热换失败**：安全缝重建；使用 `presence: refreshing`，不说“网络断开”；重建失败按现有 `model_unavailable` 重试策略。
-- **语言切换时正在生成回复**：不打断；当前回复结束后再切音色/重建。提示词可在下一次请求前更新。
+- **语言切换时正在生成回复**：不打断；音色用 `session.update` 热换，从下一句生效；Seeduplex 热换失败才在安全缝重建。提示词可在下一次请求前更新。
 - **记忆告知语言不匹配**：按现有 `noticeVerified` 逻辑判未送达并重试；不标记已告知。
 - **文本模型失败**：抽取/摘要/召回包装回退到当前语言的配置文案或逐字原话。
 

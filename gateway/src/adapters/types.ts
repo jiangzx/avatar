@@ -63,6 +63,8 @@ export interface RealtimeAdapter extends EventEmitter<AdapterEvents> {
   /** Debug path: treat text as a finished user turn and reply to it. */
   sendUserText(text: string): void;
   updateInstructions(text: string): void;
+  /** Move the session to another voice without reconnecting; undefined = the adapter default. */
+  updateVoice(voice: string | undefined): void;
   createResponse(request?: ProactiveRequest): void;
   cancelResponse(): void;
   sendToolResult(callId: string, result: unknown): void;

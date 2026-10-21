@@ -7,6 +7,8 @@ const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 
 const EDGE_PUNCTUATION = /^[\s\p{P}]+|[\s\p{P}]+$/gu;
 const QUESTION_MARK = /[?？]\s*$/u;
+/** Pure Han at or above this length is Chinese; short pure-kanji text stays with the previous language. */
+const PURE_HAN_ZH_MIN = 4;
 
 /** Fallback for callers without loaded config: detection uses the script heuristic only. */
 export const EMPTY_LANGUAGE_RULES: LanguageRules = {
@@ -68,7 +70,11 @@ export function detectLanguage(text: string, previous: Language = 'zh', rules: L
   }
   if (kana > 0) return 'ja';
   if (latin > 0 && han === 0) return 'en';
-  if (han > 0 && latin === 0) return previous === 'ja' ? 'ja' : 'zh';
+  if (han > 0 && latin === 0) {
+    // Japanese speech almost always carries kana. Keeping every pure-Han line in ja would make
+    // a ja session unable to return to Chinese, so only short pure-kanji text keeps the previous language.
+    return previous === 'ja' && han < PURE_HAN_ZH_MIN ? 'ja' : 'zh';
+  }
   return latin > han ? 'en' : previous;
 }
 

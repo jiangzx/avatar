@@ -8,6 +8,15 @@ Last updated: 2026-10-21. 2026-10-21 用户确认：本轮开场、召回包装�
 
 2026-10-21 多语言 M1 基础已落地（仅基础，不代表日语/英语已可用）：协议新增 `Language`；会话按 `session.start.clientInfo.language`（App 设备语言，未知回退 `zh`）初始化，并在用户终稿后用脚本启发式检测切换；角色/共享提示词迁入 `gateway/roles/<role>/<language>/` 与 `gateway/roles/_shared/<language>/`，生产 `elder-companion` 仅声明 `zh`；Director/Session 按当前语言取 persona、话术、摘要语言、音色与提示词结构标签，启动时按语言校验指令预算和记忆告知关键词。M1 不包含日语/英语内容包，也不包含记忆/安全本地化，生产对话语言仍为中文。语言探针（2026-10-21，合成输入，只记标志/字节数）：Qwen 文本 zh/ja/en PASS；Qwen 音频 zh/en PASS，ja 使用 2026-10-19 样本 PASS（本次新合成样本未触发 VAD，blocker #45）；Seeduplex zh/en PASS（en 未收到 `response.output_audio.done`，见研究文档异常 3）、`session.update` 音色热换 PASS，Seeduplex 日语 ASR FAIL（无含假名终稿，blocker #46，M3 禁止实现“明确告知不支持”）。详见 `docs/research/multilingual-probes-2026-10-21.md`。最终验证（2026-10-21，Task 11 + 最终审查修复后）：`npm test -w gateway` 42 个测试文件、564 项通过（最终审查补了安全缝隙推送守卫、语言判定否定/短应答用例）；`npm run typecheck -w gateway` 通过；`cd app && flutter test` 182 项通过（worktree 无生成目录 `app/assets/web/`，仅有目录缺失告警）；`git diff --check` 通过；`gateway/src|test|config` 与 `app` 中 `summaryLanguage` 已清零；中文沉默/记忆回归 5 个文件、166 项通过。语言识别用的显式换语短语与短应答白名单在 M1 仍位于 `gateway/src/session/language.ts`，M2 迁入语言配置。下一任务：M2 日语/英语语言包与记忆/安全本地化。
 
+## 音色未跟随语言切换（2026-10-21）
+
+- 用户反馈：AI 语音在 `～` 处念“横杠”，字幕显示正常。定位：会话先 `ja` 后 `en`，13:06:56 适配器因 `closed` 重建时按 `en` 选中 Tina；13:07:09 用户改说中文，语言切回 `zh`，但音色只在连接时选择一次，Tina 继续播报并把 `～` 读作“横杠”（`longanlingxin` 只读作停顿）。
+- 修复 1：`RealtimeAdapter` 增加 `updateVoice`；Session 在语言切换时按 `voiceFor(language)` 立即更新音色。Qwen 发送部分 `session.update`，Seeduplex 重发完整 session payload。
+- 用户复验（13:29–13:30）仍听到横杠。日志回放：13:29:21 日语后，13:29:44 / 13:29:53 / 13:30:21 的纯汉字中文（21/15/16 个汉字）被 `detectLanguage` 按“纯汉字保留上一轮 `ja`”判成 `ja`，语言从未切回 `zh`，音色修复没有机会生效。
+- 修复 2：纯汉字规则改为“上一轮 `ja` 且本句汉字 < 4 才保留 `ja`，否则 `zh`”。短纯汉字（`東京`/`大丈夫`）仍保留 `ja`；日语正常语音带假名，长串纯汉字按中文处理。
+- 验证：`test/language.test.ts`、`test/multilingual.test.ts`（新增 `ja` 会话收到长串纯汉字后切回 `zh` 并更新音色）、`test/session.test.ts` 通过；用记忆库最近真实消息回放，13:29:44 起 `ja → zh`；真实 Qwen 探针确认 Tina → `longanlingxin` 后 `～` 的“横杠”消失；`npm test -w gateway` 45 文件 651 项通过；`npm run typecheck -w gateway` 通过；`git diff --check` 通过。
+- 8787 网关已于 13:36 重启（`healthz=200`、`adapter=qwen`，手机已自动重连），修复已加载；用户已真机确认问题解决（日语→中文整句后不再念“横杠”）。切换后第一句若上游已开始生成，可能仍用旧音色；第二句起应为中文音色。
+
 ## 打断与沉默：已踩过的坑
 
 后面改话术、沉默节奏或打断时先读这里。不要为了新文案去改这些机制。

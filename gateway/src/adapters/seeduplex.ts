@@ -91,7 +91,8 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
   sendUserText(_text: string): void {
     // Debug-only path; the Session refuses it because commit is direct TTS, not a user turn.
   }
-  updateInstructions(text: string): void { this.instructions = text; if (this.connected) this.send({ type: 'session.update', event_id: this.eventId(), session: this.sessionPayload() }); }
+  updateInstructions(text: string): void { this.instructions = text; this.pushSession(); }
+  updateVoice(voice: string | undefined): void { this.voice = voice ?? this.opts.voice; this.pushSession(); }
   createResponse(request?: ProactiveRequest): void {
     // High-risk tool/proactive path: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
     // speech_text_buffer.commit is direct TTS; committing the Director prompt would speak it verbatim.
@@ -103,6 +104,8 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
   close(): void { if (this.closed) return; this.closed = true; this.connected = false; this.failInitialization('seeduplex_connect_closed'); this.clearConnectTimer(); const ws = this.ws; this.ws = null; if (ws && ws.readyState === WebSocket.OPEN) { try { ws.send(JSON.stringify({ type: 'session.close', event_id: this.eventId() })); } catch {} ws.close(); } else ws?.terminate(); }
 
   private sessionPayload(): Json { return { id: 'anyidea', model: this.opts.model, instructions: this.instructions, audio: { input: { format: { type: 'pcm', rate: MIC_SAMPLE_RATE } }, output: { format: { type: 'pcm_s16le', rate: AI_SAMPLE_RATE }, voice: this.voice } }, tools: this.tools.map((tool) => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.parameters })) }; }
+  /** Changing the voice mid-session re-sends the full payload, same shape as an instruction update. */
+  private pushSession(): void { if (this.connected) this.send({ type: 'session.update', event_id: this.eventId(), session: this.sessionPayload() }); }
   private sendSessionCreate(): void { this.send({ type: 'session.create', event_id: this.eventId(), session: this.sessionPayload() }); }
   private send(event: Json): void { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(event)); }
   private eventId(): string { return `anyidea-${++this.eventCounter}`; }

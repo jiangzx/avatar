@@ -974,6 +974,24 @@ describe('Session', () => {
     expect(s.session.ledger.recent.at(-1)?.interrupted).toBe(true);
   });
 
+  it('moves the adapter voice when the session language changes', async () => {
+    const s = setup({
+      roles: bilingualRoles(),
+      voiceFor: (language) => language === 'en' ? 'voice-en' : 'voice-zh',
+    }, { ...ownedCtx });
+    await greetAndFinish(s);
+    const update = vi.spyOn(s.mocks[0]!, 'updateVoice');
+
+    s.session.setInitialLanguage('en');
+    expect(update).toHaveBeenCalledWith('voice-en');
+    expect(s.mocks[0]!.voice).toBe('voice-en');
+
+    s.session.setInitialLanguage('zh');
+    expect(update).toHaveBeenLastCalledWith('voice-zh');
+    expect(s.mocks[0]!.voice).toBe('voice-zh');
+    s.session.end();
+  });
+
   it('pushes new-language instructions before the next proactive request', async () => {
     const s = setup({ roles: bilingualRoles() }, { ...ownedCtx });
     await greetAndFinish(s);

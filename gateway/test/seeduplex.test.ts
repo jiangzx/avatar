@@ -80,6 +80,26 @@ describe('SeeduplexAdapter', () => {
     expect(types).toEqual(['session.create', 'input_audio_mute.commit', 'input_audio_unmute.commit']);
     adapter.close();
   });
+  it('changes the voice mid-session with a full session update', async () => {
+    const server = new WebSocketServer({ port: 0 }); servers.push(server);
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const port = (server.address() as { port: number }).port;
+    const sent: Array<{ type: string; session?: { audio?: { output?: { voice?: string } } } }> = [];
+    server.on('connection', (socket) => socket.on('message', (raw) => {
+      const event = JSON.parse(raw.toString()) as { type: string; session?: { audio?: { output?: { voice?: string } } } };
+      sent.push(event);
+      if (event.type === 'session.create') socket.send(JSON.stringify({ type: 'session.created' }));
+    }));
+    const adapter = new SeeduplexAdapter({ apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${port}`, voice: 'voice-default' });
+    await adapter.connect({ ...config, voice: 'voice-en' });
+    adapter.updateVoice('voice-zh');
+    adapter.updateVoice(undefined);
+    await wait();
+    const voices = sent.filter((event) => event.type === 'session.update').map((event) => event.session?.audio?.output?.voice);
+    expect(voices).toEqual(['voice-zh', 'voice-default']);
+    adapter.close();
+  });
+
   it('does not become ready or send audio until session.created arrives', async () => {
     const server = new WebSocketServer({ port: 0 }); servers.push(server);
     await new Promise<void>((resolve) => server.once('listening', resolve));
