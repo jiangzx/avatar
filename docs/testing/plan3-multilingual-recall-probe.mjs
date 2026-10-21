@@ -167,6 +167,16 @@ async function runTemp() {
     insert(store, ownerId, 'probe-active', 'en-question', 'user', 'Did I say I like tea?', 2_800);
     insert(store, ownerId, 'probe-active', 'zh-active', 'user', '这是还没结束的会话里的句子。', 2_900);
 
+    // Separate owner: a said-frame query must not match statements sharing only the frame words.
+    const frame = store.createOwner({
+      tokenHash: 'probe-frame', roleId: 'elder-companion', styleId: 'grandchild', now: 3,
+    });
+    store.recordSessionStart('probe-frame-session', frame.agentId, 3_001);
+    insert(store, frame.ownerId, 'probe-frame-session', 'zh-frame-unrelated', 'user', '我说今天有点累。', 3_100);
+    insert(store, frame.ownerId, 'probe-frame-session', 'ja-frame-unrelated', 'user', '私は昨日映画を見ました。', 3_200);
+    insert(store, frame.ownerId, 'probe-frame-session', 'en-frame-unrelated', 'user', 'I said I was tired.', 3_300);
+    const frameCtx = () => toolContext(store, frame.ownerId);
+
     const ja = registryFor('ja');
     const zh = registryFor('zh');
     const en = registryFor('en');
@@ -214,6 +224,30 @@ async function runTemp() {
       toolContext(store, ownerId, { triggerText: '我最近在看老电影。' }),
     );
     check(dropped.spokenFound === false && historyLines(dropped, 'zh').length === 0, 'same_utterance_dropped');
+
+    // Said-frames: unrelated statements sharing only the frame words are not recalled.
+    const zhFrame = '我说过喜欢喝茶吗';
+    const jaFrame = 'お茶が好きだと言いましたか';
+    const enFrame = 'Did I say I like tea?';
+    check((await zh.handle('recall_memory', { query: zhFrame }, frameCtx())).spokenFound === false, 'zh_frame_unrelated');
+    check((await ja.handle('recall_memory', { query: jaFrame }, frameCtx())).spokenFound === false, 'ja_frame_unrelated');
+    check((await en.handle('recall_memory', { query: enFrame }, frameCtx())).spokenFound === false, 'en_frame_unrelated');
+
+    insert(store, frame.ownerId, 'probe-frame-session', 'zh-frame-content', 'user', '我喜欢喝茶。', 3_400);
+    insert(store, frame.ownerId, 'probe-frame-session', 'ja-frame-content', 'user', '私はお茶が好きです。', 3_500);
+    insert(store, frame.ownerId, 'probe-frame-session', 'en-frame-content', 'user', 'I like tea.', 3_600);
+    const zhFrameHit = await zh.handle('recall_memory', { query: zhFrame }, frameCtx());
+    check(zhFrameHit.spokenFound === true, 'zh_frame_content');
+    check(historyLines(zhFrameHit, 'zh').includes('我喜欢喝茶。'), 'zh_frame_content_line');
+    check(!historyLines(zhFrameHit, 'zh').includes('我说今天有点累。'), 'zh_frame_unrelated_line');
+    const jaFrameHit = await ja.handle('recall_memory', { query: jaFrame }, frameCtx());
+    check(jaFrameHit.spokenFound === true, 'ja_frame_content');
+    check(historyLines(jaFrameHit, 'ja').includes('私はお茶が好きです。'), 'ja_frame_content_line');
+    check(!historyLines(jaFrameHit, 'ja').includes('私は昨日映画を見ました。'), 'ja_frame_unrelated_line');
+    const enFrameHit = await en.handle('recall_memory', { query: enFrame }, frameCtx());
+    check(enFrameHit.spokenFound === true, 'en_frame_content');
+    check(historyLines(enFrameHit, 'en').includes('I like tea.'), 'en_frame_content_line');
+    check(!historyLines(enFrameHit, 'en').includes('I said I was tired.'), 'en_frame_unrelated_line');
 
     // Phrasing with a new work title is rejected and falls back to the verbatim line.
     let phrased = 0;

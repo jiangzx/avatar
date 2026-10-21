@@ -45,6 +45,8 @@ export interface RecallTextCopy {
   skipPatterns: readonly string[];
   lightAcks: readonly string[];
   recentQueryPatterns: readonly string[];
+  /** First-person "I said" frames stripped from the query before FTS tokenization. */
+  queryFramePatterns: readonly RegExp[];
   phraseMaxChars: number;
 }
 

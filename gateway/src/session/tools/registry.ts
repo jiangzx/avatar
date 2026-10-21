@@ -123,6 +123,7 @@ export function createToolRegistry(options: ToolRegistryOptions = defaultToolOpt
       lightAcks: options.evidence.lightAcks,
       questionPatterns: options.evidence.questionPatterns,
       recentQueryPatterns: options.recentQueries,
+      queryFramePatterns: options.memory.recall.queryFramePatterns,
       phraseInstruction: options.recallPrompt,
       phraseMaxChars: options.memory.recall.phraseMaxChars,
       phraseTimeoutMs: options.phraseTimeoutMs,

@@ -42,6 +42,13 @@ function sameUtterance(a: string, b: string): boolean {
   return normalize(a) === normalize(b);
 }
 
+/** FTS only sees the content after a first-person "I said" frame; an empty result keeps the raw query. */
+function contentQuery(query: string, patterns: readonly RegExp[]): string {
+  let text = query;
+  for (const pattern of patterns) text = text.replace(pattern, '');
+  return text.trim() || query;
+}
+
 export interface RecallCopy {
   /** Spoken when there is no usable user line. */
   emptyText: string;
@@ -61,6 +68,8 @@ export interface RecallCopy {
   questionPatterns: readonly RegExp[];
   /** Vague "what did we talk about" queries answer from recent user statements instead of FTS. */
   recentQueryPatterns: readonly string[];
+  /** First-person "I said" frames; stripped before FTS so frame words alone cannot hit. */
+  queryFramePatterns: readonly RegExp[];
   /** System prompt for natural phrasing of a grounded line. */
   phraseInstruction: string;
   /** Spoken phrasing cap; longer output falls back to the verbatim quote. */
@@ -102,12 +111,13 @@ async function recall(args: unknown, ctx: ToolContext, rules: SafetyRules, clipC
       .map((text) => clip(text, clipChars));
     return outcome(recent, copy, await phrase(ctx.textClient, recent[0], copy, rules));
   }
-  const match = ftsMatch(query);
+  const searchText = contentQuery(query, copy.queryFramePatterns);
+  const match = ftsMatch(searchText);
   // A single character has no bigrams; fall back to LIKE within this owner's user lines.
   const rows = match
     ? ctx.store.searchMessages(ctx.ownerId, match, 50)
-    : [...query].length === 1
-      ? ctx.store.searchMessagesLike(ctx.ownerId, `%${escapeLike(query)}%`, 50)
+    : [...searchText].length === 1
+      ? ctx.store.searchMessagesLike(ctx.ownerId, `%${escapeLike(searchText)}%`, 50)
       : [];
   if (rows.length === 0) return outcome([], copy);
   const trigger = ctx.triggerText?.trim();

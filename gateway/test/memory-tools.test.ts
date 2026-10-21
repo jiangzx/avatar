@@ -110,6 +110,20 @@ function worker(store: SqliteMemoryStore, client: TextModelClient = { complete: 
   return new MemoryWorker({ store, client, systemPrompt: '陈述。', maxTokens: 80, policy });
 }
 
+/** Production registry for one language; no text client is passed, so the prompt is unused. */
+function registryFor(language: 'zh' | 'ja' | 'en') {
+  return createToolRegistry({
+    language,
+    memory: i18n.memory[language],
+    evidence: i18n.evidence,
+    recentQueries: i18n.recentQueries,
+    recallPrompt: 'FIXTURE RECALL',
+    safety: i18n.safety,
+    clipChars: 80,
+    phraseTimeoutMs: 1_500,
+  });
+}
+
 describe('memory tool registry', () => {
   it('returns unknown_tool without throwing and keeps perform_action', async () => {
     const db = open();
@@ -175,6 +189,54 @@ describe('memory tool registry', () => {
     const miss = await ja.handle('recall_memory', { query: '存在しない言葉' }, ctx);
     expect(miss.spokenText).toBe(i18n.memory.ja.recall.emptyText);
     expect(miss.text).toBe(i18n.memory.ja.recall.wrapText);
+  });
+
+  it('strips the zh said-frame before searching so unrelated statements do not hit', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'frame-zh');
+    say(store, a.ownerId, 'zh-tired', '我说今天有点累。', 10);
+
+    const miss = await registryFor('zh').handle('recall_memory', { query: '我说过喜欢喝茶吗' }, ctxFor(store, worker(store), a));
+    expect(miss.spokenFound).toBe(false);
+    expect(miss.text).toBe(i18n.memory.zh.recall.wrapText);
+
+    say(store, a.ownerId, 'zh-tea', '我喜欢喝茶。', 11);
+    const hit = await registryFor('zh').handle('recall_memory', { query: '我说过喜欢喝茶吗' }, ctxFor(store, worker(store), a));
+    expect(hit.spokenFound).toBe(true);
+    expect(hit.text).toContain('我喜欢喝茶。');
+    expect(hit.text).not.toContain('我说今天有点累。');
+  });
+
+  it('strips the ja said-frame before searching so unrelated statements do not hit', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'frame-ja');
+    say(store, a.ownerId, 'ja-movie', '私は昨日映画を見ました。', 10);
+
+    const miss = await registryFor('ja').handle('recall_memory', { query: 'お茶が好きだと言いましたか' }, ctxFor(store, worker(store), a));
+    expect(miss.spokenFound).toBe(false);
+    expect(miss.text).toBe(i18n.memory.ja.recall.wrapText);
+
+    say(store, a.ownerId, 'ja-tea', '私はお茶が好きです。', 11);
+    const hit = await registryFor('ja').handle('recall_memory', { query: 'お茶が好きだと言いましたか' }, ctxFor(store, worker(store), a));
+    expect(hit.spokenFound).toBe(true);
+    expect(hit.text).toContain('私はお茶が好きです。');
+    expect(hit.text).not.toContain('私は昨日映画を見ました。');
+  });
+
+  it('strips the en said-frame before searching so unrelated statements do not hit', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'frame-en');
+    say(store, a.ownerId, 'en-tired', 'I said I was tired.', 10);
+
+    const miss = await registryFor('en').handle('recall_memory', { query: 'Did I say I like tea?' }, ctxFor(store, worker(store), a));
+    expect(miss.spokenFound).toBe(false);
+    expect(miss.text).toBe(i18n.memory.en.recall.wrapText);
+
+    say(store, a.ownerId, 'en-tea', 'I like tea.', 11);
+    const hit = await registryFor('en').handle('recall_memory', { query: 'Did I say I like tea?' }, ctxFor(store, worker(store), a));
+    expect(hit.spokenFound).toBe(true);
+    expect(hit.text).toContain('I like tea.');
+    expect(hit.text).not.toContain('I said I was tired.');
   });
 
   it('recalls separated topic keywords without requiring a cross-boundary bigram', async () => {

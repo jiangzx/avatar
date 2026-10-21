@@ -60,6 +60,14 @@ describe('loadI18n', () => {
     expect(i18n.recentQueries.some((p) => p.includes('前回'))).toBe(true);
   });
 
+  it('compiles said-frame query patterns for every language', () => {
+    for (const language of ['zh', 'ja', 'en'] as const) {
+      const patterns = i18n.memory[language].recall.queryFramePatterns;
+      expect(patterns.length).toBeGreaterThan(0);
+      expect(patterns.every((pattern) => pattern instanceof RegExp)).toBe(true);
+    }
+  });
+
   it('fails fast on a missing language file', () => {
     const dir = copyConfig();
     unlinkSync(join(dir, 'i18n', 'ja', 'memory.json'));
@@ -73,6 +81,15 @@ describe('loadI18n', () => {
     value.addressingPatterns = ['(unclosed'];
     writeFileSync(path, JSON.stringify(value));
     expect(() => loadI18n(dir)).toThrow(/i18n_pattern_invalid:en:addressingPatterns/);
+  });
+
+  it('fails fast on an invalid query-frame pattern', () => {
+    const dir = copyConfig();
+    const path = join(dir, 'i18n', 'zh', 'memory.json');
+    const value = JSON.parse(readFileSync(path, 'utf8')) as { recall: { queryFramePatterns: string[] } };
+    value.recall.queryFramePatterns = ['(unclosed'];
+    writeFileSync(path, JSON.stringify(value));
+    expect(() => loadI18n(dir)).toThrow(/i18n_pattern_invalid:zh:queryFramePatterns/);
   });
 
   it('fails fast on an invalid explicit request pattern', () => {
