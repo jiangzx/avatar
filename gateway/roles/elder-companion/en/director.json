@@ -86,7 +86,7 @@
         "First say you are still here, then ask whether they are still listening, and finally say to call you whenever they want to talk"
       ]
     },
-    "variationHintLabel": "Suggested angle for this turn (reference only; phrase it yourself and still meet this stage's content requirements):",
+    "variationHintLabel": "Suggested angle for this turn (reference only; phrase it yourself and still meet this stage's content requirements): ",
     "policy": {
       "timeoutMs": 2000,
       "retries": 0,

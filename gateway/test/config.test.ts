@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DirectorSchema, loadConfig, loadDirectorConfig, loadIdentityConfig, makeOriginCheck } from '../src/config.ts';
+import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -323,6 +324,12 @@ describe('identity config', () => {
     for (const [key, value] of [['MAX_OWNERS', '0'], ['REGISTER_DAILY_CAP', 'x'], ['REGISTER_RATE_LIMIT_MAX', '0'], ['REGISTER_RATE_LIMIT_WINDOW_MS', '99'], ['ORPHAN_OWNER_DAYS', '0'], ['ORPHAN_CLEANUP_BATCH', '0'], ['MEMORY_DB_BUSY_TIMEOUT_MS', '99'], ['ENABLE_DEV_ENDPOINTS', 'yes']] as const) {
       expect(() => loadIdentityConfig({ ...base, [key]: value }, repoRoot)).toThrow(key);
     }
+  });
+
+  it('gives the en silence hint label a trailing space', () => {
+    const roles = loadRoleCatalog(`${root}roles`);
+    const label = roles.director('elder-companion', 'en').silenceDecision?.variationHintLabel;
+    expect(label?.endsWith(': ')).toBe(true);
   });
 
   it('requires a strong, distinct DEV_TOKEN only when dev endpoints are enabled, without echoing it', () => {
