@@ -514,7 +514,10 @@ git commit -m "feat(gateway): add ja/en elder-companion language packs"
 - Modify: `gateway/src/memory/evidence.ts`
 - Modify: `gateway/src/memory/snapshot.ts`
 - Modify: `gateway/src/memory/store.ts`
-- Modify: `gateway/src/session/tools/recall.ts`（`sameUtterance`/`grounded` 标点与假名 token）
+- Modify: `gateway/src/session/tools/recall.ts`（`sameUtterance`/`grounded` 标点与假名 token；`RecallCopy.questionPatterns`）
+- Modify: `gateway/src/session/tools/registry.ts`（把 `DEFAULT_I18N.evidence.questionPatterns` 传给 recall）
+- Modify: `gateway/src/session/pacing.ts`（`MemoryBudgetSchema` 新增 `kanaBackfillBatch?`）
+- Modify: `gateway/config/memory.json`（`"kanaBackfillBatch": 500`）
 - Modify: `gateway/src/index.ts`（startup 有界回填）
 - Modify: `gateway/src/session/session.ts`（新增 `i18n?: I18nBundle` 依赖；快照渲染传 labels/rules；语言切换重渲染；`safeGreeting` 用标签）
 - Modify: `gateway/src/identity/registry.ts`（初始快照 labels/rules）
@@ -528,6 +531,7 @@ git commit -m "feat(gateway): add ja/en elder-companion language packs"
 - Produces:
   - `bigrams(text)` 对 `Han|Hiragana|Katakana` 连续 run 输出相邻 pair；Latin/digit run 不变。
   - `isMemoryEvidence(text: string, rules?: EvidenceRules): boolean`（默认只做问号结尾检查；生产必须传 `I18nBundle.evidence`）。
+  - `RecallCopy` 增加 `questionPatterns: readonly RegExp[]`；`recallTool` 用 `{ questionPatterns, skipPatterns, lightAcks }` 构造 `EvidenceRules`。
   - `renderMemoryViews(input & { labels?: PromptLabels; rules?: { addressingPatterns?: readonly RegExp[]; evidence?: EvidenceRules } })`
   - `MemoryStore.listMessagesForKanaBackfill(limit: number): { rowid: number; text: string; bigrams: string }[]`
   - `MemoryStore.updateMessageBigrams(rowid: number, bigrams: string): void`
@@ -621,7 +625,7 @@ export function backfillKanaBigrams(store: MemoryStore, limit: number): number {
 }
 ```
 
-`store.ts` 添加语句：`SELECT rowid, text, bigrams FROM messages WHERE rowid > 0 ORDER BY rowid LIMIT ?` 与 `UPDATE messages SET bigrams = ? WHERE rowid = ?`；接口与实现同步。`index.ts` 在 store 打开后调用：
+`store.ts` 添加语句：`SELECT rowid, text, bigrams FROM messages WHERE rowid > 0 ORDER BY rowid LIMIT ?` 与 `UPDATE messages SET bigrams = ? WHERE rowid = ?`；接口与实现同步。`pacing.ts` 的 `MemoryBudgetSchema` 增加 `kanaBackfillBatch: z.number().int().min(1).max(5_000).optional()`，`config/memory.json` 加 `"kanaBackfillBatch": 500`。`index.ts` 在 store 打开后调用：
 
 ```ts
 const backfilled = backfillKanaBigrams(store, memory.kanaBackfillBatch ?? 500);
@@ -657,7 +661,7 @@ export function isMemoryEvidence(text: string, rules: EvidenceRules = EMPTY_EVID
 
 `snapshot.ts`：新增可选 `rules`，`addressingText` 遍历 `rules.addressingPatterns`，命中则 `labels.addressing + separator + match[1]`；未命中保持原文。`renderMemoryViews` 用 `rules.evidence ?? EMPTY_EVIDENCE_RULES` 过滤 tail。所有调用点更新；`session.refreshMemorySnapshot` 与 `registry.resolve` 传入当前语言 labels + `i18n` 规则。
 
-`recall.ts` 的 `sameUtterance` 归一化扩展为 `[\s，。！？、,.!?~～…—「」『』“”"'・]`；`grounded()` 的作品名正则加入直引号 `"`；token 过滤从 `length===2` 改为“长度 2 或含假名”，避免英文/拉丁 token 被排除。
+`recall.ts` 的 `sameUtterance` 归一化扩展为 `[\s，。！？、,.!?~～…—「」『』“”"'・]`；`grounded()` 的作品名正则加入直引号 `"`；token 过滤从 `length===2` 改为“长度 2 或含假名”，避免英文/拉丁 token 被排除。`RecallCopy` 增加 `questionPatterns: readonly RegExp[]`；`recall` 内两处 `isMemoryEvidence` 改为 `isMemoryEvidence(text, { questionPatterns: copy.questionPatterns, skipPatterns: copy.skipPatterns, lightAcks: copy.lightAcks })`；`registry.ts` 暂时把 `DEFAULT_I18N.evidence.questionPatterns` 放进现有 `RecallCopy`（Task 4 再按语言取）。
 
 - [ ] **Step 5: 会话/注册表接线**
 
@@ -680,7 +684,7 @@ Expected: PASS。
 - [ ] **Step 7: 提交**
 
 ```bash
-git add gateway/src/memory/bigram.ts gateway/src/memory/evidence.ts gateway/src/memory/snapshot.ts gateway/src/memory/store.ts gateway/src/memory/backfill.ts gateway/src/session/tools/recall.ts gateway/src/session/session.ts gateway/src/identity/registry.ts gateway/src/index.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/snapshot.test.ts gateway/test/session.test.ts gateway/test/memory-acceptance.test.ts
+git add gateway/src/memory/bigram.ts gateway/src/memory/evidence.ts gateway/src/memory/snapshot.ts gateway/src/memory/store.ts gateway/src/memory/backfill.ts gateway/src/session/tools/recall.ts gateway/src/session/tools/registry.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/src/session/session.ts gateway/src/identity/registry.ts gateway/src/index.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/snapshot.test.ts gateway/test/session.test.ts gateway/test/memory-acceptance.test.ts gateway/test/pacing.test.ts
 git commit -m "feat(gateway): localize memory evidence, kana bigrams, and snapshots"
 ```
 
@@ -971,7 +975,7 @@ if (stage === 'rest') return !/[？?]/.test(text);
 
 此时所有消费者（writer、tools、Session、index、worker）已经读 `I18nBundle`，可以删除共享 JSON 里的旧字段：
 
-1. `gateway/config/memory.json` 删除 `forgetConfirmText`、`declineConfirmPrompt`、`declineConfirmedText`、`recallEmptyText`、`recallFoundPrefix`、`memoryNoticeKeywords`、`lightAcks`、`recallSkipPatterns`、`recallRecentQueries`；`MemoryBudgetSchema` 同步删除这些字段，保留 `recallClipChars`、`recallPhraseMaxChars`、`recallPhraseTimeoutMs`、抽取数值等，新增可选 `kanaBackfillBatch`（1–5000，默认 500）。
+1. `gateway/config/memory.json` 删除 `forgetConfirmText`、`declineConfirmPrompt`、`declineConfirmedText`、`recallEmptyText`、`recallFoundPrefix`、`memoryNoticeKeywords`、`lightAcks`、`recallSkipPatterns`、`recallRecentQueries`；`MemoryBudgetSchema` 同步删除这些字段，保留 `recallClipChars`、`recallPhraseMaxChars`、`recallPhraseTimeoutMs`、`kanaBackfillBatch`（Task 3 已加）、抽取数值等。
 2. `gateway/config/safety.json` 只保留 `minMaskedDigits`、`chineseDigits`、`invisibleCodePoints`；`gateway/src/config.ts` 删除旧 `loadSafetyConfig`，`loadSharedSafety` + `mergeSafety` 成为唯一读取；`SafetyRules` 仍为 shared + 三数组（供 `scanText`）。
 3. `gateway/config/emotion.json` 只保留 `defaultEmotion`、`debounceMs`、`revertAfterMs`、`firstSentenceMaxChars`、`priority`；`gateway/src/session/emotion.ts` 删除旧 `loadEmotionConfig`，`loadSharedEmotion` + `mergeEmotion` 成为唯一读取。`gateway/src/i18n/load.ts` 改用 `loadSharedSafety`/`loadSharedEmotion`，不要引用已删除的旧 loader。
 4. 更新 `memory-text.test.ts`：`scanText` 用 `DEFAULT_I18N.safety`；`loadSafetyConfig` 断言改为 `loadSharedSafety` + i18n 合并词表。`emotion.test.ts` 用 `DEFAULT_I18N.emotion`。`memory-acceptance.test.ts` 的 `memoryConfig.memoryNoticeKeywords`/`recallSkipPatterns` 改用 `i18n`。
