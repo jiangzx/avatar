@@ -19,7 +19,9 @@ export function isMemoryEvidence(text: string, rules: EvidenceRules = EMPTY_EVID
   // Light acknowledgements only count when they are the whole utterance; "好的，我喜欢听京剧" is a statement.
   const normalized = normalizeUtterance(cleaned);
   if (rules.lightAcks.some((ack) => normalizeUtterance(ack) === normalized)) return false;
-  return !rules.skipPatterns.some((pattern) => pattern.length > 0 && cleaned.includes(pattern));
+  // Sentence-initial capitals ("You're wrong") must still match the lowercase English denials.
+  const lowered = cleaned.toLowerCase();
+  return !rules.skipPatterns.some((pattern) => pattern.length > 0 && lowered.includes(pattern.toLowerCase()));
 }
 
 /** Whitespace, sentence punctuation, and Latin case are not evidence-bearing. */

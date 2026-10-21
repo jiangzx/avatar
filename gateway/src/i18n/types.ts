@@ -1,6 +1,6 @@
 import type { Language } from '@anyidea/protocol';
 import type { SafetyRules } from '../config.ts';
-import type { EmotionConfig } from '../session/emotion.ts';
+import type { EmotionConfig } from './emotion.ts';
 
 /** Language detection rules, merged across every loaded language pack. */
 export interface LanguageRules {

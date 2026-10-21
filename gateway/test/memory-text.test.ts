@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { loadSafetyConfig, type SafetyRules } from '../src/config.ts';
+import { loadSharedSafety, type SafetyRules } from '../src/config.ts';
+import { DEFAULT_I18N } from '../src/i18n/load.ts';
 import { backfillKanaBigrams } from '../src/memory/backfill.ts';
 import { bigrams } from '../src/memory/bigram.ts';
 import { openDatabase } from '../src/memory/db.ts';
@@ -124,7 +125,7 @@ describe('kana backfill', () => {
 });
 
 describe('scanText', () => {
-  const rules = () => loadSafetyConfig(safetyPath);
+  const rules = () => DEFAULT_I18N.safety;
 
   it('rejects a string that contains U+200B', () => {
     expect(scanText('你好\u200B', rules())).toBe('reject');
@@ -162,9 +163,10 @@ describe('scanText', () => {
   });
 });
 
-describe('loadSafetyConfig', () => {
-  it('parses the shipped safety.json', () => {
-    const rules = loadSafetyConfig(safetyPath);
+describe('loadSharedSafety', () => {
+  it('parses the shipped safety.json shared fields', () => {
+    const rules = loadSharedSafety(safetyPath);
+    expect(Object.keys(rules).sort()).toEqual(['chineseDigits', 'invisibleCodePoints', 'minMaskedDigits']);
     expect(rules.minMaskedDigits).toBe(12);
     expect(rules.chineseDigits['零']).toBe('0');
     expect(rules.chineseDigits['幺']).toBe('1');
@@ -180,18 +182,24 @@ describe('loadSafetyConfig', () => {
     expect(rules.chineseDigits['两']).toBeUndefined();
     expect(rules.chineseDigits['十']).toBeUndefined();
     expect(rules.chineseDigits['拾']).toBeUndefined();
+    expect(rules.invisibleCodePoints).toContain(0x200B);
+  });
+
+  it('merges every language pack into the shipped phrases', () => {
+    const rules = DEFAULT_I18N.safety;
     expect(rules.degradePhrases).toContain('验证码');
     expect(rules.degradePhrases).toContain('转账');
     expect(rules.degradePhrases).toContain('银行卡');
+    expect(rules.degradePhrases).toContain('verification code');
     expect(rules.markPhrases).toContain('你现在是');
-    expect(rules.invisibleCodePoints).toContain(0x200B);
     expect(rules.rejectPhrases.length).toBeGreaterThan(0);
+    expect(new Set(rules.rejectPhrases).size).toBe(rules.rejectPhrases.length);
   });
 
   it('fails closed when the file has an unknown field', () => {
     const dir = mkdtempSync(join(tmpdir(), 'safety-'));
-    const rules = loadSafetyConfig(safetyPath);
+    const rules = loadSharedSafety(safetyPath);
     writeFileSync(join(dir, 'safety.json'), JSON.stringify({ ...rules, extra: true }));
-    expect(() => loadSafetyConfig(join(dir, 'safety.json'))).toThrow();
+    expect(() => loadSharedSafety(join(dir, 'safety.json'))).toThrow();
   });
 });

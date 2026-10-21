@@ -4,6 +4,7 @@ import type { ServerMessage } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
 import type { ProactiveRequest } from '../src/adapters/types.ts';
 import { DeviceRegistry } from '../src/identity/registry.ts';
+import { loadI18n } from '../src/i18n/load.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import type { TextModelClient } from '../src/memory/extract.ts';
 import { renderSnapshot } from '../src/memory/snapshot.ts';
@@ -15,12 +16,11 @@ import type { SessionContext } from '../src/session/context.ts';
 import { buildInstructions } from '../src/session/instructions.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { SessionManager } from '../src/session/manager.ts';
-import { loadMemoryBudget } from '../src/session/pacing.ts';
 import { Session, type Transport } from '../src/session/session.ts';
 import { ftsMatch } from '../src/session/tools/recall.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const memoryConfig = loadMemoryBudget(`${root}config/memory.json`);
+const i18n = loadI18n(`${root}config`);
 const roles = loadRoleCatalog(`${root}roles`);
 const director = roles.director('elder-companion');
 const policy = { timeoutMs: 1_000, retries: 0, backoffMs: 0, maxBackoffMs: 0 };
@@ -145,7 +145,8 @@ describe('Plan C memory acceptance', () => {
         store,
         budget: { totalChars: 8_000, snapshotMaxChars: 600, summaryMaxChars: 800 },
         extractEveryUserTurns: 10,
-        ...(memoryConfig.memoryNoticeKeywords ? { noticeKeywords: memoryConfig.memoryNoticeKeywords } : {}),
+        i18n,
+        noticeKeywords: i18n.memory.zh.noticeKeywords,
       }, ctx, sessionId, noticePending),
       60_000,
       300_000,

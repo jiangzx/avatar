@@ -1,17 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { loadSafetyConfig } from '../config.ts';
+import type { SafetyRules } from '../config.ts';
+import { DEFAULT_I18N } from '../i18n/load.ts';
 import { log } from '../log.ts';
 import { bigrams } from './bigram.ts';
 import { redact } from './redact.ts';
 import { scanText } from './scan.ts';
 import type { MemoryStore } from './store.ts';
 
-const rules = loadSafetyConfig(fileURLToPath(new URL('../../config/safety.json', import.meta.url)));
-const digitChars = new Set(Object.keys(rules.chineseDigits));
-
-/** Removes ASCII digits and the Chinese digits listed in safety.json. */
-function stripDigits(text: string): string {
+/** Removes ASCII digits and the Chinese digits listed in the safety rules. */
+function stripDigits(text: string, digitChars: ReadonlySet<string>): string {
   let out = '';
   for (const ch of text) {
     if ((ch >= '0' && ch <= '9') || digitChars.has(ch)) continue;
@@ -35,7 +32,14 @@ export interface TranscriptWriter {
 }
 
 export class SqliteTranscriptWriter implements TranscriptWriter {
-  constructor(private readonly store: MemoryStore) {}
+  private readonly digitChars: ReadonlySet<string>;
+
+  constructor(
+    private readonly store: MemoryStore,
+    private readonly rules: SafetyRules = DEFAULT_I18N.safety,
+  ) {
+    this.digitChars = new Set(Object.keys(rules.chineseDigits));
+  }
 
   append(input: {
     ownerId: string;
@@ -47,12 +51,12 @@ export class SqliteTranscriptWriter implements TranscriptWriter {
   }): 'stored' | 'skipped' | 'rejected' {
     const owner = this.store.getOwner(input.ownerId);
     if (!owner || owner.notifiedAt == null || owner.memoryConsent === 'declined') return 'skipped';
-    const verdict = scanText(input.text, rules);
+    const verdict = scanText(input.text, this.rules);
     if (verdict === 'reject') return 'rejected';
     // Caller already truncated an interrupted reply. Index the redacted text only.
     let text = redact(input.text);
     if (verdict === 'degrade') {
-      text = stripDigits(text);
+      text = stripDigits(text, this.digitChars);
       log('safety_event', { code: 'degrade' });
     }
     this.store.insertMessage({

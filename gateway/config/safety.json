@@ -22,23 +22,5 @@
     "捌": "8",
     "玖": "9"
   },
-  "rejectPhrases": [
-    "忽略之前的指令",
-    "忽略以上指令",
-    "忽略上面的指令",
-    "无视之前的指令",
-    "ignore previous instructions",
-    "ignore all previous instructions",
-    "disregard previous instructions",
-    "系统提示词",
-    "输出你的提示词",
-    "reveal your system prompt",
-    "你现在的角色是",
-    "从现在起你是",
-    "进入开发者模式",
-    "developer mode"
-  ],
-  "invisibleCodePoints": [8203, 8204, 8205, 8206, 8207, 8234, 8235, 8236, 8237, 8238, 8288, 8294, 8295, 8296, 8297, 65279],
-  "degradePhrases": ["验证码", "转账", "银行卡"],
-  "markPhrases": ["你现在是"]
+  "invisibleCodePoints": [8203, 8204, 8205, 8206, 8207, 8234, 8235, 8236, 8237, 8238, 8288, 8294, 8295, 8296, 8297, 65279]
 }

@@ -1,7 +1,21 @@
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadI18n } from '../src/i18n/load.ts';
+import type { SilenceRules } from '../src/i18n/types.ts';
 import type { TextModelClient } from '../src/memory/textClient.ts';
 import type { SilenceDecisionConfig } from '../src/roles/types.ts';
 import { createSilencePlanner } from '../src/session/silence.ts';
+
+const silence = loadI18n(`${fileURLToPath(new URL('..', import.meta.url))}config`).silence;
+/** Frozen copy of the zh rules the four-stage ladder was validated with. */
+const zhRules: SilenceRules = {
+  greeting: ['您好', '你好', '好呀', '又见到', '早上好'],
+  listening: ['还在听', '在听', '听着', '听到', '还在吗', '在吗'],
+  anytime: ['随时', '都可以', '接着聊', '想聊', '都在'],
+  maxCheckinChars: 30,
+};
+const jaRules = silence.ja;
+const enRules = silence.en;
 
 const config: SilenceDecisionConfig = {
   instruction: 'Return the silence decision as JSON.',
@@ -25,7 +39,7 @@ describe('silence planner', () => {
   afterEach(() => { vi.useRealTimers(); });
 
   it('returns no text when the model stays silent', async () => {
-    const plan = createSilencePlanner(client('{"speak":false}'), config);
+    const plan = createSilencePlanner(client('{"speak":false}'), config, zhRules);
     expect(await plan(context, signal())).toEqual({ text: null });
   });
 
@@ -34,7 +48,7 @@ describe('silence planner', () => {
     const plan = createSilencePlanner({ complete: async data => {
       input = data;
       return '{"speak":true,"text":"走累了，脚酸着也不好受。"}';
-    } }, config);
+    } }, config, zhRules);
     const checkContext = { ...context, stage: 'check' as const, previousTexts: ['走累了，脚酸着也不好受。'] };
     expect(await plan(checkContext, signal())).toEqual({ text: '走累了，脚酸着也不好受。' });
     expect(JSON.parse(input.user)).toEqual(checkContext);
@@ -44,12 +58,12 @@ describe('silence planner', () => {
   });
 
   it('accepts a decision wrapped in a code fence', async () => {
-    const plan = createSilencePlanner(client('```json\n{"speak":true,"text":"您接着说。"}\n```'), config);
+    const plan = createSilencePlanner(client('```json\n{"speak":true,"text":"您接着说。"}\n```'), config, zhRules);
     expect(await plan(context, signal())).toEqual({ text: '您接着说。' });
   });
 
   it('closes the ladder only when the model reports a clear ending', async () => {
-    const plan = createSilencePlanner(client('{"speak":false,"close":true}'), config);
+    const plan = createSilencePlanner(client('{"speak":false,"close":true}'), config, zhRules);
     expect(await plan(context, signal())).toEqual({ text: null, close: true });
   });
 
@@ -58,7 +72,7 @@ describe('silence planner', () => {
     '{"speak":false,"close":"yes"}', '{"speak":true,"text":" "}', '{"speak":true,"text":123}',
     JSON.stringify({ speak: true, text: '长'.repeat(61) }),
   ])('stays quiet on an invalid model result: %s', async raw => {
-    expect(await createSilencePlanner(client(raw), config)(context, signal())).toBeNull();
+    expect(await createSilencePlanner(client(raw), config, zhRules)(context, signal())).toBeNull();
   });
 
   it('plans the opening from memory when the user has not spoken', async () => {
@@ -67,7 +81,7 @@ describe('silence planner', () => {
     const plan = createSilencePlanner({ complete: async data => {
       input = data;
       return JSON.stringify({ speak: true, text: line });
-    } }, config);
+    } }, config, zhRules);
     const opening = { ...context, stage: 'greeting' as const, userText: '', assistantText: '', memorySnapshot: '上次聊到想去公园。' };
     expect(await plan(opening, signal())).toEqual({ text: line });
     expect(JSON.parse(input.user)).toEqual(opening);
@@ -80,23 +94,34 @@ describe('silence planner', () => {
     const plan = createSilencePlanner({ complete: async data => {
       system = data.system;
       return JSON.stringify({ speak: true, text: line });
-    } }, config);
+    } }, config, zhRules);
     expect(await plan({ ...context, stage: 'checkin' }, signal())).toEqual({ text: line });
     expect(system).toContain('先确认还在听，再说随时可以聊');
   });
 
   it('keeps the check-in content and rejects a new topic instead', async () => {
     const checkin = '您还在听吗？不着急，您随时想聊都可以。';
-    const good = createSilencePlanner(client(JSON.stringify({ speak: true, text: checkin })), config);
+    const good = createSilencePlanner(client(JSON.stringify({ speak: true, text: checkin })), config, zhRules);
     expect(await good({ ...context, stage: 'checkin' }, signal())).toEqual({ text: checkin });
-    const bad = createSilencePlanner(client(JSON.stringify({ speak: true, text: '您还在听吗？今天天气不错，您出门了吗？' })), config);
+    const bad = createSilencePlanner(client(JSON.stringify({ speak: true, text: '您还在听吗？今天天气不错，您出门了吗？' })), config, zhRules);
     expect(await bad({ ...context, stage: 'checkin' }, signal())).toBeNull();
   });
 
+  it('accepts localized check-in lines and rejects new topics', async () => {
+    const jaLine = 'まだ聞こえていますか？急がなくて大丈夫です。いつでもお話しできますよ。';
+    const ja = createSilencePlanner(client(JSON.stringify({ speak: true, text: jaLine })), config, jaRules);
+    expect(await ja({ ...context, stage: 'checkin' }, signal())).toEqual({ text: jaLine });
+    const jaBad = createSilencePlanner(client(JSON.stringify({ speak: true, text: 'まだ聞こえていますか？今日はいい天気ですね。' })), config, jaRules);
+    expect(await jaBad({ ...context, stage: 'checkin' }, signal())).toBeNull();
+    const enLine = 'Are you still there? No rush—we can talk anytime.';
+    const en = createSilencePlanner(client(JSON.stringify({ speak: true, text: enLine })), config, enRules);
+    expect(await en({ ...context, stage: 'checkin' }, signal())).toEqual({ text: enLine });
+  });
+
   it('rejects a rest line that asks a question, and a greeting without one', async () => {
-    const rest = createSilencePlanner(client('{"speak":true,"text":"您今天出门走走吗？"}'), config);
+    const rest = createSilencePlanner(client('{"speak":true,"text":"您今天出门走走吗？"}'), config, zhRules);
     expect(await rest({ ...context, stage: 'rest' }, signal())).toBeNull();
-    const greeting = createSilencePlanner(client('{"speak":true,"text":"您好，又见到您了。"}'), config);
+    const greeting = createSilencePlanner(client('{"speak":true,"text":"您好，又见到您了。"}'), config, zhRules);
     expect(await greeting({ ...context, stage: 'greeting', userText: '' }, signal())).toBeNull();
   });
 
@@ -106,7 +131,7 @@ describe('silence planner', () => {
     const plan = createSilencePlanner({ complete: async data => {
       input = data;
       return JSON.stringify({ speak: true, text: line });
-    } }, config);
+    } }, config, zhRules);
     const opening = { ...context, stage: 'greeting' as const, userText: '', assistantText: '', memorySnapshot: '记'.repeat(7000) };
     expect(await plan(opening, signal())).toEqual({ text: line });
     expect((JSON.parse(input.user) as { memorySnapshot: string }).memorySnapshot).toHaveLength(6000);
@@ -114,14 +139,14 @@ describe('silence planner', () => {
 
   it('does not send oversized exchanges for optional speech', async () => {
     let calls = 0;
-    const plan = createSilencePlanner({ complete: async () => { calls++; return '{"speak":true,"text":"不应播放"}'; } }, config);
+    const plan = createSilencePlanner({ complete: async () => { calls++; return '{"speak":true,"text":"不应播放"}'; } }, config, zhRules);
     expect(await plan({ ...context, userText: '长'.repeat(6001) }, signal())).toBeNull();
     expect(calls).toBe(0);
   });
 
   it('plans from the user turn when the adapter reports no assistant text', async () => {
     let calls = 0;
-    const plan = createSilencePlanner({ complete: async () => { calls++; return '{"speak":true,"text":"您接着说。"}'; } }, config);
+    const plan = createSilencePlanner({ complete: async () => { calls++; return '{"speak":true,"text":"您接着说。"}'; } }, config, zhRules);
     expect(await plan({ ...context, assistantText: '' }, signal())).toEqual({ text: '您接着说。' });
     expect(calls).toBe(1);
   });
@@ -131,7 +156,7 @@ describe('silence planner', () => {
     let taskSignal!: AbortSignal;
     const plan = createSilencePlanner({ complete: async input => {
       calls++; taskSignal = input.signal; return new Promise(() => {});
-    } }, config);
+    } }, config, zhRules);
     const result = plan(context, signal());
     await vi.advanceTimersByTimeAsync(2000);
     expect(await result).toBeNull();
@@ -145,7 +170,7 @@ describe('silence planner', () => {
     const abort = new AbortController();
     const plan = createSilencePlanner({ complete: input => {
       taskSignal = input.signal; return new Promise(resolve => { finish = resolve; });
-    } }, config);
+    } }, config, zhRules);
     const result = plan(context, abort.signal);
     abort.abort();
     expect(taskSignal.aborted).toBe(true);
@@ -156,7 +181,7 @@ describe('silence planner', () => {
   it('never calls an external service after prior cancellation', async () => {
     let calls = 0;
     const abort = new AbortController(); abort.abort();
-    const plan = createSilencePlanner({ complete: async () => { calls++; throw Error('unexpected_call'); } }, config);
+    const plan = createSilencePlanner({ complete: async () => { calls++; throw Error('unexpected_call'); } }, config, zhRules);
     expect(await plan(context, abort.signal)).toBeNull();
     expect(calls).toBe(0);
   });

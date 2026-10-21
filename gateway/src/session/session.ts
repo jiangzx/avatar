@@ -99,6 +99,8 @@ export interface SessionDeps {
   recallPhraseTimeoutMs?: number;
   /** The memory notice is verified by these words in its transcript (or verbatim fallback). */
   noticeKeywords?: readonly string[];
+  /** Per-language notice keywords; a notice is verified in the language it was requested in. */
+  noticeKeywordsByLanguage?: Partial<Record<Language, readonly string[]>>;
   /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
   rebuildTriggerRatio?: number;
   /** Interval slim rebuild (gateway/config/pacing.json slim). */
@@ -211,6 +213,8 @@ export class Session {
   private noticeSeq: number | null = null;
   /** A notice request is outstanding but no response has started yet. */
   private noticePendingRequest = false;
+  /** Language the outstanding notice was requested in; its keywords must not follow later switches. */
+  private noticeLanguage: Language | null = null;
   private noticeFallback: string | null = null;
   private noticeVerbatim = false;
   /** User finals since the session started. Every Nth one enqueues extraction. */
@@ -553,7 +557,7 @@ export class Session {
     if (!config || !client) return null;
     let planner = this.silencePlanners.get(this.language);
     if (!planner) {
-      planner = createSilencePlanner(client, config);
+      planner = createSilencePlanner(client, config, this.i18n.silence[this.language]);
       this.silencePlanners.set(this.language, planner);
     }
     return planner(context, signal);
@@ -621,6 +625,7 @@ export class Session {
     }
     if (request.cue === 'memoryNotice') {
       this.noticePendingRequest = true;
+      this.noticeLanguage = this.language;
       this.noticeFallback = request.fallbackText;
       this.noticeVerbatim = this.adapter.verbatimFallback;
     }
@@ -647,13 +652,17 @@ export class Session {
     }
     this.noticeSeq = null;
     this.noticePendingRequest = false;
+    this.noticeLanguage = null;
     this.noticeFallback = null;
     this.director.onNoticePlayed();
   }
 
   /** Qwen may paraphrase the notice; direct-TTS adapters speak the fallback we supplied. */
   private noticeVerified(seq: number): boolean {
-    const keywords = this.deps.noticeKeywords ?? [];
+    const language = this.noticeLanguage;
+    const keywords = (language ? this.deps.noticeKeywordsByLanguage?.[language] : undefined)
+      ?? this.deps.noticeKeywords
+      ?? [];
     if (keywords.length === 0) return true;
     const text = this.noticeVerbatim ? this.noticeFallback ?? '' : this.bySeq.get(seq)?.text ?? '';
     return keywords.some((keyword) => text.includes(keyword));
@@ -664,6 +673,7 @@ export class Session {
     if (seq !== this.noticeSeq) return;
     this.noticeSeq = null;
     this.noticePendingRequest = false;
+    this.noticeLanguage = null;
     this.noticeFallback = null;
     this.director.onNoticeMissed();
   }
@@ -1094,6 +1104,7 @@ export class Session {
     if (this.noticePendingRequest) {
       // The request never produced a response; do not let a later reply inherit it.
       this.noticePendingRequest = false;
+      this.noticeLanguage = null;
       this.noticeFallback = null;
       this.director.onNoticeMissed();
     }

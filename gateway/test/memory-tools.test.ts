@@ -400,7 +400,7 @@ describe('memory tool registry', () => {
     const result = await registry.handle('forget_memory', { query: '王叔' }, ctxFor(store, queued, a, ledger));
     release('旧摘要');
 
-    expect(result).toMatchObject({ ok: true, rebuild: 'forget', confirmText: memory.forgetConfirmText });
+    expect(result).toMatchObject({ ok: true, rebuild: 'forget', confirmText: i18n.memory.zh.forgetConfirmText });
     expect(await pending).toBe(false);
     expect(ledger.summary).toBe('');
     // Unrelated turns survive; only the forgotten line is removed.
@@ -469,7 +469,7 @@ describe('memory tool registry', () => {
       ctxFor(store, queued, a, ledger),
     );
 
-    expect(first).toMatchObject({ ok: true, confirmText: memory.declineConfirmPrompt });
+    expect(first).toMatchObject({ ok: true, confirmText: i18n.memory.zh.declineConfirmPrompt });
     expect(first.rebuild).toBeUndefined();
     expect(counts(db, a.ownerId)).toEqual(beforeA);
     expect(store.snapshotRows(a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我叫王叔' }]);
@@ -483,7 +483,7 @@ describe('memory tool registry', () => {
       ctxFor(store, queued, a, ledger),
     );
 
-    expect(second).toMatchObject({ ok: true, rebuild: 'decline', confirmText: memory.declineConfirmedText });
+    expect(second).toMatchObject({ ok: true, rebuild: 'decline', confirmText: i18n.memory.zh.declineConfirmedText });
     expect(ledger.summary).toBe('');
     expect(ledger.recent).toEqual([]);
     expect(counts(db, a.ownerId)).toEqual({ messages: 0, facts: 0, notes: 0, episodes: 0, followups: 0, changes: 0 });
@@ -574,8 +574,8 @@ describe('session memory tools', () => {
 
     expect(calls).toContainEqual({
       cue: 'toolContinue',
-      instruction: memory.forgetConfirmText,
-      fallbackText: memory.forgetConfirmText,
+      instruction: i18n.memory.zh.forgetConfirmText,
+      fallbackText: i18n.memory.zh.forgetConfirmText,
     });
     expect(calls.some((call) => call.cue === 'resume')).toBe(false);
     expect(sent.filter((message) => message.type === 'error').map((message) => message.code)).not.toContain('model_reconnecting');
@@ -676,8 +676,8 @@ describe('session memory tools', () => {
 
     expect(calls).toContainEqual({
       cue: 'toolContinue',
-      instruction: memory.declineConfirmPrompt,
-      fallbackText: memory.declineConfirmPrompt,
+      instruction: i18n.memory.zh.declineConfirmPrompt,
+      fallbackText: i18n.memory.zh.declineConfirmPrompt,
     });
     expect(calls.some((call) => call.cue === 'resume')).toBe(false);
     expect(mocks).toHaveLength(1);
@@ -728,8 +728,8 @@ describe('session memory tools', () => {
 
     expect(calls).toContainEqual({
       cue: 'toolContinue',
-      instruction: memory.declineConfirmedText,
-      fallbackText: memory.declineConfirmedText,
+      instruction: i18n.memory.zh.declineConfirmedText,
+      fallbackText: i18n.memory.zh.declineConfirmedText,
     });
     expect(calls.some((call) => call.cue === 'memoryNotice')).toBe(false);
     expect(mocks.length).toBeGreaterThan(1);
@@ -800,8 +800,8 @@ describe('session memory tools', () => {
     // The gated extraction is still running; forget and its confirmation do not wait for it.
     expect(calls).toContainEqual({
       cue: 'toolContinue',
-      instruction: memory.forgetConfirmText,
-      fallbackText: memory.forgetConfirmText,
+      instruction: i18n.memory.zh.forgetConfirmText,
+      fallbackText: i18n.memory.zh.forgetConfirmText,
     });
     expect(mocks.length).toBeGreaterThan(1);
 
@@ -879,7 +879,7 @@ describe('session memory tools', () => {
     session.handleClientMessage({ type: 'debug.userText', text: '忘掉王叔' });
     await vi.advanceTimersByTimeAsync(1000);
 
-    expect(calls.some((call) => call.fallbackText === memory.forgetConfirmText)).toBe(false);
+    expect(calls.some((call) => call.fallbackText === i18n.memory.zh.forgetConfirmText)).toBe(false);
     expect(calls).toContainEqual({
       cue: 'toolContinue',
       instruction: director.toolContinueInstruction,

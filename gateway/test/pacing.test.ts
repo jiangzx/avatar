@@ -158,9 +158,6 @@ describe('pacing and budget config', () => {
     const memory: MemoryBudgetConfig = {
       instructions: { budgetRatio: 0.4, snapshotMaxChars: 100, summaryMaxChars: 200, minHistoryChars: 100 },
       toolTurnTimeoutMs: 15_000,
-      forgetConfirmText: '好，这件事我不记着了。',
-      declineConfirmPrompt: '那我以后就不记着咱们聊的事了，以前的也都删掉，确定吗？',
-      declineConfirmedText: '好，都清掉了。',
       recallClipChars: 80,
       retentionDays: 90,
       retentionBatch: 200,

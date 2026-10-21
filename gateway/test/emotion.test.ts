@@ -1,6 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EmotionTagger, loadEmotionConfig, tagEmotion, type Emotion, type EmotionConfig } from '../src/session/emotion.ts';
+import { loadSharedEmotion } from '../src/i18n/emotion.ts';
+import { DEFAULT_I18N } from '../src/i18n/load.ts';
+import { EmotionTagger, tagEmotion, type Emotion, type EmotionConfig } from '../src/session/emotion.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cfg: EmotionConfig = {
@@ -17,12 +19,16 @@ describe('tagEmotion', () => {
     expect(tagEmotion('吃了碗面', cfg)).toBeNull();
   });
 
-  it('ships a valid lexicon config', () => {
-    const shipped = loadEmotionConfig(`${root}config/emotion.json`);
+  it('ships a valid merged lexicon config', () => {
+    const shipped = DEFAULT_I18N.emotion;
     expect(tagEmotion('我今天有点难过', shipped)).toBe('sad');
     expect(tagEmotion('我今天特别开心', shipped)).toBe('happy');
     expect(tagEmotion('孙子可疼我了', shipped)).toBe('love');
     expect(tagEmotion('我心里难过', shipped)).toBe('sad');
+    // Shared config keeps timing only; every language pack contributes words.
+    expect(loadSharedEmotion(`${root}config/emotion.json`).lexicon).toBeUndefined();
+    expect(shipped.lexicon.sad.some((word) => word.includes('悲'))).toBe(true);
+    expect(shipped.lexicon.sad).toContain('sad');
   });
 });
 

@@ -3,7 +3,7 @@ import { LANGUAGES, type Language } from '@anyidea/protocol';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
-import { loadConfig, loadIdentityConfig, loadSafetyConfig, makeOriginCheck } from './config.ts';
+import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
 import { DEFAULT_ROLE } from './roles/catalog.ts';
 import { log } from './log.ts';
@@ -21,7 +21,6 @@ import { SqliteMemoryStore } from './memory/store.ts';
 import { QwenTextClient } from './memory/textClient.ts';
 import { MemoryWorker, withExtraction } from './memory/worker.ts';
 import { SqliteTranscriptWriter } from './memory/writer.ts';
-import { loadEmotionConfig } from './session/emotion.ts';
 import { loadI18n } from './i18n/load.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -56,16 +55,14 @@ for (const pair of roles.languagePairs()) {
   const keywords = i18n.memory[pair.language].noticeKeywords;
   const text = roles.director(pair.roleId, pair.language).memoryNoticeText;
   if (!keywords.some((keyword) => text.includes(keyword))) {
-    throw new Error(`memory_notice_keyword_missing:${pair.language}`);
+    throw new Error(`memory_notice_keyword_missing:${pair.roleId}:${pair.language}`);
   }
 }
-const emotion = loadEmotionConfig(`${root}config/emotion.json`);
-const safety = loadSafetyConfig(`${root}config/safety.json`);
 log('safety_rules', {
-  rejectPhrases: safety.rejectPhrases.length,
-  degradePhrases: safety.degradePhrases.length,
-  markPhrases: safety.markPhrases.length,
-  invisibleCodePoints: safety.invisibleCodePoints.length,
+  rejectPhrases: i18n.safety.rejectPhrases.length,
+  degradePhrases: i18n.safety.degradePhrases.length,
+  markPhrases: i18n.safety.markPhrases.length,
+  invisibleCodePoints: i18n.safety.invisibleCodePoints.length,
 });
 const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
@@ -96,7 +93,7 @@ const registry = store
     })
   : null;
 log('identity_mode', { enabled: registry !== null, devEndpoints: identityConfig.enableDevEndpoints });
-const writer = store ? new SqliteTranscriptWriter(store) : undefined;
+const writer = store ? new SqliteTranscriptWriter(store, i18n.safety) : undefined;
 const textClient = config.qwenApiKey && config.summarizerEndpoint
   ? new QwenTextClient({
       apiKey: config.qwenApiKey,
@@ -146,7 +143,9 @@ const manager = new SessionManager(
       i18n,
       ...(memory.recallClipChars !== undefined ? { recallClipChars: memory.recallClipChars } : {}),
       ...(memory.recallPhraseTimeoutMs !== undefined ? { recallPhraseTimeoutMs: memory.recallPhraseTimeoutMs } : {}),
-      ...(memory.memoryNoticeKeywords ? { noticeKeywords: memory.memoryNoticeKeywords } : {}),
+      noticeKeywordsByLanguage: Object.fromEntries(
+        LANGUAGES.map((language) => [language, i18n.memory[language].noticeKeywords]),
+      ) as Record<Language, readonly string[]>,
       modelContextTokenLimit: pacing.rebuild.contextChars,
       rebuildTriggerRatio: pacing.rebuild.triggerRatio,
       rebuildAfterTurns: pacing.rebuild.afterTurns,
@@ -155,7 +154,7 @@ const manager = new SessionManager(
       tailGuardMs: pacing.tailGuardMs,
       slim: pacing.slim,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
-      emotion,
+      emotion: i18n.emotion,
       languageRules: i18n.language,
       ...(store ? { store } : {}),
       ...(writer ? { writer } : {}),

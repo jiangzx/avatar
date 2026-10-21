@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
-import { loadSafetyConfig } from '../config.ts';
+import { loadSharedSafety } from '../config.ts';
 
-const safety = loadSafetyConfig(fileURLToPath(new URL('../../config/safety.json', import.meta.url)));
+const safety = loadSharedSafety(fileURLToPath(new URL('../../config/safety.json', import.meta.url)));
 
 function isDigitChar(ch: string): boolean {
   return safety.chineseDigits[ch] !== undefined || (ch >= '0' && ch <= '9');

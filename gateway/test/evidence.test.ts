@@ -59,6 +59,14 @@ describe('memory evidence', () => {
     expect(isMemoryEvidence('Okay, I like tea.', rules)).toBe(true);
   });
 
+  it('filters English denials regardless of sentence case', () => {
+    expect(isMemoryEvidence("You're wrong", rules)).toBe(false);
+    expect(isMemoryEvidence("YOU'RE WRONG", rules)).toBe(false);
+    expect(isMemoryEvidence("You're wrong, I like tea.", rules)).toBe(false);
+    expect(isMemoryEvidence('I like tea.', rules)).toBe(true);
+    expect(isMemoryEvidence('Okay, I like tea.', rules)).toBe(true);
+  });
+
   it('does only the question-mark check when no rules are configured', () => {
     expect(isMemoryEvidence('你吃饭了吗。')).toBe(true);
     expect(isMemoryEvidence('你吃饭了吗？')).toBe(false);

@@ -3,13 +3,13 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LANGUAGES, type Language } from '@anyidea/protocol';
 import { z } from 'zod';
-import { loadSafetyConfig, mergeSafety, type SafetyPhrases } from '../config.ts';
+import { loadSharedSafety, mergeSafety, type SafetyPhrases } from '../config.ts';
 import {
   EmotionLexiconSchema,
-  loadEmotionConfig,
+  loadSharedEmotion,
   mergeEmotion,
   type EmotionLexicon,
-} from '../session/emotion.ts';
+} from './emotion.ts';
 import type {
   EvidenceRules,
   I18nBundle,
@@ -229,8 +229,8 @@ export function loadI18n(configRoot: string): I18nBundle {
   };
   const recentQueries = unique(LANGUAGES.flatMap((code) => memory[code].recall.recentQueryPatterns));
 
-  const safety = mergeSafety(loadSafetyConfig(join(configRoot, 'safety.json')), loadSafety(configRoot));
-  const emotion = mergeEmotion(loadEmotionConfig(join(configRoot, 'emotion.json')), loadEmotion(configRoot));
+  const safety = mergeSafety(loadSharedSafety(join(configRoot, 'safety.json')), loadSafety(configRoot));
+  const emotion = mergeEmotion(loadSharedEmotion(join(configRoot, 'emotion.json')), loadEmotion(configRoot));
 
   return { language, memory, evidence, recentQueries, safety, emotion, silence: loadSilence(configRoot) };
 }

@@ -1,21 +1,23 @@
 // High-risk silence contract: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
 import { z } from 'zod';
+import type { SilenceRules } from '../i18n/types.ts';
 import { log } from '../log.ts';
 import type { TextModelClient } from '../memory/textClient.ts';
 import { runWithPolicy } from '../reliability/policy.ts';
 import type { SilenceDecisionConfig } from '../roles/types.ts';
 import type { SilenceContext, SilencePlan } from './director.ts';
 
-/** Every planned line must keep the content its stage promises; otherwise configured copy is used. */
-const GREETING = /您好|你好|好呀|好啊|好哇|又见到|又见面|早上好|上午好|下午好|晚上好|早啊|早安|嗨|哈喽|来啦/;
 const QUESTION = /[？?]/;
-const LISTENING = /还在听|在听|听着|听到|还在吗|在吗/;
-const ANYTIME = /随时|都可以|接着聊|想聊|都在/;
 
-function stageContentOk(stage: SilenceContext['stage'], text: string): boolean {
-  if (stage === 'greeting') return GREETING.test(text) && QUESTION.test(text);
+/** Every planned line must keep the content its stage promises; otherwise configured copy is used. */
+function stageContentOk(stage: SilenceContext['stage'], text: string, rules: SilenceRules): boolean {
+  if (stage === 'greeting') return rules.greeting.some((phrase) => text.includes(phrase)) && QUESTION.test(text);
   // A check-in that stops asking whether the user is there is a new topic, not a check-in.
-  if (stage === 'checkin') return text.length <= 30 && LISTENING.test(text) && ANYTIME.test(text);
+  if (stage === 'checkin') {
+    return text.length <= rules.maxCheckinChars
+      && rules.listening.some((phrase) => text.includes(phrase))
+      && rules.anytime.some((phrase) => text.includes(phrase));
+  }
   if (stage === 'rest') return !QUESTION.test(text);
   return true;
 }
@@ -38,7 +40,7 @@ function variationHint(config: SilenceDecisionConfig, context: SilenceContext): 
 }
 
 /** Optional speech earns a turn only after a validated, current decision. */
-export function createSilencePlanner(client: TextModelClient, config: SilenceDecisionConfig) {
+export function createSilencePlanner(client: TextModelClient, config: SilenceDecisionConfig, rules: SilenceRules) {
   const decisionSchema = z.discriminatedUnion('speak', [
     z.object({ speak: z.literal(false), close: z.boolean().optional() }).strict(),
     z.object({ speak: z.literal(true), text: z.string().trim().min(1).max(config.maxReplyChars) }).strict(),
@@ -77,7 +79,7 @@ export function createSilencePlanner(client: TextModelClient, config: SilenceDec
     }, { classify: () => signal.aborted ? 'ignorable' : 'fatal' });
     if (signal.aborted) return null;
     const decision = result.ok ? result.value : null;
-    if (decision?.speak && !stageContentOk(context.stage, decision.text)) {
+    if (decision?.speak && !stageContentOk(context.stage, decision.text, rules)) {
       log('silence_decision_rejected', { stage: context.stage, code: 'stage_content' });
       return null;
     }

@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadDirectorConfig } from '../src/config.ts';
+import { DEFAULT_I18N } from '../src/i18n/load.ts';
 import { QwenTextClient } from '../src/memory/textClient.ts';
 import { createSilencePlanner } from '../src/session/silence.ts';
 import type { SilenceContext } from '../src/session/director.ts';
@@ -17,7 +18,7 @@ const client = new QwenTextClient({
   endpoint: process.env.QWEN_SUMMARIZER_ENDPOINT ?? '',
   model: memory.extractModel ?? 'qwen-plus',
 });
-const plan = createSilencePlanner(client, decision);
+const plan = createSilencePlanner(client, decision, DEFAULT_I18N.silence.zh);
 const base = { previousTexts: [], assistantText: '', memorySnapshot: '' };
 const cases: Array<{ name: string; context: SilenceContext }> = [
   { name: 'greeting-memory-1', context: { ...base, stage: 'greeting', userText: '', memorySnapshot: '称呼：王叔。兴趣：越剧、去公园散步。上次聊到想去公园看菊花。' } },

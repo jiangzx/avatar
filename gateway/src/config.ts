@@ -326,50 +326,29 @@ export { DirectorSchema };
 
 const SingleChar = z.string().regex(/^.$/u);
 const DigitChar = z.string().regex(/^[0-9]$/);
-const PhraseList = z.array(z.string().min(1)).min(1);
 
-/** Scan phrases, the Chinese digit map, and the long-number threshold. */
-const SafetyRulesSchema = z.object({
-  minMaskedDigits: z.number().int().min(1).max(64),
-  chineseDigits: z.record(SingleChar, DigitChar).refine((map) => Object.keys(map).length > 0, { message: 'chineseDigits must not be empty' }),
-  rejectPhrases: PhraseList,
-  invisibleCodePoints: z.array(z.number().int().min(0).max(0x10FFFF)).min(1),
-  degradePhrases: PhraseList,
-  markPhrases: PhraseList,
-}).strict();
-
-export type SafetyRules = z.infer<typeof SafetyRulesSchema>;
-
-export function loadSafetyConfig(path: string): SafetyRules {
-  return SafetyRulesSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
-}
-
-/** Shared safety rules: numeric thresholds and code points.
- *  The phrase lists stay until the migration to config/i18n lands; after that they become optional. */
+/** Shared safety rules: thresholds and code points that do not depend on language. */
 export interface SharedSafetyConfig {
   minMaskedDigits: number;
   chineseDigits: Record<string, string>;
   invisibleCodePoints: number[];
-  rejectPhrases?: string[];
-  degradePhrases?: string[];
-  markPhrases?: string[];
 }
 
 const SharedSafetyConfigSchema = z.object({
   minMaskedDigits: z.number().int().min(1).max(64),
   chineseDigits: z.record(SingleChar, DigitChar).refine((map) => Object.keys(map).length > 0, { message: 'chineseDigits must not be empty' }),
   invisibleCodePoints: z.array(z.number().int().min(0).max(0x10FFFF)).min(1),
-  rejectPhrases: PhraseList.optional(),
-  degradePhrases: PhraseList.optional(),
-  markPhrases: PhraseList.optional(),
 }).strict();
 
-/** Localized phrase lists from config/i18n/<lang>/safety.json. */
+/** Localized phrase lists from config/i18n/<language>/safety.json. */
 export interface SafetyPhrases {
   rejectPhrases: readonly string[];
   degradePhrases: readonly string[];
   markPhrases: readonly string[];
 }
+
+/** Everything scanText needs: shared thresholds plus every language's phrases. */
+export type SafetyRules = SharedSafetyConfig & SafetyPhrases;
 
 export function loadSharedSafety(path: string): SharedSafetyConfig {
   return SharedSafetyConfigSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
@@ -381,9 +360,9 @@ export function mergeSafety(shared: SharedSafetyConfig, phrases: SafetyPhrases):
     minMaskedDigits: shared.minMaskedDigits,
     chineseDigits: shared.chineseDigits,
     invisibleCodePoints: shared.invisibleCodePoints,
-    rejectPhrases: unique([...(shared.rejectPhrases ?? []), ...phrases.rejectPhrases]),
-    degradePhrases: unique([...(shared.degradePhrases ?? []), ...phrases.degradePhrases]),
-    markPhrases: unique([...(shared.markPhrases ?? []), ...phrases.markPhrases]),
+    rejectPhrases: unique(phrases.rejectPhrases),
+    degradePhrases: unique(phrases.degradePhrases),
+    markPhrases: unique(phrases.markPhrases),
   };
 }
 

@@ -7,8 +7,8 @@ import { QwenAdapter } from '../src/adapters/qwen.ts';
 import { loadConfig } from '../src/config.ts';
 import { parseEvalArgs, resolveEvalOut } from '../src/eval/cli.ts';
 import { loadEvalConfig, loadScenarios, renderReport, runScenario, summarize, type ReplyRecord, type SessionMaker } from '../src/eval/harness.ts';
+import { loadI18n } from '../src/i18n/load.ts';
 import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
-import { loadEmotionConfig } from '../src/session/emotion.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from '../src/session/pacing.ts';
 import { Session } from '../src/session/session.ts';
@@ -32,6 +32,7 @@ const styleId = args.style ?? roles.defaultStyle(roleId);
 if (!roles.hasStyle(roleId, styleId)) throw new Error(`unknown style ${styleId}`);
 const pacing = loadPacing(`${root}config/pacing.json`);
 const memoryConfig = loadMemoryBudget(`${root}config/memory.json`);
+const i18n = loadI18n(`${root}config`);
 const personasByLanguage: Partial<Record<'zh' | 'ja' | 'en', string[]>> = {};
 for (const pair of roles.languagePairs()) {
   (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
@@ -58,7 +59,7 @@ const make: SessionMaker = (onReplyMetrics) => new Session({
   summarizePolicy: pacing.policies.summarize,
   ...(pacing.output.maxTokens !== null ? { maxOutputTokens: pacing.output.maxTokens } : {}),
   tailGuardMs: pacing.tailGuardMs,
-  emotion: loadEmotionConfig(`${root}config/emotion.json`),
+  emotion: i18n.emotion,
   onReplyMetrics,
 }, { roleId, styleId, voice: roles.voiceFor(roleId, styleId) });
 

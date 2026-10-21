@@ -1190,6 +1190,84 @@ describe('Session', () => {
     s.session.end();
   });
 
+  it('verifies the memory notice with the language it was requested in', async () => {
+    const markNotified = vi.fn();
+    const roles = fixedRoleCatalog('P', director, {
+      languages: ['zh', 'ja'],
+      defaultLanguage: 'zh',
+      directors: { ja: { ...director, memoryNoticeText: 'これからは覚えておきますね。' } },
+    });
+    const s = setup({
+      roles,
+      writer: { append: () => 'stored', markNotified },
+      noticeKeywordsByLanguage: { zh: ['记着'], ja: ['覚えて'] },
+      adapterFactory: () => new MockAdapter({
+        script: { ...script, memoryNotice: 'これからは覚えておきますね。' },
+        replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+      }),
+    }, { ...ownedCtx, language: 'ja' }, 'notice-ja', true);
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(1000);
+    const notice = of(s.sent, 'response.start').at(-1)!;
+    expect(assistantText(s.sent, notice.responseSeq)).toContain('覚えて');
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: notice.responseSeq, playedMs: 300, reason: 'ended' });
+    expect(markNotified).toHaveBeenCalledTimes(1);
+    s.session.end();
+  });
+
+  it('keeps the request language for notice verification after a language switch', async () => {
+    const markNotified = vi.fn();
+    const roles = fixedRoleCatalog('P', director, {
+      languages: ['zh', 'en'],
+      defaultLanguage: 'zh',
+      directors: { en: { ...director, memoryNoticeText: 'Okay, done.' } },
+    });
+    const s = setup({
+      roles,
+      writer: { append: () => 'stored', markNotified },
+      noticeKeywordsByLanguage: { zh: ['记着'], en: ['remember'] },
+    }, ownedCtx, 'notice-switch', true);
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(1000);
+    const notice = of(s.sent, 'response.start').at(-1)!;
+    s.session.setInitialLanguage('en');
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: notice.responseSeq, playedMs: 300, reason: 'ended' });
+    expect(markNotified).toHaveBeenCalledTimes(1);
+    s.session.end();
+  });
+
+  it('rejects a notice missing its language keyword and retries it', async () => {
+    const markNotified = vi.fn();
+    const cues: Array<string | undefined> = [];
+    const roles = fixedRoleCatalog('P', director, {
+      languages: ['zh', 'en'],
+      defaultLanguage: 'zh',
+      // Chinese copy, but the request is in English and the en keyword is absent.
+      directors: { en: { ...director, memoryNoticeText: '好，我会记着。' } },
+    });
+    const s = setup({
+      roles,
+      writer: { append: () => 'stored', markNotified },
+      noticeKeywordsByLanguage: { en: ['remember'] },
+      adapterFactory: () => {
+        const m = new MockAdapter({
+          script: { ...script, memoryNotice: '好，我会记着。' },
+          replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+        });
+        const create = m.createResponse.bind(m);
+        m.createResponse = (request) => { cues.push(request?.cue); return create(request); };
+        return m;
+      },
+    }, { ...ownedCtx, language: 'en' }, 'notice-en-mismatch', true);
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(1000);
+    const notice = of(s.sent, 'response.start').at(-1)!;
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: notice.responseSeq, playedMs: 300, reason: 'ended' });
+    expect(markNotified).not.toHaveBeenCalled();
+    expect(cues.filter((cue) => cue === 'memoryNotice').length).toBeGreaterThanOrEqual(2);
+    s.session.end();
+  });
+
   it('retries a notice that ends without playback ended, then marks notified once', async () => {
     const markNotified = vi.fn();
     const cues: Array<string | undefined> = [];
