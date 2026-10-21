@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Language } from '@anyidea/protocol';
+import { dominantLanguage } from '../i18n/language.ts';
 import { DEFAULT_I18N } from '../i18n/load.ts';
 import type { ExtractLabels } from '../i18n/types.ts';
 import { log } from '../log.ts';
 import { errorCodeOf, runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import type { SessionContext } from '../session/context.ts';
-import { dominantLanguage } from '../session/language.ts';
 import type { SessionLifecycle } from '../session/manager.ts';
 import { applyExtractOps, parseExtractOps, type TextModelClient } from './extract.ts';
 import type { ExtractMemory, MemoryStore, PendingMessage } from './store.ts';

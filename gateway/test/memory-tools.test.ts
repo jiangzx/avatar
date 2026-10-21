@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +23,7 @@ import { createToolRegistry, type ToolContext } from '../src/session/tools/regis
 
 const memory = loadMemoryBudget(fileURLToPath(new URL('../config/memory.json', import.meta.url)));
 const i18n = loadI18n(fileURLToPath(new URL('../config', import.meta.url)));
+const jaRecallPrompt = readFileSync(fileURLToPath(new URL('../roles/_shared/ja/recall.md', import.meta.url)), 'utf8').trim();
 const dbs: DatabaseSync[] = [];
 const policy = { timeoutMs: 1_000, retries: 0, backoffMs: 0, maxBackoffMs: 0 };
 
@@ -138,7 +140,7 @@ describe('memory tool registry', () => {
       memory: i18n.memory.ja,
       evidence: i18n.evidence,
       recentQueries: i18n.recentQueries,
-      recallPrompt: 'RECALL JA',
+      recallPrompt: jaRecallPrompt,
       safety: i18n.safety,
       clipChars: 80,
       phraseTimeoutMs: 1_500,
@@ -148,11 +150,31 @@ describe('memory tool registry', () => {
     const hit = await ja.handle('recall_memory', { query: 'ヨガ' }, ctx);
     expect(hit.ok).toBe(true);
     expect(hit.spokenText).toContain('ヨガ');
+    expect(hit.text).toBe(`${i18n.memory.ja.recall.wrapText}\n${text}`);
     expect(ja.specs().find((spec) => spec.name === 'recall_memory')?.description).toBe(i18n.memory.ja.recall.toolDescription);
-    expect(ja.specs().find((spec) => spec.name === 'perform_action')?.description).toBe(i18n.memory.ja.performAction.toolDescription);
+    const actionSpec = ja.specs().find((spec) => spec.name === 'perform_action');
+    expect(actionSpec?.description).toBe(i18n.memory.ja.performAction.toolDescription);
+    expect(actionSpec?.parameters).toMatchObject({
+      properties: { action: { description: i18n.memory.ja.performAction.actionDescription } },
+    });
+
+    // The registry must pass the ja shared prompt to the phrasing model.
+    const systems: string[] = [];
+    const phrased = await ja.handle('recall_memory', { query: 'ヨガ' }, {
+      ...ctx,
+      textClient: {
+        complete: async (input) => {
+          systems.push(input.system);
+          return JSON.stringify({ text: 'ヨガを続けているんですね。' });
+        },
+      },
+    });
+    expect(systems).toEqual([jaRecallPrompt]);
+    expect(phrased.spokenText).toBe('ヨガを続けているんですね。');
 
     const miss = await ja.handle('recall_memory', { query: '存在しない言葉' }, ctx);
     expect(miss.spokenText).toBe(i18n.memory.ja.recall.emptyText);
+    expect(miss.text).toBe(i18n.memory.ja.recall.wrapText);
   });
 
   it('recalls separated topic keywords without requiring a cross-boundary bigram', async () => {

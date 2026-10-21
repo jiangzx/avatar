@@ -73,16 +73,5 @@ export function detectLanguage(text: string, previous: Language = 'zh', rules: L
   return latin > han ? 'en' : previous;
 }
 
-/** Batch language for extraction: any kana means ja; otherwise the dominant script decides. */
-export function dominantLanguage(texts: readonly string[]): Language {
-  let han = 0;
-  let latin = 0;
-  for (const text of texts) {
-    if (KANA.test(text)) return 'ja';
-    for (const ch of text) {
-      if (HAN.test(ch)) han++;
-      else if (LATIN.test(ch)) latin++;
-    }
-  }
-  return latin > han ? 'en' : 'zh';
-}
+// Batch-language detection lives in the i18n layer so memory code never imports session code.
+export { dominantLanguage } from '../i18n/language.ts';

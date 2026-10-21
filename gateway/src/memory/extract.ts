@@ -102,10 +102,7 @@ export function loadExtractPrompt(path = fileURLToPath(new URL('../../roles/_sha
 export function loadExtractPrompts(rolesRoot: string): Record<Language, string> {
   const prompts = {} as Record<Language, string>;
   for (const language of LANGUAGES) {
-    const path = join(rolesRoot, '_shared', language, 'extract.md');
-    const text = readFileSync(path, 'utf8').trim();
-    if (!text) throw new Error(`empty_extract_prompt:${language}`);
-    prompts[language] = text;
+    prompts[language] = loadExtractPrompt(join(rolesRoot, '_shared', language, 'extract.md'));
   }
   return prompts;
 }
