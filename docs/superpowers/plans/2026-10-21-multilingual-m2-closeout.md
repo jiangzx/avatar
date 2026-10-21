@@ -851,7 +851,7 @@ git add docs/project/roadmap.md docs/blockers.md docs/superpowers/plans/2026-10-
 git commit -m "docs: record M2 closeout verification"
 ```
 
-- [ ] **Step 4: 整分支复查**
+- [x] **Step 4: 整分支复查**
 
 对本轮 `14165e4..HEAD` 做 scoped review；确认无新增 Critical/Important 后，再按 finishing-a-development-branch 给合并选项。未得到用户明确同意前不合并、不推送。
 
