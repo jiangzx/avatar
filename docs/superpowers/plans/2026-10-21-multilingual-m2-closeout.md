@@ -1,6 +1,6 @@
 # 多语言 M2 收尾修复 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 在不改变中文既有行为、不进入 M3 范围的前提下，修掉 M2 整分支复查留下的合并前限制（A1–A8），并把真实记忆库只读探针扩展到 zh/ja/en 查询。
 
@@ -88,7 +88,7 @@
 - Produces: `RecallCopy.recentQueryExactPatterns: readonly string[]`（可选，默认空）。
 - Consumes: 既有 `recentQueryPatterns`、`queryFramePatterns`、`questionPatterns`。
 
-- [ ] **Step 1: 写失败测试（证据问句）**
+- [x] **Step 1: 写失败测试（证据问句）**
 
 在 `gateway/test/evidence.test.ts` 的 `rejects ja/en questions but keeps statements` 之后加：
 
@@ -102,7 +102,7 @@ it('keeps en statements that start with what/how/have', () => {
 });
 ```
 
-- [ ] **Step 2: 写失败测试（召回路由）**
+- [x] **Step 2: 写失败测试（召回路由）**
 
 在 `gateway/test/memory-tools.test.ts` 的 en 模糊回忆用例后加：
 
@@ -135,12 +135,12 @@ it('routes en specific recall to FTS instead of vague recall', async () => {
 });
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/evidence.test.ts test/memory-tools.test.ts`
 Expected: FAIL（en 问句模式仍把 `What/How/Have` 陈述判为非证据；具体查询仍走 recent 路径）。
 
-- [ ] **Step 4: 扩展 exact 模糊问接口**
+- [x] **Step 4: 扩展 exact 模糊问接口**
 
 `gateway/src/i18n/types.ts` 的 `RecallTextCopy` 加：
 
@@ -185,7 +185,7 @@ function isRecentQuery(normalized: string, copy: RecallCopy): boolean {
       recentQueryExactPatterns: options.memory.recall.recentQueryExactPatterns ?? [],
 ```
 
-- [ ] **Step 5: 改 en 配置**
+- [x] **Step 5: 改 en 配置**
 
 `gateway/config/i18n/en/memory.json`：
 
@@ -224,7 +224,7 @@ function isRecentQuery(normalized: string, copy: RecallCopy): boolean {
 ]
 ```
 
-- [ ] **Step 6: 扩展合成探针**
+- [x] **Step 6: 扩展合成探针**
 
 在 `docs/testing/plan3-multilingual-recall-probe.mjs` 的 en vague owner 增加一条更新的陈述：
 
@@ -252,7 +252,7 @@ for (const query of ['Do you remember?', 'What did we say?', 'What did we talk a
 }
 ```
 
-- [ ] **Step 7: 跑聚焦、全量与真实库**
+- [x] **Step 7: 跑聚焦、全量与真实库**
 
 Run: `npm test -w gateway -- test/evidence.test.ts test/memory-tools.test.ts`
 Expected: PASS。
@@ -266,7 +266,7 @@ Expected: PASS。
 Run: `node docs/testing/plan3-multilingual-recall-probe.mjs --real-db /Users/jed/.avatar/memory.db`
 Expected: 三个中文查询仍为 `true/true/false`；不打印正文。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add gateway/config/i18n/en/memory.json gateway/src/i18n/types.ts gateway/src/i18n/load.ts gateway/src/session/tools/recall.ts gateway/src/session/tools/registry.ts gateway/test/evidence.test.ts gateway/test/memory-tools.test.ts docs/testing/plan3-multilingual-recall-probe.mjs
@@ -288,7 +288,7 @@ git commit -m "fix(gateway): narrow en recall question patterns"
 - Produces: `ConversationLedger.summarizeThreshold: number`（getter）、`setSummarizeAfterTokens(tokens: number): void`（只降不升）。
 - Consumes: `historyBudget(persona, budget, labels)`、`SessionDeps.budgets`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `gateway/test/session.test.ts` 的 `uses the initial language budget for the history room` 后加：
 
@@ -324,12 +324,12 @@ it('lowers the summary threshold when switching to a smaller language budget', (
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/session.test.ts`
 Expected: FAIL（`summarizeThreshold` 不存在；全局 fallback 覆盖语言预算）。
 
-- [ ] **Step 3: 实现阈值 getter/setter**
+- [x] **Step 3: 实现阈值 getter/setter**
 
 `gateway/src/session/ledger.ts`：
 
@@ -358,7 +358,7 @@ export class ConversationLedger {
 }
 ```
 
-- [ ] **Step 4: 会话按当前语言计算 history room**
+- [x] **Step 4: 会话按当前语言计算 history room**
 
 `gateway/src/session/session.ts` 构造器：
 
@@ -383,7 +383,7 @@ export class ConversationLedger {
 
 把 `SessionDeps.maxHistoryChars` 注释改为“per-language budget 缺失时的测试 fallback”。
 
-- [ ] **Step 5: 去掉生产/eval 的全局阈值，补 eval i18n**
+- [x] **Step 5: 去掉生产/eval 的全局阈值，补 eval i18n**
 
 `gateway/src/index.ts` 删除 SessionDeps 里的：
 
@@ -410,7 +410,7 @@ export class ConversationLedger {
 
 文件头注释加一句：`// Scenarios are zh-only; multilingual behavior is covered by gateway/test/multilingual.test.ts.`
 
-- [ ] **Step 6: 跑聚焦、全量与真实库**
+- [x] **Step 6: 跑聚焦、全量与真实库**
 
 Run: `npm test -w gateway -- test/session.test.ts test/ledger.test.ts`
 Expected: PASS。
@@ -421,7 +421,7 @@ Expected: PASS。
 Run: `node docs/testing/plan3-multilingual-recall-probe.mjs --real-db /Users/jed/.avatar/memory.db`
 Expected: `true/true/false` 不变。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add gateway/src/session/ledger.ts gateway/src/session/session.ts gateway/src/index.ts gateway/scripts/eval.ts gateway/test/session.test.ts
@@ -437,7 +437,7 @@ git commit -m "fix(gateway): scope summary threshold to session language"
 - Modify: `gateway/config/i18n/en/emotion.json`
 - Test: `gateway/test/emotion.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `gateway/test/emotion.test.ts` 的 `ships a valid merged lexicon config` 后加：
 
@@ -451,12 +451,12 @@ it('matches English emotion words regardless of sentence case', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/emotion.test.ts`
 Expected: FAIL（`Sad`/`Lonely`/`Thank` 大小写不匹配；`sadness` 未入词表）。
 
-- [ ] **Step 3: 实现共享短语匹配**
+- [x] **Step 3: 实现共享短语匹配**
 
 `gateway/src/session/emotion.ts`：
 
@@ -471,7 +471,7 @@ export function tagEmotion(text: string, cfg: EmotionConfig): Emotion | null {
 
 `gateway/config/i18n/en/emotion.json` 的 `sad` 数组补 `"sadness"`、`"loneliness"`。
 
-- [ ] **Step 4: 跑聚焦与全量**
+- [x] **Step 4: 跑聚焦与全量**
 
 Run: `npm test -w gateway -- test/emotion.test.ts`
 Expected: PASS。
@@ -479,7 +479,7 @@ Expected: PASS。
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS；中文情绪用例不变。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add gateway/src/session/emotion.ts gateway/config/i18n/en/emotion.json gateway/test/emotion.test.ts
@@ -512,7 +512,7 @@ git commit -m "fix(gateway): match emotion words case-insensitively"
 - Test: `gateway/test/silence.test.ts`
 - Test: `gateway/test/session.test.ts`
 
-- [ ] **Step 1: 写失败/守卫测试**
+- [x] **Step 1: 写失败/守卫测试**
 
 `gateway/test/memory-text.test.ts` 的 kana backfill 用例后加：
 
@@ -589,12 +589,12 @@ it('uses the latest language for session-end extraction', async () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/memory-text.test.ts test/extract.test.ts test/fileCatalog.test.ts test/silence.test.ts test/session.test.ts`
 Expected: FAIL（`loadExtractPrompts` 签名/`missingRoleLanguages`/`shared_missing:ja:directory`/非正 limit 等未实现）。
 
-- [ ] **Step 3: 实现卫生项**
+- [x] **Step 3: 实现卫生项**
 
 1. 新建 `gateway/src/unique.ts`：
 
@@ -660,7 +660,7 @@ export function missingRoleLanguages(
 
 8. 删除 `config/memory.json` 的 `recallPhraseMaxChars` 与 `pacing.ts` 的 schema 字段。
 
-- [ ] **Step 4: 跑聚焦与全量**
+- [x] **Step 4: 跑聚焦与全量**
 
 Run: `npm test -w gateway -- test/memory-text.test.ts test/extract.test.ts test/fileCatalog.test.ts test/silence.test.ts test/session.test.ts test/memory-tools.test.ts`
 Expected: PASS。
@@ -668,7 +668,7 @@ Expected: PASS。
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add gateway/src/unique.ts gateway/src/config.ts gateway/src/i18n/load.ts gateway/src/i18n/emotion.ts gateway/src/i18n/language.ts gateway/src/session/language.ts gateway/src/memory/backfill.ts gateway/src/memory/extract.ts gateway/src/session/tools/consent.ts gateway/src/session/tools/registry.ts gateway/src/roles/catalog.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/config/memory.json gateway/src/session/pacing.ts gateway/test/memory-text.test.ts gateway/test/extract.test.ts gateway/test/fileCatalog.test.ts gateway/test/silence.test.ts gateway/test/session.test.ts
@@ -684,7 +684,7 @@ git commit -m "refactor(gateway): remove dead recall config and dedupe helpers"
 - Modify: `docs/testing/plan3-mock-smoke.mjs`
 - Modify: `docs/superpowers/plans/2026-10-21-multilingual-m2-localization.md`
 
-- [ ] **Step 1: 扩展真实库查询**
+- [x] **Step 1: 扩展真实库查询**
 
 `docs/testing/plan3-multilingual-recall-probe.mjs` 顶部替换 `ROADMAP_QUERIES`：
 
@@ -721,7 +721,7 @@ async function runQueries(store, ownerId) {
 
 `runRealDb` 调用改为 `await runQueries(store, ownerId);`。文件头注释说明：en/ja 查询是只读诊断，不断言命中；`newTitleFlag` 结构上为 false。
 
-- [ ] **Step 2: smoke 显式 zh**
+- [x] **Step 2: smoke 显式 zh**
 
 `docs/testing/plan3-mock-smoke.mjs`：
 
@@ -731,11 +731,11 @@ async function runQueries(store, ownerId) {
 
 头部注释加：`// zh regression smoke; multilingual behavior is covered by gateway/test/multilingual.test.ts.`
 
-- [ ] **Step 3: 补勾 plan Task 1–5**
+- [x] **Step 3: 补勾 plan Task 1–5**
 
-把 `docs/superpowers/plans/2026-10-21-multilingual-m2-localization.md` 中 Task 1–5 的 37 个 `- [ ]` 改为 `- [x]`；Task 6 已是 `[x]`，不动。
+把 `docs/superpowers/plans/2026-10-21-multilingual-m2-localization.md` 中 Task 1–5 的 37 个 `- [x]` 改为 `- [x]`；Task 6 已是 `[x]`，不动。
 
-- [ ] **Step 4: 验证**
+- [x] **Step 4: 验证**
 
 Run: `node --check docs/testing/plan3-multilingual-recall-probe.mjs && node --check docs/testing/plan3-mock-smoke.mjs`
 Expected: PASS。
@@ -749,7 +749,7 @@ Expected: 7 行 JSON；只读、无正文；中文三行仍 `true/true/false`。
 Run: `node --import tsx docs/testing/plan3-mock-smoke.mjs`
 Expected: `passed: true`（若环境无法启动 8797，记录 NOT RUN，不伪造通过）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add docs/testing/plan3-multilingual-recall-probe.mjs docs/testing/plan3-mock-smoke.mjs docs/superpowers/plans/2026-10-21-multilingual-m2-localization.md
@@ -766,7 +766,7 @@ git commit -m "test: extend multilingual probe and tick M2 plan"
 - Modify: `gateway/roles/elder-companion/en/director.json`
 - Test: `gateway/test/config.test.ts`
 
-- [ ] **Step 1: 内容修改**
+- [x] **Step 1: 内容修改**
 
 `ja/styles/old-friend.md`：
 
@@ -781,7 +781,7 @@ git commit -m "test: extend multilingual probe and tick M2 plan"
 
 `en/director.json` 的 `variationHintLabel` 末尾补一个空格（`... requirements): `），使拼接后的提示为 `: ` 开头 content。
 
-- [ ] **Step 2: 加配置守卫测试**
+- [x] **Step 2: 加配置守卫测试**
 
 `gateway/test/config.test.ts`：
 
@@ -793,7 +793,7 @@ it('gives the en silence hint label a trailing space', () => {
 });
 ```
 
-- [ ] **Step 3: 验证**
+- [x] **Step 3: 验证**
 
 Run: `npm test -w gateway -- test/config.test.ts test/fileCatalog.test.ts test/silence.test.ts`
 Expected: PASS；固定兜底话术与 parity 不变。
@@ -801,7 +801,7 @@ Expected: PASS；固定兜底话术与 parity 不变。
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: PASS。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add gateway/roles/elder-companion/ja/styles/old-friend.md gateway/roles/elder-companion/en/styles/grandchild.md gateway/roles/elder-companion/en/director.json gateway/test/config.test.ts
@@ -817,7 +817,7 @@ git commit -m "fix(gateway): polish ja/en persona copy"
 - Modify: `docs/blockers.md`
 - Modify: `docs/superpowers/plans/2026-10-21-multilingual-m2-closeout.md`（勾选本计划步骤）
 
-- [ ] **Step 1: 跑完整验证**
+- [x] **Step 1: 跑完整验证**
 
 Run: `npm test -w gateway`
 Expected: PASS，记录文件/用例数。
@@ -840,11 +840,11 @@ Expected: PASS。
 Run: `node docs/testing/plan3-multilingual-recall-probe.mjs --real-db /Users/jed/.avatar/memory.db`
 Expected: 7 行 JSON；中文三行 `true/true/false`；不打印正文。
 
-- [ ] **Step 2: 更新 roadmap / blockers**
+- [x] **Step 2: 更新 roadmap / blockers**
 
 `docs/project/roadmap.md` 文首 M2 段追加本轮 closeout 结果：实际测试计数、探针结果、仍 deferred 的 B1/B2/B3/C1 迁移/D1 grounded。`docs/blockers.md` 只补 M2 closeout 说明；#45/#46 状态不变。
 
-- [ ] **Step 3: 勾选本计划并提交文档**
+- [x] **Step 3: 勾选本计划并提交文档**
 
 ```bash
 git add docs/project/roadmap.md docs/blockers.md docs/superpowers/plans/2026-10-21-multilingual-m2-closeout.md
