@@ -324,8 +324,14 @@ describe('memory tool registry', () => {
       'What did we talk about today?',
       'What did we talk about earlier?',
       'What did we talk about this morning?',
+      'What did we talk about last night?',
+      'What did we talk about last week?',
+      'What did we talk about this afternoon?',
+      'What did we talk about in the morning?',
       'What did we say just now?',
       'What did we talk about? ❤️',
+      'You know, what did we talk about?',
+      'Do you remember our last conversation?',
     ]) {
       const vague = await registryFor('en').handle('recall_memory', { query }, ctx());
       expect(vague.spokenFound).toBe(true);

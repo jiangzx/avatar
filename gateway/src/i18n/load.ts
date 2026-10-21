@@ -53,6 +53,8 @@ const MemoryFileSchema = z.object({
     lightAcks: StringList,
     recentQueryPatterns: StringList,
     recentQueryExactPatterns: StringList.optional(),
+    recentQueryLeadingFillers: StringList.optional(),
+    recentQueryTrailingFillers: StringList.optional(),
     queryFramePatterns: StringList.min(1),
     phraseMaxChars: z.number().int().min(1).max(1000),
   }).strict(),
@@ -184,6 +186,8 @@ function loadMemoryCopy(configRoot: string, language: Language): MemoryCopy {
     recall: {
       ...raw.recall,
       recentQueryExactPatterns: raw.recall.recentQueryExactPatterns ?? [],
+      recentQueryLeadingFillers: raw.recall.recentQueryLeadingFillers ?? [],
+      recentQueryTrailingFillers: raw.recall.recentQueryTrailingFillers ?? [],
       // Stored as sources in JSON; recall matches text and needs compiled patterns.
       queryFramePatterns: raw.recall.queryFramePatterns.map((source) => compilePattern(source, language, 'queryFramePatterns')),
     },

@@ -45,8 +45,12 @@ export interface RecallTextCopy {
   skipPatterns: readonly string[];
   lightAcks: readonly string[];
   recentQueryPatterns: readonly string[];
-  /** Bare vague questions; match only when the query carries no extra content. */
+  /** Bare vague questions; bounded leading/trailing filler words do not make them specific. */
   recentQueryExactPatterns: readonly string[];
+  /** Bounded filler words ignored before a bare vague question (multi-word entries allowed). */
+  recentQueryLeadingFillers: readonly string[];
+  /** Bounded filler/time words ignored after a bare vague question (multi-word entries allowed). */
+  recentQueryTrailingFillers: readonly string[];
   /** First-person "I said" frames stripped from the query before FTS tokenization. */
   queryFramePatterns: readonly RegExp[];
   phraseMaxChars: number;

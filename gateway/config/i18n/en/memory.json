@@ -16,6 +16,8 @@
     "lightAcks": ["ok", "okay", "yes", "yeah", "yep", "no", "nope", "sure", "alright", "got it", "i see"],
     "recentQueryPatterns": [],
     "recentQueryExactPatterns": ["what did we talk about", "what were we talking about", "what did we discuss", "what did we say", "what did i say", "last time we talked", "last conversation", "talked about last time", "do you remember", "remember when", "did we talk"],
+    "recentQueryLeadingFillers": ["and", "so", "okay", "ok", "well", "now", "um", "uh", "oh", "hey", "alright", "then", "but", "you know", "i mean"],
+    "recentQueryTrailingFillers": ["last", "time", "night", "week", "month", "before", "yesterday", "today", "earlier", "morning", "afternoon", "evening", "this", "just", "now", "previously", "recently", "again", "please", "ago", "day", "in", "the", "our", "conversation"],
     "queryFramePatterns": ["^(?:did|do|have)\\s+(?:i|you|we)\\s+(?:ever\\s+)?(?:say|said|tell|told|mention(?:ed)?|talk\\s+about)\\s+(?:(?:that|i|you|we)\\s+)*", "^(?:do|did)\\s+you\\s+remember\\s+(?:(?:that|what|when|where|who|how|if)\\s+)?", "^what\\s+(?:did|do|does)\\s+(?:i|you|we)\\s+(?:say|said|tell|told|mention(?:ed)?|talk\\s+about|discuss(?:ed)?)\\s+(?:about\\s+)?", "^i\\s+(?:said|told\\s+you|mentioned)\\s+(?:(?:that|i|you|we)\\s+)*"],
     "phraseMaxChars": 120
   },

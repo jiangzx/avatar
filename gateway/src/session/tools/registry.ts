@@ -124,6 +124,8 @@ export function createToolRegistry(options: ToolRegistryOptions = defaultToolOpt
       questionPatterns: options.evidence.questionPatterns,
       recentQueryPatterns: options.recentQueries,
       recentQueryExactPatterns: options.memory.recall.recentQueryExactPatterns,
+      recentQueryLeadingFillers: options.memory.recall.recentQueryLeadingFillers,
+      recentQueryTrailingFillers: options.memory.recall.recentQueryTrailingFillers,
       queryFramePatterns: options.memory.recall.queryFramePatterns,
       phraseInstruction: options.recallPrompt,
       phraseMaxChars: options.memory.recall.phraseMaxChars,

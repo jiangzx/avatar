@@ -10,6 +10,7 @@
 //
 // --temp builds a synthetic in-memory database, drives the production
 // createToolRegistry()/recall_memory path, and asserts the multilingual recall contract.
+// Time words in a vague query only select the recent-statement path; no date filtering is done.
 // Synthetic text may be printed only in this mode.
 //
 // --real-db opens the given SQLite file read-only (no migrations, no PRAGMA journal_mode,
@@ -356,8 +357,14 @@ async function runTemp() {
       'What did we talk about today?',
       'What did we talk about earlier?',
       'What did we talk about this morning?',
+      'What did we talk about last night?',
+      'What did we talk about last week?',
+      'What did we talk about this afternoon?',
+      'What did we talk about in the morning?',
       'What did we say just now?',
       'What did we talk about? ❤️',
+      'You know, what did we talk about?',
+      'Do you remember our last conversation?',
     ]) {
       const vague = await en.handle('recall_memory', { query }, vagueCtx());
       check(vague.spokenFound === true, 'en_filler_vague_found');

@@ -165,4 +165,4 @@
 ## 2026-10-21 M2 多语言状态
 
 - M2 的 ja/en 内容包、`gateway/config/i18n/*` 与记忆/安全/情绪/沉默本地化已通过单元/合成验证（gateway 45 个测试文件、632 项通过、无 expected fail；typecheck、Flutter 182 项、中文回归 218 项通过；`--temp` 召回探针 78 项断言通过）。Seeduplex 日语仍无能力（#46），真机未验收；真实记忆库只读探针已跑通（预 M2 schema 缺 `meta` 表时走同 SQL 的只读 fallback，不迁移、不写入），三个查询 `hits` 依次为 true/true/false、`evidenceCount` 为 2/2/0、`newTitleFlag` 均为 false。第三个查询此前误命中无关陈述，已用按语言的 `recall.queryFramePatterns` 在 FTS 前剥离第一人称转述框架修复（覆盖问句前缀、英文间接宾语 `that` 与前导空白；`--temp` 覆盖否定句/轻回应不作为证据）；最终复查又修 en 模糊回忆归一化、静默/告知短语大小写与词边界、en 包装词元门槛、zh 填充词/「我记得」前缀、en/ja checkin 长度与 `variationHintLabel` 本地化；详见 `docs/project/roadmap.md` 文首。
-- 2026-10-21 M2 closeout：A1–A8 修复已通过 gateway 45/645、typecheck、Flutter 182、根 `npm test` 6/645/114+5、`--temp` 116、Mock smoke；真实库探针扩展为 7 条只读查询（zh 三条 true/true/false；en/ja 诊断行不要求命中，仍未打印正文）。#45/#46 不解除；真实库未迁移、未写入；8787 与真机未操作。
+- 2026-10-21 M2 closeout：A1–A8 修复已通过 gateway 45/645、typecheck、Flutter 182、根 `npm test` 6/645/114+5、`--temp` 128、Mock smoke；真实库探针扩展为 7 条只读查询（zh 三条 true/true/false；en/ja 诊断行不要求命中，仍未打印正文）。#45/#46 不解除；真实库未迁移、未写入；8787 与真机未操作。

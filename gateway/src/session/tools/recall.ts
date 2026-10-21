@@ -40,8 +40,10 @@ function sameUtterance(a: string, b: string): boolean {
   return normalize(a) === normalize(b);
 }
 
-const LEADING_FILLERS = new Set(['and', 'so', 'okay', 'ok', 'well', 'now', 'um', 'uh', 'oh', 'hey', 'alright', 'then', 'but']);
-const TRAILING_FILLERS = new Set(['last', 'time', 'before', 'yesterday', 'today', 'earlier', 'morning', 'this', 'just', 'now', 'previously', 'recently', 'again', 'please']);
+/** Config phrases may be multi-word; matching is token-based. */
+function fillerWords(phrases: readonly string[]): Set<string> {
+  return new Set(phrases.flatMap((phrase) => phrase.toLowerCase().split(/\s+/)).filter(Boolean));
+}
 
 /** Whole-utterance key: ignore whitespace and edge punctuation/symbols. */
 function utteranceKey(text: string): string {
@@ -55,23 +57,25 @@ function utteranceKey(text: string): string {
  * Bare vague questions may carry a leading filler or a trailing time word.
  * Anything else after the phrase is content and must go to FTS.
  */
-function vagueKey(text: string): string {
+function vagueKey(text: string, leading: ReadonlySet<string>, trailing: ReadonlySet<string>): string {
   const words = text
     .toLowerCase()
     .replace(/[\p{P}\p{S}\p{M}]+/gu, ' ')
     .split(/\s+/)
     .filter(Boolean);
-  while (words.length > 0 && LEADING_FILLERS.has(words[0]!)) words.shift();
-  while (words.length > 0 && TRAILING_FILLERS.has(words[words.length - 1]!)) words.pop();
+  while (words.length > 0 && leading.has(words[0]!)) words.shift();
+  while (words.length > 0 && trailing.has(words[words.length - 1]!)) words.pop();
   return words.join('');
 }
 
-/** A bare vague question stays vague; "what did we say about X" must go to FTS instead. */
+/** A bare vague question stays vague; content after the phrase must go to FTS instead. */
 function isRecentQuery(query: string, copy: RecallCopy): boolean {
   const normalized = query.replace(/\s/g, '').toLowerCase();
-  const key = vagueKey(query);
+  const leading = fillerWords(copy.recentQueryLeadingFillers);
+  const trailing = fillerWords(copy.recentQueryTrailingFillers);
+  const key = vagueKey(query, leading, trailing);
   if (copy.recentQueryExactPatterns.some((pattern) => {
-    const value = vagueKey(pattern);
+    const value = vagueKey(pattern, leading, trailing);
     return value.length > 0 && key === value;
   })) return true;
   return copy.recentQueryPatterns.some((pattern) => {
@@ -108,8 +112,12 @@ export interface RecallCopy {
   questionPatterns: readonly RegExp[];
   /** Vague "what did we talk about" queries answer from recent user statements instead of FTS. */
   recentQueryPatterns: readonly string[];
-  /** Bare vague questions; extra content after the phrase makes it a specific FTS query. */
+  /** Bare vague questions; bounded leading/trailing fillers still count as vague. */
   recentQueryExactPatterns: readonly string[];
+  /** Words ignored before an exact vague question. */
+  recentQueryLeadingFillers: readonly string[];
+  /** Words ignored after an exact vague question. */
+  recentQueryTrailingFillers: readonly string[];
   /** First-person "I said" frames; stripped before FTS so frame words alone cannot hit. */
   queryFramePatterns: readonly RegExp[];
   /** System prompt for natural phrasing of a grounded line. */
