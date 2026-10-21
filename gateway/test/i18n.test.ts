@@ -92,6 +92,15 @@ describe('loadI18n', () => {
     expect(() => loadI18n(dir)).toThrow(/i18n_pattern_invalid:zh:queryFramePatterns/);
   });
 
+  it('fails fast on an empty query-frame pattern list', () => {
+    const dir = copyConfig();
+    const path = join(dir, 'i18n', 'en', 'memory.json');
+    const value = JSON.parse(readFileSync(path, 'utf8')) as { recall: { queryFramePatterns: string[] } };
+    value.recall.queryFramePatterns = [];
+    writeFileSync(path, JSON.stringify(value));
+    expect(() => loadI18n(dir)).toThrow(/i18n_invalid:en:memory/);
+  });
+
   it('fails fast on an invalid explicit request pattern', () => {
     const dir = copyConfig();
     const path = join(dir, 'i18n', 'en', 'language.json');

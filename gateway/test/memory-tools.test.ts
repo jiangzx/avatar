@@ -200,11 +200,23 @@ describe('memory tool registry', () => {
     expect(miss.spokenFound).toBe(false);
     expect(miss.text).toBe(i18n.memory.zh.recall.wrapText);
 
+    // Optional question prefixes and leading whitespace must not bypass the anchored frame.
+    const prefixed = '你还记得我说过喜欢喝茶吗';
+    const prefixedMiss = await registryFor('zh').handle('recall_memory', { query: prefixed }, ctxFor(store, worker(store), a));
+    expect(prefixedMiss.spokenFound).toBe(false);
+    const spacedMiss = await registryFor('zh').handle('recall_memory', { query: '  我说过喜欢喝茶吗' }, ctxFor(store, worker(store), a));
+    expect(spacedMiss.spokenFound).toBe(false);
+
     say(store, a.ownerId, 'zh-tea', '我喜欢喝茶。', 11);
     const hit = await registryFor('zh').handle('recall_memory', { query: '我说过喜欢喝茶吗' }, ctxFor(store, worker(store), a));
     expect(hit.spokenFound).toBe(true);
     expect(hit.text).toContain('我喜欢喝茶。');
     expect(hit.text).not.toContain('我说今天有点累。');
+
+    const prefixedHit = await registryFor('zh').handle('recall_memory', { query: prefixed }, ctxFor(store, worker(store), a));
+    expect(prefixedHit.spokenFound).toBe(true);
+    expect(prefixedHit.text).toContain('我喜欢喝茶。');
+    expect(prefixedHit.text).not.toContain('我说今天有点累。');
   });
 
   it('strips the ja said-frame before searching so unrelated statements do not hit', async () => {
@@ -232,11 +244,21 @@ describe('memory tool registry', () => {
     expect(miss.spokenFound).toBe(false);
     expect(miss.text).toBe(i18n.memory.en.recall.wrapText);
 
+    // The indirect object plus "that" must be consumed too.
+    const indirect = 'Have I told you that I like tea?';
+    const indirectMiss = await registryFor('en').handle('recall_memory', { query: indirect }, ctxFor(store, worker(store), a));
+    expect(indirectMiss.spokenFound).toBe(false);
+
     say(store, a.ownerId, 'en-tea', 'I like tea.', 11);
     const hit = await registryFor('en').handle('recall_memory', { query: 'Did I say I like tea?' }, ctxFor(store, worker(store), a));
     expect(hit.spokenFound).toBe(true);
     expect(hit.text).toContain('I like tea.');
     expect(hit.text).not.toContain('I said I was tired.');
+
+    const indirectHit = await registryFor('en').handle('recall_memory', { query: indirect }, ctxFor(store, worker(store), a));
+    expect(indirectHit.spokenFound).toBe(true);
+    expect(indirectHit.text).toContain('I like tea.');
+    expect(indirectHit.text).not.toContain('I said I was tired.');
   });
 
   it('recalls separated topic keywords without requiring a cross-boundary bigram', async () => {

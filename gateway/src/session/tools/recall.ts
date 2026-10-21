@@ -44,9 +44,11 @@ function sameUtterance(a: string, b: string): boolean {
 
 /** FTS only sees the content after a first-person "I said" frame; an empty result keeps the raw query. */
 function contentQuery(query: string, patterns: readonly RegExp[]): string {
-  let text = query;
+  // Trim first: every frame pattern is anchored, so leading whitespace must not bypass it.
+  const trimmed = query.trim();
+  let text = trimmed;
   for (const pattern of patterns) text = text.replace(pattern, '');
-  return text.trim() || query;
+  return text.trim() || trimmed;
 }
 
 export interface RecallCopy {

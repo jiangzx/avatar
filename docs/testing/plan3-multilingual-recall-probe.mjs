@@ -23,7 +23,10 @@
 //   evidenceCount  number of grounded history lines the tool returned (candidate lines
 //                  that passed the evidence filter)
 //   newTitleFlag   true only when the spoken text quotes a title marker absent from the
-//                  source lines (detects a phrasing model inventing a work title)
+//                  source lines (detects a phrasing model inventing a work title).
+//                  Structurally false in --real-db because no text client is passed; it is
+//                  exercised in --temp with the fake phrasing client and kept here for
+//                  field compatibility.
 // If the database is missing, unreadable, lacks the tables recall needs, or the read-only
 // WAL open fails, it prints "NOT RUN <short_reason_code>" once and exits 0 (codes:
 // db_path_missing, db_missing, db_open_failed, db_unreadable, db_schema_incompatible,
@@ -175,6 +178,13 @@ async function runTemp() {
     insert(store, frame.ownerId, 'probe-frame-session', 'zh-frame-unrelated', 'user', '我说今天有点累。', 3_100);
     insert(store, frame.ownerId, 'probe-frame-session', 'ja-frame-unrelated', 'user', '私は昨日映画を見ました。', 3_200);
     insert(store, frame.ownerId, 'probe-frame-session', 'en-frame-unrelated', 'user', 'I said I was tired.', 3_300);
+    // Denials and whole-utterance light acks must never become grounded history.
+    insert(store, frame.ownerId, 'probe-frame-session', 'zh-denial', 'user', '我没说过喜欢喝茶。', 3_350);
+    insert(store, frame.ownerId, 'probe-frame-session', 'ja-denial', 'user', 'お茶が好きなんて言ってない。', 3_360);
+    insert(store, frame.ownerId, 'probe-frame-session', 'en-denial', 'user', "I didn't say I like tea.", 3_370);
+    insert(store, frame.ownerId, 'probe-frame-session', 'zh-ack', 'user', '好的', 3_380);
+    insert(store, frame.ownerId, 'probe-frame-session', 'ja-ack', 'user', 'はい', 3_390);
+    insert(store, frame.ownerId, 'probe-frame-session', 'en-ack', 'user', 'Okay', 3_400);
     const frameCtx = () => toolContext(store, frame.ownerId);
 
     const ja = registryFor('ja');
@@ -227,19 +237,44 @@ async function runTemp() {
 
     // Said-frames: unrelated statements sharing only the frame words are not recalled.
     const zhFrame = '我说过喜欢喝茶吗';
+    const zhPrefixed = '你还记得我说过喜欢喝茶吗';
     const jaFrame = 'お茶が好きだと言いましたか';
     const enFrame = 'Did I say I like tea?';
+    const enIndirect = 'Have I told you that I like tea?';
     check((await zh.handle('recall_memory', { query: zhFrame }, frameCtx())).spokenFound === false, 'zh_frame_unrelated');
+    check((await zh.handle('recall_memory', { query: zhPrefixed }, frameCtx())).spokenFound === false, 'zh_prefix_unrelated');
     check((await ja.handle('recall_memory', { query: jaFrame }, frameCtx())).spokenFound === false, 'ja_frame_unrelated');
     check((await en.handle('recall_memory', { query: enFrame }, frameCtx())).spokenFound === false, 'en_frame_unrelated');
+    check((await en.handle('recall_memory', { query: enIndirect }, frameCtx())).spokenFound === false, 'en_indirect_unrelated');
 
-    insert(store, frame.ownerId, 'probe-frame-session', 'zh-frame-content', 'user', '我喜欢喝茶。', 3_400);
-    insert(store, frame.ownerId, 'probe-frame-session', 'ja-frame-content', 'user', '私はお茶が好きです。', 3_500);
-    insert(store, frame.ownerId, 'probe-frame-session', 'en-frame-content', 'user', 'I like tea.', 3_600);
+    // Denials and whole-utterance light acks are never evidence, so they never become history.
+    const evidenceRows = [
+      { language: 'zh', text: '我没说过喜欢喝茶。', ack: '好的', query: '喝茶' },
+      { language: 'ja', text: 'お茶が好きなんて言ってない。', ack: 'はい', query: 'お茶' },
+      { language: 'en', text: "I didn't say I like tea.", ack: 'Okay', query: 'tea' },
+    ];
+    const registries = { zh, ja, en };
+    for (const row of evidenceRows) {
+      check(isMemoryEvidence(row.text, i18n.evidence) === false, `${row.language}_denial_rule`);
+      check(isMemoryEvidence(row.ack, i18n.evidence) === false, `${row.language}_ack_rule`);
+      const result = await registries[row.language].handle('recall_memory', { query: row.query }, frameCtx());
+      check(!historyLines(result, row.language).includes(row.text), `${row.language}_denial_not_recalled`);
+      check(!historyLines(result, row.language).includes(row.ack), `${row.language}_ack_not_recalled`);
+      const ackHit = await registries[row.language].handle('recall_memory', { query: row.ack }, frameCtx());
+      check(ackHit.spokenFound === false, `${row.language}_ack_not_grounded`);
+    }
+
+    insert(store, frame.ownerId, 'probe-frame-session', 'zh-frame-content', 'user', '我喜欢喝茶。', 3_450);
+    insert(store, frame.ownerId, 'probe-frame-session', 'ja-frame-content', 'user', '私はお茶が好きです。', 3_460);
+    insert(store, frame.ownerId, 'probe-frame-session', 'en-frame-content', 'user', 'I like tea.', 3_470);
     const zhFrameHit = await zh.handle('recall_memory', { query: zhFrame }, frameCtx());
     check(zhFrameHit.spokenFound === true, 'zh_frame_content');
     check(historyLines(zhFrameHit, 'zh').includes('我喜欢喝茶。'), 'zh_frame_content_line');
     check(!historyLines(zhFrameHit, 'zh').includes('我说今天有点累。'), 'zh_frame_unrelated_line');
+    const zhPrefixedHit = await zh.handle('recall_memory', { query: zhPrefixed }, frameCtx());
+    check(zhPrefixedHit.spokenFound === true, 'zh_prefix_content');
+    check(historyLines(zhPrefixedHit, 'zh').includes('我喜欢喝茶。'), 'zh_prefix_content_line');
+    check(!historyLines(zhPrefixedHit, 'zh').includes('我说今天有点累。'), 'zh_prefix_unrelated_line');
     const jaFrameHit = await ja.handle('recall_memory', { query: jaFrame }, frameCtx());
     check(jaFrameHit.spokenFound === true, 'ja_frame_content');
     check(historyLines(jaFrameHit, 'ja').includes('私はお茶が好きです。'), 'ja_frame_content_line');
@@ -248,6 +283,10 @@ async function runTemp() {
     check(enFrameHit.spokenFound === true, 'en_frame_content');
     check(historyLines(enFrameHit, 'en').includes('I like tea.'), 'en_frame_content_line');
     check(!historyLines(enFrameHit, 'en').includes('I said I was tired.'), 'en_frame_unrelated_line');
+    const enIndirectHit = await en.handle('recall_memory', { query: enIndirect }, frameCtx());
+    check(enIndirectHit.spokenFound === true, 'en_indirect_content');
+    check(historyLines(enIndirectHit, 'en').includes('I like tea.'), 'en_indirect_content_line');
+    check(!historyLines(enIndirectHit, 'en').includes('I said I was tired.'), 'en_indirect_unrelated_line');
 
     // Phrasing with a new work title is rejected and falls back to the verbatim line.
     let phrased = 0;

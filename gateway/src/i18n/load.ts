@@ -51,7 +51,7 @@ const MemoryFileSchema = z.object({
     skipPatterns: StringList,
     lightAcks: StringList,
     recentQueryPatterns: StringList,
-    queryFramePatterns: StringList,
+    queryFramePatterns: StringList.min(1),
     phraseMaxChars: z.number().int().min(1).max(1000),
   }).strict(),
   performAction: z.object({
