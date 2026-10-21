@@ -514,6 +514,7 @@ git commit -m "feat(gateway): add ja/en elder-companion language packs"
 - Modify: `gateway/src/memory/evidence.ts`
 - Modify: `gateway/src/memory/snapshot.ts`
 - Modify: `gateway/src/memory/store.ts`
+- Modify: `gateway/src/memory/migrations.ts`（append-only `meta` 表，持久化回填 cursor）
 - Modify: `gateway/src/session/tools/recall.ts`（`sameUtterance`/`grounded` 标点与假名 token；`RecallCopy.questionPatterns`）
 - Modify: `gateway/src/session/tools/registry.ts`（把 `DEFAULT_I18N.evidence.questionPatterns` 传给 recall）
 - Modify: `gateway/src/session/pacing.ts`（`MemoryBudgetSchema` 新增 `kanaBackfillBatch?`）
@@ -533,9 +534,10 @@ git commit -m "feat(gateway): add ja/en elder-companion language packs"
   - `isMemoryEvidence(text: string, rules?: EvidenceRules): boolean`（默认只做问号结尾检查；生产必须传 `I18nBundle.evidence`）。
   - `RecallCopy` 增加 `questionPatterns: readonly RegExp[]`；`recallTool` 用 `{ questionPatterns, skipPatterns, lightAcks }` 构造 `EvidenceRules`。
   - `renderMemoryViews(input & { labels?: PromptLabels; rules?: { addressingPatterns?: readonly RegExp[]; evidence?: EvidenceRules } })`
-  - `MemoryStore.listMessagesForKanaBackfill(limit: number): { rowid: number; text: string; bigrams: string }[]`
+  - `MemoryStore.listMessagesForKanaBackfill(limit: number, afterRowid?: number): { rowid: number; text: string; bigrams: string }[]`
   - `MemoryStore.updateMessageBigrams(rowid: number, bigrams: string): void`
-  - `backfillKanaBigrams(store, limit): number`（新文件 `gateway/src/memory/backfill.ts`）
+  - `MemoryStore.kanaBackfillCursor(): number` / `setKanaBackfillCursor(rowid: number): void`
+  - `backfillKanaBigrams(store, limit): number`（新文件 `gateway/src/memory/backfill.ts`；使用持久化 cursor，分批推进）
 
 - [ ] **Step 1: 写失败测试**
 
@@ -594,10 +596,40 @@ it('renders ja/en labels and addressing in the session language', () => {
 });
 ```
 
+补充回归（必须在实现前失败）：
+
+```ts
+it('advances the kana backfill cursor past the first page', () => {
+  const db = open();
+  const store = new SqliteMemoryStore(db);
+  for (let i = 0; i < 3; i++) {
+    store.insertMessage({ id: `m${i}`, sessionId: 's1', ownerId: ownerId, role: 'user', text: `${i}ヨガをしています。`, bigrams: '', now: i + 1 });
+  }
+  expect(backfillKanaBigrams(store, 2)).toBe(2);
+  expect(backfillKanaBigrams(store, 2)).toBe(1); // third row, not the same first two
+  expect(backfillKanaBigrams(store, 2)).toBe(0); // cursor wrapped; nothing left to change
+});
+
+it('reads a zh-stored addressing line in an en snapshot', () => {
+  const views = renderMemoryViews({
+    addressing: ['称呼：王叔'], facts: [], tail: [], maxChars: 600,
+    labels: PROMPT_LABELS.en,
+    rules: { addressingPatterns: i18n.memory.en.addressingPatterns, evidence: i18n.evidence },
+  });
+  expect(views.full).toBe('Address as: 王叔');
+});
+
+it('drops case-insensitive English whole-utterance acks', () => {
+  expect(isMemoryEvidence('Okay', i18n.evidence)).toBe(false);
+  expect(isMemoryEvidence('Yes', i18n.evidence)).toBe(false);
+  expect(isMemoryEvidence('Okay, I like tea.', i18n.evidence)).toBe(true);
+});
+```
+
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/memory-text.test.ts test/evidence.test.ts test/snapshot.test.ts`
-Expected: FAIL（假名 token 为空 / 证据规则签名不匹配）。
+Expected: FAIL（假名 token 为空 / 证据规则签名不匹配 / 回填 cursor 未实现）。
 
 - [ ] **Step 3: 实现假名 bigram 与回填**
 
@@ -625,7 +657,31 @@ export function backfillKanaBigrams(store: MemoryStore, limit: number): number {
 }
 ```
 
-`store.ts` 添加语句：`SELECT rowid, text, bigrams FROM messages WHERE rowid > 0 ORDER BY rowid LIMIT ?` 与 `UPDATE messages SET bigrams = ? WHERE rowid = ?`；接口与实现同步。`pacing.ts` 的 `MemoryBudgetSchema` 增加 `kanaBackfillBatch: z.number().int().min(1).max(5_000).optional()`，`config/memory.json` 加 `"kanaBackfillBatch": 500`。`index.ts` 在 store 打开后调用：
+`store.ts` 添加语句：`SELECT rowid, text, bigrams FROM messages WHERE rowid > ? ORDER BY rowid LIMIT ?` 与 `UPDATE messages SET bigrams = ? WHERE rowid = ?`；接口与实现同步。`migrations.ts` 追加第 3 步：
+
+```sql
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+```
+
+`store.ts` 用 `meta` 读写 `kana_backfill_cursor`（`SELECT value ...`/`INSERT ... ON CONFLICT DO UPDATE`），缺失时返回 0。`backfill.ts`：
+
+```ts
+const cursor = store.kanaBackfillCursor();
+const rows = store.listMessagesForKanaBackfill(limit, cursor);
+let changed = 0;
+for (const row of rows) {
+  if (!KANA.test(row.text)) continue;
+  const next = bigrams(row.text);
+  if (next === row.bigrams) continue;
+  store.updateMessageBigrams(row.rowid, next);
+  changed++;
+}
+if (rows.length < limit) store.setKanaBackfillCursor(0);
+else store.setKanaBackfillCursor(rows[rows.length - 1]!.rowid);
+return changed;
+```
+
+`pacing.ts` 的 `MemoryBudgetSchema` 增加 `kanaBackfillBatch: z.number().int().min(1).max(5_000).optional()`，`config/memory.json` 加 `"kanaBackfillBatch": 500`。`index.ts` 在 store 打开后调用：
 
 ```ts
 const backfilled = backfillKanaBigrams(store, memory.kanaBackfillBatch ?? 500);
@@ -657,9 +713,9 @@ export function isMemoryEvidence(text: string, rules: EvidenceRules = EMPTY_EVID
 }
 ```
 
-注意 `RegExp.test` 对带 `g` 标志的正则会保留 `lastIndex`；加载器编译时不加 `g`（只 `iu`）。
+`normalizeUtterance` 同时 `toLowerCase()`（CJK 无影响；英文 `Okay`/`Yes` 必须匹配小写 lightAcks）。注意 `RegExp.test` 对带 `g` 标志的正则会保留 `lastIndex`；加载器编译时不加 `g`（只 `iu`）。
 
-`snapshot.ts`：新增可选 `rules`，`addressingText` 遍历 `rules.addressingPatterns`，命中则 `labels.addressing + separator + match[1]`；未命中保持原文。`renderMemoryViews` 用 `rules.evidence ?? EMPTY_EVIDENCE_RULES` 过滤 tail。所有调用点更新；`session.refreshMemorySnapshot` 与 `registry.resolve` 传入当前语言 labels + `i18n` 规则。
+`snapshot.ts`：新增可选 `rules`，`addressingText` 先匹配语言中立的已存标签 `^(?:称呼|呼び方|Address as)[：:]\s*(.+)$`，再遍历 `rules.addressingPatterns`；命中则用当前语言 `labels.addressing + separator + match[1]`，未命中保持原文。这样 zh 提取保存的 `称呼：王叔` 在 ja/en 会话里分别渲染为 `呼び方：王叔`/`Address as: 王叔`，`safeGreeting` 也能读到名字。`renderMemoryViews` 用 `rules.evidence ?? EMPTY_EVIDENCE_RULES` 过滤 tail。所有调用点更新；`session.refreshMemorySnapshot` 与 `registry.resolve` 传入当前语言 labels + `i18n` 规则。
 
 `recall.ts` 的 `sameUtterance` 归一化扩展为 `[\s，。！？、,.!?~～…—「」『』“”"'・]`；`grounded()` 的作品名正则加入直引号 `"`；token 过滤从 `length===2` 改为“长度 2 或含假名”，避免英文/拉丁 token 被排除。`RecallCopy` 增加 `questionPatterns: readonly RegExp[]`；`recall` 内两处 `isMemoryEvidence` 改为 `isMemoryEvidence(text, { questionPatterns: copy.questionPatterns, skipPatterns: copy.skipPatterns, lightAcks: copy.lightAcks })`；`registry.ts` 暂时把 `DEFAULT_I18N.evidence.questionPatterns` 放进现有 `RecallCopy`（Task 4 再按语言取）。
 
@@ -684,7 +740,7 @@ Expected: PASS。
 - [ ] **Step 7: 提交**
 
 ```bash
-git add gateway/src/memory/bigram.ts gateway/src/memory/evidence.ts gateway/src/memory/snapshot.ts gateway/src/memory/store.ts gateway/src/memory/backfill.ts gateway/src/session/tools/recall.ts gateway/src/session/tools/registry.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/src/session/session.ts gateway/src/identity/registry.ts gateway/src/index.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/snapshot.test.ts gateway/test/session.test.ts gateway/test/memory-acceptance.test.ts gateway/test/pacing.test.ts
+git add gateway/src/memory/bigram.ts gateway/src/memory/evidence.ts gateway/src/memory/snapshot.ts gateway/src/memory/store.ts gateway/src/memory/migrations.ts gateway/src/memory/backfill.ts gateway/src/session/tools/recall.ts gateway/src/session/tools/registry.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/src/session/session.ts gateway/src/identity/registry.ts gateway/src/index.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/snapshot.test.ts gateway/test/session.test.ts gateway/test/memory-acceptance.test.ts gateway/test/pacing.test.ts
 git commit -m "feat(gateway): localize memory evidence, kana bigrams, and snapshots"
 ```
 
