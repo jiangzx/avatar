@@ -63,12 +63,24 @@ describe('FileRoleCatalog', () => {
     expect(d.topics).toEqual([{ id: 't1', prompt: '天气', fallbackText: '今天天气不错。' }]);
   });
 
-  it('ships a zh-only elder-companion in M1', () => {
+  it('ships a zh/ja/en elder-companion with matching ids and shared prompts', () => {
     const roles = loadRoleCatalog(`${root}roles`);
     expect(roles.defaultRole()).toBe('elder-companion');
     expect(roles.defaultStyle('elder-companion')).toBe('grandchild');
     expect(roles.defaultLanguage('elder-companion')).toBe('zh');
-    expect(roles.supportedLanguages('elder-companion')).toEqual(['zh']);
+    expect(roles.supportedLanguages('elder-companion')).toEqual(['zh', 'ja', 'en']);
+    for (const language of ['zh', 'ja', 'en'] as const) {
+      expect(roles.extractPrompt(language)).not.toHaveLength(0);
+      expect(roles.recallPrompt(language)).not.toHaveLength(0);
+      expect(roles.director('elder-companion', language).topics?.map((t) => t.id)).toEqual(
+        roles.director('elder-companion', 'zh').topics?.map((t) => t.id),
+      );
+    }
+    expect(roles.buildPersona('elder-companion', 'grandchild', 'ja')).toContain('安全');
+    expect(roles.buildPersona('elder-companion', 'grandchild', 'en')).toContain('Safety');
+    expect(roles.buildPersona('elder-companion', 'grandchild', 'en')).toContain('- Reminisce: ');
+
+    // Chinese content and ordering stay exactly as M1.
     const grandchild = roles.buildPersona('elder-companion', 'grandchild', 'zh');
     expect(grandchild).toContain('孙辈');
     expect(grandchild.indexOf('安全底线')).toBe(grandchild.indexOf('##') + 3);
@@ -86,10 +98,37 @@ describe('FileRoleCatalog', () => {
     }
     expect(roles.director('elder-companion', 'zh').topics?.length).toBeGreaterThanOrEqual(5);
     expect(roles.activityText('elder-companion', 'reminisce', 'zh')).toContain('回忆往事');
+    expect(roles.activityText('elder-companion', 'reminisce', 'ja')).not.toHaveLength(0);
+    expect(roles.activityText('elder-companion', 'reminisce', 'en')).not.toHaveLength(0);
     expect(roles.languagePairs()).toEqual([
       { roleId: 'elder-companion', styleId: 'grandchild', language: 'zh' },
       { roleId: 'elder-companion', styleId: 'old-friend', language: 'zh' },
+      { roleId: 'elder-companion', styleId: 'grandchild', language: 'ja' },
+      { roleId: 'elder-companion', styleId: 'old-friend', language: 'ja' },
+      { roleId: 'elder-companion', styleId: 'grandchild', language: 'en' },
+      { roleId: 'elder-companion', styleId: 'old-friend', language: 'en' },
     ]);
+  });
+
+  it('rejects a missing shared extract prompt', () => {
+    const dir = copyFixtures();
+    rmSync(join(dir, '_shared', 'ja', 'extract.md'));
+    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:extract/);
+  });
+
+  it('rejects a topic id set mismatch', () => {
+    const dir = copyFixtures();
+    writeFileSync(join(dir, 'test-role', 'ja', 'topics.json'), JSON.stringify([{ id: 'other', prompt: 'x', fallbackText: 'y' }]));
+    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/topic_set_mismatch:test-role/);
+  });
+
+  it('accepts topic ids in a different order', () => {
+    const dir = copyFixtures();
+    const topics = (ids: readonly string[]) => JSON.stringify(ids.map((id) => ({ id, prompt: `p-${id}`, fallbackText: `f-${id}` })));
+    writeFileSync(join(dir, 'test-role', 'zh', 'topics.json'), topics(['t1', 't2']));
+    writeFileSync(join(dir, 'test-role', 'ja', 'topics.json'), topics(['t2', 't1']));
+    const roles = loadRoleCatalog(dir, 'test-role');
+    expect(roles.director('test-role', 'ja').topics?.map((topic) => topic.id)).toEqual(['t2', 't1']);
   });
 
   it('rejects a role whose default style or default language is not declared', () => {

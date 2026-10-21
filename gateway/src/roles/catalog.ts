@@ -13,6 +13,10 @@ export interface RoleCatalog {
   buildPersona(roleId: string, styleId: string, language?: Language): string;
   activityText(roleId: string, activityId: string, language?: Language): string | undefined;
   director(roleId: string, language?: Language): DirectorConfig;
+  /** Shared extractor system prompt for this language. */
+  extractPrompt(language?: Language): string;
+  /** Shared recall-phrasing system prompt for this language. */
+  recallPrompt(language?: Language): string;
   pairs(): Array<{ roleId: string; styleId: string }>;
 }
 
@@ -49,6 +53,8 @@ export function fixedRoleCatalog(
     buildPersona: (_roleId, _styleId, language = defaultLanguage) => personas[language] ?? persona,
     activityText: () => undefined,
     director: (_roleId, language = defaultLanguage) => directors[language] ?? director,
+    extractPrompt: () => 'FIXTURE EXTRACT',
+    recallPrompt: () => 'FIXTURE RECALL',
     pairs: () => STUB_STYLES.map((styleId) => ({ roleId: DEFAULT_ROLE, styleId })),
   };
 }

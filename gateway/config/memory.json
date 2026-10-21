@@ -1,5 +1,5 @@
 {
-  "instructions": { "budgetRatio": 0.4, "snapshotMaxChars": 600, "summaryMaxChars": 800, "minHistoryChars": 400 },
+  "instructions": { "budgetRatio": 0.4, "languageBudgetRatio": { "ja": 0.45, "en": 0.75 }, "snapshotMaxChars": 600, "summaryMaxChars": 800, "minHistoryChars": 400 },
   "toolTurnTimeoutMs": 15000,
   "forgetConfirmText": "好，这件事我不记着了。",
   "declineConfirmPrompt": "那我以后就不记着咱们聊的事了，以前的也都删掉，确定吗？",

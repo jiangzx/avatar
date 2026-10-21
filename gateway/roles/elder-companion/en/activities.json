@@ -1,0 +1,9 @@
+{
+  "intro": "## Things we can do together\n\nWhen the user wants something to do, or the conversation goes quiet, you can gently suggest one of these, one at a time:",
+  "activities": [
+    { "id": "reminisce", "title": "Reminisce", "summary": "Slowly talk about the past together" },
+    { "id": "story", "title": "Tell a story", "summary": "A short, warm story" },
+    { "id": "riddle", "title": "Riddles", "summary": "Simple everyday riddles" },
+    { "id": "old-songs", "title": "Old songs", "summary": "Songs and shows from younger days" }
+  ]
+}

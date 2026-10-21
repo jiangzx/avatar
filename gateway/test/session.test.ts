@@ -768,6 +768,49 @@ describe('Session', () => {
     expect(s.mocks[0].instructions.length).toBeLessThanOrEqual(200 + 4);
   });
 
+  it('prefers the current language budget over the fallback budget', async () => {
+    const roles = fixedRoleCatalog('P-zh', director, {
+      languages: ['zh', 'en'],
+      defaultLanguage: 'zh',
+      personas: { zh: 'P-zh', en: 'P-en' },
+    });
+    const fallback = { totalChars: 2_000, snapshotMaxChars: 0, summaryMaxChars: 60 };
+    const long = 'A'.repeat(400);
+    const s = setup(
+      { roles, budget: fallback, budgets: { zh: fallback, en: { totalChars: 300, snapshotMaxChars: 0, summaryMaxChars: 60 } } },
+      { ...ownedCtx, language: 'en' },
+    );
+    s.session.ledger.addUser(long, Date.now());
+    await greetAndFinish(s);
+    const instructions = s.mocks[0]!.instructions;
+    expect(instructions).toContain('P-en');
+    expect(instructions).not.toContain(long);
+    expect(instructions.length).toBeLessThanOrEqual(304);
+    s.session.end();
+  });
+
+  it('uses the initial language budget for the history room', async () => {
+    const s = setup(
+      {
+        roles: bilingualRoles(),
+        budgets: {
+          zh: { totalChars: 200, snapshotMaxChars: 0, summaryMaxChars: 60 },
+          en: { totalChars: 2_000, snapshotMaxChars: 0, summaryMaxChars: 60 },
+        },
+        ledger: { keepRecentTurns: 4, summarizeAfterTurns: 100, summarizeAfterTokens: 10_000 },
+      },
+      { ...ownedCtx, language: 'en' },
+    );
+    await greetAndFinish(s);
+    for (const text of ['甲'.repeat(150), '乙'.repeat(150)]) {
+      s.session.handleClientMessage({ type: 'debug.userText', text });
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    // The zh budget would leave ~60 chars of history room and trigger a summary immediately.
+    expect(s.session.ledger.needsSummary()).toBe(false);
+    s.session.end();
+  });
+
   it('restarts silence after a proactive line is cut off while nobody is speaking', async () => {
     const s = setup();
     await greetAndFinish(s);

@@ -170,6 +170,82 @@ describe('config', () => {
     expect(d.presenceText).toBe('我在');
   });
 
+  it('ships ja/en directors with zh timings and localized fixed lines', () => {
+    const zh = loadDirectorConfig(`${root}roles/elder-companion/zh/director.json`);
+    const ja = loadDirectorConfig(`${root}roles/elder-companion/ja/director.json`);
+    const en = loadDirectorConfig(`${root}roles/elder-companion/en/director.json`);
+    for (const field of ['followupAfterMs', 'idleNoticeAfterMs', 'maxConsecutive', 'maxPerWindow', 'windowMs', 'companyAfterMs', 'contextAfterMs', 'checkAfterMs', 'leaveAfterMs', 'checkinAfterMs', 'restAfterMs', 'greetingRetryMs'] as const) {
+      expect(ja[field]).toBe(zh[field]);
+      expect(en[field]).toBe(zh[field]);
+    }
+    for (const d of [ja, en]) {
+      expect(d.silenceDecision?.maxTokens).toBe(zh.silenceDecision?.maxTokens);
+      expect(d.silenceDecision?.maxInputChars).toBe(zh.silenceDecision?.maxInputChars);
+      expect(d.silenceDecision?.temperature).toBe(zh.silenceDecision?.temperature);
+      expect(d.silenceDecision?.policy).toEqual(zh.silenceDecision?.policy);
+      expect(d.silenceDecision?.speakInstruction).toContain('{continuation}');
+      expect(d.topicInstruction).toContain('{topic}');
+      expect(d.greetingNameTexts).toHaveLength(3);
+      for (const text of d.greetingNameTexts ?? []) expect(text).toContain('{name}');
+      for (const stage of ['greeting', 'context', 'check', 'leave', 'checkin', 'rest']) {
+        expect(d.silenceDecision?.instruction).toContain(stage);
+      }
+      expect(d.silenceDecision?.instruction).toContain('previousTexts');
+      expect(d.silenceDecision?.instruction).toContain('close');
+      expect(d.silenceDecision?.variationHints?.greeting).toHaveLength(3);
+      expect(d.silenceDecision?.variationHints?.checkin).toHaveLength(3);
+    }
+    expect(ja.silenceDecision?.maxReplyChars).toBe(60);
+    expect(en.silenceDecision?.maxReplyChars).toBe(120);
+    expect(ja.quietPhrases).toEqual(['やめて', '静かにして', '黙って', '話さないで', '静かに']);
+    expect(en.quietPhrases).toEqual(['be quiet', 'stop talking', 'quiet please', "don't talk", 'silence']);
+    expect(ja.lightPhrases).toEqual(['うん', 'はい', 'ええ', 'そうですね', 'わかりました', 'なるほど']);
+    expect(en.lightPhrases).toEqual(['okay', 'ok', 'yes', 'yeah', 'I see', 'got it', 'alright']);
+
+    expect(ja.greetingText).toBe('こんにちは、小暖です。お話ししに来ました。どうお呼びすればいいですか？');
+    expect(ja.greetingMemoryText).toBe('こんにちは、またお会いできましたね。今日は何をお話ししましょうか？');
+    expect(ja.followupText).toBe('ゆっくりで大丈夫ですよ。ここにいますから。');
+    expect(ja.contextText).toBe('続きがあれば、聞いていますよ。');
+    expect(ja.idleNoticeText).toBe('ここにいますよ。急がなくて大丈夫です。');
+    expect(ja.resumeText).toBe('さっきネットが少し切れましたね。続きを話しましょう。');
+    expect(ja.toolContinueText).toBe('じゃあ、続きを話しましょう。');
+    expect(ja.memoryNoticeText).toBe('これからお話ししたことは覚えておきますね。次にまた続きを話せますから。');
+    expect(ja.presenceText).toBe('ここにいます');
+    expect(ja.openingFollowText).toBe('お名前を聞かせていただけたらうれしいです。');
+    expect(ja.memoryFollowText).toBe('ゆっくりで大丈夫です。そばにいますね。');
+    expect(ja.bargeMissText).toBe('うまく聞き取れませんでした。もう一度言ってください。');
+    expect(ja.checkText).toBe('お名前のことは急がなくて大丈夫ですよ。');
+    expect(ja.checkContextText).toBe('別のお話でも大丈夫ですよ。ここにいますから。');
+    expect(ja.checkMemoryText).toBe('さっきのお話、急がなくて大丈夫です。話したくなったら聞かせてください。');
+    expect(ja.leaveText).toBe('少し静かにしますね。話したくなったら呼んでください。');
+    expect(ja.checkinText).toBe('まだ聞こえていますか？急がなくて大丈夫です。いつでもお話しできますよ。');
+    expect(ja.restText).toBe('しばらくご自分でゆっくりしてください。急いで返事をしなくて大丈夫です。');
+
+    expect(en.greetingText).toBe("Hello, I'm Xiaonuan. I came to keep you company. What should I call you?");
+    expect(en.greetingMemoryText).toBe("Hello, it's good to see you again. What would you like to talk about today?");
+    expect(en.followupText).toBe("Take your time. I'm right here.");
+    expect(en.contextText).toBe("If you'd like to keep talking, I'm listening.");
+    expect(en.idleNoticeText).toBe("I'm here. No rush at all.");
+    expect(en.resumeText).toBe("The connection dropped for a moment. Let's pick up where we left off.");
+    expect(en.toolContinueText).toBe("Let's keep going.");
+    expect(en.memoryNoticeText).toBe("I'll remember what we talk about, so we can pick it up next time.");
+    expect(en.presenceText).toBe("I'm here");
+    expect(en.openingFollowText).toBe("Whenever you're ready, just tell me what to call you.");
+    expect(en.memoryFollowText).toBe("Take your time. I'm right here with you.");
+    expect(en.bargeMissText).toBe("I didn't quite catch that. Could you say it again?");
+    expect(en.checkText).toBe("There's no rush about your name. Whenever you're comfortable.");
+    expect(en.checkContextText).toBe("We can talk about something else too. I'm here with you.");
+    expect(en.checkMemoryText).toBe("That earlier thing can wait. Tell me whenever you feel like it.");
+    expect(en.leaveText).toBe("I'll be quiet for a little while. Call me whenever you'd like to talk.");
+    expect(en.checkinText).toBe("Are you still there? No rush—we can talk anytime.");
+    expect(en.restText).toBe("Take some time for yourself. No need to reply.");
+
+    // English copy carries no Chinese characters; Japanese copy is not the Chinese text.
+    const enText = JSON.stringify(en);
+    expect(enText).not.toMatch(/[一-鿿]/);
+    expect(JSON.stringify(ja)).not.toContain('您');
+  });
+
   it('rejects an invalid director config', () => {
     expect(() => loadDirectorConfig(`${root}package.json`)).toThrow();
   });

@@ -86,6 +86,8 @@ export interface SessionDeps {
   toolTurnTimeoutMs?: number;
   /** Instruction size budget (gateway/config/memory.json); undefined = unbounded (tests). */
   budget?: InstructionBudget;
+  /** Per-language instruction budgets; the current language's entry wins over `budget`. */
+  budgets?: Partial<Record<Language, InstructionBudget>>;
   /** Smallest history room across supported languages (startup validation). */
   maxHistoryChars?: number;
   /** Lines that challenge or deny an earlier memory; undefined = no denial filtering (tests). */
@@ -239,7 +241,9 @@ export class Session {
     const initialPersona = this.personaFor(this.language);
     const ledgerOpts = deps.ledger ?? DEFAULT_LEDGER_OPTIONS;
     // Summarize before the instruction budget would have to drop unsummarized turns.
-    const history = deps.maxHistoryChars ?? (deps.budget ? historyBudget(initialPersona, deps.budget) : Number.POSITIVE_INFINITY);
+    const initialBudget = this.budgetFor(this.language);
+    const history = deps.maxHistoryChars
+      ?? (initialBudget ? historyBudget(initialPersona, initialBudget, PROMPT_LABELS[this.language]) : Number.POSITIVE_INFINITY);
     this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
     const extractor = deps.worker;
     const ownerId = ctx.ownerId;
@@ -527,6 +531,10 @@ export class Session {
     return persona;
   }
 
+  private budgetFor(language: Language): InstructionBudget | undefined {
+    return this.deps.budgets?.[language] ?? this.deps.budget;
+  }
+
   private planProactiveLine(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null> {
     const config = this.deps.roles.director(this.context.roleId, this.language).silenceDecision;
     const client = this.deps.textClient;
@@ -553,7 +561,7 @@ export class Session {
     const labels = PROMPT_LABELS[this.language];
     return buildInstructions(
       { persona: this.personaFor(this.language), memorySnapshot: this.context.memorySnapshot, summary: this.ledger.summary, recent: this.ledger.recent },
-      this.deps.budget,
+      this.budgetFor(this.language),
       labels,
     );
   }
@@ -1191,7 +1199,7 @@ export class Session {
   private refreshMemorySnapshot(): void {
     const store = this.deps.store;
     const ownerId = this.context.ownerId;
-    const maxChars = this.deps.budget?.snapshotMaxChars;
+    const maxChars = this.budgetFor(this.language)?.snapshotMaxChars;
     if (!store || !ownerId || maxChars === undefined) return;
     const views = renderMemoryViews({
       addressing: store.listFacts(ownerId).filter((fact) => fact.category === 'addressing').map((fact) => fact.text),

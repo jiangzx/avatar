@@ -1,10 +1,11 @@
 import { fileURLToPath } from 'node:url';
-import type { Language } from '@anyidea/protocol';
+import { LANGUAGES, type Language } from '@anyidea/protocol';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
 import { loadConfig, loadIdentityConfig, loadSafetyConfig, makeOriginCheck } from './config.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
+import { DEFAULT_ROLE } from './roles/catalog.ts';
 import { log } from './log.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from './session/pacing.ts';
 import { devContextResolver } from './session/context.ts';
@@ -27,6 +28,8 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
 // File-backed roles (M1): gateway/roles/<role>/<language>/ + gateway/roles/_shared/<language>/.
 const roles = loadRoleCatalog(`${root}roles`);
+const missingLanguages = LANGUAGES.filter((language) => !roles.supportedLanguages(DEFAULT_ROLE).includes(language));
+if (missingLanguages.length > 0) throw new Error(`role_languages_incomplete:${DEFAULT_ROLE}:${missingLanguages.join(',')}`);
 const pacing = loadPacing(`${root}config/pacing.json`);
 const memory = loadMemoryBudget(`${root}config/memory.json`);
 const i18n = loadI18n(`${root}config`);
@@ -35,13 +38,25 @@ for (const pair of roles.languagePairs()) {
   (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
 }
 const budgetReport = validateBudgets(pacing, memory, config.ledger, personasByLanguage);
-log('instruction_budget', { totalChars: budgetReport.budget.totalChars, minHistoryChars: budgetReport.minHistoryChars, ledgerCapped: budgetReport.ledgerCapped });
-if (memory.memoryNoticeKeywords) {
-  for (const pair of roles.languagePairs()) {
-    const text = roles.director(pair.roleId, pair.language).memoryNoticeText;
-    if (!memory.memoryNoticeKeywords.some((keyword) => text.includes(keyword))) {
-      throw new Error(`memory_notice_keyword_missing:${pair.language}`);
-    }
+const languageBudgetFields: Record<string, number> = {};
+for (const language of LANGUAGES) {
+  const budget = budgetReport.budgets[language];
+  const perLanguage = budgetReport.perLanguage[language];
+  if (!budget || !perLanguage) continue;
+  languageBudgetFields[`${language}TotalChars`] = budget.totalChars;
+  languageBudgetFields[`${language}MinHistoryChars`] = perLanguage.minHistoryChars;
+}
+log('instruction_budget', {
+  totalChars: budgetReport.budget.totalChars,
+  minHistoryChars: budgetReport.minHistoryChars,
+  ledgerCapped: budgetReport.ledgerCapped,
+  ...languageBudgetFields,
+});
+for (const pair of roles.languagePairs()) {
+  const keywords = i18n.memory[pair.language].noticeKeywords;
+  const text = roles.director(pair.roleId, pair.language).memoryNoticeText;
+  if (!keywords.some((keyword) => text.includes(keyword))) {
+    throw new Error(`memory_notice_keyword_missing:${pair.language}`);
   }
 }
 const emotion = loadEmotionConfig(`${root}config/emotion.json`);
@@ -121,6 +136,7 @@ const manager = new SessionManager(
         return undefined;
       },
       budget: budgetReport.budget,
+      budgets: budgetReport.budgets,
       maxHistoryChars: budgetReport.minHistoryChars,
       recallSkipPatterns: memory.recallSkipPatterns,
       ...(memory.lightAcks ? { lightAcks: memory.lightAcks } : {}),

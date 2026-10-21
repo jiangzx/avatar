@@ -20,6 +20,8 @@ describe('fixedRoleCatalog', () => {
     expect(roles.buildPersona(DEFAULT_ROLE, 'old-friend')).toBe('P');
     expect(roles.voiceFor(DEFAULT_ROLE, 'grandchild')).toBeUndefined();
     expect(roles.director(DEFAULT_ROLE)).toBe(director);
+    expect(roles.extractPrompt()).toBe('FIXTURE EXTRACT');
+    expect(roles.recallPrompt()).toBe('FIXTURE RECALL');
   });
 
   it('exposes language-specific personas and directors', () => {

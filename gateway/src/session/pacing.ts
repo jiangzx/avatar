@@ -41,6 +41,8 @@ export const DEFAULT_TOOL_TURN_TIMEOUT_MS = 15_000;
 const MemoryBudgetSchema = z.object({
   instructions: z.object({
     budgetRatio: z.number().gt(0).max(0.4),
+    /** Per-language override; English needs more characters for the same instructions. */
+    languageBudgetRatio: z.partialRecord(z.enum(['zh', 'ja', 'en']), z.number().gt(0).max(0.8)).optional(),
     snapshotMaxChars: z.number().int().min(0).max(5_000),
     summaryMaxChars: z.number().int().min(100).max(5_000),
     minHistoryChars: z.number().int().min(100).max(5_000),
@@ -88,7 +90,10 @@ export function loadMemoryBudget(path: string): MemoryBudgetConfig {
 }
 
 export interface BudgetReport {
+  /** zh (or the first validated language) budget; kept for legacy callers. */
   budget: InstructionBudget;
+  /** One instruction budget per validated language. */
+  budgets: Partial<Record<Language, InstructionBudget>>;
   /** Smallest history room over all languages and personas. */
   minHistoryChars: number;
   /** True when sessions will summarize earlier than LEDGER_SUMMARIZE_AFTER_TOKENS. */
@@ -106,20 +111,30 @@ export function validateBudgets(
   const m = memory.instructions;
   if (ledger.keepRecentTurns > pacing.rebuild.afterTurns) throw new Error('ledger_keep_exceeds_rebuild_turns');
   const rebuildChars = pacing.rebuild.contextChars * pacing.rebuild.triggerRatio;
-  const budget: InstructionBudget = { totalChars: Math.floor(rebuildChars * m.budgetRatio), snapshotMaxChars: m.snapshotMaxChars, summaryMaxChars: m.summaryMaxChars };
+  const ratioFor = (language: Language) => m.languageBudgetRatio?.[language] ?? m.budgetRatio;
+  const budgetFor = (language: Language): InstructionBudget => ({
+    totalChars: Math.floor(rebuildChars * ratioFor(language)),
+    snapshotMaxChars: m.snapshotMaxChars,
+    summaryMaxChars: m.summaryMaxChars,
+  });
+  const budgets: Partial<Record<Language, InstructionBudget>> = {};
   // Legacy array callers (docs/testing probes) only build zh personas.
   const byLanguage = (Array.isArray(personas) ? { zh: personas } : personas) as Partial<Record<Language, readonly string[]>>;
   const perLanguage: Partial<Record<Language, { minHistoryChars: number; ledgerCapped: boolean }>> = {};
   let minHistoryChars = Number.POSITIVE_INFINITY;
   for (const [language, list] of Object.entries(byLanguage) as Array<[Language, readonly string[] | undefined]>) {
     if (!list || list.length === 0) continue;
+    const budget = budgetFor(language);
     const languageMin = Math.min(...list.map((persona) => historyBudget(persona, budget, PROMPT_LABELS[language])));
     if (languageMin < m.summaryMaxChars + m.minHistoryChars) {
       throw new Error(`instruction_budget_too_small:${language}: history ${languageMin} < summary ${m.summaryMaxChars} + min ${m.minHistoryChars}`);
     }
+    budgets[language] = budget;
     perLanguage[language] = { minHistoryChars: languageMin, ledgerCapped: ledger.summarizeAfterTokens > languageMin };
     minHistoryChars = Math.min(minHistoryChars, languageMin);
   }
   if (!Number.isFinite(minHistoryChars)) throw new Error('instruction_budget_no_personas');
-  return { budget, minHistoryChars, ledgerCapped: ledger.summarizeAfterTokens > minHistoryChars, perLanguage };
+  const first = Object.keys(budgets)[0] as Language | undefined;
+  const budget = budgets.zh ?? (first ? budgets[first]! : budgetFor('zh'));
+  return { budget, budgets, minHistoryChars, ledgerCapped: ledger.summarizeAfterTokens > minHistoryChars, perLanguage };
 }

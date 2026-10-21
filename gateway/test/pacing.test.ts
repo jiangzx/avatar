@@ -33,14 +33,41 @@ describe('pacing and budget config', () => {
       (byLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
     }
     const report = validateBudgets(pacing, memory, ledger, byLanguage);
-    expect(report.perLanguage.zh?.minHistoryChars).toBe(report.minHistoryChars);
+    expect(report.minHistoryChars).toBe(Math.min(...Object.values(report.perLanguage).map((entry) => entry!.minHistoryChars)));
     expect(report.budget.totalChars).toBe(Math.floor(pacing.rebuild.contextChars * pacing.rebuild.triggerRatio * memory.instructions.budgetRatio));
+    expect(report.budget).toEqual(report.budgets.zh);
+  });
+
+  it('gives ja/en their own instruction budget while zh stays unchanged', () => {
+    const pacing = loadPacing(`${root}config/pacing.json`);
+    const memory = loadMemoryBudget(`${root}config/memory.json`);
+    const report = validateBudgets(pacing, memory, ledger, {
+      zh: ['中'.repeat(1800)], ja: ['日'.repeat(1900)], en: ['E'.repeat(3200)],
+    });
+    expect(report.budgets.zh!.totalChars).toBe(3840);
+    expect(report.budgets.ja!.totalChars).toBe(4320);
+    expect(report.budgets.en!.totalChars).toBe(7200);
+    expect(report.budgets.en!.totalChars).toBeGreaterThan(report.budgets.zh!.totalChars);
+    expect(report.perLanguage.en!.minHistoryChars).toBeGreaterThanOrEqual(1200);
+    expect(report.budget.totalChars).toBe(report.budgets.zh!.totalChars);
   });
 
   it('rejects an overlong persona in any language', () => {
     const pacing = loadPacing(`${root}config/pacing.json`);
     const memory = loadMemoryBudget(`${root}config/memory.json`);
-    expect(() => validateBudgets(pacing, memory, ledger, { zh: ['P'], en: ['P'.repeat(2000)] })).toThrow('instruction_budget_too_small:en');
+    expect(() => validateBudgets(pacing, memory, ledger, { zh: ['P'], en: ['P'.repeat(8000)] })).toThrow('instruction_budget_too_small:en');
+  });
+
+  it('caps per-language instruction ratios at 80 percent and keeps the default ratio at 40', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mem-'));
+    const shipped = JSON.parse(readFileSync(join(root, 'config/memory.json'), 'utf8')) as Record<string, unknown>;
+    const instructions = { budgetRatio: 0.4, snapshotMaxChars: 600, summaryMaxChars: 800, minHistoryChars: 400 };
+    writeFileSync(join(dir, 'memory.json'), JSON.stringify({ ...shipped, instructions: { ...instructions, languageBudgetRatio: { en: 0.8 } } }));
+    expect(loadMemoryBudget(join(dir, 'memory.json')).instructions.languageBudgetRatio).toEqual({ en: 0.8 });
+    writeFileSync(join(dir, 'memory.json'), JSON.stringify({ ...shipped, instructions: { ...instructions, languageBudgetRatio: { en: 0.81 } } }));
+    expect(() => loadMemoryBudget(join(dir, 'memory.json'))).toThrow();
+    writeFileSync(join(dir, 'memory.json'), JSON.stringify({ ...shipped, instructions: { ...instructions, budgetRatio: 0.45 } }));
+    expect(() => loadMemoryBudget(join(dir, 'memory.json'))).toThrow();
   });
 
   it('rejects an instruction budget above 40% of the rebuild threshold', () => {

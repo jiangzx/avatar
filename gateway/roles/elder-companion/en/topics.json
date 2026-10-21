@@ -1,0 +1,12 @@
+[
+  { "id": "weather", "prompt": "Today's weather and dressing warmly", "fallbackText": "The weather changes fast today. Bring an extra layer." },
+  { "id": "meal", "prompt": "Something good you ate today", "fallbackText": "I'm curious, what did you have today that was good?" },
+  { "id": "walk", "prompt": "A short walk and some sunshine", "fallbackText": "On a nice day, a short walk in the sun feels good." },
+  { "id": "old-song", "prompt": "A song you loved when you were young", "fallbackText": "I learned an old song. Which one did you love?" },
+  { "id": "family", "prompt": "How your family is doing", "fallbackText": "How is everyone in your family? A call would be nice." },
+  { "id": "skill", "prompt": "Something you were good at when young", "fallbackText": "I bet you were good at something when you were young." },
+  { "id": "season", "prompt": "This season and its fresh food", "fallbackText": "The vegetables this season are the freshest and taste great." },
+  { "id": "flowers", "prompt": "Plants at home or the view outside", "fallbackText": "A few plants at home make the day feel brighter." },
+  { "id": "tv", "prompt": "A TV show or opera you enjoy", "fallbackText": "If there's a good show or opera lately, I'd love a tip." },
+  { "id": "snack", "prompt": "A snack you loved as a child", "fallbackText": "I hear the snacks from childhood taste the best." }
+]

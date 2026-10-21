@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { LANGUAGES, type Language } from '@anyidea/protocol';
 import { DirectorSchema } from '../config.ts';
 import { DEFAULT_ROLE, type RoleCatalog } from './catalog.ts';
+import { PROMPT_LABELS } from './labels.ts';
 import type { DirectorConfig } from './types.ts';
 
 const Id = z.string().regex(/^[a-z][a-z0-9-]{0,39}$/);
@@ -39,7 +40,7 @@ const TopicsSchema = z.array(z.object({
   fallbackText: z.string().min(1).max(60),
 }).strict()).min(1).max(50);
 
-interface SharedText { safety: string; actions: string }
+export interface SharedText { safety: string; actions: string; extract: string; recall: string }
 interface LoadedStyle { text: string; voice: string | undefined }
 interface LoadedActivity { title: string; summary: string; text: string }
 interface LoadedLanguage {
@@ -74,9 +75,16 @@ export class FileRoleCatalog implements RoleCatalog {
     for (const language of LANGUAGES) {
       const dir = join(rootDir, '_shared', language);
       if (!existsSync(dir)) continue;
+      const readShared = (name: keyof SharedText): string => {
+        const file = join(dir, `${name}.md`);
+        if (!existsSync(file)) throw new Error(`shared_missing:${language}:${name}`);
+        return readText(file);
+      };
       shared.set(language, {
-        safety: readText(join(dir, 'safety.md')),
-        actions: readText(join(dir, 'actions.md')),
+        safety: readShared('safety'),
+        actions: readShared('actions'),
+        extract: readShared('extract'),
+        recall: readShared('recall'),
       });
     }
     const roles = new Map<string, LoadedRole>();
@@ -121,6 +129,14 @@ export class FileRoleCatalog implements RoleCatalog {
 
   director(roleId: string, language = this.defaultLanguage(roleId)): DirectorConfig {
     return this.languagePack(roleId, language).director;
+  }
+
+  extractPrompt(language = this.defaultLanguage(this.fallbackRole)): string {
+    return this.sharedFor(language).extract;
+  }
+
+  recallPrompt(language = this.defaultLanguage(this.fallbackRole)): string {
+    return this.sharedFor(language).recall;
   }
 
   pairs(): Array<{ roleId: string; styleId: string }> {
@@ -202,10 +218,14 @@ function loadRole(dir: string, dirName: string): LoadedRole {
     languages.set(language, {
       styles,
       activities,
-      activityDirectory: [meta.intro, ...meta.activities.map((activity) => `- ${activity.title}：${activity.summary}`)].join('\n'),
+      activityDirectory: [
+        meta.intro,
+        ...meta.activities.map((activity) => `- ${activity.title}${PROMPT_LABELS[language].separator}${activity.summary}`),
+      ].join('\n'),
       director: { ...director, topics },
     });
   }
+  validateTopics(role.id, languages);
   validateTimings(role.id, languages);
   return {
     defaultStyle: role.defaultStyle,
@@ -213,6 +233,22 @@ function loadRole(dir: string, dirName: string): LoadedRole {
     supportedLanguages: role.supportedLanguages,
     languages,
   };
+}
+
+/** Topic ids must match across languages; order may differ. */
+function validateTopics(roleId: string, languages: Map<Language, LoadedLanguage>): void {
+  const entries = [...languages.entries()];
+  const first = entries[0];
+  if (!first) return;
+  const [firstLanguage, firstPack] = first;
+  const reference = new Set(firstPack.director.topics?.map((topic) => topic.id) ?? []);
+  for (const [language, pack] of entries) {
+    if (language === firstLanguage) continue;
+    const ids = new Set(pack.director.topics?.map((topic) => topic.id) ?? []);
+    if (ids.size !== reference.size || [...ids].some((id) => !reference.has(id))) {
+      throw new Error(`topic_set_mismatch:${roleId}`);
+    }
+  }
 }
 
 function validateTimings(roleId: string, languages: Map<Language, LoadedLanguage>): void {
