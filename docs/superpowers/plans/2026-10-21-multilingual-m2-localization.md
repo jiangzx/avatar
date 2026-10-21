@@ -920,6 +920,7 @@ git commit -m "feat(gateway): localize recall, extraction, and summaries"
 ### Task 5: 安全/情绪/沉默本地化、告知关键词与会话剩余接线
 
 **Files:**
+- Modify: `gateway/src/memory/evidence.ts`（skipPatterns 大小写不敏感，英文 denial 不漏）
 - Modify: `gateway/src/memory/writer.ts`
 - Modify: `gateway/src/session/silence.ts`
 - Modify: `gateway/src/session/session.ts`
@@ -937,6 +938,7 @@ git commit -m "feat(gateway): localize recall, extraction, and summaries"
 - Test: `gateway/test/snapshot.test.ts`
 - Test: `gateway/test/fileCatalog.test.ts`
 - Test: `gateway/test/memory-text.test.ts`
+- Test: `gateway/test/evidence.test.ts`
 - Test: `gateway/test/emotion.test.ts`
 - Test: `gateway/test/memory-acceptance.test.ts`
 
@@ -1016,6 +1018,7 @@ if (stage === 'rest') return !/[？?]/.test(text);
 
 - [ ] **Step 4: 安全/情绪/告知/会话接线**
 
+- `evidence.ts`：`skipPatterns` 比较改为大小写不敏感（`cleaned.toLowerCase().includes(pattern.toLowerCase())`），避免英文句首大写的 denial（`You're wrong`）被当成证据；中文无影响。测试：`You're wrong`/`YOU'RE WRONG` 为 false，`You're wrong, I like tea.` 仍为 false，`I like tea.` 为 true。
 - `writer.ts`：构造函数 `(store, rules: SafetyRules = DEFAULT_I18N.safety)`；`scanText(input.text, rules)`；`index.ts` 传 `i18n.safety`。中文测试仍用默认（合并后包含 zh 词表）。
 - `index.ts`：`emotion: i18n.emotion`；`noticeKeywordsByLanguage: Object.fromEntries(LANGUAGES.map(l => [l, i18n.memory[l].noticeKeywords]))`；启动校验改为逐语言：
   ```ts
@@ -1059,7 +1062,7 @@ Expected: PASS。
 - [ ] **Step 6: 提交**
 
 ```bash
-git add gateway/src/memory/writer.ts gateway/src/session/silence.ts gateway/src/session/session.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/src/identity/registry.ts gateway/src/config.ts gateway/src/session/emotion.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/config/safety.json gateway/config/emotion.json gateway/test/silence.test.ts gateway/test/director-silence.test.ts gateway/test/session.test.ts gateway/test/snapshot.test.ts gateway/test/fileCatalog.test.ts gateway/test/memory-text.test.ts gateway/test/emotion.test.ts gateway/test/memory-acceptance.test.ts
+git add gateway/src/memory/evidence.ts gateway/src/memory/writer.ts gateway/src/session/silence.ts gateway/src/session/session.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/src/identity/registry.ts gateway/src/config.ts gateway/src/session/emotion.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/config/safety.json gateway/config/emotion.json gateway/test/silence.test.ts gateway/test/director-silence.test.ts gateway/test/session.test.ts gateway/test/snapshot.test.ts gateway/test/fileCatalog.test.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/emotion.test.ts gateway/test/memory-acceptance.test.ts
 git commit -m "feat(gateway): localize safety, emotion, silence, and notice checks"
 ```
 
