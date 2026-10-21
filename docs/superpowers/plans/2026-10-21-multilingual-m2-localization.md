@@ -944,6 +944,8 @@ git commit -m "feat(gateway): localize recall, extraction, and summaries"
 - Test: `gateway/test/fileCatalog.test.ts`
 - Test: `gateway/test/memory-text.test.ts`
 - Test: `gateway/test/evidence.test.ts`
+- Test: `gateway/test/memory-tools.test.ts`（改用 `i18n.memory.zh` 文案断言）
+- Test: `gateway/test/pacing.test.ts`（移除临时 memory.json 里的文本字段）
 - Test: `gateway/test/emotion.test.ts`
 - Test: `gateway/test/memory-acceptance.test.ts`
 
@@ -1051,7 +1053,8 @@ if (stage === 'rest') return !/[？?]/.test(text);
 2. `gateway/config/safety.json` 只保留 `minMaskedDigits`、`chineseDigits`、`invisibleCodePoints`；`gateway/src/config.ts` 删除旧 `loadSafetyConfig`/`SafetyRulesSchema`，`loadSharedSafety` + `mergeSafety` 成为唯一读取；`SafetyRules` 为 `SharedSafetyConfig & SafetyPhrases`（供 `scanText`）。`gateway/src/memory/redact.ts` 的 `chineseDigits` 同步改用 `loadSharedSafety`。
 3. `gateway/config/emotion.json` 只保留 `defaultEmotion`、`debounceMs`、`revertAfterMs`、`firstSentenceMaxChars`、`priority`；新建 `gateway/src/i18n/emotion.ts` 承载 `Emotion`/`EmotionLexicon`/`SharedEmotionConfig`/`EmotionConfig`、`loadSharedEmotion`、`mergeEmotion`；`gateway/src/session/emotion.ts` 只保留 `tagEmotion`/`EmotionTagger` 并 re-export 共享类型/函数，避免 memory→session 的间接运行时依赖。`gateway/src/i18n/load.ts`/`types.ts` 从 `./emotion.ts` 引入，不要引用 `session/emotion.ts`；旧 `loadEmotionConfig` 删除。
 4. 更新 `memory-text.test.ts`：`scanText` 用 `DEFAULT_I18N.safety`；`loadSafetyConfig` 断言改为 `loadSharedSafety` + i18n 合并词表。`emotion.test.ts` 用 `DEFAULT_I18N.emotion`。`memory-acceptance.test.ts` 的 `memoryConfig.memoryNoticeKeywords`/`recallSkipPatterns` 改用 `i18n`。
-5. `gateway/test/fixtures/**` 中若有旧的完整 safety/emotion JSON，改为 shared + i18n 两段或直接使用生产 `DEFAULT_I18N`。
+5. 更新 `memory-tools.test.ts` 的 `memory.forgetConfirmText`/`declineConfirmPrompt`/`declineConfirmedText` 断言为 `i18n.memory.zh.*`；更新 `pacing.test.ts` 里临时 memory.json fixture，删除已移除的文本字段（保留数值字段）。
+6. `gateway/test/fixtures/**` 中若有旧的完整 safety/emotion JSON，改为 shared + i18n 两段或直接使用生产 `DEFAULT_I18N`。
 
 Run: `npm test -w gateway -- test/memory-text.test.ts test/emotion.test.ts test/memory-acceptance.test.ts test/memory-tools.test.ts test/session.test.ts`
 Expected: PASS。
@@ -1067,7 +1070,7 @@ Expected: PASS。
 - [ ] **Step 6: 提交**
 
 ```bash
-git add gateway/src/memory/evidence.ts gateway/src/memory/redact.ts gateway/src/memory/writer.ts gateway/src/session/silence.ts gateway/src/session/session.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/src/identity/registry.ts gateway/src/config.ts gateway/src/i18n gateway/src/session/emotion.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/config/safety.json gateway/config/emotion.json gateway/test/silence.test.ts gateway/test/director-silence.test.ts gateway/test/session.test.ts gateway/test/snapshot.test.ts gateway/test/fileCatalog.test.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/emotion.test.ts gateway/test/memory-acceptance.test.ts
+git add gateway/src/memory/evidence.ts gateway/src/memory/redact.ts gateway/src/memory/writer.ts gateway/src/session/silence.ts gateway/src/session/session.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/src/identity/registry.ts gateway/src/config.ts gateway/src/i18n gateway/src/session/emotion.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/config/safety.json gateway/config/emotion.json gateway/test/silence.test.ts gateway/test/director-silence.test.ts gateway/test/session.test.ts gateway/test/snapshot.test.ts gateway/test/fileCatalog.test.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/memory-tools.test.ts gateway/test/pacing.test.ts gateway/test/emotion.test.ts gateway/test/memory-acceptance.test.ts
 git commit -m "feat(gateway): localize safety, emotion, silence, and notice checks"
 ```
 
