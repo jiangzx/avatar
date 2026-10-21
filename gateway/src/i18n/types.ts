@@ -84,6 +84,7 @@ export interface I18nBundle {
   language: LanguageRules;
   memory: Record<Language, MemoryCopy>;
   evidence: EvidenceRules;
+  /** Union of substring vague-recall phrases; exact per-language patterns stay in MemoryCopy. */
   recentQueries: readonly string[];
   safety: SafetyRules;
   emotion: EmotionConfig;

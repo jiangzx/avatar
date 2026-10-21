@@ -52,6 +52,12 @@ describe('memory evidence', () => {
     expect(isMemoryEvidence('Have a good day with your family.', rules)).toBe(true);
     expect(isMemoryEvidence('What did you do today?', rules)).toBe(false);
     expect(isMemoryEvidence('Have you eaten?', rules)).toBe(false);
+    expect(isMemoryEvidence('What about the park', rules)).toBe(false);
+    expect(isMemoryEvidence('Why so sad', rules)).toBe(false);
+    expect(isMemoryEvidence('Who else', rules)).toBe(false);
+    expect(isMemoryEvidence('How come', rules)).toBe(false);
+    expect(isMemoryEvidence('Where to', rules)).toBe(false);
+    expect(isMemoryEvidence('What if it rains', rules)).toBe(false);
   });
 
   it('drops whole-utterance ja/en acknowledgements only', () => {

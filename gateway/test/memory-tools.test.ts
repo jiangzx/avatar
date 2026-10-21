@@ -309,11 +309,26 @@ describe('memory tool registry', () => {
       expect(hit.text).not.toContain('I went to the park yesterday.');
     }
 
-    for (const query of ['Do you remember?', 'What did we say?', 'What did we talk about?']) {
+    for (const query of [
+      'Do you remember?', 'What did we say?', 'What did we talk about?',
+      'What did we say,', 'What did we say?"', 'Do you remember，',
+    ]) {
       const vague = await registryFor('en').handle('recall_memory', { query }, ctx());
       expect(vague.spokenFound).toBe(true);
       expect(vague.text).toContain('I went to the park yesterday.');
     }
+
+    const yesterday = await registryFor('en').handle(
+      'recall_memory', { query: 'What did we talk about yesterday?' }, ctx(),
+    );
+    expect(yesterday.text).toContain('I went to the park yesterday.');
+    expect(yesterday.text).not.toContain('I like watching old movies.');
+
+    const discussed = await registryFor('en').handle(
+      'recall_memory', { query: 'What did we discuss about movies?' }, ctx(),
+    );
+    expect(discussed.text).toContain('I like watching old movies.');
+    expect(discussed.text).not.toContain('I went to the park yesterday.');
   });
 
   it('accepts an en phrasing that keeps the source content words', async () => {

@@ -1,6 +1,6 @@
 {
   "neutral": [],
   "sad": ["sad", "sadness", "unhappy", "lonely", "loneliness", "alone", "crying", "cried", "upset", "worried", "sleepless", "hurts", "grieving", "memorial"],
-  "love": ["love you", "miss you", "thank you", "sweet", "kind", "warm", "my dear", "hug", "love"],
-  "happy": ["happy", "glad", "great", "fun", "haha", "birthday", "delicious", "wonderful", "good news", "exciting", "yay"]
+  "love": ["love you", "miss you", "thank you", "sweet", "kind", "kindness", "warm", "warmth", "my dear", "hug", "loved", "love"],
+  "happy": ["happy", "happiness", "glad", "great", "fun", "haha", "birthday", "delicious", "wonderful", "good news", "exciting", "yay"]
 }

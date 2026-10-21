@@ -37,6 +37,11 @@ describe('tagEmotion', () => {
     expect(tagEmotion('Lonely evening.', shipped)).toBe('sad');
     expect(tagEmotion('Thank you for the tea.', shipped)).toBe('love');
     expect(tagEmotion('A deep sadness.', shipped)).toBe('sad');
+    expect(tagEmotion('I felt loved.', shipped)).toBe('love');
+    expect(tagEmotion('Her warmth and kindness.', shipped)).toBe('love');
+    expect(tagEmotion('A deep happiness.', shipped)).toBe('happy');
+    // Whole-word matching must not turn "saddle" into sadness.
+    expect(tagEmotion('The saddle is old.', shipped)).toBeNull();
   });
 });
 

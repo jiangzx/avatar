@@ -53,7 +53,7 @@ export interface ToolRegistryOptions {
   memory: MemoryCopy;
   /** Union skip / question / ack rules, shared across languages. */
   evidence: EvidenceRules;
-  /** Union vague-recall phrases, shared across languages. */
+  /** Union substring vague-recall phrases; exact patterns come from the active language. */
   recentQueries: readonly string[];
   /** Recall phrasing system prompt for this language. */
   recallPrompt: string;

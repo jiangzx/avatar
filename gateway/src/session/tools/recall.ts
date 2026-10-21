@@ -40,16 +40,23 @@ function sameUtterance(a: string, b: string): boolean {
   return normalize(a) === normalize(b);
 }
 
+/** Whole-utterance key: ignore whitespace and edge punctuation/symbols. */
+function utteranceKey(text: string): string {
+  return text
+    .replace(/\s/g, '')
+    .toLowerCase()
+    .replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '');
+}
+
 /** A bare vague question stays vague; "what did we say about X" must go to FTS instead. */
 function isRecentQuery(normalized: string, copy: RecallCopy): boolean {
-  const key = normalized.replace(/[?？!！.。…]+$/u, '');
-  const norm = (pattern: string) => pattern.replace(/\s/g, '').toLowerCase();
+  const key = utteranceKey(normalized);
   if (copy.recentQueryExactPatterns.some((pattern) => {
-    const value = norm(pattern);
+    const value = utteranceKey(pattern);
     return value.length > 0 && key === value;
   })) return true;
   return copy.recentQueryPatterns.some((pattern) => {
-    const value = norm(pattern);
+    const value = utteranceKey(pattern);
     return value.length > 0 && normalized.includes(value);
   });
 }
