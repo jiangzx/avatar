@@ -1,6 +1,12 @@
 // High-risk memory-view contract: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
 import { PROMPT_LABELS, type PromptLabels } from '../roles/labels.ts';
-import { isMemoryEvidence } from './evidence.ts';
+import { EMPTY_EVIDENCE_RULES, isMemoryEvidence, type EvidenceRules } from './evidence.ts';
+
+/** Language-specific inputs: labels come from PROMPT_LABELS, rules from the i18n bundle. */
+export interface SnapshotRules {
+  addressingPatterns?: readonly RegExp[];
+  evidence?: EvidenceRules;
+}
 
 export function renderSnapshot(input: {
   facts: readonly { category: string; text: string }[];
@@ -9,11 +15,13 @@ export function renderSnapshot(input: {
   tail: readonly { role: 'user' | 'assistant'; text: string }[];
   maxChars: number;
   labels?: PromptLabels;
+  rules?: SnapshotRules;
 }): string {
   const labels = input.labels ?? PROMPT_LABELS.zh;
+  const addressingPatterns = input.rules?.addressingPatterns ?? [];
   const addressing = input.facts
     .filter((f) => f.category === 'addressing' && f.text)
-    .map((f) => addressingText(oneLine(f.text), labels));
+    .map((f) => addressingText(oneLine(f.text), labels, addressingPatterns));
   const other = input.facts
     .filter((f) => f.category !== 'addressing' && f.text)
     .map((f) => `${labels.fact}${labels.separator}${oneLine(f.text)}`);
@@ -64,22 +72,21 @@ export function renderMemoryViews(input: {
   addressing: readonly string[];
   facts: readonly string[];
   tail: readonly { role?: 'user' | 'assistant'; text: string }[];
-  skipPatterns?: readonly string[];
-  lightAcks?: readonly string[];
   maxChars: number;
   labels?: PromptLabels;
+  rules?: SnapshotRules;
 }): MemoryViews {
   const nameFacts = input.addressing.filter(Boolean).map((text) => ({ category: 'addressing', text }));
   const factLines = input.facts.filter(Boolean).map((text) => ({ category: 'other', text }));
-  const skipPatterns = input.skipPatterns ?? [];
+  const evidence = input.rules?.evidence ?? EMPTY_EVIDENCE_RULES;
   // Recent-session rows have no role; assistant rows are never evidence.
   const userTail = input.tail
-    .filter((entry) => entry.role !== 'assistant' && isMemoryEvidence(entry.text, skipPatterns, input.lightAcks ?? []))
+    .filter((entry) => entry.role !== 'assistant' && isMemoryEvidence(entry.text, evidence))
     .map((entry) => ({ role: 'user' as const, text: entry.text }));
   return {
-    full: renderSnapshot({ facts: [...nameFacts, ...factLines], notes: [], tail: userTail, maxChars: input.maxChars, labels: input.labels }),
-    greeting: renderSnapshot({ facts: [...nameFacts, ...factLines], notes: [], tail: [], maxChars: input.maxChars, labels: input.labels }),
-    proactive: renderSnapshot({ facts: factLines, notes: [], tail: [], maxChars: input.maxChars, labels: input.labels }),
+    full: renderSnapshot({ facts: [...nameFacts, ...factLines], notes: [], tail: userTail, maxChars: input.maxChars, labels: input.labels, rules: input.rules }),
+    greeting: renderSnapshot({ facts: [...nameFacts, ...factLines], notes: [], tail: [], maxChars: input.maxChars, labels: input.labels, rules: input.rules }),
+    proactive: renderSnapshot({ facts: factLines, notes: [], tail: [], maxChars: input.maxChars, labels: input.labels, rules: input.rules }),
     hasTopic: factLines.length > 0,
   };
 }
@@ -90,9 +97,12 @@ function oneLine(text: string): string {
 }
 
 /** Renders a stored self-introduction as a short label so the model does not mirror the whole sentence. */
-function addressingText(text: string, labels: PromptLabels): string {
-  const match = /^(?:用户名叫|用户叫|我叫)(.+)$/.exec(text.trim());
-  return match ? `${labels.addressing}${labels.separator}${match[1]}` : text;
+function addressingText(text: string, labels: PromptLabels, patterns: readonly RegExp[]): string {
+  for (const pattern of patterns) {
+    const match = pattern.exec(text.trim());
+    if (match?.[1]) return `${labels.addressing}${labels.separator}${match[1]}`;
+  }
+  return text;
 }
 
 function joinedLength(lines: readonly string[]): number {

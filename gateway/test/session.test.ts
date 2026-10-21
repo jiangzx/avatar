@@ -9,6 +9,7 @@ import type { SessionContext } from '../src/session/context.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import type { ReplyMetrics } from '../src/session/metrics.ts';
+import type { MemoryStore } from '../src/memory/store.ts';
 import { InterruptCoordinator } from '../src/session/interrupt.ts';
 import type { PacingConfig } from '../src/session/pacing.ts';
 import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
@@ -112,6 +113,15 @@ const ownedCtx: SessionContext = {
   ownerId: 'owner-1', agentId: 'agent-1', roleId: 'elder-companion', styleId: 'grandchild',
 };
 
+/** Only the rows refreshMemorySnapshot reads. */
+function memoryStoreStub(input: { addressing?: string[]; facts?: string[]; tail?: string[] }): MemoryStore {
+  return {
+    listFacts: () => (input.addressing ?? []).map((text) => ({ category: 'addressing', text })),
+    listProactiveFacts: () => (input.facts ?? []).map((text) => ({ category: 'preference', text })),
+    recentUserMessages: () => (input.tail ?? []).map((text) => ({ text })),
+  } as unknown as MemoryStore;
+}
+
 const slimOn: NonNullable<PacingConfig['slim']> = {
   enabled: true,
   intervalMs: 1_500,
@@ -185,6 +195,56 @@ describe('Session', () => {
     expect(plannerCalls).toBe(0);
     expect(creates).toHaveBeenCalledWith({ cue: 'greeting', instruction: '王叔，又见面了。', fallbackText: '王叔，又见面了。' });
     s.session.end();
+  });
+
+  it('reads the localized addressing line for the safe greeting', async () => {
+    const enDirector: DirectorConfig = {
+      ...director,
+      greetingNameTexts: ['{name}, good to see you again.'],
+      silenceDecision: {
+        instruction: 'D', speakInstruction: 'SAY {continuation}',
+        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
+        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
+      },
+    };
+    const roles = fixedRoleCatalog('P-en', enDirector, { languages: ['en'], defaultLanguage: 'en', directors: { en: enDirector } });
+    const s = setup({
+      roles,
+      store: memoryStoreStub({ addressing: ['My name is Hanako'], facts: ['likes tea'] }),
+      budget: { totalChars: 8_000, snapshotMaxChars: 600, summaryMaxChars: 800 },
+      textClient: { complete: async () => '{"speak":false}' },
+    }, { ...ownedCtx, language: 'en' }, 'en-safe-greeting');
+    const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
+    await s.session.start(s.transport);
+    expect(creates).toHaveBeenCalledWith({
+      cue: 'greeting', instruction: 'Hanako, good to see you again.', fallbackText: 'Hanako, good to see you again.',
+    });
+    s.session.end();
+  });
+
+  it('re-renders the memory snapshot with the new labels when the language changes', () => {
+    const roles = fixedRoleCatalog('P-zh', director, {
+      languages: ['zh', 'en'],
+      defaultLanguage: 'zh',
+      personas: { zh: 'P-zh', en: 'P-en' },
+    });
+    const store = memoryStoreStub({
+      addressing: ['My name is Hanako'],
+      facts: ['likes tea'],
+      tail: ['I walk every morning.'],
+    });
+    const session = new Session({
+      adapterFactory: () => new MockAdapter({ script }),
+      summarizer: new MockSummarizer(),
+      roles,
+      store,
+      budget: { totalChars: 8_000, snapshotMaxChars: 600, summaryMaxChars: 800 },
+    }, { ...ownedCtx, language: 'zh' });
+    expect(session.context.memorySnapshot).toBe('My name is Hanako\n事实：likes tea\n用户：I walk every morning.');
+
+    session.setInitialLanguage('en');
+    expect(session.context.memorySnapshot).toBe('Address as: Hanako\nFact: likes tea\nUser: I walk every morning.');
+    session.end();
   });
 
   it('keeps the substantive answer when a deferred memory notice plays after it', async () => {

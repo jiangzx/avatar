@@ -15,6 +15,7 @@ import { SessionManager } from './session/manager.ts';
 import { Session } from './session/session.ts';
 import { createGatewayServer } from './server/server.ts';
 import { DeviceRegistry, ORPHAN_CLEANUP_INTERVAL_MS } from './identity/registry.ts';
+import { backfillKanaBigrams } from './memory/backfill.ts';
 import { openDatabase } from './memory/db.ts';
 import { loadExtractPrompt } from './memory/extract.ts';
 import { SqliteMemoryStore } from './memory/store.ts';
@@ -78,6 +79,9 @@ if (store) {
   // This process is the only gateway for the DB: any row still open belongs to a dead process.
   const reconciled = store.closeOpenSessions(Date.now());
   if (reconciled > 0) log('sessions_reconciled', { count: reconciled });
+  // One bounded pass over rows written before kana tokens existed. Never log message text.
+  const backfilled = backfillKanaBigrams(store, memory.kanaBackfillBatch ?? 500);
+  if (backfilled > 0) log('kana_bigram_backfill', { changed: backfilled });
 }
 const registry = store
   ? new DeviceRegistry({
@@ -89,6 +93,7 @@ const registry = store
         orphanOwnerDays: identityConfig.orphanOwnerDays,
         orphanCleanupBatch: identityConfig.orphanCleanupBatch,
       },
+      i18n,
     })
   : null;
 log('identity_mode', { enabled: registry !== null, devEndpoints: identityConfig.enableDevEndpoints });
@@ -138,8 +143,7 @@ const manager = new SessionManager(
       budget: budgetReport.budget,
       budgets: budgetReport.budgets,
       maxHistoryChars: budgetReport.minHistoryChars,
-      recallSkipPatterns: memory.recallSkipPatterns,
-      ...(memory.lightAcks ? { lightAcks: memory.lightAcks } : {}),
+      i18n,
       ...(memory.memoryNoticeKeywords ? { noticeKeywords: memory.memoryNoticeKeywords } : {}),
       modelContextTokenLimit: pacing.rebuild.contextChars,
       rebuildTriggerRatio: pacing.rebuild.triggerRatio,

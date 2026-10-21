@@ -4,9 +4,13 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadSafetyConfig, type SafetyRules } from '../src/config.ts';
+import { backfillKanaBigrams } from '../src/memory/backfill.ts';
 import { bigrams } from '../src/memory/bigram.ts';
+import { openDatabase } from '../src/memory/db.ts';
 import { normalizeChineseDigits, redact } from '../src/memory/redact.ts';
 import { scanText } from '../src/memory/scan.ts';
+import { SqliteMemoryStore } from '../src/memory/store.ts';
+import { ftsMatch } from '../src/session/tools/recall.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const safetyPath = `${root}config/safety.json`;
@@ -55,6 +59,50 @@ describe('bigrams', () => {
     expect(bigrams('一十')).toBe('一十');
     expect(bigrams('两三')).toBe('两三');
     expect(bigrams('一拾')).toBe('一拾');
+  });
+
+  it('indexes kana and mixed Japanese runs without changing zh/en tokens', () => {
+    expect(bigrams('今日はいい天気ですね')).toEqual(expect.stringContaining('今日'));
+    expect(bigrams('今日はいい天気ですね')).toEqual(expect.stringContaining('天気'));
+    expect(bigrams('ヨガをしています')).toEqual(expect.stringContaining('ヨガ'));
+    expect(bigrams('ヨガをしています')).toEqual(expect.stringContaining('して'));
+    expect(bigrams('今天天气不错')).toBe('今天 天天 天气 气不 不错');
+    expect(bigrams('hello world')).toBe('hello world');
+  });
+});
+
+describe('kana backfill', () => {
+  it('rewrites stale kana bigrams once so FTS finds the message', () => {
+    const db = openDatabase(':memory:', { busyTimeoutMs: 1_000 });
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'kana-backfill', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    store.insertMessage({
+      id: 'kana-1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: 'ヨガをしています', bigrams: '', now: 2,
+    });
+    expect(store.searchMessages(created.ownerId, ftsMatch('ヨガ')!, 10)).toEqual([]);
+
+    expect(backfillKanaBigrams(store, 100)).toBe(1);
+    expect(store.searchMessages(created.ownerId, ftsMatch('ヨガ')!, 10).map((row) => row.text)).toEqual(['ヨガをしています']);
+
+    // The row now carries kana tokens: a second pass changes nothing.
+    expect(backfillKanaBigrams(store, 100)).toBe(0);
+    db.close();
+  });
+
+  it('leaves Han-only and Latin messages untouched and respects the batch limit', () => {
+    const db = openDatabase(':memory:', { busyTimeoutMs: 1_000 });
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'kana-limit', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    store.insertMessage({ id: 'zh', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天天气不错', bigrams: '', now: 2 });
+    store.insertMessage({ id: 'en', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: 'hello', bigrams: '', now: 3 });
+    store.insertMessage({ id: 'k1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: 'ヨガ', bigrams: '', now: 4 });
+    store.insertMessage({ id: 'k2', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: 'お茶', bigrams: '', now: 5 });
+
+    expect(backfillKanaBigrams(store, 3)).toBe(1);
+    expect(store.searchMessages(created.ownerId, ftsMatch('ヨガ')!, 10)).toHaveLength(1);
+    expect(store.searchMessages(created.ownerId, ftsMatch('お茶')!, 10)).toEqual([]);
+    expect(backfillKanaBigrams(store, 100)).toBe(1);
+    db.close();
   });
 });
 

@@ -35,9 +35,11 @@ function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
+const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
+
 /** Punctuation-insensitive comparison so the current question never becomes its own memory hit. */
 function sameUtterance(a: string, b: string): boolean {
-  const normalize = (text: string) => text.replace(/[\s，。！？、,.!?~～]/g, '');
+  const normalize = (text: string) => text.replace(/[\s，。！？、,.!?~～…—「」『』“”"'・]/g, '');
   return normalize(a) === normalize(b);
 }
 
@@ -50,6 +52,8 @@ export interface RecallCopy {
   skipPatterns: readonly string[];
   /** Whole-utterance acknowledgements are not evidence; substrings are. */
   lightAcks: readonly string[];
+  /** Question shapes per language (the question mark alone is not enough when ASR drops it). */
+  questionPatterns: readonly RegExp[];
   /** Vague "what did we talk about" queries answer from recent user statements instead of FTS. */
   recentQueryPatterns: readonly string[];
   /** System prompt for natural phrasing of a grounded line. */
@@ -82,12 +86,13 @@ async function recall(args: unknown, ctx: ToolContext, rules: SafetyRules, clipC
   if (!parsed.success) return { ok: false, error: 'invalid_args' };
   if (!ctx.store || !ctx.ownerId) return { ok: false, error: 'memory_unavailable' };
   const query = parsed.data.query;
+  const evidence = { questionPatterns: copy.questionPatterns, skipPatterns: copy.skipPatterns, lightAcks: copy.lightAcks };
   // Vague "what did we talk about" questions have no useful FTS tokens; use recent user statements.
   const normalized = query.replace(/\s/g, '');
   if (copy.recentQueryPatterns.some((pattern) => pattern.length > 0 && normalized.includes(pattern))) {
     const recent = ctx.store.recentUserMessages(ctx.ownerId, 12)
       .map((row) => stripInvisible(row.text, rules.invisibleCodePoints))
-      .filter((text) => text.length > 0 && scanText(text, rules) !== 'reject' && isMemoryEvidence(text, copy.skipPatterns, copy.lightAcks))
+      .filter((text) => text.length > 0 && scanText(text, rules) !== 'reject' && isMemoryEvidence(text, evidence))
       .slice(0, 3)
       .map((text) => clip(text, clipChars));
     return outcome(recent, copy, await phrase(ctx.textClient, recent[0], copy, rules));
@@ -106,7 +111,7 @@ async function recall(args: unknown, ctx: ToolContext, rules: SafetyRules, clipC
     const stripped = stripInvisible(row.text, rules.invisibleCodePoints);
     if (!stripped || scanText(stripped, rules) === 'reject') continue;
     if (trigger && sameUtterance(stripped, trigger)) continue;
-    if (!isMemoryEvidence(stripped, copy.skipPatterns, copy.lightAcks)) continue;
+    if (!isMemoryEvidence(stripped, evidence)) continue;
     lines.push(clip(stripped, clipChars));
     if (lines.length === 3) break;
   }
@@ -152,10 +157,11 @@ function parsePhrase(raw: string): string | null {
 /** Reject a phrasing that adds a new quoted title or loses every content bigram from the source. */
 function grounded(text: string, source: string): boolean {
   if (sameUtterance(text, source)) return false;
-  for (const match of text.matchAll(/[《「『“]([^》」』”]{1,20})[》」』”]/g)) {
+  for (const match of text.matchAll(/[《「『“"]([^》」』”"]{1,20})[》」』”"]/g)) {
     if (!source.includes(match[1]!)) return false;
   }
-  const tokens = bigrams(source).split(' ').filter((token) => token.length === 2);
+  // Kana pairs matter for Japanese; two-character Latin/digit tokens keep the same gate as Han pairs.
+  const tokens = bigrams(source).split(' ').filter((token) => token.length === 2 || KANA.test(token));
   return tokens.some((token) => text.includes(token));
 }
 

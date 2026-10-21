@@ -1,7 +1,12 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { loadI18n } from '../src/i18n/load.ts';
 import { PROMPT_LABELS } from '../src/roles/labels.ts';
 import { buildInstructions } from '../src/session/instructions.ts';
 import { renderMemoryViews, renderSnapshot } from '../src/memory/snapshot.ts';
+
+const root = fileURLToPath(new URL('..', import.meta.url));
+const i18n = loadI18n(`${root}config`);
 
 describe('renderSnapshot', () => {
   it('puts the addressing name ahead of a preference, a note, and the tail', () => {
@@ -138,6 +143,7 @@ describe('renderSnapshot', () => {
       notes: [],
       tail: [],
       maxChars: 200,
+      rules: { addressingPatterns: i18n.memory.zh.addressingPatterns },
     });
     expect(text).toBe('称呼：王叔');
   });
@@ -156,6 +162,7 @@ describe('renderSnapshot', () => {
 });
 
 describe('renderMemoryViews', () => {
+  const zhRules = { addressingPatterns: i18n.memory.zh.addressingPatterns, evidence: i18n.evidence };
   const views = renderMemoryViews({
     addressing: ['称呼：王叔'],
     facts: ['喜欢喝茶'],
@@ -166,6 +173,7 @@ describe('renderMemoryViews', () => {
       { role: 'assistant', text: '公园空气好' },
     ],
     maxChars: 600,
+    rules: zhRules,
   });
 
   it('keeps the full view to user statements only', () => {
@@ -187,8 +195,28 @@ describe('renderMemoryViews', () => {
       facts: [],
       tail: [{ role: 'user', text: '昨天去了公园' }],
       maxChars: 600,
+      rules: zhRules,
     });
     expect(nameOnly.greeting).toBe('称呼：王叔');
     expect(nameOnly.hasTopic).toBe(false);
+  });
+
+  it('renders ja/en labels and addressing in the session language', () => {
+    const ja = renderMemoryViews({
+      addressing: ['私の名前は花子です'], facts: ['お茶が好き'], tail: [{ role: 'user', text: '毎朝散歩しています。' }],
+      maxChars: 600, labels: PROMPT_LABELS.ja, rules: { addressingPatterns: i18n.memory.ja.addressingPatterns, evidence: i18n.evidence },
+    });
+    expect(ja.full).toContain('呼び方：花子');
+    expect(ja.full).toContain('事実：お茶が好き');
+    expect(ja.full).toContain('ユーザー：毎朝散歩しています。');
+    expect(ja.full).not.toContain('User');
+
+    const en = renderMemoryViews({
+      addressing: ['My name is Hanako'], facts: ['likes tea'], tail: [{ role: 'user', text: 'I walk every morning.' }],
+      maxChars: 600, labels: PROMPT_LABELS.en, rules: { addressingPatterns: i18n.memory.en.addressingPatterns, evidence: i18n.evidence },
+    });
+    expect(en.full).toContain('Address as: Hanako');
+    expect(en.full).toContain('Fact: likes tea');
+    expect(en.full).toContain('User: I walk every morning.');
   });
 });

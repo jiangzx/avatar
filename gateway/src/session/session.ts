@@ -18,7 +18,8 @@ import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
 import type { TranscriptWriter } from '../memory/writer.ts';
-import type { LanguageRules } from '../i18n/types.ts';
+import { DEFAULT_I18N } from '../i18n/load.ts';
+import type { I18nBundle, LanguageRules } from '../i18n/types.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { PROMPT_LABELS } from '../roles/labels.ts';
 import { devContext, type SessionContext } from './context.ts';
@@ -90,10 +91,8 @@ export interface SessionDeps {
   budgets?: Partial<Record<Language, InstructionBudget>>;
   /** Smallest history room across supported languages (startup validation). */
   maxHistoryChars?: number;
-  /** Lines that challenge or deny an earlier memory; undefined = no denial filtering (tests). */
-  recallSkipPatterns?: readonly string[];
-  /** Whole-utterance acknowledgements that are not user statements. */
-  lightAcks?: readonly string[];
+  /** Loaded language packs for memory views and evidence rules. Defaults to DEFAULT_I18N. */
+  i18n?: I18nBundle;
   /** The memory notice is verified by these words in its transcript (or verbatim fallback). */
   noticeKeywords?: readonly string[];
   /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
@@ -148,6 +147,7 @@ export class Session {
   readonly ledger: ConversationLedger;
   readonly context: SessionContext;
   private readonly writer: TranscriptWriter | undefined;
+  private readonly i18n: I18nBundle;
   private language: Language;
   private readonly personas = new Map<Language, string>();
   private readonly silencePlanners = new Map<Language, ReturnType<typeof createSilencePlanner>>();
@@ -237,7 +237,10 @@ export class Session {
   ) {
     this.writer = deps.writer;
     this.context = ctx;
+    this.i18n = deps.i18n ?? DEFAULT_I18N;
     this.language = this.resolveLanguage(ctx.language ?? deps.roles.defaultLanguage(ctx.roleId));
+    // The resolver rendered with the role's default language; render again in the session language.
+    this.refreshMemorySnapshot();
     const initialPersona = this.personaFor(this.language);
     const ledgerOpts = deps.ledger ?? DEFAULT_LEDGER_OPTIONS;
     // Summarize before the instruction budget would have to drop unsummarized turns.
@@ -513,6 +516,8 @@ export class Session {
     if (next === this.language) return;
     this.language = next;
     this.director.setLanguage(next);
+    // Same store data, new labels, addressing patterns, and evidence rules.
+    this.refreshMemorySnapshot();
     this.languagePushPending = push;
   }
 
@@ -1205,9 +1210,12 @@ export class Session {
       addressing: store.listFacts(ownerId).filter((fact) => fact.category === 'addressing').map((fact) => fact.text),
       facts: store.listProactiveFacts(ownerId).map((fact) => fact.text),
       tail: store.recentUserMessages(ownerId, 12).slice().reverse(),
-      skipPatterns: this.deps.recallSkipPatterns ?? [],
-      lightAcks: this.deps.lightAcks ?? [],
       maxChars,
+      labels: PROMPT_LABELS[this.language],
+      rules: {
+        addressingPatterns: this.i18n.memory[this.language].addressingPatterns,
+        evidence: this.i18n.evidence,
+      },
     });
     if (views.full) this.context.memorySnapshot = views.full;
     else delete this.context.memorySnapshot;
@@ -1226,7 +1234,8 @@ export class Session {
   private safeGreeting(): string | null {
     const snapshot = this.context.greetingMemorySnapshot;
     if (!snapshot) return null;
-    const namePrefix = '称呼：';
+    const labels = PROMPT_LABELS[this.language];
+    const namePrefix = `${labels.addressing}${labels.separator}`;
     const nameLine = snapshot.split('\n').find((line) => line.startsWith(namePrefix));
     const name = nameLine?.slice(namePrefix.length).trim();
     if (!name) return null;

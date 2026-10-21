@@ -25,7 +25,7 @@ export interface NewOwner { ownerId: string; deviceId: string; agentId: string }
  * owner/agent-scoped methods. Unscoped exceptions: the credential lookup by token hash,
  * aggregate counts for registration caps, the batched orphan-cleanup delete,
  * the startup list of owners that still have unextracted messages,
- * and the owner-id list for the daily retention pass.
+ * the startup kana-bigram backfill, and the owner-id list for the daily retention pass.
  */
 export interface MemoryStore {
   /** Owner + device + agent in one transaction. */
@@ -89,6 +89,10 @@ export interface MemoryStore {
   searchMessages(ownerId: string, match: string, limit: number): { text: string }[];
   /** Owner-scoped LIKE fallback for a single-character query (bigrams are empty). */
   searchMessagesLike(ownerId: string, pattern: string, limit: number): { text: string }[];
+  /** Startup-only, unscoped: oldest rows first so one pass covers messages written before kana tokens existed. */
+  listMessagesForKanaBackfill(limit: number): { rowid: number; text: string; bigrams: string }[];
+  /** Startup-only backfill of a row's stored FTS text; the update trigger refreshes the index. */
+  updateMessageBigrams(rowid: number, bigrams: string): void;
   /**
    * Deletes facts, notes, episodes, and followups whose text contains `query`.
    * Blanks FTS hits, the triggering user line when its text is given, and related diffs.
@@ -273,6 +277,8 @@ function prepareStatements(db: DatabaseSync) {
       WHERE owner_id = ? AND role = 'user' AND excluded = 0 AND text LIKE ? ESCAPE '\\'
       ORDER BY created_at DESC, rowid DESC
       LIMIT ?`),
+    messagesForKanaBackfill: p('SELECT rowid, text, bigrams FROM messages WHERE rowid > 0 ORDER BY rowid LIMIT ?'),
+    updateMessageBigrams: p('UPDATE messages SET bigrams = ? WHERE rowid = ?'),
     matchRowids: p(`SELECT m.rowid AS rowid FROM messages_fts
       JOIN messages m ON m.rowid = messages_fts.rowid
       WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.excluded = 0`),
@@ -485,6 +491,16 @@ export class SqliteMemoryStore implements MemoryStore {
 
   searchMessagesLike(ownerId: string, pattern: string, limit: number): { text: string }[] {
     return this.q.searchMessagesLike.all(ownerId, pattern, limit).map((row) => ({ text: row.text as string }));
+  }
+
+  listMessagesForKanaBackfill(limit: number): { rowid: number; text: string; bigrams: string }[] {
+    return this.q.messagesForKanaBackfill.all(limit).map((row) => ({
+      rowid: row.rowid as number, text: row.text as string, bigrams: row.bigrams as string,
+    }));
+  }
+
+  updateMessageBigrams(rowid: number, bigrams: string): void {
+    this.q.updateMessageBigrams.run(bigrams, rowid);
   }
 
   forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): ForgetResult {

@@ -15,6 +15,7 @@
   "recallPhraseTimeoutMs": 1500,
   "retentionDays": 90,
   "retentionBatch": 200,
+  "kanaBackfillBatch": 500,
   "extractEveryUserTurns": 10,
   "extractSilenceMs": 180000,
   "extractModel": "qwen-plus",

@@ -1,18 +1,19 @@
 import { normalizeChineseDigits } from './redact.ts';
 
-const HAN = /^\p{Script=Han}$/u;
+// Han, Hiragana, and Katakana form one adjacent-pair run; Latin and digits keep their run-per-token shape.
+const CJK = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]$/u;
 const LATIN_OR_DIGIT = /^[A-Za-z0-9]$/;
 
-/** Adjacent Han pairs, and each Latin or digit run, joined by spaces. Digit runs are folded first, not masked. */
+/** Adjacent CJK pairs, and each Latin or digit run, joined by spaces. Digit runs are folded first, not masked. */
 export function bigrams(text: string): string {
   const tokens: string[] = [];
   const chars = [...normalizeChineseDigits(text)];
   let i = 0;
   while (i < chars.length) {
     const ch = chars[i]!;
-    if (HAN.test(ch)) {
+    if (CJK.test(ch)) {
       const run: string[] = [];
-      while (i < chars.length && HAN.test(chars[i]!)) run.push(chars[i++]!);
+      while (i < chars.length && CJK.test(chars[i]!)) run.push(chars[i++]!);
       for (let j = 0; j < run.length - 1; j++) tokens.push(run[j]! + run[j + 1]!);
       continue;
     }

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { ActionName } from '@anyidea/protocol';
 import { loadSafetyConfig } from '../../config.ts';
+import { DEFAULT_I18N } from '../../i18n/load.ts';
 import type { MemoryStore } from '../../memory/store.ts';
 import type { TextModelClient } from '../../memory/textClient.ts';
 import type { MemoryWorker } from '../../memory/worker.ts';
@@ -87,6 +88,8 @@ export function createToolRegistry(): ToolRegistry {
       foundPrefix: copy.recallFoundPrefix ?? '我这边记着，您之前说过：',
       skipPatterns: copy.recallSkipPatterns ?? ['我什么时候', '什么时候说', '没说过', '没讲过', '记错', '记岔', '胡扯', '瞎说', '乱说', '你是不是'],
       lightAcks: copy.lightAcks ?? [],
+      // Task 4 replaces this with per-language copy.
+      questionPatterns: DEFAULT_I18N.evidence.questionPatterns,
       recentQueryPatterns: copy.recallRecentQueries ?? ['上次聊过什么', '上次说了什么', '之前聊过什么', '咱们聊过什么', '我们聊过什么', '聊到哪', '还记得上次', '上次咱们'],
       phraseInstruction: recallPhraseInstruction,
       phraseMaxChars: copy.recallPhraseMaxChars ?? 60,

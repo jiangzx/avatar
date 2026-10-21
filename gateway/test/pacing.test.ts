@@ -24,6 +24,21 @@ describe('pacing and budget config', () => {
     expect(memory.retentionBatch).toBe(200);
   });
 
+  it('accepts an optional kana backfill batch within 1..5000', () => {
+    expect(loadMemoryBudget(`${root}config/memory.json`).kanaBackfillBatch).toBe(500);
+    const dir = mkdtempSync(join(tmpdir(), 'mem-'));
+    const shipped = JSON.parse(readFileSync(join(root, 'config/memory.json'), 'utf8')) as Record<string, unknown>;
+    const write = (value: unknown) => writeFileSync(join(dir, 'memory.json'), JSON.stringify({ ...shipped, kanaBackfillBatch: value }));
+    for (const value of [1, 5_000]) {
+      write(value);
+      expect(loadMemoryBudget(join(dir, 'memory.json')).kanaBackfillBatch).toBe(value);
+    }
+    for (const value of [0, 5_001, 1.5]) {
+      write(value);
+      expect(() => loadMemoryBudget(join(dir, 'memory.json'))).toThrow();
+    }
+  });
+
   it('validates personas for every language and reports the smallest history room', () => {
     const pacing = loadPacing(`${root}config/pacing.json`);
     const memory = loadMemoryBudget(`${root}config/memory.json`);

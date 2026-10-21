@@ -67,6 +67,8 @@ const MemoryBudgetSchema = z.object({
   recallPhraseTimeoutMs: z.number().int().min(300).max(5_000).optional(),
   retentionDays: z.number().int().min(1).max(3_650),
   retentionBatch: z.number().int().min(1).max(10_000),
+  /** Rows examined in the one startup pass that adds kana tokens to old messages. */
+  kanaBackfillBatch: z.number().int().min(1).max(5_000).optional(),
   // Extraction settings sit beside `instructions`. Optional so older fixtures still parse.
   extractEveryUserTurns: z.number().int().min(1).max(100).optional(),
   extractSilenceMs: z.number().int().min(1_000).max(1_800_000).optional(),

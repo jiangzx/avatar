@@ -1,8 +1,11 @@
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_I18N } from '../i18n/load.ts';
+import type { I18nBundle } from '../i18n/types.ts';
 import { log } from '../log.ts';
 import { renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
+import { PROMPT_LABELS } from '../roles/labels.ts';
 import { devContext, type ContextResolver, type ResolveResult, type SessionContext } from '../session/context.ts';
 import type { SessionLifecycle } from '../session/manager.ts';
 import { loadMemoryBudget } from '../session/pacing.ts';
@@ -40,8 +43,8 @@ export interface DeviceRegistryDeps {
   now?: () => number;
   /** Defaults to instructions.snapshotMaxChars in gateway/config/memory.json. */
   snapshotMaxChars?: number;
-  /** Lines that challenge or deny an earlier memory; defaults to memory.json. */
-  recallSkipPatterns?: readonly string[];
+  /** Language packs for the initial snapshot. Defaults to DEFAULT_I18N. */
+  i18n?: I18nBundle;
 }
 
 /** Device registration and bearer → owner/agent resolution. Only token hashes are stored. */
@@ -50,15 +53,13 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
   readonly lifecycle: SessionLifecycle;
   private readonly now: () => number;
   private readonly snapshotMaxChars: number;
-  private readonly recallSkipPatterns: readonly string[];
-  private readonly lightAcks: readonly string[];
+  private readonly i18n: I18nBundle;
 
   constructor(private readonly deps: DeviceRegistryDeps) {
     const memory = loadMemoryBudget(fileURLToPath(new URL('../../config/memory.json', import.meta.url)));
     this.now = deps.now ?? Date.now;
     this.snapshotMaxChars = deps.snapshotMaxChars ?? memory.instructions.snapshotMaxChars;
-    this.recallSkipPatterns = deps.recallSkipPatterns ?? memory.recallSkipPatterns ?? [];
-    this.lightAcks = memory.lightAcks ?? [];
+    this.i18n = deps.i18n ?? DEFAULT_I18N;
     this.lifecycle = {
       started: (sessionId, ctx) => {
         if (ctx.agentId !== undefined) deps.store.recordSessionStart(sessionId, ctx.agentId, this.now());
@@ -108,9 +109,9 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
       addressing: store.listFacts(device.ownerId).filter((fact) => fact.category === 'addressing').map((fact) => fact.text),
       facts: store.listProactiveFacts(device.ownerId).map((fact) => fact.text),
       tail: store.recentUserMessages(device.ownerId, 12).slice().reverse(),
-      skipPatterns: this.recallSkipPatterns,
-      lightAcks: this.lightAcks,
       maxChars: this.snapshotMaxChars,
+      labels: PROMPT_LABELS[language],
+      rules: { addressingPatterns: this.i18n.memory[language].addressingPatterns, evidence: this.i18n.evidence },
     });
     if (views.full) ctx.memorySnapshot = views.full;
     if (views.greeting) {
