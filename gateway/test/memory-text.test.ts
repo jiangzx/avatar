@@ -89,6 +89,23 @@ describe('kana backfill', () => {
     db.close();
   });
 
+  it('advances the kana backfill cursor past the first page', () => {
+    const db = openDatabase(':memory:', { busyTimeoutMs: 1_000 });
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'kana-cursor', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    const texts = [0, 1, 2].map((i) => `${i}ヨガをしています。`);
+    texts.forEach((text, i) => store.insertMessage({
+      id: `m${i}`, sessionId: 's1', ownerId: created.ownerId, role: 'user', text, bigrams: '', now: i + 1,
+    }));
+
+    expect(backfillKanaBigrams(store, 2)).toBe(2);
+    expect(backfillKanaBigrams(store, 2)).toBe(1); // third row, not the same first two
+    // The third row is retrievable now, before the cursor wraps.
+    expect(store.searchMessages(created.ownerId, ftsMatch('ヨガ')!, 10).map((row) => row.text)).toContain(texts[2]);
+    expect(backfillKanaBigrams(store, 2)).toBe(0); // cursor wrapped; nothing left to change
+    db.close();
+  });
+
   it('leaves Han-only and Latin messages untouched and respects the batch limit', () => {
     const db = openDatabase(':memory:', { busyTimeoutMs: 1_000 });
     const store = new SqliteMemoryStore(db);

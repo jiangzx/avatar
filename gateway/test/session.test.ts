@@ -222,6 +222,32 @@ describe('Session', () => {
     s.session.end();
   });
 
+  it('greets with a zh-stored name in an en session', async () => {
+    const enDirector: DirectorConfig = {
+      ...director,
+      greetingNameTexts: ['{name}, good to see you again.'],
+      silenceDecision: {
+        instruction: 'D', speakInstruction: 'SAY {continuation}',
+        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
+        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
+      },
+    };
+    const roles = fixedRoleCatalog('P-en', enDirector, { languages: ['en'], defaultLanguage: 'en', directors: { en: enDirector } });
+    const s = setup({
+      roles,
+      store: memoryStoreStub({ addressing: ['称呼：王叔'] }),
+      budget: { totalChars: 8_000, snapshotMaxChars: 600, summaryMaxChars: 800 },
+      textClient: { complete: async () => '{"speak":false}' },
+    }, { ...ownedCtx, language: 'en' }, 'en-zh-addressing');
+    expect(s.session.context.greetingMemorySnapshot).toBe('Address as: 王叔');
+    const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
+    await s.session.start(s.transport);
+    expect(creates).toHaveBeenCalledWith({
+      cue: 'greeting', instruction: '王叔, good to see you again.', fallbackText: '王叔, good to see you again.',
+    });
+    s.session.end();
+  });
+
   it('re-renders the memory snapshot with the new labels when the language changes', () => {
     const roles = fixedRoleCatalog('P-zh', director, {
       languages: ['zh', 'en'],

@@ -89,10 +89,14 @@ export interface MemoryStore {
   searchMessages(ownerId: string, match: string, limit: number): { text: string }[];
   /** Owner-scoped LIKE fallback for a single-character query (bigrams are empty). */
   searchMessagesLike(ownerId: string, pattern: string, limit: number): { text: string }[];
-  /** Startup-only, unscoped: oldest rows first so one pass covers messages written before kana tokens existed. */
-  listMessagesForKanaBackfill(limit: number): { rowid: number; text: string; bigrams: string }[];
+  /** Startup-only, unscoped: rows after the durable cursor, oldest first. */
+  listMessagesForKanaBackfill(limit: number, afterRowid?: number): { rowid: number; text: string; bigrams: string }[];
   /** Startup-only backfill of a row's stored FTS text; the update trigger refreshes the index. */
   updateMessageBigrams(rowid: number, bigrams: string): void;
+  /** Last rowid scanned by the kana backfill; 0 when no pass has completed or the scan wrapped. */
+  kanaBackfillCursor(): number;
+  /** Persists the kana backfill cursor so the next startup resumes instead of rescanning page one. */
+  setKanaBackfillCursor(rowid: number): void;
   /**
    * Deletes facts, notes, episodes, and followups whose text contains `query`.
    * Blanks FTS hits, the triggering user line when its text is given, and related diffs.
@@ -277,8 +281,10 @@ function prepareStatements(db: DatabaseSync) {
       WHERE owner_id = ? AND role = 'user' AND excluded = 0 AND text LIKE ? ESCAPE '\\'
       ORDER BY created_at DESC, rowid DESC
       LIMIT ?`),
-    messagesForKanaBackfill: p('SELECT rowid, text, bigrams FROM messages WHERE rowid > 0 ORDER BY rowid LIMIT ?'),
+    messagesForKanaBackfill: p('SELECT rowid, text, bigrams FROM messages WHERE rowid > ? ORDER BY rowid LIMIT ?'),
     updateMessageBigrams: p('UPDATE messages SET bigrams = ? WHERE rowid = ?'),
+    kanaBackfillCursor: p("SELECT value FROM meta WHERE key = 'kana_backfill_cursor'"),
+    setKanaBackfillCursor: p("INSERT INTO meta (key, value) VALUES ('kana_backfill_cursor', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value"),
     matchRowids: p(`SELECT m.rowid AS rowid FROM messages_fts
       JOIN messages m ON m.rowid = messages_fts.rowid
       WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.excluded = 0`),
@@ -493,14 +499,24 @@ export class SqliteMemoryStore implements MemoryStore {
     return this.q.searchMessagesLike.all(ownerId, pattern, limit).map((row) => ({ text: row.text as string }));
   }
 
-  listMessagesForKanaBackfill(limit: number): { rowid: number; text: string; bigrams: string }[] {
-    return this.q.messagesForKanaBackfill.all(limit).map((row) => ({
+  listMessagesForKanaBackfill(limit: number, afterRowid = 0): { rowid: number; text: string; bigrams: string }[] {
+    return this.q.messagesForKanaBackfill.all(afterRowid, limit).map((row) => ({
       rowid: row.rowid as number, text: row.text as string, bigrams: row.bigrams as string,
     }));
   }
 
   updateMessageBigrams(rowid: number, bigrams: string): void {
     this.q.updateMessageBigrams.run(bigrams, rowid);
+  }
+
+  kanaBackfillCursor(): number {
+    const row = this.q.kanaBackfillCursor.get() as { value: string } | undefined;
+    const parsed = row ? Number.parseInt(row.value, 10) : 0;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
+
+  setKanaBackfillCursor(rowid: number): void {
+    this.q.setKanaBackfillCursor.run(String(rowid));
   }
 
   forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): ForgetResult {

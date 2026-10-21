@@ -96,10 +96,16 @@ function oneLine(text: string): string {
   return text.replace(/[\r\n]+/g, ' ').trim();
 }
 
+// Extraction may store an already-labelled name from any language; re-render it in the session language.
+const STORED_ADDRESSING = /^(?:称呼|呼び方|Address as)[：:]\s*(.+)$/iu;
+
 /** Renders a stored self-introduction as a short label so the model does not mirror the whole sentence. */
 function addressingText(text: string, labels: PromptLabels, patterns: readonly RegExp[]): string {
+  const trimmed = text.trim();
+  const stored = STORED_ADDRESSING.exec(trimmed);
+  if (stored?.[1]) return `${labels.addressing}${labels.separator}${stored[1]}`;
   for (const pattern of patterns) {
-    const match = pattern.exec(text.trim());
+    const match = pattern.exec(trimmed);
     if (match?.[1]) return `${labels.addressing}${labels.separator}${match[1]}`;
   }
   return text;

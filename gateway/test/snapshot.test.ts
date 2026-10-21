@@ -201,6 +201,24 @@ describe('renderMemoryViews', () => {
     expect(nameOnly.hasTopic).toBe(false);
   });
 
+  it('reads a zh-stored addressing line in an en snapshot', () => {
+    const views = renderMemoryViews({
+      addressing: ['称呼：王叔'], facts: [], tail: [], maxChars: 600,
+      labels: PROMPT_LABELS.en,
+      rules: { addressingPatterns: i18n.memory.en.addressingPatterns, evidence: i18n.evidence },
+    });
+    expect(views.full).toBe('Address as: 王叔');
+  });
+
+  it('keeps a zh-stored addressing line byte-identical in a zh snapshot', () => {
+    const views = renderMemoryViews({
+      addressing: ['称呼：王叔'], facts: [], tail: [], maxChars: 600,
+      labels: PROMPT_LABELS.zh,
+      rules: { addressingPatterns: i18n.memory.zh.addressingPatterns, evidence: i18n.evidence },
+    });
+    expect(views.full).toBe('称呼：王叔');
+  });
+
   it('renders ja/en labels and addressing in the session language', () => {
     const ja = renderMemoryViews({
       addressing: ['私の名前は花子です'], facts: ['お茶が好き'], tail: [{ role: 'user', text: '毎朝散歩しています。' }],

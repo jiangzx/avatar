@@ -261,10 +261,10 @@ describe('SqliteMemoryStore', () => {
 });
 
 describe('memory tables', () => {
-  it('reaches schema version 3, finds a message by bigram, and cascades with the owner', () => {
+  it('reaches schema version 4, finds a message by bigram, and cascades with the owner', () => {
     const db = open();
-    expect(MIGRATIONS).toHaveLength(3);
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 3 });
+    expect(MIGRATIONS).toHaveLength(4);
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 4 });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('messages_owner_created', 'messages_owner_pending') ORDER BY name").all())
       .toEqual([{ name: 'messages_owner_created' }, { name: 'messages_owner_pending' }]);
     const created = owner(new SqliteMemoryStore(db), 'h-mem');
@@ -333,9 +333,29 @@ describe('memory tables', () => {
     db.exec('PRAGMA foreign_keys = ON');
     expect(migrate(db, MIGRATIONS.slice(0, 1))).toBe(1);
     db.prepare('INSERT INTO owners (id, created_at, last_seen_at) VALUES (?, ?, ?)').run('owner-v1', 1, 1);
-    expect(migrate(db)).toBe(3);
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 3 });
+    expect(migrate(db)).toBe(4);
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 4 });
     expect(db.prepare('SELECT id FROM owners WHERE id = ?').get('owner-v1')).toEqual({ id: 'owner-v1' });
     expect(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'messages'").get()).toEqual({ n: 1 });
+  });
+
+  it('persists the kana backfill cursor in meta and pages after it', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = owner(store, 'h-kana-cursor');
+    expect(store.kanaBackfillCursor()).toBe(0);
+    store.insertMessage({ id: 'c1', sessionId: 's', ownerId: created.ownerId, role: 'user', text: 'ヨガ', bigrams: '', now: 1 });
+    store.insertMessage({ id: 'c2', sessionId: 's', ownerId: created.ownerId, role: 'user', text: 'お茶', bigrams: '', now: 2 });
+
+    expect(store.listMessagesForKanaBackfill(10, 0).map((row) => row.text)).toEqual(['ヨガ', 'お茶']);
+    const first = store.listMessagesForKanaBackfill(1, 0);
+    expect(first.map((row) => row.text)).toEqual(['ヨガ']);
+    expect(store.listMessagesForKanaBackfill(10, first[0]!.rowid).map((row) => row.text)).toEqual(['お茶']);
+
+    store.setKanaBackfillCursor(first[0]!.rowid);
+    expect(store.kanaBackfillCursor()).toBe(first[0]!.rowid);
+    store.setKanaBackfillCursor(0);
+    expect(store.kanaBackfillCursor()).toBe(0);
+    expect(db.prepare("SELECT value FROM meta WHERE key = 'kana_backfill_cursor'").get()).toEqual({ value: '0' });
   });
 });
