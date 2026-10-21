@@ -12,6 +12,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
 // Run from the repo root: node --import tsx docs/testing/plan3-mock-smoke.mjs
+// zh regression smoke; multilingual behavior is covered by gateway/test/multilingual.test.ts.
 // Synthetic inputs only; no model requests or retained database.
 async function main() {
   const temp = mkdtempSync(join(tmpdir(), 'avatar-resume-smoke-'));
@@ -109,7 +110,7 @@ async function main() {
           });
           await once(ws, 'open');
           const send = msg => ws.send(JSON.stringify(msg));
-          send({ type: 'session.start', clientInfo: { platform: 'test', audioPath: 'B' } });
+          send({ type: 'session.start', clientInfo: { platform: 'test', audioPath: 'B', language: 'zh' } });
           await until(() => received.some(m => m.type === 'session.ready'), 'session ready');
           const done = seq => until(() => received.some(m => m.type === 'response.end' && m.responseSeq === seq), 'response end');
           const finish = seq => send({ type: 'playback.stopped', responseSeq: seq, playedMs: audioMs.get(seq) ?? 0, reason: 'ended' });

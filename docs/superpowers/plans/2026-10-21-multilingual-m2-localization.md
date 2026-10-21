@@ -1,6 +1,6 @@
 # 多语言 M2：日语/英语语言包与记忆/安全本地化 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 在不改变中文既有行为的前提下，交付 `elder-companion` 的 `ja`/`en` 生产语言包，并把记忆告知/召回、证据判定、假名分词、安全/情绪词表、四段沉默校验和抽取/摘要链路全部按语言配置化。
 
@@ -125,7 +125,7 @@
   - `detectLanguage(text: string, previous?: Language, rules?: LanguageRules): Language`
   - `dominantLanguage(texts: readonly string[]): Language`
 
-- [ ] **Step 1: 写 i18n 失败测试**
+- [x] **Step 1: 写 i18n 失败测试**
 
 `gateway/test/i18n.test.ts`：
 
@@ -198,16 +198,16 @@ describe('loadI18n', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/i18n.test.ts`
 Expected: FAIL（`gateway/src/i18n/load.ts` 不存在）。
 
-- [ ] **Step 3: 定义 i18n 类型**
+- [x] **Step 3: 定义 i18n 类型**
 
 `gateway/src/i18n/types.ts`：按上面的 Interfaces 定义。注意 `MemoryCopy.recall.phraseInstruction` **不放在 JSON 里**，由 `RoleCatalog.recallPrompt(language)` 在 Task 4 注入；`RecallTextCopy` 不包含 `phraseInstruction`/`phraseTimeoutMs`。
 
-- [ ] **Step 4: 迁移共享配置并实现加载器（本任务不删除共享 JSON 字段）**
+- [x] **Step 4: 迁移共享配置并实现加载器（本任务不删除共享 JSON 字段）**
 
 1. `config/i18n/zh/safety.json` 原样保存 `config/safety.json` 的三个短语数组；ja/en 各写本地化词表。`gateway/src/config.ts` 新增 `SharedSafetyConfig`、`loadSharedSafety(path)`、`mergeSafety(shared, phrases)`；**保留**现有 `loadSafetyConfig`/`SafetyRules` 不动，避免本任务打断 writer/tools。`load.ts` 用 `mergeSafety(loadSafetyConfig(sharedPath), i18nPhrases)` 得到 `I18nBundle.safety`，去重。
 2. `config/i18n/zh/emotion.json` 原样保存 `config/emotion.json` 的 `lexicon`；ja/en 各写本地化词表。`session/emotion.ts` 新增 `SharedEmotionConfig`、`loadSharedEmotion`、`mergeEmotion`；**保留**现有 `loadEmotionConfig`/`EmotionConfig` 不动。`load.ts` 把共享 `lexicon` 与三语词表合并去重。
@@ -237,7 +237,7 @@ Expected: FAIL（`gateway/src/i18n/load.ts` 不存在）。
 
 `ja/language.json` 至少包含 `names: ["日语","日文","日本語","japanese"]`、日语短应答（はい/うん/ええ/いいえ/そう/そうですね）、`questionSuffixes: ["か","かな","かしら"]`、以及 M1 的 `^日本語で(?:お願いします)?$`（目标 ja）和对应目标 en/zh 的 `英語で`/`中国語で` 整句式。`en/language.json` 至少包含 `names: ["英文","英语","english"]`、短应答（ok/okay/yes/yeah/yep/no/nope）、以及 M1 英文整句正则（目标 en/ja/zh 各一份）：`^(?:names)$`、`^(?:names)\\s+please$`、`^(?:please\\s+)?(?:speak|talk|reply|answer|switch)(?:\\s+(?:to|in))?(?:\\s+in)?\\s+(?:names)(?:\\s+please)?$`。
 
-- [ ] **Step 5: 把 `detectLanguage` 改为配置驱动**
+- [x] **Step 5: 把 `detectLanguage` 改为配置驱动**
 
 `gateway/src/session/language.ts` 删除 `SHORT_ACKS`、`LANGUAGE_NAMES`、`EXPLICIT`、`CHINESE_REQUEST_TAIL` 及组合正则；保留 `KANA/HAN/LATIN/LETTER_OR_DIGIT`、边缘标点、问号/问句后缀判断。实现：
 
@@ -262,13 +262,13 @@ export function detectLanguage(text: string, previous: Language = 'zh', rules: L
 
 新增 `dominantLanguage(texts)`：任一句含假名→`ja`；否则拉丁字符多于汉字→`en`；否则`zh`。用于 startup 抽取（Task 4）。
 
-- [ ] **Step 6: 更新测试与调用点**
+- [x] **Step 6: 更新测试与调用点**
 
 - `language.test.ts` 改为 `const rules = loadI18n(config).language;`，所有 `detectLanguage(x, y)` 变 `detectLanguage(x, y, rules)`；M1 全部用例必须保持通过。新增回归：`讲英语`、`麻烦用英语`、`麻烦说英语`、`切换英语`、`用英语回答`、`请用英语跟我说话`、`说英语跟我聊天`、`please speak English`、`talk English`、`reply English`、`switch English` 都必须切到目标语言；`我在学英语` 等提及句仍不切。
 - `session.test.ts` 的 `setup()` 增加 `languageRules: loadI18n(config).language`；`multilingual.test.ts` 后续同样。
 - `index.ts`：`const i18n = loadI18n(`${root}config`)`；传 `languageRules: i18n.language`。此任务不接线其它 i18n 字段，`config/memory.json`、`config/safety.json`、`config/emotion.json` 保持原样。
 
-- [ ] **Step 7: 跑聚焦测试与 typecheck**
+- [x] **Step 7: 跑聚焦测试与 typecheck**
 
 Run: `npm test -w gateway -- test/i18n.test.ts test/language.test.ts test/session.test.ts`
 Expected: PASS。
@@ -279,7 +279,7 @@ Expected: PASS（本任务未改共享 safety/emotion 配置，旧测试应保�
 Run: `npm run typecheck -w gateway`
 Expected: PASS。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add gateway/src/i18n gateway/config/i18n gateway/src/config.ts gateway/src/session/emotion.ts gateway/src/session/language.ts gateway/src/session/session.ts gateway/src/index.ts gateway/test/i18n.test.ts gateway/test/language.test.ts gateway/test/session.test.ts
@@ -321,7 +321,7 @@ git commit -m "feat(gateway): add i18n config loader and language rules"
   - `SessionDeps.budgets?: Partial<Record<Language, InstructionBudget>>`；`Session` 用当前语言的预算渲染 instructions/初始 historyBudget，`budget` 字段保留为测试回退。
   - 启动错误码：`shared_missing:<language>:<file>`、`topic_set_mismatch:<role>`、`role_languages_incomplete:elder-companion:<missing>`。
 
-- [ ] **Step 1: 先写 parity 失败测试**
+- [x] **Step 1: 先写 parity 失败测试**
 
 在 `gateway/test/fileCatalog.test.ts`：
 
@@ -359,12 +359,12 @@ it('rejects a topic id set mismatch', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/fileCatalog.test.ts`
 Expected: FAIL（`extractPrompt` 不存在 / elder-companion 仍只有 zh）。
 
-- [ ] **Step 3: 扩展 RoleCatalog 与 FileRoleCatalog**
+- [x] **Step 3: 扩展 RoleCatalog 与 FileRoleCatalog**
 
 `catalog.ts` 加两个方法；`fixedRoleCatalog` 返回固定字符串（`'FIXTURE EXTRACT'`/`'FIXTURE RECALL'`），不影响测试。
 
@@ -381,7 +381,7 @@ const missing = LANGUAGES.filter((language) => !roles.supportedLanguages(DEFAULT
 if (missing.length > 0) throw new Error(`role_languages_incomplete:${DEFAULT_ROLE}:${missing.join(',')}`);
 ```
 
-- [ ] **Step 3b: 按语言指令预算（英语字符更长，不能复用中文预算）**
+- [x] **Step 3b: 按语言指令预算（英语字符更长，不能复用中文预算）**
 
 `gateway/config/memory.json` 的 `instructions` 增加：
 
@@ -426,7 +426,7 @@ it('gives ja/en their own instruction budget while zh stays unchanged', () => {
 - “rejects an overlong persona in any language”的 en 长度必须超过 en 预算（用 `'P'.repeat(8000)` 之类的明显超长值），不要用 2000（在 0.6 比例下会合法）。
 - `.budget` 仍等于 zh 的预算，保留旧断言。
 
-- [ ] **Step 4: 写 ja/en 内容包**
+- [x] **Step 4: 写 ja/en 内容包**
 
 **内容原则**：本地化改写，不逐字翻译。保留“小暖”、AI 身份、无身体、不能做现实动作、危机处理、不索要验证码/转账、不鼓励只依赖 AI 的边界。日语用です・ます体、少敬语堆叠、短句；英语用简单温暖短句，避免网络流行语和幼态称呼。
 
@@ -479,7 +479,7 @@ it('gives ja/en their own instruction budget while zh stays unchanged', () => {
 
 `_shared/{ja,en}/safety.md`：逐条本地化 zh 的 9 条安全底线。不要编造热线号码（blocker #16）；日语使用「心の相談窓口」、英语使用「a mental-health helpline」。`actions.md` 本地化 perform_action 说明。`extract.md` 完整本地化 zh 的输出契约与 14 条规则，并增加硬规则：每条 `text`/`summary` 用用户原话的语言写，不要翻译。`recall.md` 本地化 zh 的包装规则；日语最多 60 字、英语最多 120 字符由 `memory.json` 的 `phraseMaxChars` 控制，提示词只写“最多两句”。`zh/extract.md` 同样加入这一条硬规则。
 
-- [ ] **Step 5: 测试夹具与断言**
+- [x] **Step 5: 测试夹具与断言**
 
 - 在 `gateway/test/fixtures/roles/_shared/{zh,ja}/` 增加 `extract.md`、`recall.md`（如 `FIXTURE EXTRACT ZH`）。
 - 在 `gateway/test/fixtures/roles/test-role/ja/topics.json` 保持 id `t1`；可新增第二个 topic 验证顺序无关、集合相等。
@@ -490,7 +490,7 @@ it('gives ja/en their own instruction budget while zh stays unchanged', () => {
   - 原“ships a zh-only elder-companion in M1”改为三语断言。
 - `gateway/test/config.test.ts` 若断言 director 数值一致，保持通过。
 
-- [ ] **Step 6: 跑聚焦测试与 typecheck**
+- [x] **Step 6: 跑聚焦测试与 typecheck**
 
 Run: `npm test -w gateway -- test/fileCatalog.test.ts test/pacing.test.ts test/config.test.ts test/director.test.ts test/director-silence.test.ts`
 Expected: PASS。
@@ -498,7 +498,7 @@ Expected: PASS。
 Run: `npm run typecheck -w gateway`
 Expected: PASS。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add gateway/roles gateway/src/roles gateway/src/session/pacing.ts gateway/src/session/session.ts gateway/config/memory.json gateway/src/index.ts gateway/test/fixtures/roles gateway/test/fileCatalog.test.ts gateway/test/pacing.test.ts gateway/test/config.test.ts
@@ -539,7 +539,7 @@ git commit -m "feat(gateway): add ja/en elder-companion language packs"
   - `MemoryStore.kanaBackfillCursor(): number` / `setKanaBackfillCursor(rowid: number): void`
   - `backfillKanaBigrams(store, limit): number`（新文件 `gateway/src/memory/backfill.ts`；使用持久化 cursor，分批推进）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `memory-text.test.ts` 增加：
 
@@ -626,12 +626,12 @@ it('drops case-insensitive English whole-utterance acks', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/memory-text.test.ts test/evidence.test.ts test/snapshot.test.ts`
 Expected: FAIL（假名 token 为空 / 证据规则签名不匹配 / 回填 cursor 未实现）。
 
-- [ ] **Step 3: 实现假名 bigram 与回填**
+- [x] **Step 3: 实现假名 bigram 与回填**
 
 `bigram.ts`：
 
@@ -690,7 +690,7 @@ if (backfilled > 0) log('kana_bigram_backfill', { changed: backfilled });
 
 不打印正文。
 
-- [ ] **Step 4: 证据规则与快照参数化**
+- [x] **Step 4: 证据规则与快照参数化**
 
 `evidence.ts`：
 
@@ -719,7 +719,7 @@ export function isMemoryEvidence(text: string, rules: EvidenceRules = EMPTY_EVID
 
 `recall.ts` 的 `sameUtterance` 归一化扩展为 `[\s，。！？、,.!?~～…—「」『』“”"'・]`；`grounded()` 的作品名正则加入直引号 `"`；token 过滤从 `length===2` 改为“长度 2 或含假名”，避免英文/拉丁 token 被排除。`RecallCopy` 增加 `questionPatterns: readonly RegExp[]`；`recall` 内两处 `isMemoryEvidence` 改为 `isMemoryEvidence(text, { questionPatterns: copy.questionPatterns, skipPatterns: copy.skipPatterns, lightAcks: copy.lightAcks })`；`registry.ts` 暂时把 `DEFAULT_I18N.evidence.questionPatterns` 放进现有 `RecallCopy`（Task 4 再按语言取）。
 
-- [ ] **Step 5: 会话/注册表接线**
+- [x] **Step 5: 会话/注册表接线**
 
 - `SessionDeps` 增加 `i18n?: I18nBundle`（Task 4/5 复用；默认 `DEFAULT_I18N`）。
 - `Session.refreshMemorySnapshot` 使用 `PROMPT_LABELS[this.language]` 和 `i18n` 规则。
@@ -729,7 +729,7 @@ export function isMemoryEvidence(text: string, rules: EvidenceRules = EMPTY_EVID
 - 更新仍以旧签名调用 `renderMemoryViews`/`isMemoryEvidence` 的 `docs/testing/*.mjs` 探针：传入 `DEFAULT_I18N.evidence` 和 `memory.<lang>.addressingPatterns`，保持原有中文断言。
 - 保持 `renderMemoryViews` 的三种视图、预算、用户尾部过滤逻辑不变。
 
-- [ ] **Step 6: 跑高风险中文回归**
+- [x] **Step 6: 跑高风险中文回归**
 
 Run: `npm test -w gateway -- test/memory-text.test.ts test/evidence.test.ts test/snapshot.test.ts test/memory-store.test.ts test/session.test.ts test/memory-acceptance.test.ts`
 Expected: PASS；中文断言不变。
@@ -737,7 +737,7 @@ Expected: PASS；中文断言不变。
 Run: `npm run typecheck -w gateway`
 Expected: PASS。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add gateway/src/memory/bigram.ts gateway/src/memory/evidence.ts gateway/src/memory/snapshot.ts gateway/src/memory/store.ts gateway/src/memory/migrations.ts gateway/src/memory/backfill.ts gateway/src/session/tools/recall.ts gateway/src/session/tools/registry.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/src/session/session.ts gateway/src/identity/registry.ts gateway/src/index.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/snapshot.test.ts gateway/test/session.test.ts gateway/test/memory-acceptance.test.ts gateway/test/pacing.test.ts
@@ -781,7 +781,7 @@ git commit -m "feat(gateway): localize memory evidence, kana bigrams, and snapsh
   - `MemoryExtractor.extractOwner(ownerId, reason, language?: Language)`
   - `loadExtractPrompts(rolesRoot): Record<Language, string>`（`extract.ts`）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `memory-tools.test.ts` 增加：
 
@@ -832,12 +832,12 @@ it('MockSummarizer uses the requested language labels', async () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/memory-tools.test.ts test/worker.test.ts`
 Expected: FAIL（`createToolRegistry` 不接受 options / worker 无 systemPrompts）。
 
-- [ ] **Step 3: 实现召回与工具注册表**
+- [x] **Step 3: 实现召回与工具注册表**
 
 `recall.ts`：
 - `RecallCopy` 增加 `wrapText`、`toolDescription`、`queryDescription`、`phraseMaxChars`。
@@ -854,7 +854,7 @@ Expected: FAIL（`createToolRegistry` 不接受 options / worker 无 systemPromp
 - `perform_action`：把 `adapters/types.ts` 的 `PERFORM_ACTION_TOOL` 改成 `performActionSpec(copy: MemoryCopy['performAction'])`，用 `options.memory.performAction` 生成 description/action description；`zh` 逐字保留现有中文，ja/en 本地化。`i18n/types.ts` 的 `MemoryCopy` 加 `performAction`，`i18n/load.ts` 的 `MemoryFileSchema` 加同名字段，三个 `config/i18n/<lang>/memory.json` 补齐。
 - `specs()` 返回当前语言的工具描述（含 perform_action）。
 
-- [ ] **Step 4: Session 按语言构造工具**
+- [x] **Step 4: Session 按语言构造工具**
 
 `SessionDeps` 已由 Task 3 增加 `i18n?: I18nBundle`；本任务增加 `recallClipChars?: number`、`recallPhraseTimeoutMs?: number`。
 `Session` 删除 `private readonly tools = createToolRegistry()`，改为：
@@ -883,7 +883,7 @@ private toolsFor(language: Language): ToolRegistry {
 
 `sessionConfig()` 用 `this.toolsFor(this.language).specs()`；`onToolCall` 用 `this.toolsFor(this.language).handle(...)`。语言切换后召回话术立即跟随；工具 schema 的更新仍等适配器重建（M3 的适配器行为，不在本计划）。
 
-- [ ] **Step 5: 抽取/摘要语言贯通**
+- [x] **Step 5: 抽取/摘要语言贯通**
 
 `worker.ts`：
 - `MemoryWorkerOptions` 增加 `systemPrompts?`、`labels?`；`systemPrompt?` 保留，优先 `systemPrompts[language] ?? systemPrompt`。
@@ -902,7 +902,7 @@ private toolsFor(language: Language): ToolRegistry {
 
 `index.ts`：worker 构造改为 `systemPrompts: Object.fromEntries(LANGUAGES.map(l => [l, roles.extractPrompt(l)]))`，`labels: Object.fromEntries(LANGUAGES.map(l => [l, i18n.memory[l].extractLabels]))`；Session 传 `i18n`、`recallClipChars`、`recallPhraseTimeoutMs`。
 
-- [ ] **Step 6: 跑记忆/召回回归**
+- [x] **Step 6: 跑记忆/召回回归**
 
 Run: `npm test -w gateway -- test/memory-tools.test.ts test/worker.test.ts test/memory-acceptance.test.ts test/session.test.ts test/ledger.test.ts`
 Expected: PASS；中文召回文案、工具描述、抽取标签不变。
@@ -910,7 +910,7 @@ Expected: PASS；中文召回文案、工具描述、抽取标签不变。
 Run: `npm run typecheck -w gateway`
 Expected: PASS。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add gateway/src/session/tools gateway/src/adapters/types.ts gateway/src/i18n gateway/config/i18n gateway/src/roles/labels.ts gateway/src/session/session.ts gateway/src/session/ledger.ts gateway/src/memory/worker.ts gateway/src/memory/extract.ts gateway/src/index.ts gateway/test/memory-tools.test.ts gateway/test/worker.test.ts gateway/test/memory-acceptance.test.ts gateway/test/session.test.ts gateway/test/ledger.test.ts gateway/test/i18n.test.ts
@@ -958,7 +958,7 @@ git commit -m "feat(gateway): localize recall, extraction, and summaries"
   - `SessionDeps.i18n?: I18nBundle`
   - `DeviceRegistryDeps.i18n?: I18nBundle`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `silence.test.ts`：
 
@@ -1004,12 +1004,12 @@ it('verifies the memory notice with the language it was requested in', () => {
 expect(roles.buildPersona('elder-companion', 'grandchild', 'en')).toContain('- Reminisce: ');
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/silence.test.ts test/session.test.ts test/fileCatalog.test.ts`
 Expected: FAIL（`createSilencePlanner` 未接收 rules / notice 关键词仍全局）。
 
-- [ ] **Step 3: 实现 silence 语言规则**
+- [x] **Step 3: 实现 silence 语言规则**
 
 `silence.ts` 删除硬编码 `GREETING/LISTENING/ANYTIME`；`stageContentOk(stage, text, rules)`：
 
@@ -1023,7 +1023,7 @@ if (stage === 'rest') return !/[？?]/.test(text);
 
 `createSilencePlanner(client, config, rules)`。`Session.planProactiveLine` 传 `(this.deps.i18n ?? DEFAULT_I18N).silence[this.language]`。`director-silence.test.ts` 的所有调用补 rules（用 `loadI18n(config).silence.zh`）。
 
-- [ ] **Step 4: 安全/情绪/告知/会话接线**
+- [x] **Step 4: 安全/情绪/告知/会话接线**
 
 - `evidence.ts`：`skipPatterns` 比较改为大小写不敏感（`cleaned.toLowerCase().includes(pattern.toLowerCase())`），避免英文句首大写的 denial（`You're wrong`）被当成证据；中文无影响。测试：`You're wrong`/`YOU'RE WRONG` 为 false，`You're wrong, I like tea.` 仍为 false，`I like tea.` 为 true。
 - `writer.ts`：构造函数 `(store, rules: SafetyRules = DEFAULT_I18N.safety)`；`scanText(input.text, rules)`；`index.ts` 传 `i18n.safety`。中文测试仍用默认（合并后包含 zh 词表）。
@@ -1045,7 +1045,7 @@ if (stage === 'rest') return !/[？?]/.test(text);
 - `DeviceRegistry`：`i18n` 依赖用于初始快照 labels/evidence（Task 3）；本步在 `index.ts` 传入。
 - `fileCatalog.ts`：确认 activityDirectory 用 `PROMPT_LABELS[language].separator`（Task 2），本步只补测试。
 
-- [ ] **Step 4b: 完成共享配置迁移（单一事实来源）**
+- [x] **Step 4b: 完成共享配置迁移（单一事实来源）**
 
 此时所有消费者（writer、tools、Session、index、worker）已经读 `I18nBundle`，可以删除共享 JSON 里的旧字段：
 
@@ -1059,7 +1059,7 @@ if (stage === 'rest') return !/[？?]/.test(text);
 Run: `npm test -w gateway -- test/memory-text.test.ts test/emotion.test.ts test/memory-acceptance.test.ts test/memory-tools.test.ts test/session.test.ts`
 Expected: PASS。
 
-- [ ] **Step 5: 跑高风险回归**
+- [x] **Step 5: 跑高风险回归**
 
 Run: `npm test -w gateway -- test/silence.test.ts test/director-silence.test.ts test/director.test.ts test/session.test.ts test/memory-text.test.ts test/snapshot.test.ts test/memory-tools.test.ts test/memory-acceptance.test.ts`
 Expected: PASS；中文四段沉默、checkin 校验、记忆告知文案不变。
@@ -1067,7 +1067,7 @@ Expected: PASS；中文四段沉默、checkin 校验、记忆告知文案不变�
 Run: `npm run typecheck -w gateway`
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add gateway/src/memory/evidence.ts gateway/src/memory/redact.ts gateway/src/memory/writer.ts gateway/src/session/silence.ts gateway/src/session/session.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/src/identity/registry.ts gateway/src/config.ts gateway/src/i18n gateway/src/session/emotion.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/config/safety.json gateway/config/emotion.json gateway/test/silence.test.ts gateway/test/director-silence.test.ts gateway/test/session.test.ts gateway/test/snapshot.test.ts gateway/test/fileCatalog.test.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/memory-tools.test.ts gateway/test/pacing.test.ts gateway/test/emotion.test.ts gateway/test/memory-acceptance.test.ts

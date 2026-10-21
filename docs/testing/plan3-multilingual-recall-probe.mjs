@@ -13,12 +13,15 @@
 // Synthetic text may be printed only in this mode.
 //
 // --real-db opens the given SQLite file read-only (no migrations, no PRAGMA journal_mode,
-// no writes), picks the first owner that has messages, and runs the three roadmap queries
-// through the zh production recall path with no text client (verbatim fallback only).
+// no writes), picks the first owner that has messages, and runs the three roadmap zh queries
+// plus read-only ja/en diagnostics through each language's production recall path with no
+// text client (verbatim fallback only). The ja/en rows are diagnostics, not assertions: a
+// zh-only database may legitimately return no hits.
 // A pre-M2 database has no `meta` table, which the current SqliteMemoryStore prepares
 // against; in that case the probe uses a read-only fallback store with the same SELECTs.
 // It prints exactly one JSON object per query and never prints stored or spoken text:
-//   query          roadmap query that was run
+//   language       registry language used for the query
+//   query          query that was run
 //   hits           the grounded-hit boolean (the tool's spokenFound)
 //   evidenceCount  number of grounded history lines the tool returned (candidate lines
 //                  that passed the evidence filter)
@@ -60,7 +63,16 @@ const { ConversationLedger } = await import('../../gateway/src/session/ledger.ts
 const { createToolRegistry } = await import('../../gateway/src/session/tools/registry.ts');
 
 const i18n = loadI18n(fileURLToPath(new URL('../../gateway/config', import.meta.url)));
-const ROADMAP_QUERIES = ['上次聊到哪儿了', '上次聊过电影吗', '我说过喜欢喝茶吗'];
+const REAL_DB_QUERIES = [
+  { language: 'zh', query: '上次聊到哪儿了' },
+  { language: 'zh', query: '上次聊过电影吗' },
+  { language: 'zh', query: '我说过喜欢喝茶吗' },
+  // Read-only cross-language diagnostics; no hit is asserted for these.
+  { language: 'en', query: 'What did we talk about?' },
+  { language: 'ja', query: '前に何を話した' },
+  { language: 'en', query: 'tea' },
+  { language: 'ja', query: 'お茶' },
+];
 
 function registryFor(language) {
   return createToolRegistry({
@@ -408,17 +420,18 @@ async function runRealDb(path) {
       }
     }
 
-    await runQueries(registryFor('zh'), store, ownerId);
+    await runQueries(store, ownerId);
   } finally {
     if (db.isOpen) db.close();
   }
 }
 
-async function runQueries(zh, store, ownerId) {
-  for (const query of ROADMAP_QUERIES) {
-    const outcome = await zh.handle('recall_memory', { query }, toolContext(store, ownerId));
-    const lines = historyLines(outcome, 'zh');
+async function runQueries(store, ownerId) {
+  for (const { language, query } of REAL_DB_QUERIES) {
+    const outcome = await registryFor(language).handle('recall_memory', { query }, toolContext(store, ownerId));
+    const lines = historyLines(outcome, language);
     console.log(JSON.stringify({
+      language,
       query,
       hits: outcome.spokenFound === true,
       evidenceCount: lines.length,
