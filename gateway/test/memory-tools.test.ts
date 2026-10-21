@@ -289,6 +289,33 @@ describe('memory tool registry', () => {
     expect(result.text).not.toContain('This is still the active session.');
   });
 
+  it('routes en specific recall to FTS instead of vague recall', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'en-specific');
+    store.recordSessionStart('s-old', a.agentId, 1);
+    say(store, a.ownerId, 'en-movie', 'I like watching old movies.', 2, 's-old');
+    say(store, a.ownerId, 'en-park', 'I went to the park yesterday.', 3, 's-old');
+    store.recordSessionEnd('s-old', a.agentId, 4);
+    const ctx = () => ctxFor(store, worker(store), a);
+
+    for (const query of [
+      'Do you remember what movies we watched?',
+      'Did we talk about movies?',
+      'What did we say about movies?',
+    ]) {
+      const hit = await registryFor('en').handle('recall_memory', { query }, ctx());
+      expect(hit.spokenFound).toBe(true);
+      expect(hit.text).toContain('I like watching old movies.');
+      expect(hit.text).not.toContain('I went to the park yesterday.');
+    }
+
+    for (const query of ['Do you remember?', 'What did we say?', 'What did we talk about?']) {
+      const vague = await registryFor('en').handle('recall_memory', { query }, ctx());
+      expect(vague.spokenFound).toBe(true);
+      expect(vague.text).toContain('I went to the park yesterday.');
+    }
+  });
+
   it('accepts an en phrasing that keeps the source content words', async () => {
     const store = new SqliteMemoryStore(open());
     const a = owner(store, 'phrase-en');

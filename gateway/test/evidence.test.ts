@@ -46,6 +46,14 @@ describe('memory evidence', () => {
     expect(isMemoryEvidence('I like watching old movies.', rules)).toBe(true);
   });
 
+  it('keeps en statements that start with what/how/have', () => {
+    expect(isMemoryEvidence('What a lovely afternoon at the park.', rules)).toBe(true);
+    expect(isMemoryEvidence('How wonderful it was to see my grandson.', rules)).toBe(true);
+    expect(isMemoryEvidence('Have a good day with your family.', rules)).toBe(true);
+    expect(isMemoryEvidence('What did you do today?', rules)).toBe(false);
+    expect(isMemoryEvidence('Have you eaten?', rules)).toBe(false);
+  });
+
   it('drops whole-utterance ja/en acknowledgements only', () => {
     expect(isMemoryEvidence('はい', rules)).toBe(false);
     expect(isMemoryEvidence('okay', rules)).toBe(false);

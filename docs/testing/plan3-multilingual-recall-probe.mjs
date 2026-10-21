@@ -193,6 +193,7 @@ async function runTemp() {
     });
     store.recordSessionStart('probe-vague-session', vagueOwner.agentId, 4_001);
     insert(store, vagueOwner.ownerId, 'probe-vague-session', 'en-vague-recent', 'user', 'I like watching old movies.', 4_100);
+    insert(store, vagueOwner.ownerId, 'probe-vague-session', 'en-vague-park', 'user', 'I went to the park yesterday.', 4_150);
     store.recordSessionEnd('probe-vague-session', vagueOwner.agentId, 4_200);
     store.recordSessionStart('probe-vague-active', vagueOwner.agentId, 4_300);
     insert(store, vagueOwner.ownerId, 'probe-vague-active', 'en-vague-active', 'user', 'This is still the active session.', 4_400);
@@ -321,6 +322,23 @@ async function runTemp() {
     check(vagueEn.spokenFound === true, 'en_vague_found');
     check(historyLines(vagueEn, 'en').includes('I like watching old movies.'), 'en_vague_recent_line');
     check(!historyLines(vagueEn, 'en').includes('This is still the active session.'), 'en_vague_active_excluded');
+
+    // Specific en questions must use FTS, not the vague recent-statement path.
+    for (const query of [
+      'Do you remember what movies we watched?',
+      'Did we talk about movies?',
+      'What did we say about movies?',
+    ]) {
+      const hit = await en.handle('recall_memory', { query }, vagueCtx());
+      check(hit.spokenFound === true, 'en_specific_found');
+      check(historyLines(hit, 'en').includes('I like watching old movies.'), 'en_specific_movie');
+      check(!historyLines(hit, 'en').includes('I went to the park yesterday.'), 'en_specific_park_excluded');
+    }
+    for (const query of ['Do you remember?', 'What did we say?', 'What did we talk about?']) {
+      const bare = await en.handle('recall_memory', { query }, vagueCtx());
+      check(bare.spokenFound === true, 'en_bare_vague_found');
+      check(historyLines(bare, 'en')[0] === 'I went to the park yesterday.', 'en_bare_vague_newest');
+    }
 
     // en phrasing: whole-word tokens are enough for the grounded gate.
     const phrasedEn = await en.handle('recall_memory', { query: 'movies' }, toolContext(store, ownerId, {

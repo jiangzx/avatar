@@ -14,8 +14,9 @@
     "consentToolDescription": "Set whether future conversations are remembered. To decline, repeat the confirmation first and call with confirmed=true only after the user confirms again.",
     "skipPatterns": ["didn't say", "did not say", "never said", "don't remember", "don't recall", "not true", "that's wrong", "you're wrong", "made that up", "when did i", "when did we", "did i say", "did we talk", "what did we talk", "not what i said", "no no"],
     "lightAcks": ["ok", "okay", "yes", "yeah", "yep", "no", "nope", "sure", "alright", "got it", "i see"],
-    "recentQueryPatterns": ["what did we talk about", "what did we say", "what did i say", "what were we talking about", "last time we talked", "remember when", "do you remember", "did we talk", "what did we discuss", "last conversation", "talked about last time"],
-    "queryFramePatterns": ["^(?:did|do|have)\\s+(?:i|you)\\s+(?:ever\\s+)?(?:say|said|tell|told|mention(?:ed)?|talk\\s+about)\\s+(?:(?:that|i|you|we)\\s+)*", "^i\\s+(?:said|told\\s+you|mentioned)\\s+(?:(?:that|i|you|we)\\s+)*"],
+    "recentQueryPatterns": ["what did we talk about", "what were we talking about", "what did we discuss", "last conversation", "talked about last time"],
+    "recentQueryExactPatterns": ["what did we say", "what did i say", "last time we talked", "do you remember", "remember when", "did we talk"],
+    "queryFramePatterns": ["^(?:did|do|have)\\s+(?:i|you|we)\\s+(?:ever\\s+)?(?:say|said|tell|told|mention(?:ed)?|talk\\s+about)\\s+(?:(?:that|i|you|we)\\s+)*", "^(?:do|did)\\s+you\\s+remember\\s+(?:(?:that|what|when|where|who|how|if)\\s+)?", "^what\\s+(?:did|do|does)\\s+(?:i|you|we)\\s+(?:say|said|tell|told|mention(?:ed)?|talk\\s+about|discuss(?:ed)?)\\s+(?:about\\s+)?", "^i\\s+(?:said|told\\s+you|mentioned)\\s+(?:(?:that|i|you|we)\\s+)*"],
     "phraseMaxChars": 120
   },
   "performAction": {
@@ -24,7 +25,9 @@
   },
   "evidence": {
     "questionPatterns": [
-      "^(?:what|where|when|who|why|how|do|did|are|is|can|could|would|should|have|has)\\b",
+      "^(?:what|where|when|who|why|how)\\s+(?:did|do|does|is|are|was|were|have|has|had|can|could|would|should|will)\\b",
+      "^(?:do|did|does|are|is|was|were|can|could|would|should|will|have|has|had)\\s+(?:i|you|we|they|he|she|it)\\b",
+      "^how\\s+about\\b",
       "^tell me\\b"
     ]
   },

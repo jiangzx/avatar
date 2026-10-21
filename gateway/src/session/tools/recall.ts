@@ -40,6 +40,20 @@ function sameUtterance(a: string, b: string): boolean {
   return normalize(a) === normalize(b);
 }
 
+/** A bare vague question stays vague; "what did we say about X" must go to FTS instead. */
+function isRecentQuery(normalized: string, copy: RecallCopy): boolean {
+  const key = normalized.replace(/[?？!！.。…]+$/u, '');
+  const norm = (pattern: string) => pattern.replace(/\s/g, '').toLowerCase();
+  if (copy.recentQueryExactPatterns.some((pattern) => {
+    const value = norm(pattern);
+    return value.length > 0 && key === value;
+  })) return true;
+  return copy.recentQueryPatterns.some((pattern) => {
+    const value = norm(pattern);
+    return value.length > 0 && normalized.includes(value);
+  });
+}
+
 /** FTS only sees the content after a first-person "I said" frame; an empty result keeps the trimmed query. */
 function contentQuery(query: string, patterns: readonly RegExp[]): string {
   // Trim first: every frame pattern is anchored, so leading whitespace must not bypass it.
@@ -68,6 +82,8 @@ export interface RecallCopy {
   questionPatterns: readonly RegExp[];
   /** Vague "what did we talk about" queries answer from recent user statements instead of FTS. */
   recentQueryPatterns: readonly string[];
+  /** Bare vague questions; extra content after the phrase makes it a specific FTS query. */
+  recentQueryExactPatterns: readonly string[];
   /** First-person "I said" frames; stripped before FTS so frame words alone cannot hit. */
   queryFramePatterns: readonly RegExp[];
   /** System prompt for natural phrasing of a grounded line. */
@@ -104,9 +120,7 @@ async function recall(args: unknown, ctx: ToolContext, rules: SafetyRules, clipC
   // Vague "what did we talk about" questions have no useful FTS tokens; use recent user statements.
   // Normalize whitespace and case on both sides: en patterns are lowercase and contain spaces.
   const normalized = query.replace(/\s/g, '').toLowerCase();
-  if (copy.recentQueryPatterns.some((pattern) => (
-    pattern.length > 0 && normalized.includes(pattern.replace(/\s/g, '').toLowerCase())
-  ))) {
+  if (isRecentQuery(normalized, copy)) {
     const recent = ctx.store.recentUserMessages(ctx.ownerId, 12)
       .map((row) => stripInvisible(row.text, rules.invisibleCodePoints))
       .filter((text) => text.length > 0 && scanText(text, rules) !== 'reject' && isMemoryEvidence(text, evidence))
