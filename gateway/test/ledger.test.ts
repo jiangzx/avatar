@@ -104,4 +104,11 @@ describe('MockSummarizer', () => {
     const long = await s.summarize('', [{ role: 'user', text: '字'.repeat(900), ts: 1 }]);
     expect(long.length).toBe(800);
   });
+
+  it('uses the requested language labels and joiner', async () => {
+    const s = new MockSummarizer();
+    expect(await s.summarize('', [{ role: 'user', text: 'I like tea', ts: 1 }], 'en')).toBe('User: I like tea');
+    expect(await s.summarize('Before', [{ role: 'assistant', text: 'Sure', ts: 1 }], 'en')).toBe('Before; Assistant: Sure');
+    expect(await s.summarize('', [{ role: 'user', text: 'お茶が好き', ts: 1 }], 'ja')).toBe('ユーザー：お茶が好き');
+  });
 });

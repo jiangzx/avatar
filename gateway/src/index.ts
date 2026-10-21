@@ -17,7 +17,6 @@ import { createGatewayServer } from './server/server.ts';
 import { DeviceRegistry, ORPHAN_CLEANUP_INTERVAL_MS } from './identity/registry.ts';
 import { backfillKanaBigrams } from './memory/backfill.ts';
 import { openDatabase } from './memory/db.ts';
-import { loadExtractPrompt } from './memory/extract.ts';
 import { SqliteMemoryStore } from './memory/store.ts';
 import { QwenTextClient } from './memory/textClient.ts';
 import { MemoryWorker, withExtraction } from './memory/worker.ts';
@@ -109,7 +108,8 @@ const worker = store && textClient
   ? new MemoryWorker({
       store,
       client: textClient,
-      systemPrompt: loadExtractPrompt(),
+      systemPrompts: byLanguage((language) => roles.extractPrompt(language)),
+      labels: byLanguage((language) => i18n.memory[language].extractLabels),
       maxTokens: memory.extractMaxTokens ?? 800,
       policy: memory.extractPolicy ?? pacing.policies.summarize,
       transcriptMaxChars: memory.extractTranscriptMaxChars ?? 6_000,
@@ -144,6 +144,8 @@ const manager = new SessionManager(
       budgets: budgetReport.budgets,
       maxHistoryChars: budgetReport.minHistoryChars,
       i18n,
+      ...(memory.recallClipChars !== undefined ? { recallClipChars: memory.recallClipChars } : {}),
+      ...(memory.recallPhraseTimeoutMs !== undefined ? { recallPhraseTimeoutMs: memory.recallPhraseTimeoutMs } : {}),
       ...(memory.memoryNoticeKeywords ? { noticeKeywords: memory.memoryNoticeKeywords } : {}),
       modelContextTokenLimit: pacing.rebuild.contextChars,
       rebuildTriggerRatio: pacing.rebuild.triggerRatio,
@@ -216,6 +218,11 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 const DAY_MS = 24 * 60 * 60_000;
+
+/** Build a complete per-language record from the same factory. */
+function byLanguage<T>(make: (language: Language) => T): Record<Language, T> {
+  return Object.fromEntries(LANGUAGES.map((language) => [language, make(language)])) as Record<Language, T>;
+}
 
 /** Same daily timer as orphan cleanup. Age and batch come from memory.json. */
 async function expireTranscripts(): Promise<void> {

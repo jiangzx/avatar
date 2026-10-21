@@ -1,15 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { ActionName } from '@anyidea/protocol';
-import { loadSafetyConfig } from '../../config.ts';
+import type { ActionName, Language } from '@anyidea/protocol';
+import type { SafetyRules } from '../../config.ts';
 import { DEFAULT_I18N } from '../../i18n/load.ts';
+import type { EvidenceRules, MemoryCopy } from '../../i18n/types.ts';
 import type { MemoryStore } from '../../memory/store.ts';
 import type { TextModelClient } from '../../memory/textClient.ts';
 import type { MemoryWorker } from '../../memory/worker.ts';
-import { PERFORM_ACTION_TOOL, type ToolSpec } from '../../adapters/types.ts';
+import { performActionSpec, type ToolSpec } from '../../adapters/types.ts';
 import { ActionRouter } from '../actions.ts';
 import type { ConversationLedger } from '../ledger.ts';
-import { loadMemoryBudget } from '../pacing.ts';
 import { consentTool } from './consent.ts';
 import { forgetTool } from './forget.ts';
 import { recallTool } from './recall.ts';
@@ -47,13 +47,43 @@ export interface ToolHandler {
   handle(args: unknown, ctx: ToolContext): Promise<ToolOutcome>;
 }
 
-const copy = loadMemoryBudget(fileURLToPath(new URL('../../../config/memory.json', import.meta.url)));
-const rules = loadSafetyConfig(fileURLToPath(new URL('../../../config/safety.json', import.meta.url)));
-const recallPhraseInstruction = readFileSync(fileURLToPath(new URL('../../../roles/_shared/zh/recall.md', import.meta.url)), 'utf8').trim();
+/** Everything one language contributes to the tool registry. */
+export interface ToolRegistryOptions {
+  language: Language;
+  memory: MemoryCopy;
+  /** Union skip / question / ack rules, shared across languages. */
+  evidence: EvidenceRules;
+  /** Union vague-recall phrases, shared across languages. */
+  recentQueries: readonly string[];
+  /** Recall phrasing system prompt for this language. */
+  recallPrompt: string;
+  safety: SafetyRules;
+  clipChars: number;
+  phraseTimeoutMs: number;
+}
 
-function performActionTool(): ToolHandler {
+const ZH_RECALL_PROMPT = readFileSync(
+  fileURLToPath(new URL('../../../roles/_shared/zh/recall.md', import.meta.url)),
+  'utf8',
+).trim();
+
+/** zh defaults keep a no-argument registry byte-identical to the pre-i18n behavior. */
+function defaultToolOptions(): ToolRegistryOptions {
   return {
-    spec: PERFORM_ACTION_TOOL,
+    language: 'zh',
+    memory: DEFAULT_I18N.memory.zh,
+    evidence: DEFAULT_I18N.evidence,
+    recentQueries: DEFAULT_I18N.recentQueries,
+    recallPrompt: ZH_RECALL_PROMPT,
+    safety: DEFAULT_I18N.safety,
+    clipChars: 80,
+    phraseTimeoutMs: 1_500,
+  };
+}
+
+function performActionTool(options: ToolRegistryOptions): ToolHandler {
+  return {
+    spec: performActionSpec(options.memory.performAction),
     handle(args: unknown, ctx: ToolContext): Promise<ToolOutcome> {
       const { action, result } = ctx.actions.fromTool(args);
       return Promise.resolve({ ...result, action });
@@ -80,22 +110,27 @@ export class ToolRegistry {
   }
 }
 
-export function createToolRegistry(): ToolRegistry {
+export function createToolRegistry(options: ToolRegistryOptions = defaultToolOptions()): ToolRegistry {
   return new ToolRegistry([
-    performActionTool(),
-    recallTool(rules, copy.recallClipChars, {
-      emptyText: copy.recallEmptyText ?? '我这边暂时找不到上次的记录，您想接着说点什么？',
-      foundPrefix: copy.recallFoundPrefix ?? '我这边记着，您之前说过：',
-      skipPatterns: copy.recallSkipPatterns ?? ['我什么时候', '什么时候说', '没说过', '没讲过', '记错', '记岔', '胡扯', '瞎说', '乱说', '你是不是'],
-      lightAcks: copy.lightAcks ?? [],
-      // Task 4 replaces this with per-language copy.
-      questionPatterns: DEFAULT_I18N.evidence.questionPatterns,
-      recentQueryPatterns: copy.recallRecentQueries ?? ['上次聊过什么', '上次说了什么', '之前聊过什么', '咱们聊过什么', '我们聊过什么', '聊到哪', '还记得上次', '上次咱们'],
-      phraseInstruction: recallPhraseInstruction,
-      phraseMaxChars: copy.recallPhraseMaxChars ?? 60,
-      phraseTimeoutMs: copy.recallPhraseTimeoutMs ?? 1_500,
+    performActionTool(options),
+    recallTool(options.safety, options.clipChars, {
+      emptyText: options.memory.recall.emptyText,
+      foundPrefix: options.memory.recall.foundPrefix,
+      wrapText: options.memory.recall.wrapText,
+      toolDescription: options.memory.recall.toolDescription,
+      queryDescription: options.memory.recall.queryDescription,
+      skipPatterns: options.evidence.skipPatterns,
+      lightAcks: options.evidence.lightAcks,
+      questionPatterns: options.evidence.questionPatterns,
+      recentQueryPatterns: options.recentQueries,
+      phraseInstruction: options.recallPrompt,
+      phraseMaxChars: options.memory.recall.phraseMaxChars,
+      phraseTimeoutMs: options.phraseTimeoutMs,
     }),
-    forgetTool(copy.forgetConfirmText),
-    consentTool(copy.declineConfirmPrompt, copy.declineConfirmedText),
+    forgetTool(options.memory.forgetConfirmText, {
+      toolDescription: options.memory.recall.forgetToolDescription,
+      queryDescription: options.memory.recall.forgetQueryDescription,
+    }),
+    consentTool(options.memory.declineConfirmPrompt, options.memory.declineConfirmedText, options.memory.recall.consentToolDescription),
   ]);
 }

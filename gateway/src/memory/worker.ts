@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import type { Language } from '@anyidea/protocol';
+import { DEFAULT_I18N } from '../i18n/load.ts';
+import type { ExtractLabels } from '../i18n/types.ts';
 import { log } from '../log.ts';
 import { errorCodeOf, runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import type { SessionContext } from '../session/context.ts';
+import { dominantLanguage } from '../session/language.ts';
 import type { SessionLifecycle } from '../session/manager.ts';
 import { applyExtractOps, parseExtractOps, type TextModelClient } from './extract.ts';
 import type { ExtractMemory, MemoryStore, PendingMessage } from './store.ts';
@@ -9,13 +13,18 @@ import type { ExtractMemory, MemoryStore, PendingMessage } from './store.ts';
 export type ExtractReason = 'session_end' | 'turns' | 'silence' | 'startup';
 
 export interface MemoryExtractor {
-  extractOwner(ownerId: string, reason: ExtractReason): Promise<void>;
+  extractOwner(ownerId: string, reason: ExtractReason, language?: Language): Promise<void>;
 }
 
 export interface MemoryWorkerOptions {
   store: MemoryStore;
   client: TextModelClient;
-  systemPrompt: string;
+  /** Legacy single prompt; used when systemPrompts lacks the batch language. */
+  systemPrompt?: string;
+  /** Per-language extractor system prompts. A missing batch language fails fast. */
+  systemPrompts?: Partial<Record<Language, string>>;
+  /** Per-language input labels; defaults to the loaded pack for that language. */
+  labels?: Partial<Record<Language, ExtractLabels>>;
   maxTokens: number;
   policy: PolicySpec;
   transcriptMaxChars?: number;
@@ -63,11 +72,11 @@ export class MemoryWorker implements MemoryExtractor {
   }
 
   /** Enqueues the extract. The returned promise settles when that job finishes. */
-  extractOwner(ownerId: string, reason: ExtractReason): Promise<void> {
+  extractOwner(ownerId: string, reason: ExtractReason, language?: Language): Promise<void> {
     return new Promise((resolve) => {
       this.enqueue(ownerId, async () => {
         try {
-          await this.run(ownerId, reason);
+          await this.run(ownerId, reason, language);
         } finally {
           resolve();
         }
@@ -87,7 +96,7 @@ export class MemoryWorker implements MemoryExtractor {
     clearTimeout(timer);
   }
 
-  private async run(ownerId: string, reason: ExtractReason): Promise<void> {
+  private async run(ownerId: string, reason: ExtractReason, language?: Language): Promise<void> {
     const owner = this.opts.store.getOwner(ownerId);
     if (!owner || owner.memoryConsent === 'declined') return;
     const epoch = this.opts.store.memoryEpoch(ownerId);
@@ -107,10 +116,15 @@ export class MemoryWorker implements MemoryExtractor {
     let end = pending.indexOf(last) + 1;
     while (end < pending.length && pending[end]!.role === 'assistant') end++;
     const consumed = pending.slice(0, end);
+    const chosen = language ?? dominantLanguage(users.map((row) => row.text));
+    // Never fall back to zh silently: a missing pack is a configuration error.
+    const systemPrompt = this.opts.systemPrompts?.[chosen] ?? this.opts.systemPrompt;
+    if (!systemPrompt) throw new Error(`extract_prompt_missing:${chosen}`);
     const now = this.opts.now?.() ?? Date.now();
-    const user = renderInput(this.opts.store.memoryForExtract(ownerId), users, this.contextMaxChars, { reason, now });
+    const labels = this.opts.labels?.[chosen] ?? DEFAULT_I18N.memory[chosen].extractLabels;
+    const user = renderInput(this.opts.store.memoryForExtract(ownerId), users, this.contextMaxChars, { reason, now }, labels);
     const result = await runWithPolicy('extract', this.opts.policy, (signal) => this.opts.client.complete({
-      system: this.opts.systemPrompt,
+      system: systemPrompt,
       user,
       maxTokens: this.opts.maxTokens,
       signal,
@@ -150,7 +164,7 @@ export function withExtraction(base: SessionLifecycle, worker: MemoryWorker): Se
     ended: (sessionId, ctx, reason) => base.ended(sessionId, ctx, reason),
     extract: (_sessionId, ctx: SessionContext) => {
       if (!ctx.ownerId) return;
-      void worker.extractOwner(ctx.ownerId, 'session_end');
+      void worker.extractOwner(ctx.ownerId, 'session_end', ctx.language);
     },
   };
 }
@@ -172,13 +186,14 @@ function renderInput(
   messages: readonly PendingMessage[],
   maxChars: number,
   meta: { reason: ExtractReason; now: number },
+  labels: ExtractLabels,
 ): string {
-  const lines = ['已有记忆（仅用于 update/remove，不是本轮证据）：'];
-  for (const agent of memory.agents) lines.push(`智能体 ${agent.id}`);
-  for (const fact of memory.facts) lines.push(`事实 ${fact.id} ${fact.category} sensitive=${fact.sensitive} ${fact.text}`);
-  for (const note of memory.notes) lines.push(`关系 ${note.id} agent=${note.agentId} ${note.kind} ${note.text}`);
-  for (const episode of memory.episodes) lines.push(`情节 ${episode.id} ${episode.mood ?? ''} ${episode.summary}`.trim());
-  for (const followup of memory.followups) lines.push(`跟进 ${followup.id} due=${followup.dueAt} ${followup.text}`);
+  const lines = [labels.memoryHeader];
+  for (const agent of memory.agents) lines.push(`${labels.agent} ${agent.id}`);
+  for (const fact of memory.facts) lines.push(`${labels.fact} ${fact.id} ${fact.category} sensitive=${fact.sensitive} ${fact.text}`);
+  for (const note of memory.notes) lines.push(`${labels.relationship} ${note.id} agent=${note.agentId} ${note.kind} ${note.text}`);
+  for (const episode of memory.episodes) lines.push(`${labels.episode} ${episode.id} ${episode.mood ?? ''} ${episode.summary}`.trim());
+  for (const followup of memory.followups) lines.push(`${labels.followup} ${followup.id} due=${followup.dueAt} ${followup.text}`);
   const kept: string[] = [];
   let used = 0;
   for (const line of lines) {
@@ -186,6 +201,12 @@ function renderInput(
     kept.push(line);
     used += line.length + 1;
   }
-  const dialogue = messages.map((row) => `用户：${row.text}`);
-  return [`原因：${meta.reason}`, `现在：${meta.now}`, ...kept, '新增对话（只有「用户：」是本轮证据）：', ...dialogue].join('\n');
+  const dialogue = messages.map((row) => `${labels.user}${labels.separator}${row.text}`);
+  return [
+    `${labels.reason}${labels.separator}${meta.reason}`,
+    `${labels.now}${labels.separator}${meta.now}`,
+    ...kept,
+    labels.newDialogueHeader,
+    ...dialogue,
+  ].join('\n');
 }

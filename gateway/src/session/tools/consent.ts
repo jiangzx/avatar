@@ -7,11 +7,11 @@ const ConsentSchema = z.object({
   confirmed: z.boolean(),
 }).strict();
 
-export function consentTool(prompt: string, confirmedText: string): ToolHandler {
+export function consentTool(prompt: string, confirmedText: string, toolDescription: string): ToolHandler {
   return {
     spec: {
       name: 'set_memory_consent',
-      description: '设置是否记住以后的聊天。拒绝时必须先复述确认，用户再次确认后才带 confirmed=true 调用。',
+      description: toolDescription,
       parameters: {
         type: 'object',
         properties: {

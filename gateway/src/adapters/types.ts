@@ -73,18 +73,21 @@ export interface RealtimeAdapter extends EventEmitter<AdapterEvents> {
 
 export type AdapterFactory = () => RealtimeAdapter;
 
-export const PERFORM_ACTION_TOOL: ToolSpec = {
-  name: 'perform_action',
-  description: '当用户请求虚拟人做动作时调用。只能做列出的动作；调用后用一句话自然回应，不要描述动作过程。',
-  parameters: {
-    type: 'object',
-    properties: {
-      action: {
-        type: 'string',
-        enum: [...ACTION_NAMES],
-        description: 'wave=挥手, nod=点头, smile=微笑, turn=转身, heart=比心',
+/** perform_action spec in the active language. */
+export function performActionSpec(copy: { toolDescription: string; actionDescription: string }): ToolSpec {
+  return {
+    name: 'perform_action',
+    description: copy.toolDescription,
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: [...ACTION_NAMES],
+          description: copy.actionDescription,
+        },
       },
+      required: ['action'],
     },
-    required: ['action'],
-  },
-};
+  };
+}

@@ -1,11 +1,14 @@
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { fileURLToPath } from 'node:url';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadI18n } from '../src/i18n/load.ts';
 import type { TextModelClient } from '../src/memory/extract.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
 import { MemoryWorker } from '../src/memory/worker.ts';
 
 const dbs: DatabaseSync[] = [];
+const i18n = loadI18n(fileURLToPath(new URL('../config', import.meta.url)));
 const policy = { timeoutMs: 1_000, retries: 0, backoffMs: 0, maxBackoffMs: 0 };
 
 function open(): DatabaseSync {
@@ -186,6 +189,74 @@ describe('MemoryWorker queue', () => {
     await worker(store, client, 1).extractOwner(created.ownerId, 'silence');
     expect(calls).toBe(2);
     expect(store.listFacts(created.ownerId)).toEqual([{ category: 'preference', text: '喜欢喝茶' }]);
+  });
+
+  it('selects the ja prompt and labels for a ja batch', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    const seen: string[] = [];
+    const w = new MemoryWorker({
+      store,
+      client: { complete: async (input) => { seen.push(input.system, input.user); return '{"ops":[]}'; } },
+      systemPrompts: { zh: 'ZH', ja: 'JA', en: 'EN' },
+      labels: { ja: i18n.memory.ja.extractLabels },
+      maxTokens: 80,
+      policy,
+    });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '私はお茶が好きです。', bigrams: '', now: 2 });
+
+    await w.extractOwner(created.ownerId, 'session_end', 'ja');
+
+    expect(seen[0]).toBe('JA');
+    expect(seen[1]).toContain(i18n.memory.ja.extractLabels.memoryHeader);
+    expect(seen[1]).toContain(i18n.memory.ja.extractLabels.user);
+    expect(seen[1]).toContain(i18n.memory.ja.extractLabels.newDialogueHeader);
+  });
+
+  it('chooses the dominant pending language when none is given', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    const seen: string[] = [];
+    const w = new MemoryWorker({
+      store,
+      client: { complete: async (input) => { seen.push(input.system); return '{"ops":[]}'; } },
+      systemPrompts: { zh: 'ZH', ja: 'JA', en: 'EN' },
+      maxTokens: 80,
+      policy,
+    });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '私はお茶が好きです。', bigrams: '', now: 2 });
+
+    await w.extractOwner(created.ownerId, 'startup');
+
+    expect(seen).toEqual(['JA']);
+  });
+
+  it('fails fast when the batch language has no system prompt', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    let calls = 0;
+    const w = new MemoryWorker({
+      store,
+      client: { complete: async () => { calls += 1; return '{"ops":[]}'; } },
+      systemPrompts: { zh: 'ZH' },
+      maxTokens: 80,
+      policy,
+    });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '私はお茶が好きです。', bigrams: '', now: 2 });
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    await w.extractOwner(created.ownerId, 'session_end', 'ja');
+    // The queue logs the failure after settling the job promise.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    const out = write.mock.calls.map((call) => String(call[0])).join('');
+    write.mockRestore();
+    expect(calls).toBe(0);
+    expect(out).toContain('extract_prompt_missing:ja');
+    expect((db.prepare('SELECT extracted FROM messages WHERE id = ?').get('m1') as { extracted: number }).extracted).toBe(0);
   });
 
   it('drain resolves after the in-flight job', async () => {

@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyExtractOps, loadExtractPrompt, parseExtractOps } from '../src/memory/extract.ts';
+import { applyExtractOps, loadExtractPrompt, loadExtractPrompts, parseExtractOps } from '../src/memory/extract.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
 import { QwenTextClient } from '../src/memory/textClient.ts';
@@ -122,6 +122,15 @@ describe('extract prompt and config', () => {
     expect(memory.extractEveryUserTurns).toBe(10);
     expect(memory.extractSilenceMs).toBe(180_000);
     expect(memory.extractModel).toBe('qwen-plus');
+  });
+
+  it('loads a shared extract prompt for every language', () => {
+    const prompts = loadExtractPrompts(fileURLToPath(new URL('../roles', import.meta.url)));
+    expect(prompts.zh).toBe(loadExtractPrompt());
+    expect(prompts.ja).toContain('JSON');
+    expect(prompts.en).toContain('JSON');
+    expect(prompts.ja).not.toBe(prompts.zh);
+    expect(prompts.en).not.toBe(prompts.zh);
   });
 });
 

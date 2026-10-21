@@ -53,6 +53,10 @@ const MemoryFileSchema = z.object({
     recentQueryPatterns: StringList,
     phraseMaxChars: z.number().int().min(1).max(1000),
   }).strict(),
+  performAction: z.object({
+    toolDescription: z.string().min(1),
+    actionDescription: z.string().min(1),
+  }).strict(),
   evidence: z.object({
     questionPatterns: StringList,
     // Optional: default to the recall lists when a language keeps one copy.
@@ -179,6 +183,7 @@ function loadMemoryCopy(configRoot: string, language: Language): MemoryCopy {
     declineConfirmPrompt: raw.declineConfirmPrompt,
     declineConfirmedText: raw.declineConfirmedText,
     recall: raw.recall,
+    performAction: raw.performAction,
     evidence: {
       questionPatterns: raw.evidence.questionPatterns.map((source) => compilePattern(source, language, 'questionPatterns')),
       skipPatterns: raw.evidence.skipPatterns ?? raw.recall.skipPatterns,

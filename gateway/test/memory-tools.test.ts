@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerMessage } from '@anyidea/protocol';
 import { MockAdapter } from '../src/adapters/mock.ts';
 import type { SessionConfig } from '../src/adapters/types.ts';
+import { loadI18n } from '../src/i18n/load.ts';
 import { bigrams } from '../src/memory/bigram.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import type { TextModelClient } from '../src/memory/extract.ts';
@@ -20,6 +21,7 @@ import { loadMemoryBudget } from '../src/session/pacing.ts';
 import { createToolRegistry, type ToolContext } from '../src/session/tools/registry.ts';
 
 const memory = loadMemoryBudget(fileURLToPath(new URL('../config/memory.json', import.meta.url)));
+const i18n = loadI18n(fileURLToPath(new URL('../config', import.meta.url)));
 const dbs: DatabaseSync[] = [];
 const policy = { timeoutMs: 1_000, retries: 0, backoffMs: 0, maxBackoffMs: 0 };
 
@@ -116,6 +118,41 @@ describe('memory tool registry', () => {
     await expect(registry.handle('not_a_tool', { query: '王叔' }, ctx)).resolves.toEqual({ ok: false, error: 'unknown_tool' });
     await expect(registry.handle('perform_action', { action: 'wave' }, ctx)).resolves.toMatchObject({ ok: true, action: 'wave' });
     await expect(registry.handle('perform_action', { action: 'dance' }, ctx)).resolves.toMatchObject({ ok: false, error: 'unsupported_action' });
+  });
+
+  it('keeps the zh default copy for a no-argument registry', () => {
+    const specs = createToolRegistry().specs();
+    expect(specs.find((spec) => spec.name === 'recall_memory')?.description).toBe(i18n.memory.zh.recall.toolDescription);
+    expect(specs.find((spec) => spec.name === 'perform_action')?.description).toBe(i18n.memory.zh.performAction.toolDescription);
+    expect(specs.find((spec) => spec.name === 'forget_memory')?.description).toBe(i18n.memory.zh.recall.forgetToolDescription);
+    expect(specs.find((spec) => spec.name === 'set_memory_consent')?.description).toBe(i18n.memory.zh.recall.consentToolDescription);
+  });
+
+  it('answers recall in the active language and uses kana tokens', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-ja');
+    const text = '私は毎朝ヨガをしています。';
+    store.insertMessage({ id: 'm-ja', sessionId: 's1', ownerId: a.ownerId, role: 'user', text, bigrams: bigrams(text), now: 3 });
+    const ja = createToolRegistry({
+      language: 'ja',
+      memory: i18n.memory.ja,
+      evidence: i18n.evidence,
+      recentQueries: i18n.recentQueries,
+      recallPrompt: 'RECALL JA',
+      safety: i18n.safety,
+      clipChars: 80,
+      phraseTimeoutMs: 1_500,
+    });
+    const ctx = ctxFor(store, worker(store), a);
+
+    const hit = await ja.handle('recall_memory', { query: 'ヨガ' }, ctx);
+    expect(hit.ok).toBe(true);
+    expect(hit.spokenText).toContain('ヨガ');
+    expect(ja.specs().find((spec) => spec.name === 'recall_memory')?.description).toBe(i18n.memory.ja.recall.toolDescription);
+    expect(ja.specs().find((spec) => spec.name === 'perform_action')?.description).toBe(i18n.memory.ja.performAction.toolDescription);
+
+    const miss = await ja.handle('recall_memory', { query: '存在しない言葉' }, ctx);
+    expect(miss.spokenText).toBe(i18n.memory.ja.recall.emptyText);
   });
 
   it('recalls separated topic keywords without requiring a cross-boundary bigram', async () => {

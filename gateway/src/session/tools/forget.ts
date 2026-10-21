@@ -6,14 +6,14 @@ import type { ToolContext, ToolHandler, ToolOutcome } from './registry.ts';
 /** Two characters minimum: a single-character substring can match unrelated facts and notes. */
 const ForgetSchema = z.object({ query: z.string().trim().min(2).max(2_000) }).strict();
 
-export function forgetTool(confirmText: string): ToolHandler {
+export function forgetTool(confirmText: string, copy: { toolDescription: string; queryDescription: string }): ToolHandler {
   return {
     spec: {
       name: 'forget_memory',
-      description: '忘掉与查询相关的记忆。调用后用一句话确认，不要复述被忘掉的内容。',
+      description: copy.toolDescription,
       parameters: {
         type: 'object',
-        properties: { query: { type: 'string', description: '要忘掉的事' } },
+        properties: { query: { type: 'string', description: copy.queryDescription } },
         required: ['query'],
       },
     },

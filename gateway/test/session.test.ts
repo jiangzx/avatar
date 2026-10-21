@@ -14,7 +14,8 @@ import { InterruptCoordinator } from '../src/session/interrupt.ts';
 import type { PacingConfig } from '../src/session/pacing.ts';
 import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
 
-const languageRules = loadI18n(`${fileURLToPath(new URL('..', import.meta.url))}config`).language;
+const i18n = loadI18n(`${fileURLToPath(new URL('..', import.meta.url))}config`);
+const languageRules = i18n.language;
 
 const script: MockScript = {
   greeting: '你好呀',
@@ -95,6 +96,32 @@ describe('Session context', () => {
 
     session.setInitialLanguage('zh');
     expect(session.currentLanguage).toBe('zh');
+    session.end();
+  });
+
+  it('builds tool specs in the session language', async () => {
+    const configs: SessionConfig[] = [];
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'ja', 'en'], defaultLanguage: 'zh' });
+    const session = new Session(
+      {
+        adapterFactory: () => {
+          const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+          const connect = m.connect.bind(m);
+          vi.spyOn(m, 'connect').mockImplementation((c) => { configs.push(c); return connect(c); });
+          return m;
+        },
+        summarizer: new MockSummarizer(),
+        roles,
+        i18n,
+      },
+      { roleId: 'elder-companion', styleId: 'grandchild', language: 'ja' },
+    );
+    await session.start(collector().transport);
+
+    const tools = configs[0]!.tools;
+    expect(tools.find((tool) => tool.name === 'recall_memory')?.description).toBe(i18n.memory.ja.recall.toolDescription);
+    expect(tools.find((tool) => tool.name === 'perform_action')?.description).toBe(i18n.memory.ja.performAction.toolDescription);
+    expect(tools.find((tool) => tool.name === 'forget_memory')?.description).toBe(i18n.memory.ja.recall.forgetToolDescription);
     session.end();
   });
 
@@ -1235,6 +1262,27 @@ describe('Session', () => {
     expect(reasons).toEqual(['turns']);
     s.session.handleClientMessage({ type: 'debug.userText', text: '第三句' });
     expect(reasons).toEqual(['turns']);
+  });
+
+  it('passes the current language to extraction after a switch', () => {
+    const seen: Array<{ reason: string; language?: Language }> = [];
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'en'], defaultLanguage: 'zh' });
+    const s = setup({
+      roles,
+      worker: { extractOwner: async (_ownerId, reason, language) => { seen.push({ reason, language }); } },
+      extractEveryUserTurns: 1,
+    }, ownedCtx, 'extract-language');
+    s.session.handleClientMessage({ type: 'debug.userText', text: '你好' });
+    expect(seen).toEqual([{ reason: 'turns', language: 'zh' }]);
+
+    s.session.handleClientMessage({ type: 'debug.userText', text: 'I like tea' });
+
+    expect(s.session.currentLanguage).toBe('en');
+    expect(s.session.context.language).toBe('en');
+    expect(seen).toEqual([
+      { reason: 'turns', language: 'zh' },
+      { reason: 'turns', language: 'en' },
+    ]);
   });
 
   it('does not enqueue extraction when no worker is injected', () => {

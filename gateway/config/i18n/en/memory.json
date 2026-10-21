@@ -17,6 +17,10 @@
     "recentQueryPatterns": ["what did we talk about", "what did we say", "what did i say", "what were we talking about", "last time we talked", "remember when", "do you remember", "did we talk", "what did we discuss", "last conversation", "talked about last time"],
     "phraseMaxChars": 120
   },
+  "performAction": {
+    "toolDescription": "Call when the user asks the avatar to perform an action. Only the listed actions are available; after calling, reply naturally in one sentence without describing the motion.",
+    "actionDescription": "wave=wave, nod=nod, smile=smile, turn=turn around, heart=make a heart"
+  },
   "evidence": {
     "questionPatterns": [
       "^(?:what|where|when|who|why|how|do|did|are|is|can|could|would|should|have|has)\\b",

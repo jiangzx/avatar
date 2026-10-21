@@ -123,9 +123,11 @@ export class ConversationLedger {
 
 /** Key-free stand-in for the LLM summarizer used in Plan 2. */
 export class MockSummarizer implements Summarizer {
-  async summarize(previous: string, entries: readonly LedgerEntry[], _language?: Language): Promise<string> {
-    const labels = PROMPT_LABELS.zh;
-    const joined = [previous, ...entries.map((e) => `${label(e, labels)}${labels.separator}${e.text}`)].filter(Boolean).join('；');
+  async summarize(previous: string, entries: readonly LedgerEntry[], language: Language = 'zh'): Promise<string> {
+    const labels = PROMPT_LABELS[language];
+    const joined = [previous, ...entries.map((e) => `${label(e, labels)}${labels.separator}${e.text}`)]
+      .filter(Boolean)
+      .join(labels.summaryJoiner);
     return joined.length > 800 ? joined.slice(joined.length - 800) : joined;
   }
 }

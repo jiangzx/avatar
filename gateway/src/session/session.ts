@@ -34,7 +34,7 @@ import { DEFAULT_TOOL_TURN_TIMEOUT_MS, type PacingConfig } from './pacing.ts';
 import { shouldSpeakBridge, slimClockAction } from './slim.ts';
 import { ToolTurn } from './toolTurn.ts';
 import { createSilencePlanner } from './silence.ts';
-import { createToolRegistry, type ToolOutcome } from './tools/registry.ts';
+import { createToolRegistry, type ToolOutcome, type ToolRegistry } from './tools/registry.ts';
 
 export interface Transport {
   send(msg: ServerMessage): void;
@@ -93,6 +93,10 @@ export interface SessionDeps {
   maxHistoryChars?: number;
   /** Loaded language packs for memory views and evidence rules. Defaults to DEFAULT_I18N. */
   i18n?: I18nBundle;
+  /** Recall snippet cap (gateway/config/memory.json). Defaults to 80. */
+  recallClipChars?: number;
+  /** Recall phrasing deadline (gateway/config/memory.json). Defaults to 1500. */
+  recallPhraseTimeoutMs?: number;
   /** The memory notice is verified by these words in its transcript (or verbatim fallback). */
   noticeKeywords?: readonly string[];
   /** Fraction of modelContextTokenLimit that triggers a silent slim rebuild. */
@@ -158,7 +162,8 @@ export class Session {
   private readonly emotion: EmotionTagger | null;
   private readonly interrupt: InterruptCoordinator;
   private readonly actions = new ActionRouter();
-  private readonly tools = createToolRegistry();
+  /** One registry per language; recall copy and tool handling follow the current language. */
+  private readonly tools = new Map<Language, ToolRegistry>();
   private readonly metrics = new ReplyMetricsTracker();
   private readonly byId = new Map<string, ResponseState>();
   private readonly bySeq = new Map<number, ResponseState>();
@@ -263,7 +268,7 @@ export class Session {
             : this.context.proactiveMemorySnapshot ?? '',
           safeGreeting: () => this.safeGreeting(),
         } : {}),
-        ...(extractor && ownerId ? { onQuietRest: () => { void extractor.extractOwner(ownerId, 'silence'); } } : {}),
+        ...(extractor && ownerId ? { onQuietRest: () => { void extractor.extractOwner(ownerId, 'silence', this.language); } } : {}),
       },
       this.noticePending,
       extractor ? deps.extractSilenceMs : undefined,
@@ -513,6 +518,8 @@ export class Session {
 
   private applyLanguage(language: Language, push: boolean): void {
     const next = this.resolveLanguage(language);
+    // Session-end extraction reads this context, so it must track the latest language.
+    this.context.language = next;
     if (next === this.language) return;
     this.language = next;
     this.director.setLanguage(next);
@@ -577,7 +584,26 @@ export class Session {
     const voice = this.deps.roles.voiceFor(this.context.roleId, this.context.styleId, this.language)
       ?? this.deps.voiceFor?.(this.language)
       ?? (this.language === this.deps.roles.defaultLanguage(this.context.roleId) ? this.context.voice : undefined);
-    return { instructions, tools: this.tools.specs(), voice, ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
+    return { instructions, tools: this.toolsFor(this.language).specs(), voice, ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
+  }
+
+  private toolsFor(language: Language): ToolRegistry {
+    let tools = this.tools.get(language);
+    if (!tools) {
+      const i18n = this.deps.i18n ?? DEFAULT_I18N;
+      tools = createToolRegistry({
+        language,
+        memory: i18n.memory[language],
+        evidence: i18n.evidence,
+        recentQueries: i18n.recentQueries,
+        recallPrompt: this.deps.roles.recallPrompt(language),
+        safety: i18n.safety,
+        clipChars: this.deps.recallClipChars ?? 80,
+        phraseTimeoutMs: this.deps.recallPhraseTimeoutMs ?? 1_500,
+      });
+      this.tools.set(language, tools);
+    }
+    return tools;
   }
 
   /** Sends fresh instructions to the live model session and remembers their size. */
@@ -834,7 +860,7 @@ export class Session {
     if (extractor && ownerId) {
       this.userTurns += 1;
       const every = this.deps.extractEveryUserTurns ?? 10;
-      if (this.userTurns % every === 0) void extractor.extractOwner(ownerId, 'turns');
+      if (this.userTurns % every === 0) void extractor.extractOwner(ownerId, 'turns', this.language);
     }
     this.director.onUserFinal(text);
     this.emotion?.onUserFinal(text);
@@ -898,7 +924,7 @@ export class Session {
       this.beginToolTurn(s);
     }
     const triggerText = this.turnUserText ?? undefined;
-    const outcome = await this.tools.handle(name, args, {
+    const outcome = await this.toolsFor(this.language).handle(name, args, {
       ownerId: this.context.ownerId,
       agentId: this.context.agentId,
       sessionId: this.sessionId,

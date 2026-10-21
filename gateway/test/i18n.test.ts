@@ -31,6 +31,17 @@ describe('loadI18n', () => {
     expect(i18n.silence.en.maxCheckinChars).toBe(80);
   });
 
+  it('localizes perform_action copy for every language', () => {
+    for (const language of ['zh', 'ja', 'en'] as const) {
+      expect(i18n.memory[language].performAction.toolDescription.length).toBeGreaterThan(0);
+      expect(i18n.memory[language].performAction.actionDescription).toContain('wave=');
+    }
+    expect(i18n.memory.zh.performAction.toolDescription).toBe('当用户请求虚拟人做动作时调用。只能做列出的动作；调用后用一句话自然回应，不要描述动作过程。');
+    expect(i18n.memory.zh.performAction.actionDescription).toBe('wave=挥手, nod=点头, smile=微笑, turn=转身, heart=比心');
+    expect(i18n.memory.ja.performAction.toolDescription).not.toBe(i18n.memory.zh.performAction.toolDescription);
+    expect(i18n.memory.en.performAction.toolDescription).not.toBe(i18n.memory.zh.performAction.toolDescription);
+  });
+
   it('merges safety and emotion across languages', () => {
     expect(i18n.safety.rejectPhrases).toContain('忽略之前的指令');
     expect(i18n.safety.rejectPhrases.some((p) => /ignore previous/i.test(p))).toBe(true);

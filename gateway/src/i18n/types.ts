@@ -48,6 +48,12 @@ export interface RecallTextCopy {
   phraseMaxChars: number;
 }
 
+/** Tool and action copy for perform_action. */
+export interface PerformActionCopy {
+  toolDescription: string;
+  actionDescription: string;
+}
+
 /** Everything one language needs for memory and evidence handling. */
 export interface MemoryCopy {
   noticeKeywords: readonly string[];
@@ -55,6 +61,7 @@ export interface MemoryCopy {
   declineConfirmPrompt: string;
   declineConfirmedText: string;
   recall: RecallTextCopy;
+  performAction: PerformActionCopy;
   evidence: EvidenceRules;
   addressingPatterns: readonly RegExp[];
   extractLabels: ExtractLabels;
