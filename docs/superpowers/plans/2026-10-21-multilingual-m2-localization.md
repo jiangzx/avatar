@@ -759,6 +759,8 @@ git commit -m "feat(gateway): localize memory evidence, kana bigrams, and snapsh
 - Modify: `gateway/src/roles/labels.ts`（`summaryJoiner`）
 - Modify: `gateway/src/session/session.ts`
 - Modify: `gateway/src/session/ledger.ts`
+- Create: `gateway/src/i18n/language.ts`（`dominantLanguage`；memory 不得反向 import session）
+- Modify: `gateway/src/session/language.ts`（re-export `dominantLanguage` 兼容现有测试）
 - Modify: `gateway/src/memory/worker.ts`
 - Modify: `gateway/src/memory/extract.ts`
 - Modify: `gateway/src/index.ts`
@@ -894,7 +896,7 @@ private toolsFor(language: Language): ToolRegistry {
 - `withExtraction` 调用 `worker.extractOwner(ctx.ownerId, 'session_end', ctx.language)`。
 - `Session` 的 `onQuietRest`/`turns` 调用传 `this.language`；`applyLanguage` 同步 `this.context.language = next`，保证 session_end 拿到最新语言。
 
-`extract.ts`：新增 `loadExtractPrompts(rootDir)` 读取 `_shared/<lang>/extract.md`；`loadExtractPrompt` 保留默认 zh。
+`extract.ts`：新增 `loadExtractPrompts(rootDir)`，内部对每个语言调用 `loadExtractPrompt(join(rootDir, '_shared', lang, 'extract.md'))`，不要复制读取/trim/空检查；`loadExtractPrompt` 保留默认 zh。`dominantLanguage` 移到 `gateway/src/i18n/language.ts`（纯函数，只依赖 protocol），`worker.ts` 从那里 import；`session/language.ts` re-export 以保持现有测试 import 不变。memory 层不得反向 import session 层。
 
 `ledger.ts`：`PROMPT_LABELS` 增加 `summaryJoiner`（zh/ja `；`，en `; `）；`MockSummarizer` 用传入 `language` 的 labels 和 joiner。`QwenSummarizer` 已按语言取 system prompt，核对 en/ja 断言。
 
