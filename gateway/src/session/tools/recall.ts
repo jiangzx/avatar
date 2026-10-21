@@ -34,15 +34,13 @@ function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
-const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
-
 /** Punctuation-insensitive comparison so the current question never becomes its own memory hit. */
 function sameUtterance(a: string, b: string): boolean {
   const normalize = (text: string) => text.replace(/[\s，。！？、,.!?~～…—「」『』“”"'・]/g, '');
   return normalize(a) === normalize(b);
 }
 
-/** FTS only sees the content after a first-person "I said" frame; an empty result keeps the raw query. */
+/** FTS only sees the content after a first-person "I said" frame; an empty result keeps the trimmed query. */
 function contentQuery(query: string, patterns: readonly RegExp[]): string {
   // Trim first: every frame pattern is anchored, so leading whitespace must not bypass it.
   const trimmed = query.trim();
@@ -104,8 +102,11 @@ async function recall(args: unknown, ctx: ToolContext, rules: SafetyRules, clipC
   const query = parsed.data.query;
   const evidence = { questionPatterns: copy.questionPatterns, skipPatterns: copy.skipPatterns, lightAcks: copy.lightAcks };
   // Vague "what did we talk about" questions have no useful FTS tokens; use recent user statements.
-  const normalized = query.replace(/\s/g, '');
-  if (copy.recentQueryPatterns.some((pattern) => pattern.length > 0 && normalized.includes(pattern))) {
+  // Normalize whitespace and case on both sides: en patterns are lowercase and contain spaces.
+  const normalized = query.replace(/\s/g, '').toLowerCase();
+  if (copy.recentQueryPatterns.some((pattern) => (
+    pattern.length > 0 && normalized.includes(pattern.replace(/\s/g, '').toLowerCase())
+  ))) {
     const recent = ctx.store.recentUserMessages(ctx.ownerId, 12)
       .map((row) => stripInvisible(row.text, rules.invisibleCodePoints))
       .filter((text) => text.length > 0 && scanText(text, rules) !== 'reject' && isMemoryEvidence(text, evidence))
@@ -177,8 +178,8 @@ function grounded(text: string, source: string): boolean {
   for (const match of text.matchAll(/[《「『“"]([^》」』”"]{1,20})[》」』”"]/g)) {
     if (!source.includes(match[1]!)) return false;
   }
-  // Kana pairs matter for Japanese; two-character Latin/digit tokens keep the same gate as Han pairs.
-  const tokens = bigrams(source).split(' ').filter((token) => token.length === 2 || KANA.test(token));
+  // Latin bigrams are whole words, so the two-character Han gate does not apply to them.
+  const tokens = bigrams(source).split(' ').filter((token) => token.length >= 2);
   return tokens.some((token) => text.includes(token));
 }
 

@@ -240,6 +240,22 @@ describe('config', () => {
     expect(en.checkinText).toBe("Are you still there? No rush—we can talk anytime.");
     expect(en.restText).toBe("Take some time for yourself. No need to reply.");
 
+    // Check-in limits follow maxCheckinChars (en 80, ja 60), not the zh 30.
+    expect(en.checkinInstruction).toContain('80 characters');
+    expect(ja.checkinInstruction).toContain('60 文字');
+    expect(en.silenceDecision?.instruction).toContain('within 80 characters');
+    expect(ja.silenceDecision?.instruction).toContain('60 文字以内');
+
+    // Variation hint labels are localized: zh keeps the contract text, ja is natural
+    // Japanese, en is ASCII.
+    expect(zh.silenceDecision?.variationHintLabel).toContain('本次建议角度');
+    expect(ja.silenceDecision?.variationHintLabel).toBeTruthy();
+    expect(ja.silenceDecision?.variationHintLabel).toMatch(/[ぁ-んァ-ン]/);
+    expect(ja.silenceDecision?.variationHintLabel).not.toContain('您');
+    expect(ja.silenceDecision?.variationHintLabel).not.toContain('本次建议角度');
+    expect(en.silenceDecision?.variationHintLabel).toBeTruthy();
+    expect(en.silenceDecision?.variationHintLabel).not.toMatch(/[㐀-鿿ぁ-んァ-ン]/);
+
     // English copy carries no Chinese characters; Japanese copy is not the Chinese text.
     const enText = JSON.stringify(en);
     expect(enText).not.toMatch(/[一-鿿]/);
@@ -248,6 +264,14 @@ describe('config', () => {
 
   it('rejects an invalid director config', () => {
     expect(() => loadDirectorConfig(`${root}package.json`)).toThrow();
+  });
+
+  it('requires a variation hint label when hints are configured', () => {
+    const value = JSON.parse(readFileSync(`${root}roles/elder-companion/en/director.json`, 'utf8')) as {
+      silenceDecision: Record<string, unknown>;
+    };
+    delete value.silenceDecision.variationHintLabel;
+    expect(() => DirectorSchema.parse(value)).toThrow(/silence_variation_hint_label_missing/);
   });
 
   it('rejects optional speech retries and a speak template that cannot carry the approved line', () => {

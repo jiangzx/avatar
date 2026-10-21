@@ -187,6 +187,17 @@ async function runTemp() {
     insert(store, frame.ownerId, 'probe-frame-session', 'en-ack', 'user', 'Okay', 3_400);
     const frameCtx = () => toolContext(store, frame.ownerId);
 
+    // Separate owner: en vague recall must use ended-session statements only.
+    const vagueOwner = store.createOwner({
+      tokenHash: 'probe-vague', roleId: 'elder-companion', styleId: 'grandchild', now: 4,
+    });
+    store.recordSessionStart('probe-vague-session', vagueOwner.agentId, 4_001);
+    insert(store, vagueOwner.ownerId, 'probe-vague-session', 'en-vague-recent', 'user', 'I like watching old movies.', 4_100);
+    store.recordSessionEnd('probe-vague-session', vagueOwner.agentId, 4_200);
+    store.recordSessionStart('probe-vague-active', vagueOwner.agentId, 4_300);
+    insert(store, vagueOwner.ownerId, 'probe-vague-active', 'en-vague-active', 'user', 'This is still the active session.', 4_400);
+    const vagueCtx = () => toolContext(store, vagueOwner.ownerId);
+
     const ja = registryFor('ja');
     const zh = registryFor('zh');
     const en = registryFor('en');
@@ -238,11 +249,17 @@ async function runTemp() {
     // Said-frames: unrelated statements sharing only the frame words are not recalled.
     const zhFrame = '我说过喜欢喝茶吗';
     const zhPrefixed = '你还记得我说过喜欢喝茶吗';
+    const zhFillers = ['那个，我说过喜欢喝茶吗', '我记得我说过喜欢喝茶吗', '我想问一下我说过喜欢喝茶吗'];
+    const zhMoviePrefix = '我还记得我说过的电影吗';
     const jaFrame = 'お茶が好きだと言いましたか';
     const enFrame = 'Did I say I like tea?';
     const enIndirect = 'Have I told you that I like tea?';
     check((await zh.handle('recall_memory', { query: zhFrame }, frameCtx())).spokenFound === false, 'zh_frame_unrelated');
     check((await zh.handle('recall_memory', { query: zhPrefixed }, frameCtx())).spokenFound === false, 'zh_prefix_unrelated');
+    for (const query of zhFillers) {
+      check((await zh.handle('recall_memory', { query }, frameCtx())).spokenFound === false, 'zh_filler_unrelated');
+    }
+    check((await zh.handle('recall_memory', { query: zhMoviePrefix }, frameCtx())).spokenFound === false, 'zh_movie_prefix_unrelated');
     check((await ja.handle('recall_memory', { query: jaFrame }, frameCtx())).spokenFound === false, 'ja_frame_unrelated');
     check((await en.handle('recall_memory', { query: enFrame }, frameCtx())).spokenFound === false, 'en_frame_unrelated');
     check((await en.handle('recall_memory', { query: enIndirect }, frameCtx())).spokenFound === false, 'en_indirect_unrelated');
@@ -265,6 +282,7 @@ async function runTemp() {
     }
 
     insert(store, frame.ownerId, 'probe-frame-session', 'zh-frame-content', 'user', '我喜欢喝茶。', 3_450);
+    insert(store, frame.ownerId, 'probe-frame-session', 'zh-movie-content', 'user', '我最近在看老电影。', 3_455);
     insert(store, frame.ownerId, 'probe-frame-session', 'ja-frame-content', 'user', '私はお茶が好きです。', 3_460);
     insert(store, frame.ownerId, 'probe-frame-session', 'en-frame-content', 'user', 'I like tea.', 3_470);
     const zhFrameHit = await zh.handle('recall_memory', { query: zhFrame }, frameCtx());
@@ -275,6 +293,16 @@ async function runTemp() {
     check(zhPrefixedHit.spokenFound === true, 'zh_prefix_content');
     check(historyLines(zhPrefixedHit, 'zh').includes('我喜欢喝茶。'), 'zh_prefix_content_line');
     check(!historyLines(zhPrefixedHit, 'zh').includes('我说今天有点累。'), 'zh_prefix_unrelated_line');
+    for (const query of zhFillers) {
+      const hit = await zh.handle('recall_memory', { query }, frameCtx());
+      check(hit.spokenFound === true, 'zh_filler_content');
+      check(historyLines(hit, 'zh').includes('我喜欢喝茶。'), 'zh_filler_content_line');
+      check(!historyLines(hit, 'zh').includes('我说今天有点累。'), 'zh_filler_unrelated_line');
+    }
+    const zhMoviePrefixHit = await zh.handle('recall_memory', { query: zhMoviePrefix }, frameCtx());
+    check(zhMoviePrefixHit.spokenFound === true, 'zh_movie_prefix_content');
+    check(historyLines(zhMoviePrefixHit, 'zh').includes('我最近在看老电影。'), 'zh_movie_prefix_content_line');
+    check(!historyLines(zhMoviePrefixHit, 'zh').includes('我说今天有点累。'), 'zh_movie_prefix_unrelated_line');
     const jaFrameHit = await ja.handle('recall_memory', { query: jaFrame }, frameCtx());
     check(jaFrameHit.spokenFound === true, 'ja_frame_content');
     check(historyLines(jaFrameHit, 'ja').includes('私はお茶が好きです。'), 'ja_frame_content_line');
@@ -287,6 +315,19 @@ async function runTemp() {
     check(enIndirectHit.spokenFound === true, 'en_indirect_content');
     check(historyLines(enIndirectHit, 'en').includes('I like tea.'), 'en_indirect_content_line');
     check(!historyLines(enIndirectHit, 'en').includes('I said I was tired.'), 'en_indirect_unrelated_line');
+
+    // en vague recall: ended-session statements only.
+    const vagueEn = await en.handle('recall_memory', { query: 'What did we talk about?' }, vagueCtx());
+    check(vagueEn.spokenFound === true, 'en_vague_found');
+    check(historyLines(vagueEn, 'en').includes('I like watching old movies.'), 'en_vague_recent_line');
+    check(!historyLines(vagueEn, 'en').includes('This is still the active session.'), 'en_vague_active_excluded');
+
+    // en phrasing: whole-word tokens are enough for the grounded gate.
+    const phrasedEn = await en.handle('recall_memory', { query: 'movies' }, toolContext(store, ownerId, {
+      textClient: { complete: async () => JSON.stringify({ text: 'You like watching old movies a lot.' }) },
+    }));
+    check(phrasedEn.spokenFound === true, 'en_phrase_control');
+    check(phrasedEn.spokenText === 'You like watching old movies a lot.', 'en_phrase_applied');
 
     // Phrasing with a new work title is rejected and falls back to the verbatim line.
     let phrased = 0;

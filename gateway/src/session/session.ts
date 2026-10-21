@@ -19,6 +19,7 @@ import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
 import type { TranscriptWriter } from '../memory/writer.ts';
 import { DEFAULT_I18N } from '../i18n/load.ts';
+import { containsPhrase } from '../i18n/text.ts';
 import type { I18nBundle, LanguageRules } from '../i18n/types.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { PROMPT_LABELS } from '../roles/labels.ts';
@@ -668,7 +669,7 @@ export class Session {
       ?? [];
     if (keywords.length === 0) return true;
     const text = this.noticeVerbatim ? this.noticeFallback ?? '' : this.bySeq.get(seq)?.text ?? '';
-    return keywords.some((keyword) => text.includes(keyword));
+    return keywords.some((keyword) => containsPhrase(text, keyword));
   }
 
   /** The notice seq will not play out. Retry later; do not mark notified. */

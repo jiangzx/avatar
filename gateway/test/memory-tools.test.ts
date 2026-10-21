@@ -195,28 +195,38 @@ describe('memory tool registry', () => {
     const store = new SqliteMemoryStore(open());
     const a = owner(store, 'frame-zh');
     say(store, a.ownerId, 'zh-tired', '我说今天有点累。', 10);
+    const registry = registryFor('zh');
+    const ctx = () => ctxFor(store, worker(store), a);
 
-    const miss = await registryFor('zh').handle('recall_memory', { query: '我说过喜欢喝茶吗' }, ctxFor(store, worker(store), a));
-    expect(miss.spokenFound).toBe(false);
-    expect(miss.text).toBe(i18n.memory.zh.recall.wrapText);
-
-    // Optional question prefixes and leading whitespace must not bypass the anchored frame.
-    const prefixed = '你还记得我说过喜欢喝茶吗';
-    const prefixedMiss = await registryFor('zh').handle('recall_memory', { query: prefixed }, ctxFor(store, worker(store), a));
-    expect(prefixedMiss.spokenFound).toBe(false);
-    const spacedMiss = await registryFor('zh').handle('recall_memory', { query: '  我说过喜欢喝茶吗' }, ctxFor(store, worker(store), a));
-    expect(spacedMiss.spokenFound).toBe(false);
+    // Question prefixes, fillers, and leading whitespace must not bypass the anchored frame.
+    const teaQueries = [
+      '我说过喜欢喝茶吗',
+      '你还记得我说过喜欢喝茶吗',
+      '那个，我说过喜欢喝茶吗',
+      '我记得我说过喜欢喝茶吗',
+      '我想问一下我说过喜欢喝茶吗',
+      '  我说过喜欢喝茶吗',
+    ];
+    for (const query of teaQueries) {
+      const miss = await registry.handle('recall_memory', { query }, ctx());
+      expect(miss.spokenFound).toBe(false);
+      expect(miss.text).toBe(i18n.memory.zh.recall.wrapText);
+    }
+    const movieQuery = '我还记得我说过的电影吗';
+    expect((await registry.handle('recall_memory', { query: movieQuery }, ctx())).spokenFound).toBe(false);
 
     say(store, a.ownerId, 'zh-tea', '我喜欢喝茶。', 11);
-    const hit = await registryFor('zh').handle('recall_memory', { query: '我说过喜欢喝茶吗' }, ctxFor(store, worker(store), a));
-    expect(hit.spokenFound).toBe(true);
-    expect(hit.text).toContain('我喜欢喝茶。');
-    expect(hit.text).not.toContain('我说今天有点累。');
-
-    const prefixedHit = await registryFor('zh').handle('recall_memory', { query: prefixed }, ctxFor(store, worker(store), a));
-    expect(prefixedHit.spokenFound).toBe(true);
-    expect(prefixedHit.text).toContain('我喜欢喝茶。');
-    expect(prefixedHit.text).not.toContain('我说今天有点累。');
+    say(store, a.ownerId, 'zh-movie', '我最近在看老电影。', 12);
+    for (const query of teaQueries) {
+      const hit = await registry.handle('recall_memory', { query }, ctx());
+      expect(hit.spokenFound).toBe(true);
+      expect(hit.text).toContain('我喜欢喝茶。');
+      expect(hit.text).not.toContain('我说今天有点累。');
+    }
+    const movieHit = await registry.handle('recall_memory', { query: movieQuery }, ctx());
+    expect(movieHit.spokenFound).toBe(true);
+    expect(movieHit.text).toContain('我最近在看老电影。');
+    expect(movieHit.text).not.toContain('我说今天有点累。');
   });
 
   it('strips the ja said-frame before searching so unrelated statements do not hit', async () => {
@@ -259,6 +269,37 @@ describe('memory tool registry', () => {
     expect(indirectHit.spokenFound).toBe(true);
     expect(indirectHit.text).toContain('I like tea.');
     expect(indirectHit.text).not.toContain('I said I was tired.');
+  });
+
+  it('answers an en vague memory question from recent ended-session statements', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'vague-en');
+    store.recordSessionStart('s-ended', a.agentId, 1);
+    store.insertMessage({
+      id: 'en-movie', sessionId: 's-ended', ownerId: a.ownerId, role: 'user',
+      text: 'I like watching old movies.', bigrams: bigrams('I like watching old movies.'), now: 2,
+    });
+    store.recordSessionEnd('s-ended', a.agentId, 3);
+    store.recordSessionStart('s-active', a.agentId, 4);
+    say(store, a.ownerId, 'en-active', 'This is still the active session.', 5, 's-active');
+
+    const result = await registryFor('en').handle('recall_memory', { query: 'What did we talk about?' }, ctxFor(store, worker(store), a));
+    expect(result.spokenFound).toBe(true);
+    expect(result.text).toContain('I like watching old movies.');
+    expect(result.text).not.toContain('This is still the active session.');
+  });
+
+  it('accepts an en phrasing that keeps the source content words', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'phrase-en');
+    say(store, a.ownerId, 'en-movies', 'I like watching old movies.', 10);
+
+    const result = await registryFor('en').handle('recall_memory', { query: 'movies' }, {
+      ...ctxFor(store, worker(store), a),
+      textClient: { complete: async () => JSON.stringify({ text: 'You like watching old movies a lot.' }) },
+    });
+    expect(result.spokenFound).toBe(true);
+    expect(result.spokenText).toBe('You like watching old movies a lot.');
   });
 
   it('recalls separated topic keywords without requiring a cross-boundary bigram', async () => {

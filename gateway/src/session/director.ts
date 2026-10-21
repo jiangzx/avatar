@@ -1,5 +1,6 @@
 import type { Language, ResponseKind } from '@anyidea/protocol';
 import type { DirectorCue, ProactiveRequest } from '../adapters/types.ts';
+import { containsPhrase } from '../i18n/text.ts';
 import type { DirectorConfig } from '../roles/types.ts';
 import { log } from '../log.ts';
 
@@ -181,7 +182,7 @@ export class Director {
 
   onUserFinal(text: string): void {
     this.cancelGreeting();
-    if (this.cfg.quietPhrases.some((p) => text.includes(p))) {
+    if (this.cfg.quietPhrases.some((p) => containsPhrase(text, p))) {
       this.quiet = true;
       this.clear();
       if (this.pending !== 'notice') this.pending = null;

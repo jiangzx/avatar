@@ -1215,6 +1215,32 @@ describe('Session', () => {
     s.session.end();
   });
 
+  it('verifies an en memory notice keyword regardless of case', async () => {
+    const markNotified = vi.fn();
+    const noticeText = 'Remember, I will keep this for next time.';
+    const roles = fixedRoleCatalog('P', director, {
+      languages: ['zh', 'en'],
+      defaultLanguage: 'zh',
+      directors: { en: { ...director, memoryNoticeText: noticeText } },
+    });
+    const s = setup({
+      roles,
+      writer: { append: () => 'stored', markNotified },
+      noticeKeywordsByLanguage: { en: i18n.memory.en.noticeKeywords },
+      adapterFactory: () => new MockAdapter({
+        script: { ...script, memoryNotice: noticeText },
+        replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
+      }),
+    }, { ...ownedCtx, language: 'en' }, 'notice-en', true);
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(1000);
+    const notice = of(s.sent, 'response.start').at(-1)!;
+    expect(assistantText(s.sent, notice.responseSeq)).toContain('Remember');
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: notice.responseSeq, playedMs: 300, reason: 'ended' });
+    expect(markNotified).toHaveBeenCalledTimes(1);
+    s.session.end();
+  });
+
   it('keeps the request language for notice verification after a language switch', async () => {
     const markNotified = vi.fn();
     const roles = fixedRoleCatalog('P', director, {

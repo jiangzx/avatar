@@ -13,6 +13,8 @@ export interface SilenceDecisionConfig {
     greeting?: readonly string[];
     checkin?: readonly string[];
   };
+  /** Localized label placed before a variation hint in the planner system prompt. */
+  variationHintLabel?: string;
   policy: PolicySpec;
 }
 

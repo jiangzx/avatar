@@ -526,6 +526,14 @@ describe('Director', () => {
     expect(calls).toEqual([]);
   });
 
+  it('treats a capitalized en quiet phrase as a stop', () => {
+    const { d, calls } = make({ ...cfg, quietPhrases: ['stop talking'] });
+    d.onUserFinal('Stop talking.');
+    d.onAiTurnEnded();
+    vi.advanceTimersByTime(60000);
+    expect(calls).toEqual([]);
+  });
+
   it('still speaks the three silence lines when the resume window is already full', () => {
     const { d, calls } = make({ ...cfg, maxPerWindow: 0 });
     d.onAiTurnEnded();

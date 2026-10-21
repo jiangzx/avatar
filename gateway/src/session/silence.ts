@@ -1,5 +1,6 @@
 // High-risk silence contract: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
 import { z } from 'zod';
+import { containsPhrase } from '../i18n/text.ts';
 import type { SilenceRules } from '../i18n/types.ts';
 import { log } from '../log.ts';
 import type { TextModelClient } from '../memory/textClient.ts';
@@ -11,12 +12,12 @@ const QUESTION = /[？?]/;
 
 /** Every planned line must keep the content its stage promises; otherwise configured copy is used. */
 function stageContentOk(stage: SilenceContext['stage'], text: string, rules: SilenceRules): boolean {
-  if (stage === 'greeting') return rules.greeting.some((phrase) => text.includes(phrase)) && QUESTION.test(text);
+  if (stage === 'greeting') return rules.greeting.some((phrase) => containsPhrase(text, phrase)) && QUESTION.test(text);
   // A check-in that stops asking whether the user is there is a new topic, not a check-in.
   if (stage === 'checkin') {
     return text.length <= rules.maxCheckinChars
-      && rules.listening.some((phrase) => text.includes(phrase))
-      && rules.anytime.some((phrase) => text.includes(phrase));
+      && rules.listening.some((phrase) => containsPhrase(text, phrase))
+      && rules.anytime.some((phrase) => containsPhrase(text, phrase));
   }
   if (stage === 'rest') return !QUESTION.test(text);
   return true;
@@ -59,7 +60,7 @@ export function createSilencePlanner(client: TextModelClient, config: SilenceDec
     }
     const hint = variationHint(config, context);
     const system = hint
-      ? `${config.instruction}\n本次建议角度（只作参考，措辞自拟，必须满足该阶段的内容要求）：${hint}`
+      ? `${config.instruction}\n${config.variationHintLabel ?? ''}${hint}`
       : config.instruction;
     const result = await runWithPolicy('silence_decision', config.policy, async timeoutSignal => {
       const raw = await client.complete({

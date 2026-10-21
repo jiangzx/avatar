@@ -118,6 +118,21 @@ describe('silence planner', () => {
     expect(await en({ ...context, stage: 'checkin' }, signal())).toEqual({ text: enLine });
   });
 
+  it('matches capitalized en stage phrases and ignores hi inside another word', async () => {
+    const greetingLine = 'Hello! How are you today?';
+    const greeting = createSilencePlanner(client(JSON.stringify({ speak: true, text: greetingLine })), config, enRules);
+    expect(await greeting({ ...context, stage: 'greeting', userText: '' }, signal())).toEqual({ text: greetingLine });
+
+    const checkinLine = 'Are you there? We can talk anytime.';
+    const checkin = createSilencePlanner(client(JSON.stringify({ speak: true, text: checkinLine })), config, enRules);
+    expect(await checkin({ ...context, stage: 'checkin' }, signal())).toEqual({ text: checkinLine });
+
+    // "hi" inside "This" must not count as a greeting.
+    const falsePositive = "This is a nice day, isn't it?";
+    const greetingBad = createSilencePlanner(client(JSON.stringify({ speak: true, text: falsePositive })), config, enRules);
+    expect(await greetingBad({ ...context, stage: 'greeting', userText: '' }, signal())).toBeNull();
+  });
+
   it('rejects a rest line that asks a question, and a greeting without one', async () => {
     const rest = createSilencePlanner(client('{"speak":true,"text":"您今天出门走走吗？"}'), config, zhRules);
     expect(await rest({ ...context, stage: 'rest' }, signal())).toBeNull();
