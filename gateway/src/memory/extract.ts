@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LANGUAGES, type Language } from '@anyidea/protocol';
+import type { Language } from '@anyidea/protocol';
 import { z } from 'zod';
 import { ExtractIncompleteError, type MemoryStore } from './store.ts';
 export type { TextModelClient } from './textClient.ts';
@@ -92,19 +91,13 @@ export function parseExtractOps(raw: unknown): ExtractOp[] {
   return ExtractSchema.parse(wrapped).ops;
 }
 
-export function loadExtractPrompt(path = fileURLToPath(new URL('../../roles/_shared/zh/extract.md', import.meta.url))): string {
+export function loadExtractPrompt(
+  path = fileURLToPath(new URL('../../roles/_shared/zh/extract.md', import.meta.url)),
+  language: Language = 'zh',
+): string {
   const text = readFileSync(path, 'utf8').trim();
-  if (!text) throw new Error('empty_extract_prompt');
+  if (!text) throw new Error(`empty_extract_prompt:${language}`);
   return text;
-}
-
-/** Shared extractor system prompt for every language under `roles/`. Fails fast on a gap. */
-export function loadExtractPrompts(rolesRoot: string): Record<Language, string> {
-  const prompts = {} as Record<Language, string>;
-  for (const language of LANGUAGES) {
-    prompts[language] = loadExtractPrompt(join(rolesRoot, '_shared', language, 'extract.md'));
-  }
-  return prompts;
 }
 
 /**

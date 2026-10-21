@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
+import { unique } from '../unique.ts';
 
 /** Avatar emotions. Priority decides which one wins when one sentence matches several lists. */
 export const EMOTIONS = ['neutral', 'happy', 'sad', 'love'] as const;
@@ -60,8 +61,4 @@ export function mergeEmotion(shared: SharedEmotionConfig, lexicons: readonly Emo
     priority: shared.priority,
     lexicon,
   };
-}
-
-function unique<T>(items: readonly T[]): T[] {
-  return [...new Set(items)];
 }

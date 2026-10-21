@@ -2,7 +2,6 @@
   "instructions": { "budgetRatio": 0.4, "languageBudgetRatio": { "ja": 0.45, "en": 0.75 }, "snapshotMaxChars": 600, "summaryMaxChars": 800, "minHistoryChars": 400 },
   "toolTurnTimeoutMs": 15000,
   "recallClipChars": 80,
-  "recallPhraseMaxChars": 60,
   "recallPhraseTimeoutMs": 1500,
   "retentionDays": 90,
   "retentionBatch": 200,

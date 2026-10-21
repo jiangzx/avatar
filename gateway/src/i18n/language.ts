@@ -1,6 +1,6 @@
 import type { Language } from '@anyidea/protocol';
 
-const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
+export const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const HAN = /\p{Script=Han}/u;
 const LATIN = /\p{Script=Latin}/u;
 

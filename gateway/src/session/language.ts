@@ -1,7 +1,6 @@
 import type { Language } from '@anyidea/protocol';
+import { KANA } from '../i18n/language.ts';
 import type { LanguageRules } from '../i18n/types.ts';
-
-const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const HAN = /\p{Script=Han}/u;
 const LATIN = /\p{Script=Latin}/u;
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;

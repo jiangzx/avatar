@@ -92,7 +92,7 @@ export class FileRoleCatalog implements RoleCatalog {
       if (!entry.isDirectory() || entry.name.startsWith('_')) continue;
       const role = loadRole(join(rootDir, entry.name), entry.name);
       for (const language of role.supportedLanguages) {
-        if (!shared.has(language)) throw new Error(`shared_missing:${language}`);
+        if (!shared.has(language)) throw new Error(`shared_missing:${language}:directory`);
       }
       roles.set(entry.name, role);
     }
@@ -168,7 +168,7 @@ export class FileRoleCatalog implements RoleCatalog {
 
   private sharedFor(language: Language): SharedText {
     const text = this.shared.get(language);
-    if (!text) throw new Error(`shared_missing:${language}`);
+    if (!text) throw new Error(`shared_missing:${language}:directory`);
     return text;
   }
 }

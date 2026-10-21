@@ -7,11 +7,11 @@ const ConsentSchema = z.object({
   confirmed: z.boolean(),
 }).strict();
 
-export function consentTool(prompt: string, confirmedText: string, toolDescription: string): ToolHandler {
+export function consentTool(copy: { prompt: string; confirmedText: string; toolDescription: string }): ToolHandler {
   return {
     spec: {
       name: 'set_memory_consent',
-      description: toolDescription,
+      description: copy.toolDescription,
       parameters: {
         type: 'object',
         properties: {
@@ -31,12 +31,12 @@ export function consentTool(prompt: string, confirmedText: string, toolDescripti
         store.setConsent(ownerId, 'granted', ctx.now);
         return { ok: true };
       }
-      if (!parsed.data.confirmed) return { ok: true, confirmText: prompt };
+      if (!parsed.data.confirmed) return { ok: true, confirmText: copy.prompt };
       runAfterEpochBump(store, ownerId, () => {
         store.wipeOwnerMemory(ownerId);
         ctx.ledger.clear();
       });
-      return { ok: true, rebuild: 'decline', confirmText: confirmedText };
+      return { ok: true, rebuild: 'decline', confirmText: copy.confirmedText };
     },
   };
 }

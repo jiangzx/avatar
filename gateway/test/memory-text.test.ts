@@ -122,6 +122,14 @@ describe('kana backfill', () => {
     expect(backfillKanaBigrams(store, 100)).toBe(1);
     db.close();
   });
+
+  it('ignores a non-positive backfill limit', () => {
+    const db = openDatabase(':memory:', { busyTimeoutMs: 1_000 });
+    const store = new SqliteMemoryStore(db);
+    expect(backfillKanaBigrams(store, 0)).toBe(0);
+    expect(backfillKanaBigrams(store, -1)).toBe(0);
+    db.close();
+  });
 });
 
 describe('scanText', () => {

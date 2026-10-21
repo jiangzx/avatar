@@ -5,7 +5,7 @@ import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
 import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
-import { DEFAULT_ROLE } from './roles/catalog.ts';
+import { DEFAULT_ROLE, missingRoleLanguages } from './roles/catalog.ts';
 import { log } from './log.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from './session/pacing.ts';
 import { devContextResolver } from './session/context.ts';
@@ -27,7 +27,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
 // File-backed roles (M1): gateway/roles/<role>/<language>/ + gateway/roles/_shared/<language>/.
 const roles = loadRoleCatalog(`${root}roles`);
-const missingLanguages = LANGUAGES.filter((language) => !roles.supportedLanguages(DEFAULT_ROLE).includes(language));
+const missingLanguages = missingRoleLanguages(roles, DEFAULT_ROLE, LANGUAGES);
 if (missingLanguages.length > 0) throw new Error(`role_languages_incomplete:${DEFAULT_ROLE}:${missingLanguages.join(',')}`);
 const pacing = loadPacing(`${root}config/pacing.json`);
 const memory = loadMemoryBudget(`${root}config/memory.json`);

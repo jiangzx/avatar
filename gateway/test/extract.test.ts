@@ -1,7 +1,10 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyExtractOps, loadExtractPrompt, loadExtractPrompts, parseExtractOps } from '../src/memory/extract.ts';
+import { applyExtractOps, loadExtractPrompt, parseExtractOps } from '../src/memory/extract.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
 import { QwenTextClient } from '../src/memory/textClient.ts';
@@ -125,12 +128,20 @@ describe('extract prompt and config', () => {
   });
 
   it('loads a shared extract prompt for every language', () => {
-    const prompts = loadExtractPrompts(fileURLToPath(new URL('../roles', import.meta.url)));
-    expect(prompts.zh).toBe(loadExtractPrompt());
-    expect(prompts.ja).toContain('JSON');
-    expect(prompts.en).toContain('JSON');
-    expect(prompts.ja).not.toBe(prompts.zh);
-    expect(prompts.en).not.toBe(prompts.zh);
+    const roles = fileURLToPath(new URL('../roles', import.meta.url));
+    const zh = loadExtractPrompt();
+    const ja = loadExtractPrompt(join(roles, '_shared', 'ja', 'extract.md'), 'ja');
+    const en = loadExtractPrompt(join(roles, '_shared', 'en', 'extract.md'), 'en');
+    expect(ja).toContain('JSON');
+    expect(en).toContain('JSON');
+    expect(ja).not.toBe(zh);
+    expect(en).not.toBe(zh);
+  });
+
+  it('tags an empty extract prompt with its language', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'extract-')), 'extract.md');
+    writeFileSync(path, '   ');
+    expect(() => loadExtractPrompt(path, 'ja')).toThrow(/empty_extract_prompt:ja/);
   });
 });
 

@@ -21,6 +21,16 @@ export interface RoleCatalog {
 }
 
 export const DEFAULT_ROLE = 'elder-companion';
+
+/** Required languages this role does not ship; empty means the role is complete. */
+export function missingRoleLanguages(
+  roles: RoleCatalog,
+  roleId: string,
+  required: readonly Language[],
+): Language[] {
+  const supported = roles.supportedLanguages(roleId);
+  return required.filter((language) => !supported.includes(language));
+}
 const STUB_STYLES: readonly string[] = ['grandchild', 'old-friend'];
 
 export interface FixedRoleCatalogOptions {

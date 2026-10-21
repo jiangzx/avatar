@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { missingRoleLanguages, type RoleCatalog } from '../src/roles/catalog.ts';
 import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -114,6 +115,17 @@ describe('FileRoleCatalog', () => {
     const dir = copyFixtures();
     rmSync(join(dir, '_shared', 'ja', 'extract.md'));
     expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:extract/);
+  });
+
+  it('reports a missing shared directory with the language', () => {
+    const dir = copyFixtures();
+    rmSync(join(dir, '_shared', 'ja'), { recursive: true, force: true });
+    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:directory/);
+  });
+
+  it('reports which required role languages are missing', () => {
+    const roles = { supportedLanguages: () => ['zh'] } as unknown as RoleCatalog;
+    expect(missingRoleLanguages(roles, 'elder-companion', ['zh', 'ja', 'en'])).toEqual(['ja', 'en']);
   });
 
   it('rejects a topic id set mismatch', () => {

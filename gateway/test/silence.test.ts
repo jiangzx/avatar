@@ -9,7 +9,7 @@ import { createSilencePlanner } from '../src/session/silence.ts';
 const silence = loadI18n(`${fileURLToPath(new URL('..', import.meta.url))}config`).silence;
 /** Frozen copy of the zh rules the four-stage ladder was validated with. */
 const zhRules: SilenceRules = {
-  greeting: ['您好', '你好', '好呀', '又见到', '早上好'],
+  greeting: ['您好', '你好', '好呀', '好啊', '好哇', '又见到', '又见面', '早上好', '上午好', '下午好', '晚上好', '早啊', '早安', '嗨', '哈喽', '来啦'],
   listening: ['还在听', '在听', '听着', '听到', '还在吗', '在吗'],
   anytime: ['随时', '都可以', '接着聊', '想聊', '都在'],
   maxCheckinChars: 30,
@@ -35,6 +35,10 @@ const signal = () => new AbortController().signal;
 const client = (raw: string): TextModelClient => ({ complete: async () => raw });
 
 describe('silence planner', () => {
+  it('ships the frozen zh silence pack verbatim', () => {
+    expect(silence.zh).toEqual(zhRules);
+  });
+
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 

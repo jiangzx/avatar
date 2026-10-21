@@ -133,6 +133,10 @@ export function createToolRegistry(options: ToolRegistryOptions = defaultToolOpt
       toolDescription: options.memory.recall.forgetToolDescription,
       queryDescription: options.memory.recall.forgetQueryDescription,
     }),
-    consentTool(options.memory.declineConfirmPrompt, options.memory.declineConfirmedText, options.memory.recall.consentToolDescription),
+    consentTool({
+      prompt: options.memory.declineConfirmPrompt,
+      confirmedText: options.memory.declineConfirmedText,
+      toolDescription: options.memory.recall.consentToolDescription,
+    }),
   ]);
 }

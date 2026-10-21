@@ -49,8 +49,7 @@ const MemoryBudgetSchema = z.object({
   }).strict(),
   toolTurnTimeoutMs: z.number().int().min(3_000).max(30_000),
   recallClipChars: z.number().int().min(20).max(500),
-  /** Natural recall phrasing output cap and deadline; failure falls back to the verbatim line. */
-  recallPhraseMaxChars: z.number().int().min(20).max(120).optional(),
+  /** Natural recall phrasing deadline; failure falls back to the verbatim line. */
   recallPhraseTimeoutMs: z.number().int().min(300).max(5_000).optional(),
   retentionDays: z.number().int().min(1).max(3_650),
   retentionBatch: z.number().int().min(1).max(10_000),

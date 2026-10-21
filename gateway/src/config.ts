@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { Language } from '@anyidea/protocol';
 import type { DirectorConfig } from './roles/types.ts';
 import type { LedgerOptions } from './session/ledger.ts';
+import { unique } from './unique.ts';
 
 export interface GatewayConfig {
   port: number;
@@ -369,8 +370,4 @@ export function mergeSafety(shared: SharedSafetyConfig, phrases: SafetyPhrases):
     degradePhrases: unique(phrases.degradePhrases),
     markPhrases: unique(phrases.markPhrases),
   };
-}
-
-function unique<T>(items: readonly T[]): T[] {
-  return [...new Set(items)];
 }

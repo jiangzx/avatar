@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { LANGUAGES, type Language } from '@anyidea/protocol';
 import { z } from 'zod';
 import { loadSharedSafety, mergeSafety, type SafetyPhrases } from '../config.ts';
+import { unique } from '../unique.ts';
 import {
   EmotionLexiconSchema,
   loadSharedEmotion,
@@ -128,10 +129,6 @@ function compilePattern(source: string, language: Language, field: string): RegE
 
 function normalizeAck(text: string): string {
   return text.replace(EDGE_PUNCTUATION, '').toLowerCase();
-}
-
-function unique<T>(items: readonly T[]): T[] {
-  return [...new Set(items)];
 }
 
 function uniquePatterns(patterns: readonly RegExp[]): RegExp[] {

@@ -5,7 +5,8 @@ import { loadI18n } from '../src/i18n/load.ts';
 import type { TextModelClient } from '../src/memory/extract.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
-import { MemoryWorker } from '../src/memory/worker.ts';
+import { MemoryWorker, withExtraction } from '../src/memory/worker.ts';
+import type { SessionContext } from '../src/session/context.ts';
 
 const dbs: DatabaseSync[] = [];
 const i18n = loadI18n(fileURLToPath(new URL('../config', import.meta.url)));
@@ -270,5 +271,18 @@ describe('MemoryWorker queue', () => {
     release();
     await drained;
     expect(finished).toBe(true);
+  });
+
+  it('passes the session context language to session-end extraction', () => {
+    const seen: Array<{ ownerId: string; reason: string; language?: string }> = [];
+    const base = { started() {}, ended() {}, extract() {} };
+    const fake = {
+      extractOwner: async (ownerId: string, reason: string, language?: string) => {
+        seen.push({ ownerId, reason, language });
+      },
+    };
+    withExtraction(base, fake as unknown as MemoryWorker)
+      .extract?.('s1', { ownerId: 'owner-1', language: 'ja' } as SessionContext, 'client_end');
+    expect(seen).toEqual([{ ownerId: 'owner-1', reason: 'session_end', language: 'ja' }]);
   });
 });
