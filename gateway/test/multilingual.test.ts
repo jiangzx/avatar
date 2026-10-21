@@ -179,7 +179,7 @@ describe('multilingual session', () => {
     session.end();
   });
 
-  it('switches to ja, holds the push while generating, then pushes ja instructions at the next safe seam', async () => {
+  it('switches to ja, holds the push while generating, then pushes ja instructions when playback ends', async () => {
     const { adapter, session } = await startEnAndSwitchToJa();
     expect(session.currentLanguage).toBe('ja');
 
@@ -190,28 +190,15 @@ describe('multilingual session', () => {
     expect(adapter.pushes).toHaveLength(0);
 
     session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
-    // The current seam guard keeps the push pending until the next proactive request.
-    await vi.advanceTimersByTimeAsync(8_100);
     expect(adapter.pushes).toHaveLength(1);
     expect(adapter.pushes[0]).toContain('P-ja');
     expect(adapter.pushes[0]).toContain(`${PROMPT_LABELS.ja.user}${PROMPT_LABELS.ja.separator}`);
+
+    // The pending flag is consumed by that one push; the next proactive request does not repeat it.
+    await vi.advanceTimersByTimeAsync(8_100);
+    expect(adapter.pushes).toHaveLength(1);
     expect(adapter.requests.at(-1)?.cue).toBe('followup');
     session.end();
-  });
-
-  // Known gap: maybePushLanguage() checks interrupt.active before playback.stopped clears it,
-  // so the reply-end push never happens; it is deferred to the next proactive request instead.
-  it.fails('pushes ja instructions immediately when the reply playback ends', async () => {
-    const { adapter, session } = await startEnAndSwitchToJa();
-    try {
-      adapter.beginResponse();
-      adapter.speak('かしこまりました。');
-      adapter.done();
-      session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
-      expect(adapter.pushes[0]).toContain('P-ja');
-    } finally {
-      session.end();
-    }
   });
 
   it('reads a zh-stored addressing line in ja and zh safe greetings', async () => {

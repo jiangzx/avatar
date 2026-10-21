@@ -15,16 +15,19 @@
 // --real-db opens the given SQLite file read-only (no migrations, no PRAGMA journal_mode,
 // no writes), picks the first owner that has messages, and runs the three roadmap queries
 // through the zh production recall path with no text client (verbatim fallback only).
+// A pre-M2 database has no `meta` table, which the current SqliteMemoryStore prepares
+// against; in that case the probe uses a read-only fallback store with the same SELECTs.
 // It prints exactly one JSON object per query and never prints stored or spoken text:
 //   query          roadmap query that was run
-//   hits           true when the outcome is a grounded memory hit (spokenFound)
-//   evidenceCount  number of candidate lines that passed the evidence filter
+//   hits           the grounded-hit boolean (the tool's spokenFound)
+//   evidenceCount  number of grounded history lines the tool returned (candidate lines
+//                  that passed the evidence filter)
 //   newTitleFlag   true only when the spoken text quotes a title marker absent from the
 //                  source lines (detects a phrasing model inventing a work title)
-// If the database is missing, unreadable, lacks a migration the current store prepares
-// against, or the read-only WAL open fails, it prints "NOT RUN <short_reason_code>" once
-// and exits 0 (codes: db_path_missing, db_missing, db_open_failed, db_unreadable,
-// db_schema_incompatible, db_no_owner). NOT RUN is not a pass.
+// If the database is missing, unreadable, lacks the tables recall needs, or the read-only
+// WAL open fails, it prints "NOT RUN <short_reason_code>" once and exits 0 (codes:
+// db_path_missing, db_missing, db_open_failed, db_unreadable, db_schema_incompatible,
+// db_no_owner). NOT RUN is not a pass.
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -100,6 +103,40 @@ function newTitleFlag(spokenText, sourceLines) {
 
 function insert(store, ownerId, sessionId, id, role, text, now) {
   store.insertMessage({ id, sessionId, ownerId, role, text, bigrams: bigrams(text), now });
+}
+
+/**
+ * Read-only fallback for pre-M2 databases: the current SqliteMemoryStore prepares
+ * statements against the `meta` table (kana backfill cursor), which older files lack.
+ * These are the same SELECTs the store uses for recall; nothing is migrated or written.
+ */
+function readOnlyStore(db) {
+  const recent = db.prepare(`SELECT m.text AS text FROM messages m
+    JOIN sessions s ON s.id = m.session_id
+    WHERE m.owner_id = ? AND m.role = 'user' AND m.excluded = 0 AND s.ended_at IS NOT NULL
+    ORDER BY m.created_at DESC, m.rowid DESC
+    LIMIT ?`);
+  const search = db.prepare(`SELECT m.text AS text FROM messages_fts
+    JOIN messages m ON m.rowid = messages_fts.rowid
+    WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.role = 'user' AND m.excluded = 0
+    ORDER BY bm25(messages_fts)
+    LIMIT ?`);
+  const searchLike = db.prepare(`SELECT text FROM messages
+    WHERE owner_id = ? AND role = 'user' AND excluded = 0 AND text LIKE ? ESCAPE '\\'
+    ORDER BY created_at DESC, rowid DESC
+    LIMIT ?`);
+  const texts = (statement, ...args) => statement.all(...args).map((row) => ({ text: row.text }));
+  return {
+    recentUserMessages: (ownerId, limit) => texts(recent, ownerId, limit),
+    searchMessages: (ownerId, match, limit) => {
+      try {
+        return texts(search, match, ownerId, limit);
+      } catch {
+        return [];
+      }
+    },
+    searchMessagesLike: (ownerId, pattern, limit) => texts(searchLike, ownerId, pattern, limit),
+  };
 }
 
 async function runTemp() {
@@ -231,9 +268,12 @@ async function runRealDb(path) {
     try {
       store = new SqliteMemoryStore(db); // constructor only prepares statements
     } catch {
-      // The current store prepares against tables added by later migrations; the probe
-      // must not migrate or write, so an older schema is a NOT RUN, not a failure.
-      return notRun('db_schema_incompatible');
+      // Pre-M2 schema (no `meta` table): use the read-only SELECT fallback. Never migrate.
+      try {
+        store = readOnlyStore(db);
+      } catch {
+        return notRun('db_schema_incompatible');
+      }
     }
 
     await runQueries(registryFor('zh'), store, ownerId);

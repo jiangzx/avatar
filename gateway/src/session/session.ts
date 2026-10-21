@@ -433,6 +433,9 @@ export class Session {
           this.bargePreroll.length = 0;
           this.finalize(s, false);
           this.interrupt.onResponseFinished(msg.responseSeq);
+          // finalize() ran while this response was still the active interrupt, so push here
+          // instead: a language switch made during the reply must reach the live model now.
+          this.maybePushLanguage();
           this.uplinkResumeAt = Date.now() + (this.deps.tailGuardMs ?? 0);
           this.finishNotice(msg.responseSeq);
           if (toolOrigin) {

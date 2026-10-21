@@ -164,4 +164,4 @@
 
 ## 2026-10-21 M2 多语言状态
 
-- M2 的 ja/en 内容包、`gateway/config/i18n/*` 与记忆/安全/情绪/沉默本地化已通过单元/合成验证（gateway 44 个测试文件、618 项通过 + 1 项 expected fail；typecheck、Flutter 182 项、中文回归 210 项通过；`--temp` 召回探针 22 项断言通过）。Seeduplex 日语仍无能力（#46），真机未验收；真实记忆库只读探针因库仍为 M2 前 schema（缺 `meta` 表）输出 `NOT RUN db_schema_incompatible`，未迁移、未写入，不算通过。
+- M2 的 ja/en 内容包、`gateway/config/i18n/*` 与记忆/安全/情绪/沉默本地化已通过单元/合成验证（gateway 44 个测试文件、618 项通过、无 expected fail；typecheck、Flutter 182 项、中文回归 210 项通过；`--temp` 召回探针 22 项断言通过）。Seeduplex 日语仍无能力（#46），真机未验收；真实记忆库只读探针已跑通（预 M2 schema 缺 `meta` 表时走同 SQL 的只读 fallback，不迁移、不写入），三个查询 `hits` 均为 true、`evidenceCount` 均为 2、`newTitleFlag` 均为 false，详见 `docs/project/roadmap.md` 文首。
