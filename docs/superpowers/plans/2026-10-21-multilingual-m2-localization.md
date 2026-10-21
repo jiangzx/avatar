@@ -923,6 +923,7 @@ git commit -m "feat(gateway): localize recall, extraction, and summaries"
 
 **Files:**
 - Modify: `gateway/src/memory/evidence.ts`（skipPatterns 大小写不敏感，英文 denial 不漏）
+- Modify: `gateway/src/memory/redact.ts`（`chineseDigits` 改用 `loadSharedSafety`）
 - Modify: `gateway/src/memory/writer.ts`
 - Modify: `gateway/src/session/silence.ts`
 - Modify: `gateway/src/session/session.ts`
@@ -1045,7 +1046,7 @@ if (stage === 'rest') return !/[？?]/.test(text);
 此时所有消费者（writer、tools、Session、index、worker）已经读 `I18nBundle`，可以删除共享 JSON 里的旧字段：
 
 1. `gateway/config/memory.json` 删除 `forgetConfirmText`、`declineConfirmPrompt`、`declineConfirmedText`、`recallEmptyText`、`recallFoundPrefix`、`memoryNoticeKeywords`、`lightAcks`、`recallSkipPatterns`、`recallRecentQueries`；`MemoryBudgetSchema` 同步删除这些字段，保留 `recallClipChars`、`recallPhraseMaxChars`、`recallPhraseTimeoutMs`、`kanaBackfillBatch`（Task 3 已加）、抽取数值等。
-2. `gateway/config/safety.json` 只保留 `minMaskedDigits`、`chineseDigits`、`invisibleCodePoints`；`gateway/src/config.ts` 删除旧 `loadSafetyConfig`，`loadSharedSafety` + `mergeSafety` 成为唯一读取；`SafetyRules` 仍为 shared + 三数组（供 `scanText`）。
+2. `gateway/config/safety.json` 只保留 `minMaskedDigits`、`chineseDigits`、`invisibleCodePoints`；`gateway/src/config.ts` 删除旧 `loadSafetyConfig`/`SafetyRulesSchema`，`loadSharedSafety` + `mergeSafety` 成为唯一读取；`SafetyRules` 为 `SharedSafetyConfig & SafetyPhrases`（供 `scanText`）。`gateway/src/memory/redact.ts` 的 `chineseDigits` 同步改用 `loadSharedSafety`。
 3. `gateway/config/emotion.json` 只保留 `defaultEmotion`、`debounceMs`、`revertAfterMs`、`firstSentenceMaxChars`、`priority`；`gateway/src/session/emotion.ts` 删除旧 `loadEmotionConfig`，`loadSharedEmotion` + `mergeEmotion` 成为唯一读取。`gateway/src/i18n/load.ts` 改用 `loadSharedSafety`/`loadSharedEmotion`，不要引用已删除的旧 loader。
 4. 更新 `memory-text.test.ts`：`scanText` 用 `DEFAULT_I18N.safety`；`loadSafetyConfig` 断言改为 `loadSharedSafety` + i18n 合并词表。`emotion.test.ts` 用 `DEFAULT_I18N.emotion`。`memory-acceptance.test.ts` 的 `memoryConfig.memoryNoticeKeywords`/`recallSkipPatterns` 改用 `i18n`。
 5. `gateway/test/fixtures/**` 中若有旧的完整 safety/emotion JSON，改为 shared + i18n 两段或直接使用生产 `DEFAULT_I18N`。
@@ -1064,7 +1065,7 @@ Expected: PASS。
 - [ ] **Step 6: 提交**
 
 ```bash
-git add gateway/src/memory/evidence.ts gateway/src/memory/writer.ts gateway/src/session/silence.ts gateway/src/session/session.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/src/identity/registry.ts gateway/src/config.ts gateway/src/session/emotion.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/config/safety.json gateway/config/emotion.json gateway/test/silence.test.ts gateway/test/director-silence.test.ts gateway/test/session.test.ts gateway/test/snapshot.test.ts gateway/test/fileCatalog.test.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/emotion.test.ts gateway/test/memory-acceptance.test.ts
+git add gateway/src/memory/evidence.ts gateway/src/memory/redact.ts gateway/src/memory/writer.ts gateway/src/session/silence.ts gateway/src/session/session.ts gateway/src/roles/fileCatalog.ts gateway/src/index.ts gateway/src/identity/registry.ts gateway/src/config.ts gateway/src/session/emotion.ts gateway/src/session/pacing.ts gateway/config/memory.json gateway/config/safety.json gateway/config/emotion.json gateway/test/silence.test.ts gateway/test/director-silence.test.ts gateway/test/session.test.ts gateway/test/snapshot.test.ts gateway/test/fileCatalog.test.ts gateway/test/memory-text.test.ts gateway/test/evidence.test.ts gateway/test/emotion.test.ts gateway/test/memory-acceptance.test.ts
 git commit -m "feat(gateway): localize safety, emotion, silence, and notice checks"
 ```
 
