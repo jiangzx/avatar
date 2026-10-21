@@ -30,6 +30,14 @@ describe('tagEmotion', () => {
     expect(shipped.lexicon.sad.some((word) => word.includes('悲'))).toBe(true);
     expect(shipped.lexicon.sad).toContain('sad');
   });
+
+  it('matches English emotion words regardless of sentence case', () => {
+    const shipped = DEFAULT_I18N.emotion;
+    expect(tagEmotion('Sad day today.', shipped)).toBe('sad');
+    expect(tagEmotion('Lonely evening.', shipped)).toBe('sad');
+    expect(tagEmotion('Thank you for the tea.', shipped)).toBe('love');
+    expect(tagEmotion('A deep sadness.', shipped)).toBe('sad');
+  });
 });
 
 describe('EmotionTagger', () => {

@@ -14,10 +14,11 @@ export type {
 } from '../i18n/emotion.ts';
 
 import type { Emotion, EmotionConfig } from '../i18n/emotion.ts';
+import { containsPhrase } from '../i18n/text.ts';
 
 /** First emotion in priority order whose word list matches. Negation is not handled (POC). */
 export function tagEmotion(text: string, cfg: EmotionConfig): Emotion | null {
-  for (const e of cfg.priority) if (cfg.lexicon[e].some((w) => text.includes(w))) return e;
+  for (const e of cfg.priority) if (cfg.lexicon[e].some((w) => containsPhrase(text, w))) return e;
   return null;
 }
 
