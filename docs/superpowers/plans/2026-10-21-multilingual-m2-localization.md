@@ -1089,7 +1089,7 @@ git commit -m "feat(gateway): localize safety, emotion, silence, and notice chec
 - Consumes: 全部前序任务。
 - Produces: 可重复的三语合成测试、只读真实库召回探针、真实测试计数与路线图记录。
 
-- [ ] **Step 1: 写三语合成测试**
+- [x] **Step 1: 写三语合成测试**
 
 `gateway/test/multilingual.test.ts` 使用 `fixedRoleCatalog` + `loadI18n` + 一个记录 `SessionConfig` 的 fake adapter：
 
@@ -1114,7 +1114,7 @@ it('starts in en, pushes ja only after the reply ends, and speaks ja fallbacks',
 
 断言至少覆盖：三语 persona/标签、工具描述、`safeGreeting` ja 称呼、notice ja 关键词、silence ja checkin、中文路径不变。避免真实音频/模型。
 
-- [ ] **Step 2: 写召回探针**
+- [x] **Step 2: 写召回探针**
 
 `docs/testing/plan3-multilingual-recall-probe.mjs`：
 - `--temp` 模式：创建临时 SQLite，插入合成三语用户陈述与问句，调用 `recallTool`（从 `gateway/src/session/tools/recall.ts` 导入）并断言：
@@ -1125,7 +1125,7 @@ it('starts in en, pushes ja only after the reply ends, and speaks ja fallbacks',
 - `--real-db <path>` 模式：用 `new DatabaseSync(path, { readOnly: true })` 只读打开；选第一个有 messages 的 owner；运行三个中文查询（`上次聊到哪儿了`、`上次聊过电影吗`、`我说过喜欢喝茶吗`）；只输出 `{query, hits, evidenceCount, newTitleFlag}`，不输出任何正文。若库不存在/不可读，输出 `NOT RUN` 并以 0 退出（记录原因）。
 - 脚本不得写入真实库、不得打印原文、不得调用模型；`--temp` 可用假文本客户端验证包装回退。
 
-- [ ] **Step 3: 跑完整验证**
+- [x] **Step 3: 跑完整验证**
 
 Run: `npm test -w gateway`
 Expected: PASS；记录测试文件数与用例数。
@@ -1149,7 +1149,7 @@ Run 中文回归抽检：
 `npm test -w gateway -- test/session.test.ts test/director.test.ts test/director-silence.test.ts test/silence.test.ts test/memory-acceptance.test.ts test/memory-tools.test.ts`
 Expected: PASS。
 
-- [ ] **Step 4: 更新 roadmap/blockers**
+- [x] **Step 4: 更新 roadmap/blockers**
 
 `docs/project/roadmap.md` 文首 M2 段记录：
 - ja/en 内容包与 `config/i18n/*` 已落地；`elder-companion` supportedLanguages=zh/ja/en。
@@ -1160,7 +1160,7 @@ Expected: PASS。
 
 `docs/blockers.md` 只补一条 M2 说明（不解除 #45/#46）：M2 的 ja/en 内容与本地化已通过单元/合成验证，但 Seeduplex ja 仍无能力、真机未验收。
 
-- [ ] **Step 5: 提交文档**
+- [x] **Step 5: 提交文档**
 
 ```bash
 git add gateway/test/multilingual.test.ts docs/testing/plan3-multilingual-recall-probe.mjs docs/project/roadmap.md docs/blockers.md docs/superpowers/plans/2026-10-21-multilingual-m2-localization.md
