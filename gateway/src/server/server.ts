@@ -393,8 +393,8 @@ function bindConnection(ws: WebSocket, sessionId: string, connId: number, opts: 
         .then((ok) => {
           if (!ok) ws.close(4002, 'bad_state');
         })
-        .catch(() => {
-          log('session_begin_failed', {});
+        .catch((error: unknown) => {
+          log('session_begin_failed', { code: error instanceof Error ? error.message : 'unknown' });
           ws.close(1011, 'internal');
         });
       return;
