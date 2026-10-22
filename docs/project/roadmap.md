@@ -8,6 +8,17 @@ Last updated: 2026-10-21. 2026-10-21 用户确认：本轮开场、召回包装�
 
 2026-10-21 多语言 M1 基础已落地（仅基础，不代表日语/英语已可用）：协议新增 `Language`；会话按 `session.start.clientInfo.language`（App 设备语言，未知回退 `zh`）初始化，并在用户终稿后用脚本启发式检测切换；角色/共享提示词迁入 `gateway/roles/<role>/<language>/` 与 `gateway/roles/_shared/<language>/`，生产 `elder-companion` 仅声明 `zh`；Director/Session 按当前语言取 persona、话术、摘要语言、音色与提示词结构标签，启动时按语言校验指令预算和记忆告知关键词。M1 不包含日语/英语内容包，也不包含记忆/安全本地化，生产对话语言仍为中文。语言探针（2026-10-21，合成输入，只记标志/字节数）：Qwen 文本 zh/ja/en PASS；Qwen 音频 zh/en PASS，ja 使用 2026-10-19 样本 PASS（本次新合成样本未触发 VAD，blocker #45）；Seeduplex zh/en PASS（en 未收到 `response.output_audio.done`，见研究文档异常 3）、`session.update` 音色热换 PASS，Seeduplex 日语 ASR FAIL（无含假名终稿，blocker #46，M3 禁止实现“明确告知不支持”）。详见 `docs/research/multilingual-probes-2026-10-21.md`。最终验证（2026-10-21，Task 11 + 最终审查修复后）：`npm test -w gateway` 42 个测试文件、564 项通过（最终审查补了安全缝隙推送守卫、语言判定否定/短应答用例）；`npm run typecheck -w gateway` 通过；`cd app && flutter test` 182 项通过（worktree 无生成目录 `app/assets/web/`，仅有目录缺失告警）；`git diff --check` 通过；`gateway/src|test|config` 与 `app` 中 `summaryLanguage` 已清零；中文沉默/记忆回归 5 个文件、166 项通过。语言识别用的显式换语短语与短应答白名单在 M1 仍位于 `gateway/src/session/language.ts`，M2 迁入语言配置。下一任务：M2 日语/英语语言包与记忆/安全本地化。
 
+## Plan 4 前置：情感共鸣与主动性探针（2026-10-22）
+
+Plan 4 写 spec 前完成 4 个最小探针，只新增 `gateway/scripts/probe-emotion-*` 与本文档，未改产品代码，未重启 8787，未操作手机。结论：
+
+- **P1（Qwen 转写情绪）**：`emotion` 字段真实存在，位于 `conversation.item.input_audio_transcription.delta` 与 `.completed` 顶层，随 delta 实时下发，取值 `neutral/happy/sad/surprised/angry`。但最终标签命中 happy 2/4、sad 0/5、neutral 2/3，且句内会翻转；没有可验证情绪的人声 ground truth（TTS 指令效果未独立验证，CosyVoice v2 instruction 返回 428）。判定 **退回 B（不可靠）**，字段保留为候选；blocker #47。
+- **P2（Qwen 语音风格）**：session 级 B−A 时长 -0.4%、RMS +1.0%、F0 -0.9%；单次 `response.create` 指令 B 反而更快（-2.1%）更响（+6.7%）。盲听 2/5（3 对作答，对 2）。判定 **不做**。
+- **P3（Seeduplex 语音风格）**：被动回复 B−A 时长 -3.9%、每字 +1.2%、RMS +0.8%，盲听 0/5（3 对作答，对 0）；直接 TTS 时长 +1.5%、RMS -0.9%、F0 -4.8%，盲听 2/5（4 对作答，对 2）。判定 **不做**，包括最关键的 `speech_text_buffer.commit` 主动开口路径。
+- **P4（Seeduplex 中途 session.update）**：播报中发送时当前回复可继续并 done、确认 46–61 ms、无 error，但下一轮不再响应（3/3）；更晚发送会无 done 停滞。空闲（上一轮 done 后）发送 2/2 下一轮生效；间隔 1 s 连续两次均确认且后一次生效。Qwen 对照 2/2 播报中更新安全。判定：Seeduplex **只在安全缝隙推送**，间隔 ≥1 s、每轮最多一次、合并连发；blocker #48。
+
+完整方法、逐项结果表、事件结构、脚本路径与复现命令见 [emotion-proactivity-probes-2026-10-22](../research/emotion-proactivity-probes-2026-10-22.md)。验证：`npm run typecheck -w gateway` 通过；`git diff --check` 无输出。探针音频已在盲听后从 `/tmp` 删除；`/tmp/avatar-emotion-probe/*.jsonl` 仅保留不含正文的指标日志。
+
 ## 音色未跟随语言切换（2026-10-21）
 
 - 用户反馈：AI 语音在 `～` 处念“横杠”，字幕显示正常。定位：会话先 `ja` 后 `en`，13:06:56 适配器因 `closed` 重建时按 `en` 选中 Tina；13:07:09 用户改说中文，语言切回 `zh`，但音色只在连接时选择一次，Tina 继续播报并把 `～` 读作“横杠”（`longanlingxin` 只读作停顿）。
