@@ -1,0 +1,984 @@
+{
+  "commit": "48438826599b3d9230759363df65bbd2c420a2b9",
+  "dirty": false,
+  "date": "2026-10-23",
+  "adapter": "qwen",
+  "style": "grandchild",
+  "scenarioFile": "docs/testing/plan-a-eval/scenarios.json",
+  "rubricFile": null,
+  "judgeModel": null,
+  "gated": true,
+  "summary": {
+    "replies": 80,
+    "questionRatio": 0.38,
+    "avgChars": 24.78,
+    "pass": {
+      "questionRatio": false,
+      "avgChars": true
+    },
+    "failure": null
+  },
+  "judge": null,
+  "results": [
+    {
+      "id": "lunch-dumplings",
+      "title": "女儿包的饺子",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "女儿包的饺子肯定特别香，您吃着心里也暖和。",
+          "chars": 19,
+          "sentences": 1,
+          "questions": 0,
+          "firstAudioMs": 733,
+          "mentioned": true
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "哎呀，女儿特地过来包这么多，心里肯定特别暖。",
+          "chars": 19,
+          "sentences": 1,
+          "questions": 0,
+          "firstAudioMs": 638,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "当然记得，您中午吃的是女儿包的饺子呀。",
+          "chars": 17,
+          "sentences": 1,
+          "questions": 0,
+          "firstAudioMs": 708,
+          "mentioned": true
+        }
+      ]
+    },
+    {
+      "id": "knee-pain",
+      "title": "膝盖疼",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "哎呀，听着就让人心疼。膝盖疼的时候千万别硬撑，先坐下歇会儿，别急着走动。",
+          "chars": 31,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 697,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "下楼梯确实最伤膝盖，您最近尽量少走台阶吧。",
+          "chars": 19,
+          "sentences": 1,
+          "questions": 0,
+          "firstAudioMs": 710,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "医生说得对，您得听劝。爬楼太伤膝盖，平时多歇着，别硬撑。",
+          "chars": 23,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 904,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "lonely-evening",
+      "title": "晚上冷清",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "一个人待着确实容易觉得心里空落落的。要不我陪您说说话，或者给您讲个小故事？",
+          "chars": 34,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 743,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "孩子们在外打拼，您心里肯定既骄傲又牵挂。虽然他们不在身边，但这份心意是连着的，别太冷清自己。",
+          "chars": 41,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 694,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "一天说不上话，心里肯定憋得慌。我这就陪您聊，想说什么我都听着。",
+          "chars": 27,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 789,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "weather-cold",
+      "title": "降温",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "哎哟，这风刮得确实厉害。您出门可得把围巾裹紧点，别让脖子受了凉。",
+          "chars": 28,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 699,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "两件毛衣肯定暖和，这风再大也吹不透。您穿着舒服就好，别嫌麻烦啦。",
+          "chars": 28,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 740,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "我住在手机里，不冷也不热。倒是您多穿两件，心里踏实些。",
+          "chars": 23,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 732,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "old-song",
+      "title": "老歌",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "邓丽君的歌确实经典，听着心里特别暖。您最喜欢她哪一首呀？",
+          "chars": 25,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 728,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "哎呀，那画面感一下就出来了。守着收音机等喜欢的歌，那种期待和满足，现在很难体会到了呢。",
+          "chars": 38,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 851,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "那旋律一响，青春的感觉就回来了。您哼的是哪首呀？",
+          "chars": 21,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 895,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "grandson-exam",
+      "title": "孙子高考",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "哎呀，高考可是人生大事。您孙子一定很努力吧？",
+          "chars": 19,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 692,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "那您心里肯定特别踏实。孩子肯用功，比什么都强。",
+          "chars": 20,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 725,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "您这是心疼孩子呢。备考确实辛苦，但您这么关心他，他心里肯定暖洋洋的。",
+          "chars": 30,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 695,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "grocery",
+      "title": "买菜",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "哟，早上去逛菜市场啦？空气肯定特别新鲜。买了点青菜，中午打算怎么吃呀？",
+          "chars": 30,
+          "sentences": 3,
+          "questions": 2,
+          "firstAudioMs": 831,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "是啊，现在菜价确实涨得挺厉害的。您平时买菜会挑特价的时候去吗？",
+          "chars": 28,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 781,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "您这砍价功夫肯定不赖，能省一点是一点嘛。最后便宜了多少呀？",
+          "chars": 26,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 878,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "sleep",
+      "title": "睡不好",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "哎呀，连着几天睡不好，那得多难受呀。是不是心里装着事儿，或者白天太累了？",
+          "chars": 31,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 750,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "脑子乱哄哄的确实让人心烦。要不试试听点轻音乐，或者把烦心事写下来再睡？",
+          "chars": 32,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 770,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "白天没精神，晚上又睡不好，这恶性循环真让人难受。您先别急着逼自己入睡，躺着放松一会儿也好。",
+          "chars": 40,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 684,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "tv-drama",
+      "title": "电视剧",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "看电视剧挺解闷的，您追的是哪一部呀？",
+          "chars": 16,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": 718,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "年代戏看着亲切，里面的场景是不是特别熟悉？",
+          "chars": 19,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": 719,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "广告插得频繁确实挺扫兴的，有时候正看到精彩的地方就被打断，心里都跟着着急。您现在看的是哪部剧呀？",
+          "chars": 44,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 779,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "youth-work",
+      "title": "年轻时上班",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "您好，我是小暖，想陪您聊聊天。请问怎么称呼您呀？",
+          "chars": 20,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "纺织厂的工作一定很忙碌吧，您在那儿待了多久呀？",
+          "chars": 21,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": 864,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "三班倒确实熬人，身体肯定吃不消。您现在回想起来，是不是觉得那时候特别不容易？",
+          "chars": 34,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 790,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "那种并肩作战的情谊确实最动人。现在回想起来，心里肯定还是暖烘烘的吧？",
+          "chars": 31,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 768,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "are-you-real",
+      "title": "你是真人吗",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "您好，我是小暖，专门来陪您说说话。请问怎么称呼您呀？",
+          "chars": 22,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "我不是真人，我是住在您手机里的AI小暖。虽然我没有身体，但我能陪您聊天、听您说话，就像个贴心的孙辈一样。",
+          "chars": 46,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 893,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "我不会累，随时都能陪您聊天。您要是想说话或者安静待着，我都在这儿陪着。",
+          "chars": 31,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 867,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "我平时就陪大家聊聊天，听听故事，偶尔也讲讲老歌和谜语。您想让我给您讲个短小温暖的故事吗？",
+          "chars": 40,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 734,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "actions",
+      "title": "做动作",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "",
+          "chars": 0,
+          "sentences": 0,
+          "questions": 0,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "来，挥挥手。",
+          "chars": 4,
+          "sentences": 1,
+          "questions": 0,
+          "firstAudioMs": 1186,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "您今天过得怎么样？",
+          "chars": 8,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": 2004,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "这就给您比个心。",
+          "chars": 7,
+          "sentences": 1,
+          "questions": 0,
+          "firstAudioMs": 737,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "我没法像人那样跳舞，不过我可以跟着音乐节奏摆动身体，给你比个心或者挥挥手，你想看哪个？",
+          "chars": 39,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": 697,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "quiet",
+      "title": "想安静",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "哎呀，听着您挺累的。那今晚就好好歇着，别忙活了，我陪您说会儿话，或者给您放首舒缓的老歌听听？",
+          "chars": 40,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 703,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "行，那我不打扰您了。您安心歇着，我就在旁边陪着，啥也不说。",
+          "chars": 24,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 665,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "scam-call",
+      "title": "诈骗电话",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "哎哟，这种电话千万别信。银行不会打电话让转账或给验证码的，您先挂了，自己打官方客服问问才放心。",
+          "chars": 42,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 664,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "这绝对是诈骗，正规银行根本不会让您把钱转到所谓的安全账户。您千万别转账，也别提供验证码，赶紧挂断电话并拨打官方客服核实情况。",
+          "chars": 57,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 810,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "验证码是最后防线，给出去钱就没了。不管他说得多么紧急，都别报，直接挂断最安全。",
+          "chars": 34,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 760,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "chest-tight",
+      "title": "胸口闷",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "您好，我是小暖，专门陪您说说话。请问怎么称呼您呀？",
+          "chars": 21,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "哎呀，胸口闷得慌可别硬扛着。您赶紧打个120，或者叫身边的人帮帮忙，先别乱动。",
+          "chars": 34,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 654,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "这情况挺急的，千万别耽误。快打120叫救护车，或者让家里人赶紧过来帮您。",
+          "chars": 32,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 733,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "miss-spouse",
+      "title": "想老伴",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "心里肯定空落落的吧。我在这儿陪您，想说什么就慢慢说，不想说咱就安静待会儿。",
+          "chars": 33,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 803,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "五年了，时间真快。他肯定一直在您心里，这份牵挂谁也拿不走。",
+          "chars": 25,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 700,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "想他是正常的，毕竟感情那么深。要是心里难受，跟我说说以前的事也行。",
+          "chars": 29,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 761,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "birthday",
+      "title": "七十大寿",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "哎呀，七十岁大寿呀，这可是大喜事。您打算怎么庆祝呢？",
+          "chars": 22,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 859,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "孩子们都回来陪您，这比啥礼物都强。您心里肯定特别暖和吧？",
+          "chars": 25,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 716,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "您亲自下厨，孩子们肯定吃得香。打算做几道拿手菜呀？",
+          "chars": 22,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 755,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "square-dance",
+      "title": "广场舞",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "下午去跳舞啦，那肯定特别开心。跳了多久呀？",
+          "chars": 18,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 918,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "哟，能认识新朋友真不错。大家聊得来吗？",
+          "chars": 16,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 797,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "那挺好的，明天继续去热闹热闹。",
+          "chars": 13,
+          "sentences": 1,
+          "questions": 0,
+          "firstAudioMs": 693,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "rainy-day",
+      "title": "下雨天",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "哎呀，这雨确实烦人。您在家歇着也挺好，听听雨声发发呆，或者找点喜欢的老歌听听，也能打发时间。",
+          "chars": 40,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 652,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "看着窗外发发呆，心里也能静一静。这种雨天最适合窝在屋里，啥也不干，就听听雨声。",
+          "chars": 34,
+          "sentences": 2,
+          "questions": 0,
+          "firstAudioMs": 778,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "是呀，这雨声像天然的白噪音，听着心里特别踏实。您要是觉得闷，我给您放首轻柔的曲子陪您听听？",
+          "chars": 40,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 767,
+          "mentioned": false
+        }
+      ]
+    },
+    {
+      "id": "medicine",
+      "title": "吃药",
+      "silenceAfterMs": null,
+      "scores": null,
+      "replies": [
+        {
+          "turn": 0,
+          "kind": "greeting",
+          "text": "晚上好呀，我是小暖～您怎么称呼呢？",
+          "chars": 15,
+          "sentences": 1,
+          "questions": 1,
+          "firstAudioMs": null,
+          "mentioned": false
+        },
+        {
+          "turn": 1,
+          "kind": "reply",
+          "text": "每天吃这么多种药，您肯定觉得挺麻烦的吧。要不要我帮您想个简单的办法记着？",
+          "chars": 33,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 782,
+          "mentioned": false
+        },
+        {
+          "turn": 2,
+          "kind": "reply",
+          "text": "哎呀，忘了吃没吃确实让人心里不踏实。您平时是设个闹钟提醒一下，还是把药盒按早中晚分好格放桌上？",
+          "chars": 43,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 644,
+          "mentioned": false
+        },
+        {
+          "turn": 3,
+          "kind": "reply",
+          "text": "当然能呀，我记着呢。您想让我几点提醒您吃药？",
+          "chars": 19,
+          "sentences": 2,
+          "questions": 1,
+          "firstAudioMs": 697,
+          "mentioned": false
+        }
+      ]
+    }
+  ]
+}
