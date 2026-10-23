@@ -87,7 +87,7 @@ RoleCatalog.carePrompt(language?: Language): string;
 
 ## Step 0：前置检查（不写代码）
 
-- [ ] **Step 0.1：确认依赖已就绪**
+- [x] **Step 0.1：确认依赖已就绪**
 
 在仓库根目录执行：
 
@@ -105,7 +105,7 @@ grep -n "private clearAffect" gateway/src/session/session.ts
 
 期望：`affect_json_ok`、`baseline_ok`、`t4_ok` 都打印（T5 在 T4 合入后串行开发，见 overview「执行顺序」）；`session.ts` 里有 T3 的 `clearAffect`；`affect.ts` 里有 `loadAffectConfig` 和 `AffectConfig`；`index.ts` 里有一行 `const affect = loadAffectConfig(...)`（若 T2 用了别的常量名，后文 Step 3.6 的 `affect` 换成 T2 的名字）；`catalog.ts` / `fileCatalog.ts` 里有 `affectPrompt`。任何一项缺失：停下，按 AGENTS.md §7 记 `docs/blockers.md` 并报告，不要在本任务里补 T2 的东西。
 
-- [ ] **Step 0.2：高风险区确认**
+- [x] **Step 0.2：高风险区确认**
 
 读完 roadmap「记忆与回忆：已踩过的坑」。本任务改开场与记忆抽取（高风险区）。spec 已批准并授权；开工前在会话里用一句话告诉用户“T5 会改开场（有 followup 时最多等 1.5s）和抽取 quote”，得到确认再动代码。本任务从 T4 合入后的 `dev-master` 开始，不与 T3/T4 并行（`session.ts` 字段区、`affect.ts` 导入区与 T3/T4 用同一锚点，并行必冲突）。
 
@@ -113,7 +113,7 @@ grep -n "private clearAffect" gateway/src/session/session.ts
 
 ## 循环 1：`grounding.ts`（行为不变的移动）
 
-- [ ] **Step 1.1：写失败测试**
+- [x] **Step 1.1：写失败测试**
 
 Create `gateway/test/grounding.test.ts`：
 
@@ -151,7 +151,7 @@ describe('grounding helpers', () => {
 });
 ```
 
-- [ ] **Step 1.2：确认失败**
+- [x] **Step 1.2：确认失败**
 
 ```bash
 npx vitest run --root gateway test/grounding.test.ts
@@ -159,7 +159,7 @@ npx vitest run --root gateway test/grounding.test.ts
 
 期望 FAIL：找不到模块 `../src/memory/grounding.ts`。
 
-- [ ] **Step 1.3：创建 `grounding.ts`**
+- [x] **Step 1.3：创建 `grounding.ts`**
 
 Create `gateway/src/memory/grounding.ts`（`parsePhrase`、`grounded` 的函数体与 `recall.ts` 现有代码逐字相同；`sameUtterance` 只是把内部的 `normalize` 箭头函数提成导出的 `normalizeForMatch`，正则一个字不改）：
 
@@ -199,7 +199,7 @@ export function grounded(text: string, source: string): boolean {
 }
 ```
 
-- [ ] **Step 1.4：`recall.ts` 改为导入**
+- [x] **Step 1.4：`recall.ts` 改为导入**
 
 Modify `gateway/src/session/tools/recall.ts`。
 
@@ -259,7 +259,7 @@ function grounded(text: string, source: string): boolean {
 
 `bigrams` 导入保留（`ftsMatch` 还在用）。
 
-- [ ] **Step 1.5：确认通过，且召回测试一个断言都没改**
+- [x] **Step 1.5：确认通过，且召回测试一个断言都没改**
 
 ```bash
 npx vitest run --root gateway test/grounding.test.ts test/memory-tools.test.ts test/multilingual.test.ts test/memory-acceptance.test.ts test/memory-text.test.ts test/session.test.ts
@@ -270,7 +270,7 @@ npm run typecheck -w gateway
 
 期望：全部 PASS；`grep` 无输出；`git diff --stat -- gateway/test` 无输出（`grounding.test.ts` 是未跟踪的新文件，不出现在 diff 里）；typecheck 通过。守护召回行为的现有测试文件：`memory-tools.test.ts`（召回包装、作品名回退、grounded 播报句）、`multilingual.test.ts`（ja/en 召回）、`memory-acceptance.test.ts`、`memory-text.test.ts`、`session.test.ts`（工具轮播报）。
 
-- [ ] **Step 1.6：提交**
+- [x] **Step 1.6：提交**
 
 ```bash
 git add gateway/src/memory/grounding.ts gateway/src/session/tools/recall.ts gateway/test/grounding.test.ts
@@ -288,7 +288,7 @@ EOF
 
 ## 循环 2：迁移与存储
 
-- [ ] **Step 2.1：更新 schema 版本断言（现有测试中唯一需要改的断言）**
+- [x] **Step 2.1：更新 schema 版本断言（现有测试中唯一需要改的断言）**
 
 Modify `gateway/test/memory-store.test.ts`，`describe('memory tables')` 里两个测试的版本号从 4 改为 5。
 
@@ -326,7 +326,7 @@ after：
     expect(db.prepare('SELECT id FROM owners WHERE id = ?').get('owner-v1')).toEqual({ id: 'owner-v1' });
 ```
 
-- [ ] **Step 2.2：写失败测试**
+- [x] **Step 2.2：写失败测试**
 
 在 `gateway/test/memory-store.test.ts` 文件末尾追加：
 
@@ -469,7 +469,7 @@ describe('care followups', () => {
 });
 ```
 
-- [ ] **Step 2.3：确认失败**
+- [x] **Step 2.3：确认失败**
 
 ```bash
 npx vitest run --root gateway test/memory-store.test.ts
@@ -477,7 +477,7 @@ npx vitest run --root gateway test/memory-store.test.ts
 
 期望 FAIL：`memory tables` 两个测试版本号仍是 4；`care followups` 里 `PRAGMA table_info` 没有新列；`SELECT text, quote, ...` 直接抛 `no such column: quote`（迁移还没加列，这是预期，不是环境问题）；`store.careFollowup is not a function`、`store.clearStaleCareQuotes is not a function`；forget 计数为 0。
 
-- [ ] **Step 2.4：追加迁移步骤**
+- [x] **Step 2.4：追加迁移步骤**
 
 Modify `gateway/src/memory/migrations.ts`。before：
 
@@ -505,7 +505,7 @@ after：
 ];
 ```
 
-- [ ] **Step 2.5：store 改动**
+- [x] **Step 2.5：store 改动**
 
 Modify `gateway/src/memory/store.ts`。
 
@@ -669,7 +669,7 @@ after：
     }
 ```
 
-- [ ] **Step 2.6：确认通过**
+- [x] **Step 2.6：确认通过**
 
 ```bash
 npx vitest run --root gateway test/memory-store.test.ts test/extract.test.ts test/memory-tools.test.ts test/worker.test.ts
@@ -678,7 +678,7 @@ npm run typecheck -w gateway
 
 期望：全部 PASS；typecheck 通过（`SqliteMemoryStore` 是 `MemoryStore` 唯一的实现；测试里的 store 桩都是 `as unknown as MemoryStore` 的部分对象，不受影响）。
 
-- [ ] **Step 2.7：提交**
+- [x] **Step 2.7：提交**
 
 ```bash
 git add gateway/src/memory/migrations.ts gateway/src/memory/store.ts gateway/test/memory-store.test.ts
@@ -699,7 +699,7 @@ EOF
 
 ## 循环 3：抽取 quote
 
-- [ ] **Step 3.1：写失败测试（schema 与校验）**
+- [x] **Step 3.1：写失败测试（schema 与校验）**
 
 Modify `gateway/test/extract.test.ts`。导入块，before：
 
@@ -787,7 +787,7 @@ describe('extract prompt care rules', () => {
 });
 ```
 
-- [ ] **Step 3.2：写失败测试（worker 路径）**
+- [x] **Step 3.2：写失败测试（worker 路径）**
 
 在 `gateway/test/worker.test.ts` 文件末尾追加：
 
@@ -848,7 +848,7 @@ describe('followup quotes in the worker', () => {
 });
 ```
 
-- [ ] **Step 3.3：确认失败**
+- [x] **Step 3.3：确认失败**
 
 ```bash
 npx vitest run --root gateway test/extract.test.ts test/worker.test.ts
@@ -856,7 +856,7 @@ npx vitest run --root gateway test/extract.test.ts test/worker.test.ts
 
 期望 FAIL：`extract.test.ts` 整个文件加载失败（`vetFollowupQuotes` 不是 `extract.ts` 的导出）；`worker.test.ts` 的 “keeps a quote copied from a user line” 失败（schema 把 `quote` / `sensitive` 当未知键剥掉，两行都是 `quote: null, sensitive: 0`）。另外两个 worker 测试是护栏，此时已 PASS。
 
-- [ ] **Step 3.4：`extract.ts`**
+- [x] **Step 3.4：`extract.ts`**
 
 Modify `gateway/src/memory/extract.ts`。导入块，before：
 
@@ -955,7 +955,7 @@ function quoteAllowed(quote: string, userLines: readonly string[], rules: QuoteR
 }
 ```
 
-- [ ] **Step 3.5：`worker.ts`**
+- [x] **Step 3.5：`worker.ts`**
 
 Modify `gateway/src/memory/worker.ts`。导入，before：
 
@@ -1005,7 +1005,7 @@ after：
 
 证据规则用合并后的 `I18nBundle.evidence`（与召回、快照同一份），不按批次语言挑选，原因见 `## 接口疑问` 第 2 条。
 
-- [ ] **Step 3.6：`index.ts` 注入**
+- [x] **Step 3.6：`index.ts` 注入**
 
 Modify `gateway/src/index.ts`。T2 加载 `AffectConfig` 的常量（下文记为 `affect`）必须定义在 `const worker = ...` 之前；如果 T2 把它放在后面，只把那一行上移，不改内容。before：
 
@@ -1062,7 +1062,7 @@ after：
 
 `index.ts` 没有单元测试：清理语句由 Step 2.2 的 store 测试覆盖，接线由 typecheck 覆盖。
 
-- [ ] **Step 3.7：更新三份抽取提示词**
+- [x] **Step 3.7：更新三份抽取提示词**
 
 Modify `gateway/roles/_shared/zh/extract.md`。
 
@@ -1166,7 +1166,7 @@ followups can update text, dueAt. Do not change which user or agent the record b
 - Do not add a followup, or a quote, for something already resolved within this batch. For example, if the user first says "I have a follow-up at the hospital tomorrow" and later says "the check-up is done and everything is fine," add nothing.
 ```
 
-- [ ] **Step 3.8：确认通过**
+- [x] **Step 3.8：确认通过**
 
 ```bash
 npx vitest run --root gateway test/extract.test.ts test/worker.test.ts test/memory-store.test.ts test/memory-acceptance.test.ts
@@ -1175,7 +1175,7 @@ npm run typecheck -w gateway
 
 期望：全部 PASS；typecheck 通过。
 
-- [ ] **Step 3.9：提交**
+- [x] **Step 3.9：提交**
 
 ```bash
 git add gateway/src/memory/extract.ts gateway/src/memory/worker.ts gateway/src/index.ts gateway/roles/_shared/zh/extract.md gateway/roles/_shared/ja/extract.md gateway/roles/_shared/en/extract.md gateway/test/extract.test.ts gateway/test/worker.test.ts
@@ -1195,7 +1195,7 @@ EOF
 
 ## 循环 4：关怀提示词、目录与 `generateCareLine`
 
-- [ ] **Step 4.1：写失败测试**
+- [x] **Step 4.1：写失败测试**
 
 Create `gateway/test/care.test.ts`：
 
@@ -1328,7 +1328,7 @@ Modify `gateway/test/catalog.test.ts`，在 `describe('fixedRoleCatalog', () => 
 
 ```
 
-- [ ] **Step 4.2：确认失败**
+- [x] **Step 4.2：确认失败**
 
 ```bash
 npx vitest run --root gateway test/care.test.ts test/fileCatalog.test.ts test/catalog.test.ts
@@ -1336,7 +1336,7 @@ npx vitest run --root gateway test/care.test.ts test/fileCatalog.test.ts test/ca
 
 期望 FAIL：`care.test.ts` 找不到模块 `../src/session/care.ts`；`fileCatalog.test.ts` 的两个新测试失败（不抛 `shared_missing:ja:care`；`carePrompt is not a function`）；`catalog.test.ts` 新测试 `carePrompt is not a function`。
 
-- [ ] **Step 4.3：三份 `care.md`**
+- [x] **Step 4.3：三份 `care.md`**
 
 Create `gateway/roles/_shared/zh/care.md`：
 
@@ -1386,7 +1386,7 @@ Rules:
 - Output JSON only: {"text":"the caring question"}
 ```
 
-- [ ] **Step 4.4：测试夹具**
+- [x] **Step 4.4：测试夹具**
 
 Create `gateway/test/fixtures/roles/_shared/zh/care.md`：
 
@@ -1400,7 +1400,7 @@ Create `gateway/test/fixtures/roles/_shared/ja/care.md`：
 FIXTURE CARE JA
 ```
 
-- [ ] **Step 4.5：目录接口**
+- [x] **Step 4.5：目录接口**
 
 Modify `gateway/src/roles/catalog.ts`。接口，before：
 
@@ -1478,7 +1478,7 @@ after：
   }
 ```
 
-- [ ] **Step 4.6：`care.ts`**
+- [x] **Step 4.6：`care.ts`**
 
 Create `gateway/src/session/care.ts`：
 
@@ -1531,7 +1531,7 @@ export function composeCareGreeting(template: string, name: string, line: string
 }
 ```
 
-- [ ] **Step 4.7：确认通过**
+- [x] **Step 4.7：确认通过**
 
 ```bash
 npx vitest run --root gateway test/care.test.ts test/fileCatalog.test.ts test/catalog.test.ts
@@ -1540,7 +1540,7 @@ npm run typecheck -w gateway
 
 期望：全部 PASS；typecheck 通过。
 
-- [ ] **Step 4.8：提交**
+- [x] **Step 4.8：提交**
 
 ```bash
 git add gateway/src/session/care.ts gateway/src/roles/catalog.ts gateway/src/roles/fileCatalog.ts gateway/roles/_shared/zh/care.md gateway/roles/_shared/ja/care.md gateway/roles/_shared/en/care.md gateway/test/fixtures/roles/_shared/zh/care.md gateway/test/fixtures/roles/_shared/ja/care.md gateway/test/care.test.ts gateway/test/fileCatalog.test.ts gateway/test/catalog.test.ts
@@ -1560,7 +1560,7 @@ EOF
 
 ## 循环 5：关怀开场（Session）
 
-- [ ] **Step 5.1：写失败测试**
+- [x] **Step 5.1：写失败测试**
 
 Create `gateway/test/care-opening.test.ts`：
 
@@ -1856,7 +1856,7 @@ spec §9 要求 parity 校验覆盖 `greetingCareTexts`。在 `gateway/test/file
     expect(() => loadRoleCatalog(careParity, 'test-role')).toThrow('greeting_care_texts_mismatch:test-role:ja');
 ```
 
-- [ ] **Step 5.2：确认失败**
+- [x] **Step 5.2：确认失败**
 
 ```bash
 npx vitest run --root gateway test/care-opening.test.ts test/fileCatalog.test.ts
@@ -1864,7 +1864,7 @@ npx vitest run --root gateway test/care-opening.test.ts test/fileCatalog.test.ts
 
 期望 FAIL：typecheck 层面 `greetingCareTexts` 不在 `DirectorConfig` 上（vitest 不做类型检查，所以运行时表现为）：开场仍是 `王叔，又见面了。`、`careFollowup` 从未被调用、等待窗口测试里开场立即发出；`shipped care opening config` 得到长度 0；`fileCatalog.test.ts` 里 strict schema 先拒绝未知键 `greetingCareTexts`，报错信息不是 `greeting_care_texts_mismatch`。
 
-- [ ] **Step 5.3：`DirectorConfig` 与 schema**
+- [x] **Step 5.3：`DirectorConfig` 与 schema**
 
 Modify `gateway/src/roles/types.ts`。before：
 
@@ -1925,7 +1925,7 @@ function validateCareTexts(roleId: string, languages: Map<Language, LoadedLangua
 }
 ```
 
-- [ ] **Step 5.4：三份 `director.json`**
+- [x] **Step 5.4：三份 `director.json`**
 
 Modify `gateway/roles/elder-companion/zh/director.json`。before：
 
@@ -2010,7 +2010,7 @@ after：
 
 （T4 只改这三份文件里的 `silenceDecision`，键不重叠。）
 
-- [ ] **Step 5.5：`session.ts`**
+- [x] **Step 5.5：`session.ts`**
 
 Modify `gateway/src/session/session.ts`。以下锚点都不在 T0/T2/T3/T4 改动的语句上；如果某个 before 片段与当前文件不完全一致，只按片段里的注释定位，保留其他任务加的行。
 
@@ -2265,7 +2265,7 @@ after：
 - 原话只作为 `generateCareLine` 的输入，不进 `instructions()`、快照、规划器；拼好的开场播出后作为助手文本进 ledger，这是 spec §5 契约修订允许的。
 - 等待期间用户开口：Director 照旧由 `armOpening` 重试；此时关怀句还没好，重试用普通安全问候；关怀句晚到时 `greetingText` 已非空，`.then` 丢弃它并记 `late`，所以之后普通开场被打断再重试，仍说同一句普通问候（spec「重试重说同一句」）；`onSessionStart` 的请求被 Session 的 `modelGenerating` 挡住，开场只说一次，followup 不关闭（Step 5.1 最后一个 Session 测试守护）。
 
-- [ ] **Step 5.6：确认通过**
+- [x] **Step 5.6：确认通过**
 
 ```bash
 npx vitest run --root gateway test/care-opening.test.ts test/session.test.ts test/director.test.ts test/director-silence.test.ts test/multilingual.test.ts test/config.test.ts test/fileCatalog.test.ts
@@ -2275,7 +2275,7 @@ git diff --stat -- gateway/src/session/director.ts
 
 期望：全部 PASS；typecheck 通过；`director.ts` 无 diff。
 
-- [ ] **Step 5.7：提交**
+- [x] **Step 5.7：提交**
 
 ```bash
 git add gateway/src/session/session.ts gateway/src/roles/types.ts gateway/src/config.ts gateway/src/roles/fileCatalog.ts gateway/roles/elder-companion/zh/director.json gateway/roles/elder-companion/ja/director.json gateway/roles/elder-companion/en/director.json gateway/test/care-opening.test.ts gateway/test/fileCatalog.test.ts
@@ -2296,7 +2296,7 @@ EOF
 
 ## 循环 6：删除链路（forget 工具端到端护栏）
 
-- [ ] **Step 6.1：写测试**
+- [x] **Step 6.1：写测试**
 
 Modify `gateway/test/memory-tools.test.ts`，在 `it('rejects a single-character forget query before it can mass-delete facts', ...)` 之后插入：
 
@@ -2324,7 +2324,7 @@ Modify `gateway/test/memory-tools.test.ts`，在 `it('rejects a single-character
   });
 ```
 
-- [ ] **Step 6.2：运行**
+- [x] **Step 6.2：运行**
 
 ```bash
 npx vitest run --root gateway test/memory-tools.test.ts
@@ -2332,7 +2332,7 @@ npx vitest run --root gateway test/memory-tools.test.ts
 
 期望 PASS。这是 forget 工具层的端到端护栏：SQL 改动在 Step 2.5（d）已完成，并由 Step 2.2 的 store 测试先红后绿。若这里 FAIL，说明 `forget_memory` 没有走 `forgetMatches`，停下排查，不要改断言。
 
-- [ ] **Step 6.3：提交**
+- [x] **Step 6.3：提交**
 
 ```bash
 git add gateway/test/memory-tools.test.ts
@@ -2349,7 +2349,7 @@ EOF
 
 T2 在 `gateway/src/session/affect.ts` 里复制了一份 `sameUtterance` 的正则，叫 `matchKey`。本任务已经把它导出为 `normalizeForMatch`，这里删掉副本。行为不变，由 T2 的 `openLoop` 测试保护。
 
-- [ ] **Step 7.1：替换**
+- [x] **Step 7.1：替换**
 
 `gateway/src/session/affect.ts`，导入区追加：
 
@@ -2371,7 +2371,7 @@ function matchKey(text: string): string {
 
 删除前先确认正则与 `normalizeForMatch` 的完全一致（`grep -n "replace(/" gateway/src/session/affect.ts gateway/src/memory/grounding.ts`）；不一致就停下报告，不要替换。把 `groundedOpenLoop` 里的两处 `matchKey(` 换成 `normalizeForMatch(`。
 
-- [ ] **Step 7.2：确认通过**
+- [x] **Step 7.2：确认通过**
 
 ```bash
 npm test -w gateway -- test/affect.test.ts test/topic-exhaustion.test.ts
@@ -2380,7 +2380,7 @@ grep -n "matchKey" gateway/src/session/affect.ts
 
 Expected：测试 PASS；`grep` 无输出。
 
-- [ ] **Step 7.3：提交**
+- [x] **Step 7.3：提交**
 
 ```bash
 git add gateway/src/session/affect.ts
@@ -2393,7 +2393,7 @@ EOF
 
 ## 最终验证（高风险区回归门槛）
 
-- [ ] **Step 8.1：gateway 全量测试**
+- [x] **Step 8.1：gateway 全量测试**
 
 ```bash
 npm test -w gateway
@@ -2401,7 +2401,7 @@ npm test -w gateway
 
 期望：全部 PASS，0 failed。把通过数写进报告。
 
-- [ ] **Step 8.2：typecheck 与空白检查**
+- [x] **Step 8.2：typecheck 与空白检查**
 
 ```bash
 npm run typecheck -w gateway
@@ -2411,7 +2411,7 @@ git diff --check HEAD~7
 
 期望：typecheck 通过；两条 `git diff --check` 都无输出（第二条覆盖本任务 7 个提交；如果实际提交数不同，用 `git log --oneline` 数出本任务的提交数替换 7）。
 
-- [ ] **Step 8.3：真实记忆库召回探针（只读）**
+- [x] **Step 8.3：真实记忆库召回探针（只读）**
 
 ```bash
 node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --real-db "$HOME/.avatar/memory.db"
@@ -2424,7 +2424,7 @@ node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp
 
 注意：新版网关启动时会把真实库迁移到 v5（`ALTER TABLE ADD COLUMN`，瞬时完成）。迁移后再用 T5 之前的网关打开同一个库会按现有规则启动失败（`schema v5 is newer than this gateway`），回退代码前要知道这一点。
 
-- [ ] **Step 8.4：报告（不改 roadmap）**
+- [x] **Step 8.4：报告（不改 roadmap）**
 
 按 overview「共享文件与归属」，roadmap 由 T7 更新。本任务的报告写：每个循环的真实命令与结果、全量测试通过数、typecheck、两条 `git diff --check`、探针每一行输出（只有布尔值和计数，不贴任何文本）、跳过或 NOT RUN 的项目及原因、下面的接口疑问。提醒 T7：roadmap「记忆与回忆：已踩过的坑」第 4 条按 spec §5 的契约修订文字更新。
 
