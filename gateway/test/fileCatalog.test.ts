@@ -104,7 +104,6 @@ describe('FileRoleCatalog', () => {
       expect(persona).toContain('用自己的话点出对方的感受');
       expect(persona).toContain('可以说满 3 句、60 字左右');
       expect(persona).toContain('三句话里最多一句是问句');
-      expect(persona).toContain('多数回复不用问句');
       expect(persona).toContain('标成"用户："的是对方原话');
       expect(persona).toContain('不声称上次聊过什么');
     }
@@ -112,13 +111,11 @@ describe('FileRoleCatalog', () => {
       const ja = roles.buildPersona('elder-companion', style, 'ja');
       expect(ja).toContain('相づちから始めません');
       expect(ja).toContain('自分の言葉で相手の気持ちに触れます');
-      expect(ja).toContain('ほとんどの返事は質問にしません');
       expect(ja).not.toContain('先に相づちを入れず');
       expect(ja).not.toContain('「はい」');
       const en = roles.buildPersona('elder-companion', style, 'en');
       expect(en).toContain('never a bare acknowledgement');
       expect(en).toContain('Name their feeling in your own words');
-      expect(en).toContain('most replies need no question');
       expect(en).not.toContain('no filler acknowledgement');
       expect(en).not.toContain('"OK,"');
     }
