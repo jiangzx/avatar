@@ -427,6 +427,28 @@ describe('memory tool registry', () => {
     expect(store.listFacts(a.ownerId)).toHaveLength(1);
   });
 
+  it('forgets a care followup whose keyword appears only in its quote', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'forget-quote');
+    const day = 24 * 60 * 60_000;
+    store.recordSessionStart('s-old', a.agentId, 10);
+    store.recordSessionEnd('s-old', a.agentId, 20);
+    say(store, a.ownerId, 'm-old', '我下周二去医院复查膝盖', 11, 's-old');
+    store.immediate(() => store.writeExtraction(a.ownerId, {
+      now: 15, messageIds: ['m-old'], facts: [], notes: [], episodes: [],
+      followups: [{ op: 'add', text: '问问复查结果', dueAt: 99, quote: '我下周二去医院复查膝盖', sensitive: true }],
+    }));
+    expect(store.careFollowup(a.ownerId, 's1', 30, 7 * day)).toMatchObject({ quote: '我下周二去医院复查膝盖' });
+
+    const result = await createToolRegistry().handle('forget_memory', { query: '膝盖' }, ctxFor(store, worker(store), a));
+
+    expect(result).toMatchObject({ ok: true, rebuild: 'forget' });
+    expect(counts(db, a.ownerId).followups).toBe(0);
+    expect(store.careFollowup(a.ownerId, 's1', 30, 7 * day)).toBeUndefined();
+    expect(db.prepare("SELECT count(*) AS n FROM memory_changes WHERE owner_id = ? AND instr(diff, '膝盖') > 0").get(a.ownerId)).toEqual({ n: 0 });
+  });
+
   it('recalls only the caller, with the two-character name first', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
