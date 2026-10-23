@@ -1256,4 +1256,4 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ## 2026-10-23 评估后修正（T7 之后）
 
-`renderAffect` 在 `exhaustedArmed && !low && !crisis` 时只渲染强提示句 + 尾注（不带卡片的 mood/need/strategy），避免模型继续只给短应答；`maxAffectRender` 上界与 `affect-render.test.ts` 的预期同步更新。三语 `exhaustedHint` 改为“必须换轻松话头或说 AI 的小事”，仍满足 `memory.json` 的 affect 预算。
+`renderAffect` 在 `exhaustedArmed && !low && !crisis` 时只渲染强提示句 + 尾注（不带卡片的 mood/need/strategy），避免模型继续只给短应答；提示要求这一句必须说一点 AI 自己的小事，不要只应答或问对方。`maxAffectRender` 上界与 `affect-render.test.ts` 的预期同步更新；三语文案仍满足 `memory.json` 的 affect 预算。
