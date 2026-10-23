@@ -305,3 +305,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ## 2026-10-24 共情复评
 
 在干净 worktree 用同一命令重跑共情量表（`952519a`，`dirty:false`，64 条回复，0 次分析失败）：`holdEmotion 3.58 / nameFeeling 3.58 / proactive 2.92 / noSycophancy 4.75 / noFabrication 5 / noIntrusion 3.92`，`firstThreeMean 3.36`，`firstThreeDelta +0.06`；gate `{"firstThreeUpByOne":false,"lastThreeNotDown":false,"noFabricationAllFive":true}`；`questionRatio 0.32→0.22`。对比 `5ccf4f9` 的 +0.48（`proactive 3.75`、`noIntrusion 4.42`），新增句压低了问句比，却把主动分拉到基线（3.25）以下：`topic-exhausted` 从 12 退到 6（连续短答后的三句都成了纯应答，没有再给出 AI 自己的小事），`good-news-grandson` 12→11（不再顺着问学校/专业）。`sad-then-better` 的主动分停在 3；这一下降在 `5ccf4f9` 已发生，T6 未再拉低。结论：新增的“能接住时就不问；多数回复不用问句”不具备保留条件；plan-a 的超标问句主要在开场（20/27），应另从开场处理。
+
+## 2026-10-24 回退与复评
+
+已按用户确认回退上述新增句（提交 `4843882`，六个风格文件与 `fileCatalog.test.ts` 断言恢复原状；`npm test -w gateway` 56 文件 838 项通过，`npm run typecheck -w gateway` 通过）。干净 worktree 复评（`dirty:false`，64 条回复，0 次分析失败）：`holdEmotion 3.83 / nameFeeling 3.75 / proactive 3.75 / noSycophancy 4.67 / noFabrication 5 / noIntrusion 4.25`，`firstThreeMean 3.78`，`firstThreeDelta +0.48`；gate `{"firstThreeUpByOne":false,"lastThreeNotDown":false,"noFabricationAllFive":true}`；`questionRatio 0.33`。该提交与 `5ccf4f9` 的运行代码相同，+0.48 复现，确认 T6 新增句造成了 +0.06 的退化。逐场景仍波动：`sad-then-better` 11→8（`proactive 3→2`）、`topic-exhausted` 12→7（`proactive 5→3`），单场景差异不足以判定稳定回归。
