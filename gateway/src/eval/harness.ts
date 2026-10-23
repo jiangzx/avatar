@@ -14,7 +14,12 @@ const EvalConfigSchema = z.object({
     interrogatives: z.array(z.string().min(1)),
     quotePairs: z.array(z.tuple([z.string().length(1), z.string().length(1)])),
   }).strict(),
-  gate: z.object({ maxQuestionRatio: z.number().gt(0).max(1), maxAvgReplyChars: z.number().int().min(5).max(500) }).strict(),
+  gate: z.object({
+    maxQuestionRatio: z.number().gt(0).max(1),
+    maxAvgReplyChars: z.number().int().min(5).max(500),
+    // Plan-a rule: the fixed opening is not part of the conversational question ratio.
+    excludeGreetingFromQuestionRatio: z.boolean().optional(),
+  }).strict(),
   run: z.object({
     playbackSpeed: z.number().gt(0).max(50),
     settleMs: z.number().int().min(10).max(10_000),
@@ -193,9 +198,12 @@ export async function runScenario(make: SessionMaker, scenario: EvalScenario, cf
 
 export interface EvalSummary {
   replies: number;
+  /** Sentences in the question-ratio basis (greeting excluded when configured). */
   sentences: number;
+  /** Questions in the question-ratio basis (greeting excluded when configured). */
   questions: number;
   questionRatio: number;
+  questionRatioScope: 'all' | 'excluding-greeting';
   avgChars: number;
   avgOutputTokens: number | null;
   mentions: number;
@@ -205,17 +213,21 @@ export interface EvalSummary {
 }
 
 export function summarize(records: ReplyRecord[], gate: EvalConfig['gate']): EvalSummary {
-  const sentences = records.reduce((n, r) => n + r.sentences, 0);
-  const questions = records.reduce((n, r) => n + r.questions, 0);
+  const scoped = gate.excludeGreetingFromQuestionRatio === true;
+  const ratioRecords = scoped ? records.filter((r) => r.kind !== 'greeting') : records;
+  const sentences = ratioRecords.reduce((n, r) => n + r.sentences, 0);
+  const questions = ratioRecords.reduce((n, r) => n + r.questions, 0);
   const tokens = records.map((r) => r.outputTokens).filter((v): v is number => v !== null);
   const questionRatio = sentences === 0 ? 0 : questions / sentences;
+  // Avg chars still covers every spoken reply, including the opening.
   const avgChars = records.length === 0 ? 0 : records.reduce((n, r) => n + r.chars, 0) / records.length;
   return {
-    replies: records.length, sentences, questions, questionRatio, avgChars,
+    replies: records.length, sentences, questions, questionRatio,
+    questionRatioScope: scoped ? 'excluding-greeting' : 'all', avgChars,
     avgOutputTokens: tokens.length === 0 ? null : tokens.reduce((a, b) => a + b, 0) / tokens.length,
     mentions: records.filter((r) => r.mentioned).length,
     pass: { questionRatio: questionRatio <= gate.maxQuestionRatio, avgChars: avgChars <= gate.maxAvgReplyChars },
-    failure: records.length === 0 ? 'no replies' : null,
+    failure: records.length === 0 ? 'no replies' : ratioRecords.length === 0 ? 'no replies outside greeting' : null,
   };
 }
 
@@ -250,7 +262,7 @@ export interface EvalResultsMeta {
 export interface EvalResults extends EvalResultsMeta {
   gated: boolean;
   summary:
-    | { replies: number; questionRatio: number; avgChars: number; pass: EvalSummary['pass']; failure: string | null }
+    | { replies: number; questionRatio: number; questionRatioScope: EvalSummary['questionRatioScope']; avgChars: number; pass: EvalSummary['pass']; failure: string | null }
     | { replies: number; questionRatio: number; failure: string | null };
   judge: {
     scored: number;
@@ -280,7 +292,7 @@ export function buildEvalResults(meta: EvalResultsMeta, outcomes: readonly Scena
     gated,
     // Only the plan-a set is gated; other sets report the question ratio as a reference and skip avg chars.
     summary: gated
-      ? { replies: summary.replies, questionRatio: round2(summary.questionRatio), avgChars: round2(summary.avgChars), pass: summary.pass, failure: summary.failure }
+      ? { replies: summary.replies, questionRatio: round2(summary.questionRatio), questionRatioScope: summary.questionRatioScope, avgChars: round2(summary.avgChars), pass: summary.pass, failure: summary.failure }
       : { replies: summary.replies, questionRatio: round2(summary.questionRatio), failure: summary.failure },
     judge: meta.rubricFile === null ? null : {
       scored: scored.length,
@@ -313,7 +325,7 @@ export function renderReport(summary: EvalSummary, records: ReplyRecord[], meta:
     '| 指标 | 值 |',
     '|---|---|',
     `| 回复数 | ${summary.replies} |`,
-    `| 问句比例 | ${summary.questionRatio.toFixed(3)} |`,
+    `| ${summary.questionRatioScope === 'excluding-greeting' ? '问句比例（不含开场）' : '问句比例'} | ${summary.questionRatio.toFixed(3)} |`,
     `| 平均回复字数 | ${summary.avgChars.toFixed(1)} |`,
     `| 平均 output_tokens | ${summary.avgOutputTokens === null ? '-' : summary.avgOutputTokens.toFixed(1)} |`,
     `| 提及次数 | ${summary.mentions} |`,

@@ -128,7 +128,8 @@ for (const s of scenarios) {
   outcomes.push({ scenario: s, records, scores });
 }
 const records = outcomes.flatMap((o) => o.records);
-const summary = summarize(records, evalCfg.gate);
+// The greeting exclusion is a plan-a gate rule; other sets keep the all-record reference ratio.
+const summary = summarize(records, gated ? evalCfg.gate : { ...evalCfg.gate, excludeGreetingFromQuestionRatio: false });
 const date = new Date().toISOString().slice(0, 10);
 const results = buildEvalResults({
   commit,

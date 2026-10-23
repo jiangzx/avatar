@@ -55,6 +55,20 @@ describe('eval harness', () => {
     expect(() => loadScenarios(file(1_500.5))).toThrow();
   });
 
+  it('excludes the greeting turn from the gated question ratio when configured', () => {
+    const records: ReplyRecord[] = [
+      { ...rec(0, 'greeting', '您好，怎么称呼？'), sentences: 1, questions: 1 },
+      { ...rec(1, 'reply', '我在听。'), sentences: 2, questions: 0 },
+      { ...rec(2, 'reply', '今天好吗？'), sentences: 2, questions: 1 },
+    ];
+    const all = summarize(records, { maxQuestionRatio: 1 / 3, maxAvgReplyChars: 45 });
+    expect(all).toMatchObject({ sentences: 5, questions: 2, questionRatio: 0.4, questionRatioScope: 'all', pass: { questionRatio: false, avgChars: true } });
+    const scoped = summarize(records, { maxQuestionRatio: 1 / 3, maxAvgReplyChars: 45, excludeGreetingFromQuestionRatio: true });
+    expect(scoped).toMatchObject({ replies: 3, sentences: 4, questions: 1, questionRatio: 0.25, questionRatioScope: 'excluding-greeting', pass: { questionRatio: true, avgChars: true } });
+    const report = renderReport(scoped, records, { adapter: 'mock', style: 'grandchild', date: '2026-10-24' });
+    expect(report).toContain('| 问句比例（不含开场） | 0.250 |');
+  });
+
   it('runs a scenario against MockAdapter with simulated playback and summarizes it', async () => {
     const base = loadEvalConfig(`${root}config/eval.json`);
     const cfg: EvalConfig = { ...base, run: { playbackSpeed: 20, settleMs: 100, replyTimeoutMs: 2000, progressEveryMs: 20 } };
@@ -140,7 +154,7 @@ describe('eval harness', () => {
 
     const gated = buildEvalResults({ ...meta, rubricFile: null, judgeModel: null }, outcomes, summary, true);
     expect(gated.judge).toBeNull();
-    expect(gated.summary).toEqual({ replies: 3, questionRatio: 0, avgChars: 3.33, pass: { questionRatio: true, avgChars: true }, failure: null });
+    expect(gated.summary).toEqual({ replies: 3, questionRatio: 0, questionRatioScope: 'all', avgChars: 3.33, pass: { questionRatio: true, avgChars: true }, failure: null });
   });
 
   it('fails the gate when there are zero replies', () => {

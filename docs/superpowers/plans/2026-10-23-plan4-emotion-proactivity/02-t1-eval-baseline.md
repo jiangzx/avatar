@@ -8,7 +8,7 @@
 
 **约束（本任务特有）：**
 
-- 现有门槛（问句比 ≤ `gate.maxQuestionRatio`、平均字数 ≤ `gate.maxAvgReplyChars`）只对 `docs/testing/plan-a-eval/scenarios.json` 生效，行为不变。新场景集只报告问句比（参考值），不统计平均字数，不因门槛失败。
+- 现有门槛（问句比 ≤ `gate.maxQuestionRatio`、平均字数 ≤ `gate.maxAvgReplyChars`）只对 `docs/testing/plan-a-eval/scenarios.json` 生效（2026-10-24 口径修订见文末）。新场景集只报告问句比（参考值），不统计平均字数，不因门槛失败。
 - 结果文件只含合成输入产生的回复文本、计数和分数。日志（stdout 的网关 JSON 日志、stderr 的进度行）只打印场景 id、计数、错误码，不打印任何场景文本或回复。
 - 评估会话与生产对齐：`ADAPTER=qwen` 且配置了文本模型时，评估会话和 `src/index.ts` 一样注入共享 `textClient`（沉默规划器、开场规划器都用它），并传入 T0 的 `push` 配置。评委复用同一个客户端。
 - 不新增 npm 依赖。可调数值（评委 token 上限、温度、策略）放 `gateway/config/eval.json`。
@@ -1399,3 +1399,9 @@ EOF
 3. **结果 JSON 的形状没有冻结。** 本任务定义的字段见上文 Interfaces；T7 做前后对比时应读取 `judge.mean`、`judge.firstThreeMean`、`judge.noFabricationAllFive`、`summary.questionRatio`、`results[].scores`，并用同一条命令、仅改 `--out` 文件名（如 `results-after.json`）生成对比结果。
 4. **评估会话的依赖变化会影响 plan-a 集在 Qwen 上的结果。** 为了与生产对齐，`ADAPTER=qwen` 且配置了 `QWEN_SUMMARIZER_ENDPOINT` 时，评估会话现在注入 `textClient`（开场与沉默规划器生效），并传入 T0 的 `push`。plan-a 门槛的计算方式不变，但以后在 Qwen 上的 plan-a 数字不能直接和此前（blockers #15 时代）的报告比较。Mock 路径不受影响。
 5. **T0 是否已改 `scripts/eval.ts` 不确定。** 总览的共享文件表没有列出 `scripts/eval.ts`。Step 10 是整文件替换，已经包含 `push: pacing.push`；执行前用 Step 1 的 `git log` 确认，T0 若有其他改动要先合并进来。
+
+## 2026-10-24 门槛口径修订
+
+用户确认把开场问称呼从 plan-a 门槛排除。实施：`config/eval.json` 的 `gate.excludeGreetingFromQuestionRatio` 设为 `true`；`summarize` 在开启时用 `kind !== 'greeting'` 的记录计算 `sentences`、`questions` 和 `questionRatio`，`replies`、`avgChars`、`mentions` 仍统计全部回复；结果 JSON 的 gated `summary` 增加 `questionRatioScope`（`all` / `excluding-greeting`），报告标签相应改为「问句比例（不含开场）」。非 plan-a 场景集在 `scripts/eval.ts` 里强制关闭该开关，保持原来的参考口径。阈值 `maxQuestionRatio 0.3334` 与 `maxAvgReplyChars 45` 不变。
+
+理由：三次回退后运行（`4843882`）的开场问句都固定为 20 条，回复侧问句比分别为 0.240/0.271/0.272，均低于阈值；把必须的称呼问句计入会让门槛随开场句数波动，而不是衡量对话中的追问。验证：`gateway/test/harness.test.ts` 新增 `excludes the greeting turn from the gated question ratio when configured`；`npm test -w gateway` 56 文件 839 项通过；`npm run typecheck -w gateway` 通过。
