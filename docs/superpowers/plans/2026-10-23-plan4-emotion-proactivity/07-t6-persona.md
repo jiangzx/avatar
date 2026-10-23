@@ -301,3 +301,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ## 2026-10-23 评估后修正（T7 之后）
 
 三语两个风格文件保留“三句话里最多一句是问句”，新增“能接住时就不问；多数回复不用问句”。同一提交（`952519a`）的 plan-a 两次运行分别为 `questionRatio 0.3538`（46/130，失败）与 `0.3106`（41/132，通过），开场问句 20/27、回复问句 21/105；说明问句比在门槛 0.3334 附近受生成波动影响，后续应以重复运行的中位数判定，而不是单次结果。
+
+## 2026-10-24 共情复评
+
+在干净 worktree 用同一命令重跑共情量表（`952519a`，`dirty:false`，64 条回复，0 次分析失败）：`holdEmotion 3.58 / nameFeeling 3.58 / proactive 2.92 / noSycophancy 4.75 / noFabrication 5 / noIntrusion 3.92`，`firstThreeMean 3.36`，`firstThreeDelta +0.06`；gate `{"firstThreeUpByOne":false,"lastThreeNotDown":false,"noFabricationAllFive":true}`；`questionRatio 0.32→0.22`。对比 `5ccf4f9` 的 +0.48（`proactive 3.75`、`noIntrusion 4.42`），新增句压低了问句比，却把主动分拉到基线（3.25）以下：`topic-exhausted` 从 12 退到 6（连续短答后的三句都成了纯应答，没有再给出 AI 自己的小事），`good-news-grandson` 12→11（不再顺着问学校/专业）。`sad-then-better` 的主动分停在 3；这一下降在 `5ccf4f9` 已发生，T6 未再拉低。结论：新增的“能接住时就不问；多数回复不用问句”不具备保留条件；plan-a 的超标问句主要在开场（20/27），应另从开场处理。
