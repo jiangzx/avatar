@@ -3,6 +3,7 @@ import type { DirectorCue, ProactiveRequest } from '../adapters/types.ts';
 import { containsPhrase } from '../i18n/text.ts';
 import type { DirectorConfig } from '../roles/types.ts';
 import { log } from '../log.ts';
+import type { AffectCard } from './affect.ts';
 
 export type { DirectorConfig, TopicCard } from '../roles/types.ts';
 
@@ -17,6 +18,15 @@ export interface SilenceContext {
   previousTexts: readonly string[];
   /** Rendered memory snapshot; empty when this session has none. */
   memorySnapshot: string;
+  /** Latest analyzer card in planner form; absent before the first card or without an analyzer. */
+  affect?: Pick<AffectCard, 'emotion' | 'intensity' | 'trend' | 'need'> & { low: boolean; crisis: boolean };
+  /** Unfinished thing the user said in this session; only the context and check stages get it. */
+  openLoop?: string;
+  /** Localized time words for small-talk wording only; absent without plan extras. */
+  timeOfDay?: string;
+  season?: string;
+  /** Approximate solar term within the configured window. */
+  solarTerm?: string;
 }
 
 export interface SilencePlan {
@@ -32,6 +42,8 @@ export interface DirectorDeps {
   planProactiveLine?(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null>;
   /** Current rendered memory for this session, read at planning time; proactive stages get the safe view. */
   getMemorySnapshot?(stage: ProactivePlanStage): string;
+  /** Planner-only extras read at planning time: latest affect card, open loop, localized time words. */
+  getPlanExtras?(): Pick<SilenceContext, 'affect' | 'openLoop' | 'timeOfDay' | 'season' | 'solarTerm'>;
   /** Deterministic opening when the name is known; never let the planner invent a past topic. */
   safeGreeting?(): string | null;
   /** Once per quiet stretch, when silence reaches the rest step. */
@@ -579,12 +591,17 @@ export class Director {
   }
 
   private planContext(stage: ProactivePlanStage): SilenceContext {
+    const extras: Pick<SilenceContext, 'affect' | 'openLoop' | 'timeOfDay' | 'season' | 'solarTerm'> = this.deps.getPlanExtras?.() ?? {};
+    const { openLoop, ...rest } = extras;
     return {
       stage,
       userText: stage === 'greeting' ? '' : this.lastContent,
       assistantText: stage === 'greeting' ? '' : this.lastAnswer,
       previousTexts: [...this.ladderTexts],
       memorySnapshot: this.deps.getMemorySnapshot?.(stage) ?? '',
+      ...rest,
+      // The open loop is handled like userText, so only the stages that quote userText get it.
+      ...(openLoop && (stage === 'context' || stage === 'check') ? { openLoop } : {}),
     };
   }
 

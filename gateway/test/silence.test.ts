@@ -163,6 +163,54 @@ describe('silence planner', () => {
     expect(calls).toBe(0);
   });
 
+  it('passes the affect, open-loop and time fields to the planner as data', async () => {
+    let input!: Parameters<TextModelClient['complete']>[0];
+    const plan = createSilencePlanner({ complete: async data => {
+      input = data;
+      return '{"speak":true,"text":"走累了，脚酸着也不好受。"}';
+    } }, config, zhRules);
+    const withExtras = {
+      ...context,
+      affect: { emotion: 'sad' as const, intensity: 2 as const, trend: 'worse' as const, need: 'vent' as const, low: true, crisis: false },
+      openLoop: '明天要去复查',
+      timeOfDay: '下午',
+      season: '秋天',
+      solarTerm: '霜降',
+    };
+    expect(await plan(withExtras, signal())).toEqual({ text: '走累了，脚酸着也不好受。' });
+    expect(JSON.parse(input.user)).toEqual(withExtras);
+  });
+
+  it('counts the new fields in the input budget and still trims only the memory snapshot', async () => {
+    let input!: Parameters<TextModelClient['complete']>[0];
+    const line = '您好，又见到您了。今天想聊点什么？';
+    const plan = createSilencePlanner({ complete: async data => {
+      input = data;
+      return JSON.stringify({ speak: true, text: line });
+    } }, config, zhRules);
+    const extras = {
+      affect: { emotion: 'happy' as const, intensity: 1 as const, trend: 'flat' as const, need: 'chat' as const, low: false, crisis: false },
+      openLoop: '开'.repeat(100),
+      timeOfDay: '下午',
+      season: '秋天',
+      solarTerm: '霜降',
+    };
+    const opening = { ...context, stage: 'greeting' as const, userText: '', assistantText: '', memorySnapshot: '记'.repeat(7000), ...extras };
+    expect(await plan(opening, signal())).toEqual({ text: line });
+    const used = JSON.stringify(extras.affect).length + 100 + 2 + 2 + 2;
+    const sent = JSON.parse(input.user) as { memorySnapshot: string; openLoop: string };
+    expect(sent.memorySnapshot).toHaveLength(6000 - used);
+    expect(sent.openLoop).toBe(extras.openLoop);
+  });
+
+  it('skips optional speech when the new fields push the exchange over budget', async () => {
+    let calls = 0;
+    const plan = createSilencePlanner({ complete: async () => { calls++; return '{"speak":true,"text":"不应播放"}'; } }, config, zhRules);
+    // userText 5990 + assistantText 9 fits on its own; the open loop tips it over 6000.
+    expect(await plan({ ...context, userText: '长'.repeat(5990), openLoop: '开'.repeat(20) }, signal())).toBeNull();
+    expect(calls).toBe(0);
+  });
+
   it('plans from the user turn when the adapter reports no assistant text', async () => {
     let calls = 0;
     const plan = createSilencePlanner({ complete: async () => { calls++; return '{"speak":true,"text":"您接着说。"}'; } }, config, zhRules);

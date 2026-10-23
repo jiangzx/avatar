@@ -291,6 +291,45 @@ describe('config', () => {
       ...decision, variationHints: { checkin: [] },
     } })).toThrow();
   });
+
+  it('appends affect, open-loop and time rules 12-15 to every planner prompt without touching rules 1-11', () => {
+    const load = (language: 'zh' | 'ja' | 'en') =>
+      loadDirectorConfig(`${root}roles/elder-companion/${language}/director.json`).silenceDecision!.instruction;
+
+    const zh = load('zh');
+    expect(zh).toContain('12) affect 是对方此刻状态的内部参考，可能没有；其中 low 为 true 时（优先于第 3 条），context、check 不起新话题');
+    expect(zh).toContain('crisis 为 true 时，任何阶段都不起新话题，只表达你一直在，并劝对方联系家人或身边的人');
+    expect(zh).toContain('13) affect.need 为 share_joy 或 chat、且 low 不为 true 时，context、check 可以主动起一个和 userText 相关的小话题。');
+    expect(zh).toContain('14) openLoop 是对方本次说过、还没说完的事，可能没有；只在 context、check 阶段可用，用法同 userText');
+    expect(zh).toContain('15) timeOfDay、season、solarTerm 是当地时段、季节和前后几天内的节气（日期是约数），只用于寒暄措辞，不要编造天气');
+    expect(zh).toContain('10) 只能使用输入里已经出现过的具体人名、作品名、地名和事件；不要补充输入里没有的具体名字或作品名。');
+    expect(zh).toContain('checkin：必须问对方是否还在听，并说明随时都可以接着聊；不超过 30 个字');
+    expect(zh.indexOf('11) ')).toBeLessThan(zh.indexOf('12) '));
+    expect(zh.indexOf('15) ')).toBeLessThan(zh.indexOf('只输出 JSON：'));
+
+    const ja = load('ja');
+    expect(ja).toContain('12) affect は相手の今の様子の内部参考で、ないこともある。');
+    expect(ja).toContain('crisis が true のときは、どの段階でも新しい話題を出さず');
+    expect(ja).toContain('13) affect.need が share_joy または chat で');
+    expect(ja).toContain('14) openLoop は相手が今回話した、まだ終わっていない事柄で');
+    expect(ja).toContain('15) timeOfDay、season、solarTerm は現地の時間帯、季節、前後数日以内の節気（日付はおおよそ）');
+    expect(ja).toContain('10) 入力に出てきた具体的な人名、作品名、地名、出来事だけを使う。');
+    expect(ja.indexOf('11) ')).toBeLessThan(ja.indexOf('12) '));
+    expect(ja.indexOf('15) ')).toBeLessThan(ja.indexOf('JSON だけを出力：'));
+    expect(ja).not.toContain('您');
+
+    const en = load('en');
+    expect(en).toContain('12) affect is internal guidance about how they feel right now and may be absent.');
+    expect(en).toContain('When affect.crisis is true, do not start a new topic at any stage');
+    expect(en).toContain('13) When affect.need is share_joy or chat and affect.low is not true');
+    expect(en).toContain('14) openLoop is something they said earlier in this conversation that is not finished');
+    expect(en).toContain('15) timeOfDay, season, and solarTerm are the local time of day');
+    expect(en).toContain('never invent the weather');
+    expect(en).toContain('10) Use only the specific names, titles, places, and events that already appear in the input');
+    expect(en.indexOf('11) ')).toBeLessThan(en.indexOf('12) '));
+    expect(en.indexOf('15) ')).toBeLessThan(en.indexOf('Output JSON only:'));
+    expect(en).not.toMatch(/[一-鿿]/);
+  });
 });
 
 describe('identity config', () => {

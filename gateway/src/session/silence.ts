@@ -48,8 +48,15 @@ export function createSilencePlanner(client: TextModelClient, config: SilenceDec
   ]);
   return async (context: SilenceContext, signal: AbortSignal): Promise<SilencePlan | null> => {
     if (signal.aborted) return null;
+    // Plan extras are small and always sent whole; they count before the snapshot gets its share.
+    const extraChars = (context.affect ? JSON.stringify(context.affect).length : 0)
+      + (context.openLoop?.length ?? 0)
+      + (context.timeOfDay?.length ?? 0)
+      + (context.season?.length ?? 0)
+      + (context.solarTerm?.length ?? 0);
     const usedChars = context.userText.length + context.assistantText.length
-      + context.previousTexts.reduce((total, text) => total + text.length, 0);
+      + context.previousTexts.reduce((total, text) => total + text.length, 0)
+      + extraChars;
     // The memory snapshot is the largest field and is expendable: keep its leading part within budget.
     const memorySnapshot = context.memorySnapshot.slice(0, Math.max(0, config.maxInputChars - usedChars));
     const input = { ...context, memorySnapshot };

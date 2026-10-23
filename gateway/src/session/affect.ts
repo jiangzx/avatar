@@ -10,6 +10,7 @@ import { scanText } from '../memory/scan.ts';
 import type { TextModelClient } from '../memory/textClient.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import type { LedgerEntry } from './ledger.ts';
+import { TopicExhaustion } from './topicExhaustion.ts';
 
 export const AFFECT_EMOTIONS = ['neutral', 'happy', 'sad', 'love'] as const; // same values as EMOTIONS
 export const AFFECT_NEEDS = ['vent', 'share_joy', 'help', 'chat', 'topic_exhausted'] as const;
@@ -161,6 +162,8 @@ export interface AffectTrackerDeps {
   safety: SafetyRules;
   /** Called with each accepted card (never with a stale one). */
   onCard: (card: AffectCard) => void;
+  /** Decline phrases for the final's language (i18n affect.json); missing means no decline cooldown. */
+  declinePhrases?: (language: Language) => readonly string[];
 }
 
 type CardEnums = Omit<AffectCard, 'openLoop'>;
@@ -212,8 +215,12 @@ export class AffectTracker {
   private readonly byEmotion: Record<AffectCard['emotion'], number> = { neutral: 0, happy: 0, sad: 0, love: 0 };
   private crisisSeen = false;
   private disposed = false;
+  /** Topic-exhaustion counters; session memory only. */
+  private readonly exhaustion: TopicExhaustion;
 
-  constructor(private readonly deps: AffectTrackerDeps) {}
+  constructor(private readonly deps: AffectTrackerDeps) {
+    this.exhaustion = new TopicExhaustion(deps.config.exhausted);
+  }
 
   get card(): AffectCard | null {
     return this.latest;
@@ -221,12 +228,13 @@ export class AffectTracker {
 
   /** T4 sets this; T2 always returns false. */
   get exhaustedArmed(): boolean {
-    return false;
+    return this.exhaustion.armed;
   }
 
   /** Non-light user final. Starts one analysis; aborts the previous one. */
   onUserFinal(text: string, language: Language): void {
     if (this.disposed) return;
+    this.exhaustion.onFinal(text, false, this.deps.declinePhrases?.(language) ?? []);
     this.remember(text);
     const user = this.buildInput(text, language);
     if (user === null) {
@@ -246,8 +254,9 @@ export class AffectTracker {
   }
 
   /** Light or short final: T2 only records the line; T4 adds the exhaustion counters. */
-  onLightFinal(text: string, _language: Language): void {
+  onLightFinal(text: string, language: Language): void {
     if (this.disposed) return;
+    this.exhaustion.onFinal(text, true, this.deps.declinePhrases?.(language) ?? []);
     this.remember(text);
   }
 
@@ -257,8 +266,8 @@ export class AffectTracker {
       failures: this.failures,
       byEmotion: { ...this.byEmotion },
       crisis: this.crisisSeen ? 1 : 0,
-      exhaustedArmed: 0,
-      exhaustedRevoked: 0,
+      exhaustedArmed: this.exhaustion.armedCount,
+      exhaustedRevoked: this.exhaustion.revokedCount,
     };
   }
 
@@ -277,6 +286,7 @@ export class AffectTracker {
     this.inflight = null;
     this.latest = null;
     this.lines.length = 0;
+    this.exhaustion.reset();
   }
 
   private remember(text: string): void {
@@ -343,6 +353,7 @@ export class AffectTracker {
     this.latest = card;
     this.byEmotion[card.emotion] += 1;
     if (card.crisis) this.crisisSeen = true;
+    this.exhaustion.onCard(card, isLow(card, this.deps.config.lowIntensity));
     log('affect', { outcome: 'ok', ms });
     this.deps.onCard(card);
   }

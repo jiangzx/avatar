@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { loadDirectorConfig } from '../src/config.ts';
 import type { ProactiveRequest } from '../src/adapters/types.ts';
-import { Director, type DirectorDeps } from '../src/session/director.ts';
+import { Director, type DirectorDeps, type SilenceContext } from '../src/session/director.ts';
 
 const { silenceDecision: _decisionConfig, ...base } = loadDirectorConfig(
   fileURLToPath(new URL('../roles/elder-companion/zh/director.json', import.meta.url)),
@@ -330,5 +330,86 @@ describe('substantive conversation silence', () => {
     await vi.advanceTimersByTimeAsync(600000);
     expect(s.requests).toHaveLength(4);
     s.d.stop();
+  });
+
+  it('adds the plan extras to every planned stage and keeps the open loop to context and check', async () => {
+    const contexts: SilenceContext[] = [];
+    const extras: Pick<SilenceContext, 'affect' | 'openLoop' | 'timeOfDay' | 'season' | 'solarTerm'> = {
+      affect: { emotion: 'happy', intensity: 1, trend: 'flat', need: 'chat', low: false, crisis: false },
+      openLoop: '明天要去医院复查',
+      timeOfDay: '下午',
+      season: '秋天',
+      solarTerm: '霜降',
+    };
+    const requests: ProactiveRequest[] = [];
+    const d = new Director(cfg, {
+      requestResponse: (_kind, request) => requests.push(request),
+      planProactiveLine: (context) => { contexts.push(context); return { text: `${context.stage}承接` }; },
+      getPlanExtras: () => extras,
+    });
+    d.onUserFinal('今天走了很多路，脚有点酸。');
+    d.onAiTurnStarted();
+    d.onAiTurnEnded('今天走了不少地方。');
+    for (const [stage, wait] of [['context', cfg.contextAfterMs], ['check', cfg.checkAfterMs], ['leave', cfg.leaveAfterMs]] as const) {
+      await vi.advanceTimersByTimeAsync(wait);
+      d.onAiTurnStarted();
+      d.onAiTurnEnded(`${stage}承接`);
+    }
+    await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
+    const { openLoop: _openLoop, ...withoutLoop } = extras;
+    const base = { userText: '今天走了很多路，脚有点酸。', assistantText: '今天走了不少地方。', memorySnapshot: '' };
+    expect(contexts).toEqual([
+      { stage: 'context', ...base, previousTexts: [], ...extras },
+      { stage: 'check', ...base, previousTexts: ['context承接'], ...extras },
+      { stage: 'leave', ...base, previousTexts: ['context承接', 'check承接'], ...withoutLoop },
+      { stage: 'checkin', ...base, previousTexts: ['context承接', 'check承接', 'leave承接'], ...withoutLoop },
+    ]);
+    expect(requests).toHaveLength(4);
+    d.stop();
+  });
+
+  it('gives the greeting plan the time words but never an open loop', () => {
+    const contexts: SilenceContext[] = [];
+    const d = new Director(cfg, {
+      requestResponse: () => {},
+      planProactiveLine: (context) => { contexts.push(context); return null; },
+      getPlanExtras: () => ({ openLoop: '明天要去医院复查', timeOfDay: '早上', season: '秋天' }),
+    });
+    d.onSessionStart();
+    expect(contexts).toEqual([
+      { stage: 'greeting', userText: '', assistantText: '', previousTexts: [], memorySnapshot: '', timeOfDay: '早上', season: '秋天' },
+    ]);
+    d.stop();
+  });
+
+  it('keeps light-reply handling unchanged when the extras say the topic ran dry', async () => {
+    let calls = 0;
+    let rests = 0;
+    const requests: ProactiveRequest[] = [];
+    const d = new Director(cfg, {
+      requestResponse: (_kind, request) => requests.push(request),
+      onQuietRest: () => { rests++; },
+      planProactiveLine: () => { calls++; return { text: '换个话头' }; },
+      getPlanExtras: () => ({
+        affect: { emotion: 'neutral', intensity: 1, trend: 'flat', need: 'topic_exhausted', low: false, crisis: false },
+        timeOfDay: '下午',
+        season: '秋天',
+      }),
+    });
+    d.onUserFinal('今天走了很多路，脚有点酸。');
+    d.onAiTurnStarted();
+    d.onAiTurnEnded('今天走了不少地方。');
+    d.onUserFinal('嗯');
+    d.onAiTurnStarted();
+    d.onAiTurnEnded('嗯。');
+    d.onUserFinal('好的');
+    d.onAiTurnStarted();
+    d.onAiTurnEnded('好。');
+    await vi.advanceTimersByTimeAsync(600_000);
+    // Same contract as without extras: light replies after content wait quietly; only the rest hook runs.
+    expect(calls).toBe(0);
+    expect(requests).toEqual([]);
+    expect(rests).toBe(1);
+    d.stop();
   });
 });

@@ -6,7 +6,7 @@ import type { SessionConfig } from '../src/adapters/types.ts';
 import { loadI18n } from '../src/i18n/load.ts';
 import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
 import type { SessionContext } from '../src/session/context.ts';
-import type { DirectorConfig } from '../src/session/director.ts';
+import type { DirectorConfig, SilenceContext } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import type { ReplyMetrics } from '../src/session/metrics.ts';
 import type { MemoryStore } from '../src/memory/store.ts';
@@ -14,6 +14,7 @@ import type { TextModelClient } from '../src/memory/textClient.ts';
 import { PROMPT_LABELS } from '../src/roles/labels.ts';
 import { loadAffectConfig } from '../src/session/affect.ts';
 import type { PushGate } from '../src/session/pushGate.ts';
+import { timeContext } from '../src/session/timeContext.ts';
 import { InterruptCoordinator } from '../src/session/interrupt.ts';
 import type { PacingConfig } from '../src/session/pacing.ts';
 import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
@@ -2046,5 +2047,123 @@ describe('Session affect render', () => {
       .toBe(150 + PROMPT_LABELS.zh.affectHeader.length + 4);
     plain.session.end();
     reserved.session.end();
+  });
+});
+
+describe('Session planner extras and topic exhaustion', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  const plannerDirector: DirectorConfig = {
+    ...director,
+    contextAfterMs: 3000,
+    silenceDecision: {
+      instruction: 'DECIDE', speakInstruction: 'READ {continuation}',
+      maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
+      policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
+    },
+  };
+  /** 14:00 in Asia/Shanghai on 2026-10-23. */
+  const FIXED_NOW = Date.UTC(2026, 9, 23, 6, 0);
+
+  it('sends the latest card, the open loop and local time words to the planner', async () => {
+    const plannerInputs: unknown[] = [];
+    const s = setup({
+      roles: fixedRoleCatalog('P', plannerDirector),
+      i18n,
+      affect: affectFixture,
+      now: () => FIXED_NOW,
+      textClient: { complete: async (input) => {
+        if (input.system === 'DECIDE') {
+          plannerInputs.push(JSON.parse(input.user));
+          return '{"speak":false}';
+        }
+        return affectCardJson({ emotion: 'happy', intensity: 1, trend: 'flat', need: 'chat', strategy: 'ask', openLoop: '明天要去医院复查' });
+      } },
+    });
+    const time = timeContext(FIXED_NOW, affectFixture.timeZone, affectFixture.solarTermWindowDays, i18n.affect.zh);
+    await greetAndFinish(s);
+    expect(plannerInputs).toEqual([{ stage: 'greeting', userText: '', assistantText: '', previousTexts: [], memorySnapshot: '', ...time }]);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '明天要去医院复查' });
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(plannerInputs[1]).toEqual({
+      stage: 'context',
+      userText: '明天要去医院复查',
+      assistantText: '我在听',
+      previousTexts: [],
+      memorySnapshot: '',
+      ...time,
+      affect: { emotion: 'happy', intensity: 1, trend: 'flat', need: 'chat', low: false, crisis: false },
+      openLoop: '明天要去医院复查',
+    });
+    s.session.end();
+  });
+
+  it('arms the topic-exhaustion hint after one short answer and drops it on real content, asking for a push each time', async () => {
+    const s = setup({
+      i18n,
+      affect: affectFixture,
+      textClient: { complete: async () => affectCardJson({ emotion: 'neutral', intensity: 1, trend: 'flat', need: 'chat', strategy: 'ask' }) },
+    });
+    await greetAndFinish(s);
+    const request = vi.spyOn(sessionInternals(s.session).gate, 'request');
+    const pushes = () => request.mock.calls.filter(([update]) => update.instructions === true).length;
+    const hint = i18n.affect.zh.lines.exhaustedHint;
+
+    s.session.handleClientMessage({ type: 'debug.userText', text: '还行' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(sessionInternals(s.session).instructions()).toContain(hint);
+    const armed = pushes();
+    expect(armed).toBeGreaterThanOrEqual(1);
+
+    s.session.handleClientMessage({ type: 'debug.userText', text: '我下午去公园看人下棋了' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(sessionInternals(s.session).instructions()).not.toContain(hint);
+    expect(pushes()).toBeGreaterThan(armed);
+    s.session.end();
+  });
+
+  it('drops the hint once the second short answer has used it', async () => {
+    const s = setup({
+      i18n,
+      affect: affectFixture,
+      textClient: { complete: async () => affectCardJson({ emotion: 'neutral', intensity: 1, trend: 'flat', need: 'chat', strategy: 'ask' }) },
+    });
+    await greetAndFinish(s);
+    const hint = i18n.affect.zh.lines.exhaustedHint;
+    s.session.handleClientMessage({ type: 'debug.userText', text: '还行' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(sessionInternals(s.session).instructions()).toContain(hint);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '嗯嗯' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(sessionInternals(s.session).instructions()).not.toContain(hint);
+    s.session.end();
+  });
+
+  it('forgets the open loop and the card on a forget rebuild, so the planner no longer sees them', async () => {
+    const s = setup({
+      roles: fixedRoleCatalog('P', plannerDirector),
+      i18n,
+      affect: affectFixture,
+      now: () => FIXED_NOW,
+      textClient: { complete: async (input) => (input.system === 'DECIDE'
+        ? '{"speak":false}'
+        : affectCardJson({ emotion: 'sad', intensity: 2, trend: 'flat', need: 'vent', strategy: 'comfort', openLoop: '明天要去医院复查' })) },
+    });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '明天要去医院复查' });
+    await vi.advanceTimersByTimeAsync(10);
+    const view = s.session as unknown as {
+      planExtras(): Pick<SilenceContext, 'affect' | 'openLoop'>;
+      rebuild(reason: string, keepToolTurn?: boolean): Promise<void>;
+    };
+    expect(view.planExtras().openLoop).toBe('明天要去医院复查');
+    void view.rebuild('forget', true);
+    expect(view.planExtras().openLoop).toBeUndefined();
+    expect(view.planExtras().affect).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(10);
+    s.session.end();
   });
 });

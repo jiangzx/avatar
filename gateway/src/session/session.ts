@@ -38,6 +38,7 @@ import { PushGate, type PushRequest } from './pushGate.ts';
 import { shouldSpeakBridge, slimClockAction } from './slim.ts';
 import { ToolTurn } from './toolTurn.ts';
 import { createSilencePlanner } from './silence.ts';
+import { timeContext } from './timeContext.ts';
 import { createToolRegistry, type ToolOutcome, type ToolRegistry } from './tools/registry.ts';
 
 export interface Transport {
@@ -264,6 +265,8 @@ export class Session {
   private affectRendered = '';
   /** affect_crisis is logged at most once per session. */
   private crisisLogged = false;
+  /** Last validated open loop from an accepted card; planner input only, never logged. */
+  private openLoop: string | undefined;
 
   constructor(
     private readonly deps: SessionDeps,
@@ -307,6 +310,7 @@ export class Session {
             ? this.context.greetingMemorySnapshot ?? ''
             : this.context.proactiveMemorySnapshot ?? '',
           safeGreeting: () => this.safeGreeting(),
+          ...(deps.affect?.enabled ? { getPlanExtras: () => this.planExtras() } : {}),
         } : {}),
         ...(extractor && ownerId ? { onQuietRest: () => { void extractor.extractOwner(ownerId, 'silence', this.language); } } : {}),
       },
@@ -326,6 +330,7 @@ export class Session {
           safety: this.i18n.safety,
           // Accepted cards stay on the tracker (this.affect.card); the session mirrors the latest one.
           onCard: (card) => this.onAffectCard(card),
+          declinePhrases: (language) => this.i18n.affect[language].declinePhrases,
         })
       : null;
     this.interrupt = new InterruptCoordinator({
@@ -673,6 +678,8 @@ export class Session {
     const config = this.deps.affect;
     if (this.ended || !config) return;
     this.affectCard = card;
+    // The tracker already checked the open loop against the user's own lines.
+    if (card.openLoop) this.openLoop = card.openLoop;
     if (card.crisis && !this.crisisLogged) {
       this.crisisLogged = true;
       log('affect_crisis', {});
@@ -685,7 +692,30 @@ export class Session {
   private clearAffect(): void {
     this.affectCard = null;
     this.affectRendered = '';
+    // The open loop is the user's own words; forget/decline must drop it too (spec §8).
+    this.openLoop = undefined;
     this.emotion?.releaseHold();
+  }
+
+  /** Planner-only extras: latest card, the session's open loop, and localized time words. */
+  private planExtras(): Pick<SilenceContext, 'affect' | 'openLoop' | 'timeOfDay' | 'season' | 'solarTerm'> {
+    const config = this.deps.affect;
+    if (!config) return {};
+    const card = this.affectCard;
+    return {
+      ...timeContext(this.now(), config.timeZone, config.solarTermWindowDays, this.i18n.affect[this.language]),
+      ...(card ? {
+        affect: {
+          emotion: card.emotion,
+          intensity: card.intensity,
+          trend: card.trend,
+          need: card.need,
+          low: isLow(card, config.lowIntensity),
+          crisis: card.crisis,
+        },
+      } : {}),
+      ...(this.openLoop ? { openLoop: this.openLoop } : {}),
+    };
   }
 
   private sessionConfig(): SessionConfig {
@@ -1052,6 +1082,8 @@ export class Session {
     }
     const action = this.actions.fromKeyword(text);
     if (action) this.send({ type: 'avatar.action', action, source: 'keyword' });
+    // The tracker may have armed or dropped the topic-exhaustion hint on this final.
+    this.syncAffectRender();
     this.maybeSummarize();
   }
 

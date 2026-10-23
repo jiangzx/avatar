@@ -51,7 +51,7 @@
 
 ---
 
-- [ ] **Step 0: 核对前置条件**
+- [x] **Step 0: 核对前置条件**
 
 Run（仓库根目录）：
 
@@ -66,7 +66,7 @@ grep -n "affectFixture\|affectCardJson\|sessionInternals" gateway/test/session.t
 
 Expected：每条都有命中。下文假定 T2 的 `AffectTracker` 把构造参数存成 `private readonly deps: AffectTrackerDeps`，Session 里的分析器字段叫 `this.affect`；名字不同就沿用 T2 的名字。最后两条确认 T2 在 `Session.onUserFinal` 里调用了 `this.affect.onUserFinal` / `onLightFinal`，以及 T3 的测试辅助存在。任何一条没命中，停下来报告。
 
-- [ ] **Step 1: 写 `timeContext` 的失败测试**
+- [x] **Step 1: 写 `timeContext` 的失败测试**
 
 新建 `gateway/test/time-context.test.ts`：
 
@@ -159,12 +159,12 @@ describe('timeContext', () => {
 });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `cd gateway && npx vitest run test/time-context.test.ts`
 Expected: FAIL，`Failed to resolve import "../src/session/timeContext.ts"`。
 
-- [ ] **Step 3: 实现 `timeContext.ts`**
+- [x] **Step 3: 实现 `timeContext.ts`**
 
 新建 `gateway/src/session/timeContext.ts`：
 
@@ -244,12 +244,12 @@ export function timeContext(
 }
 ```
 
-- [ ] **Step 4: 运行，确认通过**
+- [x] **Step 4: 运行，确认通过**
 
 Run: `cd gateway && npx vitest run test/time-context.test.ts`
 Expected: PASS（7 个用例）。
 
-- [ ] **Step 5: 写 Director 规划输入的失败测试与轻回应回归测试**
+- [x] **Step 5: 写 Director 规划输入的失败测试与轻回应回归测试**
 
 `gateway/test/director-silence.test.ts` 第 5 行，原文：
 
@@ -348,12 +348,12 @@ import { Director, type DirectorDeps, type SilenceContext } from '../src/session
   });
 ```
 
-- [ ] **Step 6: 运行，确认失败**
+- [x] **Step 6: 运行，确认失败**
 
 Run: `cd gateway && npx vitest run test/director-silence.test.ts`
 Expected: FAIL。前两个新用例的实际上下文里没有 `affect` / `timeOfDay` 等字段（`getPlanExtras` 还没被读取）。第三个新用例 `keeps light-reply handling unchanged...` 现在就 PASS，它是回归护栏，实现后必须仍然 PASS。原有用例全部 PASS。
 
-- [ ] **Step 7: 实现 `SilenceContext`、`getPlanExtras`、`planContext`**
+- [x] **Step 7: 实现 `SilenceContext`、`getPlanExtras`、`planContext`**
 
 `gateway/src/session/director.ts`，原文：
 
@@ -458,12 +458,12 @@ export interface SilenceContext {
 
 `onUserFinal`、`waitQuietly`、`onAiTurnEnded` 等轻回应与阶梯逻辑一行都不改。
 
-- [ ] **Step 8: 运行，确认通过**
+- [x] **Step 8: 运行，确认通过**
 
 Run: `cd gateway && npx vitest run test/director-silence.test.ts test/director.test.ts`
 Expected: PASS。原有的 `toEqual` 精确断言（没有 `getPlanExtras`）不变，证明不传扩展时上下文与现状完全一致。
 
-- [ ] **Step 9: 写规划器输入预算的失败测试**
+- [x] **Step 9: 写规划器输入预算的失败测试**
 
 `gateway/test/silence.test.ts`，在 `it('does not send oversized exchanges for optional speech', ...)` 之后追加：
 
@@ -517,12 +517,12 @@ Expected: PASS。原有的 `toEqual` 精确断言（没有 `getPlanExtras`）不
   });
 ```
 
-- [ ] **Step 10: 运行，确认失败**
+- [x] **Step 10: 运行，确认失败**
 
 Run: `cd gateway && npx vitest run test/silence.test.ts`
 Expected: FAIL。`counts the new fields...` 报 `expected ... to have a length of <6000 - used> but got 6000`；`skips optional speech...` 返回了 `{ text: '不应播放' }`，`calls` 是 1。`passes the affect, open-loop and time fields...` 现在就 PASS（输入本来就整体透传）。
 
-- [ ] **Step 11: 实现 `usedChars`**
+- [x] **Step 11: 实现 `usedChars`**
 
 `gateway/src/session/silence.ts`，原文：
 
@@ -549,12 +549,12 @@ Expected: FAIL。`counts the new fields...` 报 `expected ... to have a length o
 
 `stageContentOk`、`variationHint`、解析与日志都不改。
 
-- [ ] **Step 12: 运行，确认通过**
+- [x] **Step 12: 运行，确认通过**
 
 Run: `cd gateway && npx vitest run test/silence.test.ts test/multilingual.test.ts`
 Expected: PASS。
 
-- [ ] **Step 13: 写 `TopicExhaustion` 与分析器接入的失败测试**
+- [x] **Step 13: 写 `TopicExhaustion` 与分析器接入的失败测试**
 
 新建 `gateway/test/topic-exhaustion.test.ts`：
 
@@ -707,12 +707,12 @@ describe('AffectTracker topic exhaustion', () => {
 });
 ```
 
-- [ ] **Step 14: 运行，确认失败**
+- [x] **Step 14: 运行，确认失败**
 
 Run: `cd gateway && npx vitest run test/topic-exhaustion.test.ts`
 Expected: FAIL，`Failed to resolve import "../src/session/topicExhaustion.ts"`。
 
-- [ ] **Step 15: 实现 `topicExhaustion.ts`**
+- [x] **Step 15: 实现 `topicExhaustion.ts`**
 
 新建 `gateway/src/session/topicExhaustion.ts`：
 
@@ -804,7 +804,7 @@ export class TopicExhaustion {
 
 `topicExhaustion.ts` 只从 `affect.ts` 导入类型，运行时没有循环依赖；低落判定由 `AffectTracker` 用 `isLow` 算好后传进来。
 
-- [ ] **Step 16: 把 `TopicExhaustion` 接进 `AffectTracker`**
+- [x] **Step 16: 把 `TopicExhaustion` 接进 `AffectTracker`**
 
 `gateway/src/session/affect.ts`（T2 的文件，只做下面这些追加和替换，其余不动）：
 
@@ -905,12 +905,12 @@ describe('TopicExhaustion.reset', () => {
 });
 ```
 
-- [ ] **Step 17: 运行，确认通过**
+- [x] **Step 17: 运行，确认通过**
 
 Run: `cd gateway && npx vitest run test/topic-exhaustion.test.ts`，再跑 T2 的分析器测试确认没有回退：`npx vitest run test/affect.test.ts`（如果 T2 的测试文件名不同，用 `ls test | grep -i affect` 找到后一起跑）。
 Expected: PASS（`topic-exhaustion.test.ts` 9 个用例；T2 的用例全部 PASS）。
 
-- [ ] **Step 18: 写 Session 接线的失败测试**
+- [x] **Step 18: 写 Session 接线的失败测试**
 
 `gateway/test/session.test.ts` 顶部导入追加：
 
@@ -1044,12 +1044,12 @@ describe('Session planner extras and topic exhaustion', () => {
 
 说明：第一个用例里规划器和分析器共用一个假客户端，按 `system === 'DECIDE'`（规划器提示词）区分；Mock 对未匹配的 `debug.userText` 回复 `我在听`。`affectFixture`、`affectCardJson`、`sessionInternals` 是 T3 加的模块级辅助。
 
-- [ ] **Step 19: 运行，确认失败**
+- [x] **Step 19: 运行，确认失败**
 
 Run: `cd gateway && npx vitest run test/session.test.ts -t "Session planner extras and topic exhaustion"`
 Expected: FAIL。第一个用例的规划器输入里没有 `timeOfDay`/`season`/`affect`/`openLoop`；最后一个用例报 `view.planExtras is not a function`；第二、三个用例的指令里没有引导句（Session 还没接 `declinePhrases`、终稿后也没有重新渲染）。注意：如果 Step 16 已经让分析器在 `onLightFinal` 时预备，第二、三个用例可能因为 Session 没有在终稿后调用 `syncAffectRender` 而仍然失败，这是预期。
 
-- [ ] **Step 20: 实现 Session 接线**
+- [x] **Step 20: 实现 Session 接线**
 
 `gateway/src/session/session.ts`：
 
@@ -1194,12 +1194,12 @@ import { timeContext } from './timeContext.ts';
 
 这一行必须在 T2 调用 `this.affect.onUserFinal(...)` / `this.affect.onLightFinal(...)` 之后；如果 T2 把它们放在 `this.maybeSummarize()` 之后，就把这一行移到那两个调用后面。`this.director.onUserFinal(text)` 不动。
 
-- [ ] **Step 21: 运行，确认通过**
+- [x] **Step 21: 运行，确认通过**
 
 Run: `cd gateway && npx vitest run test/session.test.ts test/director-silence.test.ts test/silence.test.ts test/topic-exhaustion.test.ts test/time-context.test.ts`
 Expected: PASS。`session.test.ts` 里原有的规划器输入精确断言（`inputs` 只有五个字段的那几处）不变：那些用例没有传 `affect`，Session 不给 Director 传 `getPlanExtras`。
 
-- [ ] **Step 22: 写规划器提示词规则的失败测试**
+- [x] **Step 22: 写规划器提示词规则的失败测试**
 
 `gateway/test/config.test.ts`，原文（`describe('config')` 的最后一个用例结尾）：
 
@@ -1264,7 +1264,7 @@ describe('identity config', () => {
 describe('identity config', () => {
 ```
 
-- [ ] **Step 23: 运行，确认失败；改三份 `director.json`；再确认通过**
+- [x] **Step 23: 运行，确认失败；改三份 `director.json`；再确认通过**
 
 Run: `cd gateway && npx vitest run test/config.test.ts`
 Expected: FAIL，`expected '你是小暖，…' to contain '12) affect 是对方此刻状态的内部参考…'`。
@@ -1310,7 +1310,7 @@ just acknowledge briefly or ask what they would like to talk about. 12) affect i
 Run: `cd gateway && npx vitest run test/config.test.ts test/fileCatalog.test.ts test/director-silence.test.ts`
 Expected: PASS。`config.test.ts` 原有对 zh/ja/en 提示词的断言（各阶段名、`previousTexts`、`close`、`within 80 characters`、`60 文字以内`、en 不含汉字、ja 不含「您」）仍然通过。
 
-- [ ] **Step 24: 全量回归与真实记忆库召回探针**
+- [x] **Step 24: 全量回归与真实记忆库召回探针**
 
 Run（仓库根目录）：
 
@@ -1323,7 +1323,7 @@ node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --real-db "$H
 
 Expected：测试与 typecheck 全部通过，`git diff --check` 无输出。召回探针（只读）：zh「上次聊到哪儿了」`hits:true`；「上次聊过电影吗」`hits:true`；「我说过喜欢喝茶吗」`hits:false`；`newTitleFlag:false`。探针结果和总览不一致就停下来报告，不要提交。如果本机没有 `$HOME/.avatar/memory.db`，按 AGENTS §7 记入 `docs/blockers.md` 并在报告里写明没跑。
 
-- [ ] **Step 25: 提交**
+- [x] **Step 25: 提交**
 
 ```bash
 git add gateway/src/session/timeContext.ts gateway/src/session/topicExhaustion.ts \
