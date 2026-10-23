@@ -5,7 +5,7 @@
     "trend": { "better": "Better now.", "worse": "Worse now." },
     "need": {
       "vent": "Wants to vent: listen.",
-      "share_joy": "Sharing joy: be glad.",
+      "share_joy": "Sharing joy: be glad, ask one detail.",
       "help": "Wants help.",
       "chat": "Light chat.",
       "topic_exhausted": "Topic ran dry."
@@ -13,13 +13,13 @@
     "strategy": {
       "comfort": "Comfort softly.",
       "reflect": "Name the feeling; don't echo.",
-      "affirm": "Affirm it.",
+      "affirm": "Name their feeling in one line, affirm it, and hold the advice.",
       "ask": "One small question.",
       "disclose": "Share a bit of yourself.",
       "suggest": "One gentle idea."
     },
     "mismatch": "Says fine; may hurt.",
-    "exhaustedHint": "Share one small AI-life detail, not a question.",
+    "exhaustedHint": "Share one small AI-life detail (a song you heard, a line you read), not a question.",
     "tail": "Internal; don't read out or name emotions."
   },
   "declinePhrases": ["don't want to talk about", "rather not talk", "stop asking", "never mind", "drop it"],
