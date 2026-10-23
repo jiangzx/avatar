@@ -15,6 +15,7 @@ export type {
 
 import type { Emotion, EmotionConfig } from '../i18n/emotion.ts';
 import { containsPhrase } from '../i18n/text.ts';
+import type { AffectCard } from './affect.ts';
 
 /** First emotion in priority order whose word list matches. Negation is not handled (POC). */
 export function tagEmotion(text: string, cfg: EmotionConfig): Emotion | null {
@@ -29,6 +30,8 @@ export class EmotionTagger {
   private current: Emotion;
   private lastChangeAt = Number.NEGATIVE_INFINITY;
   private revertTimer: NodeJS.Timeout | null = null;
+  /** A low card holds the mood: no revert, and the lexicon may not switch it to happy. */
+  private hold = false;
   private readonly pending = new Map<number, string>();
   private readonly done = new Set<number>();
 
@@ -43,6 +46,24 @@ export class EmotionTagger {
   onUserFinal(text: string): void {
     const e = tagEmotion(text, this.cfg);
     if (e) this.apply(e);
+  }
+
+  /** Analyzer card: wins over the lexicon, skips the debounce, and holds the mood while low. */
+  onAffect(card: AffectCard, low: boolean): void {
+    this.hold = low;
+    const e: Emotion = card.crisis ? 'neutral' : card.emotion;
+    if (e !== this.current) {
+      this.current = e;
+      this.lastChangeAt = this.now();
+      this.emit(e);
+    }
+    this.scheduleRevert();
+  }
+
+  /** Forget/decline dropped the card: stop holding and revert as usual. */
+  releaseHold(): void {
+    this.hold = false;
+    this.scheduleRevert();
   }
 
   onResponseStart(seq: number): void {
@@ -73,6 +94,7 @@ export class EmotionTagger {
   }
 
   private apply(e: Emotion): void {
+    if (this.hold && e === 'happy') return;
     if (e === this.current) {
       this.scheduleRevert(); // same mood again: keep it a little longer
       return;
@@ -88,7 +110,7 @@ export class EmotionTagger {
   private scheduleRevert(): void {
     if (this.revertTimer) clearTimeout(this.revertTimer);
     this.revertTimer = null;
-    if (this.current === this.cfg.defaultEmotion) return;
+    if (this.hold || this.current === this.cfg.defaultEmotion) return;
     this.revertTimer = setTimeout(() => {
       this.revertTimer = null;
       this.current = this.cfg.defaultEmotion;

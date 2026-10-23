@@ -16,6 +16,8 @@ export interface PromptLabels {
   summaryJoiner: string;
   /** Label/value separator: full-width for CJK, colon-space for English. */
   separator: string;
+  /** Header of the per-turn affect section (internal guidance, never read aloud). */
+  affectHeader: string;
 }
 
 export const PROMPT_LABELS: Record<Language, PromptLabels> = {
@@ -25,6 +27,7 @@ export const PROMPT_LABELS: Record<Language, PromptLabels> = {
     summaryHeader: '## 对话摘要', recentHeader: '## 最近对话', empty: '（暂无）',
     fact: '事实', relationship: '关系', episode: '上次话题（概括，非原话）', addressing: '称呼',
     summaryPrevious: '已有摘要', summaryJoiner: '；', separator: '：',
+    affectHeader: '## 此刻（内部参考）',
   },
   ja: {
     user: 'ユーザー', assistant: 'アシスタント',
@@ -32,6 +35,7 @@ export const PROMPT_LABELS: Record<Language, PromptLabels> = {
     summaryHeader: '## 会話の要約', recentHeader: '## 最近の会話', empty: '（なし）',
     fact: '事実', relationship: '関係', episode: '前回の話題（要約、原文ではない）', addressing: '呼び方',
     summaryPrevious: '既存の要約', summaryJoiner: '；', separator: '：',
+    affectHeader: '## いまの様子（内部参考）',
   },
   en: {
     user: 'User', assistant: 'Assistant',
@@ -39,5 +43,6 @@ export const PROMPT_LABELS: Record<Language, PromptLabels> = {
     summaryHeader: '## Conversation summary', recentHeader: '## Recent conversation', empty: '(none)',
     fact: 'Fact', relationship: 'Relationship', episode: 'Previous topic (summary, not verbatim)', addressing: 'Address as',
     summaryPrevious: 'Existing summary', summaryJoiner: '; ', separator: ': ',
+    affectHeader: '## Right now (internal reference)',
   },
 };

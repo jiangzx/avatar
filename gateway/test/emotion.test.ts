@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadSharedEmotion } from '../src/i18n/emotion.ts';
 import { DEFAULT_I18N } from '../src/i18n/load.ts';
 import { EmotionTagger, tagEmotion, type Emotion, type EmotionConfig } from '../src/session/emotion.ts';
+import type { AffectCard } from '../src/session/affect.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cfg: EmotionConfig = {
@@ -92,5 +93,68 @@ describe('EmotionTagger', () => {
     t.dispose();
     vi.advanceTimersByTime(10_000);
     expect(out).toEqual(['sad']);
+  });
+});
+
+describe('EmotionTagger.onAffect', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  const card = (over: Partial<AffectCard> = {}): AffectCard => ({
+    emotion: 'neutral', intensity: 1, trend: 'flat', need: 'chat', strategy: 'reflect', mismatch: false, crisis: false, ...over,
+  });
+  function make() {
+    const out: Emotion[] = [];
+    const t = new EmotionTagger(cfg, (e) => out.push(e), () => Date.now());
+    return { t, out };
+  }
+
+  it('applies the card at once, even inside the lexicon debounce, then reverts as usual', () => {
+    const { t, out } = make();
+    t.onUserFinal('我有点难过');
+    t.onAffect(card({ emotion: 'love' }), false);
+    expect(out).toEqual(['sad', 'love']);
+    vi.advanceTimersByTime(6000);
+    expect(out).toEqual(['sad', 'love', 'happy']);
+  });
+
+  it('holds a low mood: no revert, lexicon happy ignored, sad and love still apply', () => {
+    const { t, out } = make();
+    t.onAffect(card({ emotion: 'sad', intensity: 3 }), true);
+    vi.advanceTimersByTime(60_000);
+    expect(out).toEqual(['sad']);
+    t.onUserFinal('今天真开心');
+    expect(out).toEqual(['sad']);
+    t.onUserFinal('谢谢你');
+    expect(out).toEqual(['sad', 'love']);
+    vi.advanceTimersByTime(60_000);
+    expect(out).toEqual(['sad', 'love']);
+  });
+
+  it('shows neutral during a crisis and keeps it', () => {
+    const { t, out } = make();
+    t.onAffect(card({ emotion: 'sad', intensity: 3, crisis: true }), true);
+    vi.advanceTimersByTime(60_000);
+    t.onUserFinal('今天真开心');
+    expect(out).toEqual(['neutral']);
+  });
+
+  it('releases the hold when a card is no longer low', () => {
+    const { t, out } = make();
+    t.onAffect(card({ emotion: 'sad', intensity: 3 }), true);
+    t.onAffect(card({ emotion: 'neutral', trend: 'better' }), false);
+    expect(out).toEqual(['sad', 'neutral']);
+    vi.advanceTimersByTime(6000);
+    expect(out).toEqual(['sad', 'neutral', 'happy']);
+  });
+
+  it('releaseHold (forget/decline) drops the hold and lets the mood revert', () => {
+    const { t, out } = make();
+    t.onAffect(card({ emotion: 'sad', intensity: 3 }), true);
+    t.releaseHold();
+    vi.advanceTimersByTime(6000);
+    expect(out).toEqual(['sad', 'happy']);
+    t.onUserFinal('今天真开心');
+    expect(out).toEqual(['sad', 'happy']); // already happy; the lexicon is no longer blocked
   });
 });

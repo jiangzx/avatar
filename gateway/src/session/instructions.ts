@@ -5,10 +5,14 @@ export interface InstructionBudget {
   totalChars: number;
   snapshotMaxChars: number;
   summaryMaxChars: number;
+  /** Room reserved for the affect section; missing means 0. The section itself is never clipped. */
+  affectMaxChars?: number;
 }
 
 export interface InstructionParts {
   persona: string;
+  /** Deterministic affect render (affectRender.ts); empty or missing leaves the section out. */
+  affect?: string;
   memorySnapshot?: string;
   summary: string;
   recent: readonly LedgerEntry[];
@@ -19,12 +23,14 @@ const line = (e: LedgerEntry, labels: PromptLabels) =>
 
 function render(
   persona: string,
+  affect: string,
   snapshot: string,
   summary: string,
   lines: readonly string[],
   labels: PromptLabels,
 ): string {
   const parts = [persona.trim()];
+  if (affect) parts.push(labels.affectHeader, affect);
   if (snapshot) parts.push(labels.memoryHeader, snapshot);
   parts.push(
     labels.summaryHeader,
@@ -51,21 +57,26 @@ export function buildInstructions(
   labels: PromptLabels = PROMPT_LABELS.zh,
 ): string {
   const lines = parts.recent.map((entry) => line(entry, labels));
-  if (!budget) return render(parts.persona, parts.memorySnapshot ?? '', parts.summary, lines, labels);
+  const affect = parts.affect ?? '';
+  if (!budget) return render(parts.persona, affect, parts.memorySnapshot ?? '', parts.summary, lines, labels);
   let snapshot = clipHead(parts.memorySnapshot ?? '', budget.snapshotMaxChars);
   let summary = clipTail(parts.summary, budget.summaryMaxChars);
   const kept = [...lines];
-  const over = () => render(parts.persona, snapshot, summary, kept, labels).length - budget.totalChars;
+  // The affect section is reserved in historyBudget, so it is never part of the clipping.
+  const over = () => render(parts.persona, affect, snapshot, summary, kept, labels).length - budget.totalChars;
   while (over() > 0 && kept.length > 0) kept.shift();
   if (over() > 0) summary = clipTail(summary, Math.max(0, summary.length - over()));
   if (over() > 0) snapshot = clipHead(snapshot, Math.max(0, snapshot.length - over()));
-  return render(parts.persona, snapshot, summary, kept, labels);
+  return render(parts.persona, affect, snapshot, summary, kept, labels);
 }
 
+/** Room left for summary plus recent turns after the persona, the full snapshot and the full affect section. */
 export function historyBudget(
   persona: string,
   budget: InstructionBudget,
   labels: PromptLabels = PROMPT_LABELS.zh,
 ): number {
-  return budget.totalChars - render(persona, 'x'.repeat(budget.snapshotMaxChars), '', [], labels).length;
+  const affectRoom = budget.affectMaxChars ?? 0;
+  const affect = affectRoom > 0 ? 'x'.repeat(affectRoom) : '';
+  return budget.totalChars - render(persona, affect, 'x'.repeat(budget.snapshotMaxChars), '', [], labels).length;
 }

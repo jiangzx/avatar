@@ -17,7 +17,8 @@ import type { TextModelClient } from '../memory/textClient.ts';
 import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
-import { AffectTracker, affectSummaryFields, type AffectConfig } from './affect.ts';
+import { AffectTracker, affectSummaryFields, isLow, type AffectCard, type AffectConfig } from './affect.ts';
+import { renderAffect } from './affectRender.ts';
 import type { TranscriptWriter } from '../memory/writer.ts';
 import { DEFAULT_I18N } from '../i18n/load.ts';
 import { containsPhrase } from '../i18n/text.ts';
@@ -257,6 +258,12 @@ export class Session {
   private readonly dropTranscriptSeqs = new Set<number>();
   /** A forget/decline rebuild arrived while another rebuild was in progress. */
   private rebuildAgain: 'forget' | 'decline' | null = null;
+  /** Latest accepted analyzer card; session memory only, never logged. */
+  private affectCard: AffectCard | null = null;
+  /** Affect text the last push request was made for. */
+  private affectRendered = '';
+  /** affect_crisis is logged at most once per session. */
+  private crisisLogged = false;
 
   constructor(
     private readonly deps: SessionDeps,
@@ -317,8 +324,8 @@ export class Session {
           history: () => this.ledger.recent,
           evidence: this.i18n.evidence,
           safety: this.i18n.safety,
-          // Accepted cards stay on the tracker (this.affect.card); nothing reacts to them yet.
-          onCard: () => {},
+          // Accepted cards stay on the tracker (this.affect.card); the session mirrors the latest one.
+          onCard: (card) => this.onAffectCard(card),
         })
       : null;
     this.interrupt = new InterruptCoordinator({
@@ -630,10 +637,55 @@ export class Session {
   private instructions(): string {
     const labels = PROMPT_LABELS[this.language];
     return buildInstructions(
-      { persona: this.personaFor(this.language), memorySnapshot: this.context.memorySnapshot, summary: this.ledger.summary, recent: this.ledger.recent },
+      {
+        persona: this.personaFor(this.language),
+        affect: this.affectSection(),
+        memorySnapshot: this.context.memorySnapshot,
+        summary: this.ledger.summary,
+        recent: this.ledger.recent,
+      },
       this.budgetFor(this.language),
       labels,
     );
+  }
+
+  /** Current affect render in the session language; '' without an analyzer, or with no card and no hint. */
+  private affectSection(): string {
+    const config = this.deps.affect;
+    if (!config || !this.affect) return '';
+    return renderAffect(this.affectCard, this.i18n.affect[this.language], {
+      exhaustedArmed: this.affect.exhaustedArmed,
+      lowIntensity: config.lowIntensity,
+    });
+  }
+
+  /** Ask the gate for one instructions push, only when the rendered affect text changed. */
+  private syncAffectRender(): void {
+    if (this.ended) return;
+    const text = this.affectSection();
+    if (text === this.affectRendered) return;
+    this.affectRendered = text;
+    this.gate.request({ instructions: true });
+  }
+
+  /** Accepted analyzer card: store it, drive the avatar, log a crisis once, then re-render. */
+  private onAffectCard(card: AffectCard): void {
+    const config = this.deps.affect;
+    if (this.ended || !config) return;
+    this.affectCard = card;
+    if (card.crisis && !this.crisisLogged) {
+      this.crisisLogged = true;
+      log('affect_crisis', {});
+    }
+    this.emotion?.onAffect(card, isLow(card, config.lowIntensity));
+    this.syncAffectRender();
+  }
+
+  /** Forget/decline: drop the session copy of the card. The rebuild reconnects with fresh instructions, so no push is requested. */
+  private clearAffect(): void {
+    this.affectCard = null;
+    this.affectRendered = '';
+    this.emotion?.releaseHold();
   }
 
   private sessionConfig(): SessionConfig {
@@ -1260,6 +1312,7 @@ export class Session {
       if (reason === 'forget' || reason === 'decline') {
         // The store just dropped user content; the analyzer must not keep its own copy.
         this.affect?.reset();
+        this.clearAffect();
         this.refreshMemorySnapshot();
       }
       await this.adapter.connect(this.sessionConfig());

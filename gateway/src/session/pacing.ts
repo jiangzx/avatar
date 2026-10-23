@@ -51,6 +51,10 @@ const MemoryBudgetSchema = z.object({
     snapshotMaxChars: z.number().int().min(0).max(5_000),
     summaryMaxChars: z.number().int().min(100).max(5_000),
     minHistoryChars: z.number().int().min(100).max(5_000),
+    /** Room reserved for the affect section (never clipped); the startup render check keeps every language within it. */
+    affectMaxChars: z.number().int().min(0).max(1_000).optional(),
+    /** Per-language override; English needs more characters for the same lines. */
+    languageAffectMaxChars: z.partialRecord(z.enum(['zh', 'ja', 'en']), z.number().int().min(0).max(1_500)).optional(),
   }).strict(),
   toolTurnTimeoutMs: z.number().int().min(3_000).max(30_000),
   recallClipChars: z.number().int().min(20).max(500),
@@ -109,6 +113,8 @@ export function validateBudgets(
     totalChars: Math.floor(rebuildChars * ratioFor(language)),
     snapshotMaxChars: m.snapshotMaxChars,
     summaryMaxChars: m.summaryMaxChars,
+    // Undefined when unset; historyBudget then reserves nothing (old fixtures keep their numbers).
+    affectMaxChars: m.languageAffectMaxChars?.[language] ?? m.affectMaxChars,
   });
   const budgets: Partial<Record<Language, InstructionBudget>> = {};
   // Legacy array callers (docs/testing probes) only build zh personas.

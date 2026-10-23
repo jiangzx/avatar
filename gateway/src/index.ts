@@ -9,6 +9,7 @@ import { DEFAULT_ROLE, missingRoleLanguages } from './roles/catalog.ts';
 import { log } from './log.ts';
 import { loadAffectConfig } from './session/affect.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from './session/pacing.ts';
+import { checkAffectBudgets } from './session/affectRender.ts';
 import { devContextResolver } from './session/context.ts';
 import { MockSummarizer } from './session/ledger.ts';
 import { QwenSummarizer } from './session/qwenSummarizer.ts';
@@ -39,6 +40,8 @@ for (const pair of roles.languagePairs()) {
   (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
 }
 const budgetReport = validateBudgets(pacing, memory, config.ledger, personasByLanguage);
+// Every language's longest affect render must fit its reserved room; otherwise refuse to start.
+checkAffectBudgets(budgetReport.budgets, i18n.affect);
 const languageBudgetFields: Record<string, number> = {};
 for (const language of LANGUAGES) {
   const budget = budgetReport.budgets[language];
@@ -46,6 +49,7 @@ for (const language of LANGUAGES) {
   if (!budget || !perLanguage) continue;
   languageBudgetFields[`${language}TotalChars`] = budget.totalChars;
   languageBudgetFields[`${language}MinHistoryChars`] = perLanguage.minHistoryChars;
+  languageBudgetFields[`${language}AffectMaxChars`] = budget.affectMaxChars ?? 0;
 }
 log('instruction_budget', {
   totalChars: budgetReport.budget.totalChars,

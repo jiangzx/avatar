@@ -48,7 +48,7 @@
 
 ---
 
-- [ ] **Step 0: 核对前置条件与预算决策**
+- [x] **Step 0: 核对前置条件与预算决策**
 
 Run（仓库根目录）：
 
@@ -66,7 +66,7 @@ Expected：每条 grep 都有命中；overview「基线门槛」的检查打印 
 
 预算方案已于 2026-10-23 批准（方案 A，见文末 Q1），直接按 Step 7 的数值执行。
 
-- [ ] **Step 1: 写 labels 与 `buildInstructions` 的失败测试**
+- [x] **Step 1: 写 labels 与 `buildInstructions` 的失败测试**
 
 在 `gateway/test/instructions.test.ts` 文件末尾追加：
 
@@ -119,12 +119,12 @@ describe('affect section', () => {
 });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `cd gateway && npx vitest run test/instructions.test.ts`
 Expected: FAIL。`ships a localized affect header` 报 `Cannot read properties of undefined (reading 'startsWith')`；`puts the affect section` 和 `never clips the affect section` 的实际文本里没有 affect 段；`reserves the affect room` 的第一个断言数值不等。原有 6 个用例和 `leaves the section out` 仍然 PASS。
 
-- [ ] **Step 3: 实现 labels 与 `buildInstructions`**
+- [x] **Step 3: 实现 labels 与 `buildInstructions`**
 
 `gateway/src/roles/labels.ts`：
 
@@ -284,12 +284,12 @@ export function historyBudget(
 }
 ```
 
-- [ ] **Step 4: 运行，确认通过**
+- [x] **Step 4: 运行，确认通过**
 
 Run: `cd gateway && npx vitest run test/instructions.test.ts`
 Expected: PASS（11 个用例）。
 
-- [ ] **Step 5: 写预算配置的失败测试**
+- [x] **Step 5: 写预算配置的失败测试**
 
 `gateway/test/pacing.test.ts` 顶部导入改为：
 
@@ -422,12 +422,12 @@ describe('affect budget', () => {
 });
 ```
 
-- [ ] **Step 6: 运行，确认失败**
+- [x] **Step 6: 运行，确认失败**
 
 Run: `cd gateway && npx vitest run test/pacing.test.ts`
 Expected: FAIL。`gives each language its own instruction budget` 报 `expected 3840 to be 4128`；`accepts the shipped configs` 与 `validates personas for every language` 此时仍通过（`memory.json` 还没加 `zh`，`zhRatio` 退回 0.4），Step 7 改完配置后它们按新比例计算；`carries the affect room` 报 `expected undefined to be 120`；`validates the affect room keys` 报 strict schema 不认识 `affectMaxChars`（`Unrecognized key`）；`ships the affect room` 报 `expected undefined to be 150`（shipped 文件还没有这个键，不会抛错）。`fails startup when the affect reservation...` 的第二个断言不抛错。
 
-- [ ] **Step 7: 实现 schema、`validateBudgets` 与 `memory.json`**
+- [x] **Step 7: 实现 schema、`validateBudgets` 与 `memory.json`**
 
 `gateway/src/session/pacing.ts`，原文：
 
@@ -489,12 +489,12 @@ Expected: FAIL。`gives each language its own instruction budget` 报 `expected 
   "instructions": { "budgetRatio": 0.4, "languageBudgetRatio": { "zh": 0.43, "ja": 0.5, "en": 0.8 }, "snapshotMaxChars": 600, "summaryMaxChars": 800, "minHistoryChars": 400, "affectMaxChars": 150, "languageAffectMaxChars": { "ja": 210, "en": 250 } },
 ```
 
-- [ ] **Step 8: 运行，确认通过**
+- [x] **Step 8: 运行，确认通过**
 
 Run: `cd gateway && npx vitest run test/pacing.test.ts test/instructions.test.ts`
 Expected: PASS。`accepts the shipped configs with the shipped roles` 和 `validates personas for every language` 用真实人设跑，预留后仍满足 `summaryMaxChars + minHistoryChars`（核算值见 Q1：T6 之前每种风格历史空间 zh 1435/1438、ja 1492/1484、en 1674/1454，都 ≥ 1200；T6 合入后比 1200 多出 zh 67/78、ja 62/53、en 304/81，按 grandchild/old-friend 计）。如果报 `instruction_budget_too_small`，停下来报告实际数字，不要自行再调预算。
 
-- [ ] **Step 9: 写 `renderAffect` 的失败测试**
+- [x] **Step 9: 写 `renderAffect` 的失败测试**
 
 新建 `gateway/test/affect-render.test.ts`：
 
@@ -598,12 +598,12 @@ describe('checkAffectBudgets', () => {
 });
 ```
 
-- [ ] **Step 10: 运行，确认失败**
+- [x] **Step 10: 运行，确认失败**
 
 Run: `cd gateway && npx vitest run test/affect-render.test.ts`
 Expected: FAIL，`Failed to resolve import "../src/session/affectRender.ts"`。
 
-- [ ] **Step 11: 实现 `affectRender.ts`**
+- [x] **Step 11: 实现 `affectRender.ts`**
 
 新建 `gateway/src/session/affectRender.ts`：
 
@@ -689,7 +689,7 @@ export function checkAffectBudgets(
 }
 ```
 
-- [ ] **Step 12: 运行，确认通过**
+- [x] **Step 12: 运行，确认通过**
 
 Run: `cd gateway && npx vitest run test/affect-render.test.ts`
 Expected: PASS（8 个用例）。
@@ -698,7 +698,7 @@ Expected: PASS（8 个用例）。
 - zh 超过 150：这是 spec 定值，停下来报告实际长度，由用户决定缩短 T2 文案还是放宽上限。
 - ja 或 en 超过：把 `languageAffectMaxChars` 里该语言的值改成实际长度向上取整到 10 的倍数，再跑 `npx vitest run test/pacing.test.ts test/affect-render.test.ts`；仍然通过就在报告里写明新值，`validateBudgets` 失败就停下来报告。
 
-- [ ] **Step 13: 在 `index.ts` 加启动校验**
+- [x] **Step 13: 在 `index.ts` 加启动校验**
 
 `gateway/src/index.ts`，原文：
 
@@ -746,7 +746,7 @@ for (const language of LANGUAGES) {
 
 `index.ts` 没有单元测试；Step 12 的 `fits the shipped copy...` 用同样的输入跑同一个函数，typecheck 在 Step 20 覆盖导入。
 
-- [ ] **Step 14: 写 `EmotionTagger.onAffect` 的失败测试**
+- [x] **Step 14: 写 `EmotionTagger.onAffect` 的失败测试**
 
 `gateway/test/emotion.test.ts` 顶部导入后加一行：
 
@@ -821,12 +821,12 @@ describe('EmotionTagger.onAffect', () => {
 });
 ```
 
-- [ ] **Step 15: 运行，确认失败**
+- [x] **Step 15: 运行，确认失败**
 
 Run: `cd gateway && npx vitest run test/emotion.test.ts`
 Expected: FAIL，5 个新用例报 `t.onAffect is not a function`；原有 7 个用例 PASS。
 
-- [ ] **Step 16: 实现 `onAffect`**
+- [x] **Step 16: 实现 `onAffect`**
 
 `gateway/src/session/emotion.ts`，原文：
 
@@ -924,12 +924,12 @@ import type { AffectCard } from './affect.ts';
     if (this.hold || this.current === this.cfg.defaultEmotion) return;
 ```
 
-- [ ] **Step 17: 运行，确认通过**
+- [x] **Step 17: 运行，确认通过**
 
 Run: `cd gateway && npx vitest run test/emotion.test.ts`
 Expected: PASS（12 个用例）。
 
-- [ ] **Step 18: 写 Session 接线的失败测试**
+- [x] **Step 18: 写 Session 接线的失败测试**
 
 `gateway/test/session.test.ts` 顶部导入里补上（T2 已经导入的不要重复）：
 
@@ -1058,12 +1058,12 @@ describe('Session affect render', () => {
 
 说明：`setup` 默认的角色没有 `silenceDecision`，所以 `textClient` 只被分析器调用；Mock 对未匹配的 `debug.userText` 回复 `我在听`，三段测试文本都不含情绪词表里的词，头像变化只来自 `onAffect`。
 
-- [ ] **Step 19: 运行，确认失败**
+- [x] **Step 19: 运行，确认失败**
 
 Run: `cd gateway && npx vitest run test/session.test.ts -t "Session affect render"`
 Expected: FAIL。前三个用例的指令里没有 `## 此刻（内部参考）` / `## Right now (internal reference)`，`pushes()` 是 0；危机用例 `affect_crisis` 匹配为 `null`；`drops the session copy...` 在第一个 `toContain` 处失败。`keeps instructions unchanged when no analyzer runs` 和 `reserves the affect room...`（Step 3 已经让 `historyBudget` 预留）PASS。
 
-- [ ] **Step 20: 实现 Session 接线**
+- [x] **Step 20: 实现 Session 接线**
 
 `gateway/src/session/session.ts`：
 
@@ -1210,12 +1210,12 @@ T4 会在 `clearAffect()` 里再清它自己的 `openLoop`，所以字段清理�
 
 不改 `sessionConfig()`、`applyLanguage`、构造函数里的 `historyBudget` 调用：它们已经通过 `budgetFor()` 拿到带 `affectMaxChars` 的预算。换语言时 `applyLanguage` 已经由 T0 请求推送，推送时 `instructions()` 现取新语言的 affect 段。
 
-- [ ] **Step 21: 运行，确认通过**
+- [x] **Step 21: 运行，确认通过**
 
 Run: `cd gateway && npx vitest run test/session.test.ts test/emotion.test.ts test/affect-render.test.ts test/instructions.test.ts test/pacing.test.ts`
 Expected: PASS。
 
-- [ ] **Step 22: 全量回归**
+- [x] **Step 22: 全量回归**
 
 Run（仓库根目录）：
 
@@ -1227,7 +1227,7 @@ git diff --check
 
 Expected：全部通过，`git diff --check` 无输出。T3 不改规划器、召回和开场，不需要跑真实记忆库召回探针（T4 会跑）。
 
-- [ ] **Step 23: 提交**
+- [x] **Step 23: 提交**
 
 ```bash
 git add gateway/src/roles/labels.ts gateway/src/session/instructions.ts gateway/src/session/pacing.ts \

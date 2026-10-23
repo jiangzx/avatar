@@ -11,7 +11,9 @@ import { MockSummarizer } from '../src/session/ledger.ts';
 import type { ReplyMetrics } from '../src/session/metrics.ts';
 import type { MemoryStore } from '../src/memory/store.ts';
 import type { TextModelClient } from '../src/memory/textClient.ts';
+import { PROMPT_LABELS } from '../src/roles/labels.ts';
 import { loadAffectConfig } from '../src/session/affect.ts';
+import type { PushGate } from '../src/session/pushGate.ts';
 import { InterruptCoordinator } from '../src/session/interrupt.ts';
 import type { PacingConfig } from '../src/session/pacing.ts';
 import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
@@ -1931,5 +1933,118 @@ describe('Session affect tracker', () => {
     expect(view.affect.card).toBeNull();
     await vi.advanceTimersByTimeAsync(10);
     s.session.end();
+  });
+});
+
+const affectFixture = loadAffectConfig(`${fileURLToPath(new URL('..', import.meta.url))}config/affect.json`);
+const affectCardJson = (over: Record<string, unknown> = {}) => JSON.stringify({
+  emotion: 'sad', intensity: 3, trend: 'worse', need: 'vent', strategy: 'comfort', mismatch: false, crisis: false, ...over,
+});
+const sessionInternals = (session: Session) => session as unknown as { gate: PushGate; instructions(): string };
+
+describe('Session affect render', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('renders an accepted card after the persona, moves the avatar, and asks for one push per change', async () => {
+    let reply = affectCardJson();
+    const s = setup({ i18n, emotion: i18n.emotion, affect: affectFixture, textClient: { complete: async () => reply } });
+    await greetAndFinish(s);
+    const request = vi.spyOn(sessionInternals(s.session).gate, 'request');
+    const pushes = () => request.mock.calls.filter(([update]) => update.instructions === true).length;
+    const lines = i18n.affect.zh.lines;
+
+    s.session.handleClientMessage({ type: 'debug.userText', text: '今天下午去了一趟菜场' });
+    await vi.advanceTimersByTimeAsync(10);
+    const text = sessionInternals(s.session).instructions();
+    expect(text.startsWith(`P\n\n${PROMPT_LABELS.zh.affectHeader}\n\n${lines.mood.low}`)).toBe(true);
+    expect(text).toContain(lines.need.vent);
+    expect(text).toContain(lines.tail);
+    expect(pushes()).toBe(1);
+    expect(of(s.sent, 'avatar.emotion').at(-1)?.emotion).toBe('sad');
+
+    // Same card again: the render is unchanged, so no new push.
+    s.session.handleClientMessage({ type: 'debug.userText', text: '买了点青菜和豆腐回来' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(pushes()).toBe(1);
+
+    // A different card changes the render and asks again.
+    reply = affectCardJson({ emotion: 'happy', intensity: 1, trend: 'better', need: 'share_joy', strategy: 'affirm' });
+    s.session.handleClientMessage({ type: 'debug.userText', text: '孙子说周末带我去公园' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(pushes()).toBe(2);
+    expect(sessionInternals(s.session).instructions()).toContain(lines.mood.happy);
+    s.session.end();
+  });
+
+  it('puts the crisis line first, keeps the avatar neutral and logs affect_crisis once without content', async () => {
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const s = setup({ i18n, emotion: i18n.emotion, affect: affectFixture, textClient: { complete: async () => affectCardJson({ crisis: true }) } });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '最近总觉得撑不下去' });
+    await vi.advanceTimersByTimeAsync(10);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '我一个人在家' });
+    await vi.advanceTimersByTimeAsync(10);
+    const lines = i18n.affect.zh.lines;
+    expect(sessionInternals(s.session).instructions()
+      .startsWith(`P\n\n${PROMPT_LABELS.zh.affectHeader}\n\n${lines.crisis}\n${lines.mood.low}`)).toBe(true);
+    expect(of(s.sent, 'avatar.emotion').at(-1)?.emotion).toBe('neutral');
+    const logged = write.mock.calls.map((c) => String(c[0])).join('');
+    expect(logged.match(/"event":"affect_crisis"/g)).toHaveLength(1);
+    expect(logged).not.toContain('撑不下去');
+    write.mockRestore();
+    s.session.end();
+  });
+
+  it('renders the affect section in the session language', async () => {
+    const s = setup(
+      {
+        i18n,
+        affect: affectFixture,
+        roles: fixedRoleCatalog('P', director, { languages: ['zh', 'en'], defaultLanguage: 'zh' }),
+        textClient: { complete: async () => affectCardJson() },
+      },
+      { roleId: 'elder-companion', styleId: 'grandchild', language: 'en' },
+    );
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: 'I went to the market this afternoon.' });
+    await vi.advanceTimersByTimeAsync(10);
+    const text = sessionInternals(s.session).instructions();
+    expect(text).toContain(`${PROMPT_LABELS.en.affectHeader}\n\n${i18n.affect.en.lines.mood.low}`);
+    expect(text).not.toContain(PROMPT_LABELS.zh.affectHeader);
+    s.session.end();
+  });
+
+  it('drops the session copy of the card when a forget rebuild starts', async () => {
+    const s = setup({ i18n, emotion: i18n.emotion, affect: affectFixture, textClient: { complete: async () => affectCardJson() } });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '今天下午去了一趟菜场' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(sessionInternals(s.session).instructions()).toContain(PROMPT_LABELS.zh.affectHeader);
+    const view = s.session as unknown as { rebuild(reason: string, keepToolTurn?: boolean): Promise<void> };
+    void view.rebuild('forget', true);
+    // Synchronous part of rebuild: the card is gone before the reconnect builds its instructions.
+    expect(sessionInternals(s.session).instructions()).not.toContain(PROMPT_LABELS.zh.affectHeader);
+    await vi.advanceTimersByTimeAsync(10);
+    s.session.end();
+  });
+
+  it('keeps instructions unchanged when no analyzer runs', async () => {
+    const s = setup({ i18n, affect: affectFixture });
+    await greetAndFinish(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '今天下午去了一趟菜场' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(sessionInternals(s.session).instructions()).not.toContain(PROMPT_LABELS.zh.affectHeader);
+    s.session.end();
+  });
+
+  it('reserves the affect room when it sets the summarize threshold', () => {
+    const budget = { totalChars: 3000, snapshotMaxChars: 100, summaryMaxChars: 200 };
+    const plain = setup({ budget });
+    const reserved = setup({ budget: { ...budget, affectMaxChars: 150 } });
+    expect(plain.session.ledger.summarizeThreshold - reserved.session.ledger.summarizeThreshold)
+      .toBe(150 + PROMPT_LABELS.zh.affectHeader.length + 4);
+    plain.session.end();
+    reserved.session.end();
   });
 });
