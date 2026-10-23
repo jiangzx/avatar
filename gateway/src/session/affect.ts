@@ -6,6 +6,7 @@ import type { SafetyRules } from '../config.ts';
 import type { EvidenceRules } from '../i18n/types.ts';
 import { log } from '../log.ts';
 import { isMemoryEvidence } from '../memory/evidence.ts';
+import { normalizeForMatch } from '../memory/grounding.ts';
 import { scanText } from '../memory/scan.ts';
 import type { TextModelClient } from '../memory/textClient.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
@@ -173,14 +174,6 @@ interface AffectInput {
   current: string;
   history: { role: LedgerEntry['role']; text: string }[];
   previous?: CardEnums;
-}
-
-/**
- * Same normalization as sameUtterance in tools/recall.ts (not exported there; T5 moves that
- * helper to memory/grounding.ts). Substring checks need the key itself, so it is copied here.
- */
-function matchKey(text: string): string {
-  return text.replace(/[\s，。！？、,.!?~～…—「」『』“”"'・]/g, '');
 }
 
 /** JSON mode should give bare JSON; tolerate a code fence or stray prose around it. */
@@ -380,10 +373,10 @@ export class AffectTracker {
     const parsed = OpenLoopSchema.safeParse(value);
     if (!parsed.success) return null;
     const text = parsed.data;
-    const key = matchKey(text);
+    const key = normalizeForMatch(text);
     if (!key) return null;
     const { evidence, safety } = this.deps;
     if (!isMemoryEvidence(text, evidence) || scanText(text, safety) !== 'allow') return null;
-    return this.lines.some((line) => matchKey(line).includes(key) && isMemoryEvidence(line, evidence)) ? text : null;
+    return this.lines.some((line) => normalizeForMatch(line).includes(key) && isMemoryEvidence(line, evidence)) ? text : null;
   }
 }
