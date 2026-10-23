@@ -4,6 +4,7 @@ import type { SafetyRules } from '../../config.ts';
 import { fillerWords, vagueKey } from '../../i18n/text.ts';
 import { bigrams } from '../../memory/bigram.ts';
 import { isMemoryEvidence } from '../../memory/evidence.ts';
+import { grounded, parsePhrase, sameUtterance } from '../../memory/grounding.ts';
 import { scanText } from '../../memory/scan.ts';
 import type { TextModelClient } from '../../memory/textClient.ts';
 import type { ToolContext, ToolHandler, ToolOutcome } from './registry.ts';
@@ -33,12 +34,6 @@ function clip(text: string, maxChars: number): string {
 /** Escape LIKE wildcards for a bound pattern. */
 function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-}
-
-/** Punctuation-insensitive comparison so the current question never becomes its own memory hit. */
-function sameUtterance(a: string, b: string): boolean {
-  const normalize = (text: string) => text.replace(/[\s，。！？、,.!?~～…—「」『』“”"'・]/g, '');
-  return normalize(a) === normalize(b);
 }
 
 /** Whole-utterance key: ignore whitespace and edge punctuation/symbols. */
@@ -187,27 +182,6 @@ async function phrase(client: TextModelClient | undefined, source: string | unde
   } finally {
     clearTimeout(timer);
   }
-}
-
-function parsePhrase(raw: string): string | null {
-  const text = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  try {
-    const value = JSON.parse(text) as { text?: unknown };
-    return typeof value.text === 'string' && value.text.trim() ? value.text.trim() : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Reject a phrasing that adds a new quoted title or loses every content bigram from the source. */
-function grounded(text: string, source: string): boolean {
-  if (sameUtterance(text, source)) return false;
-  for (const match of text.matchAll(/[《「『“"]([^》」』”"]{1,20})[》」』”"]/g)) {
-    if (!source.includes(match[1]!)) return false;
-  }
-  // Latin bigrams are whole words, so the two-character Han gate does not apply to them.
-  const tokens = bigrams(source).split(' ').filter((token) => token.length >= 2);
-  return tokens.some((token) => text.includes(token));
 }
 
 /** Seeduplex cannot continue a tool turn; speak the grounded line instead of a canned reply. */
