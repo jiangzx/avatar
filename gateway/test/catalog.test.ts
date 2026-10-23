@@ -22,6 +22,7 @@ describe('fixedRoleCatalog', () => {
     expect(roles.director(DEFAULT_ROLE)).toBe(director);
     expect(roles.extractPrompt()).toBe('FIXTURE EXTRACT');
     expect(roles.recallPrompt()).toBe('FIXTURE RECALL');
+    expect(roles.affectPrompt()).toBe('FIXTURE AFFECT');
   });
 
   it('exposes language-specific personas and directors', () => {

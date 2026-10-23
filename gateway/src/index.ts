@@ -7,6 +7,7 @@ import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
 import { DEFAULT_ROLE, missingRoleLanguages } from './roles/catalog.ts';
 import { log } from './log.ts';
+import { loadAffectConfig } from './session/affect.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from './session/pacing.ts';
 import { devContextResolver } from './session/context.ts';
 import { MockSummarizer } from './session/ledger.ts';
@@ -32,6 +33,7 @@ if (missingLanguages.length > 0) throw new Error(`role_languages_incomplete:${DE
 const pacing = loadPacing(`${root}config/pacing.json`);
 const memory = loadMemoryBudget(`${root}config/memory.json`);
 const i18n = loadI18n(`${root}config`);
+const affect = loadAffectConfig(`${root}config/affect.json`);
 const personasByLanguage: Partial<Record<Language, string[]>> = {};
 for (const pair of roles.languagePairs()) {
   (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
@@ -114,6 +116,8 @@ const worker = store && textClient
     })
   : null;
 if (store && !textClient) log('memory_extract_unconfigured', {});
+// Sessions get the text client only for real adapters; Mock runs stay lexicon-only.
+log('affect_analyzer', { enabled: affect.enabled && config.adapter !== 'mock' && textClient !== null });
 const manager = new SessionManager(
   (ctx, sessionId, noticePending = false) =>
     new Session({
@@ -155,6 +159,7 @@ const manager = new SessionManager(
       push: pacing.push,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
       emotion: i18n.emotion,
+      affect,
       languageRules: i18n.language,
       ...(store ? { store } : {}),
       ...(writer ? { writer } : {}),

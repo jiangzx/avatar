@@ -119,3 +119,89 @@ describe('loadI18n', () => {
     expect(() => loadI18n(dir)).toThrow(/i18n_pattern_invalid:en:explicitRequestPatterns/);
   });
 });
+
+describe('affect copy', () => {
+  const i18n = loadI18n(config);
+  const LANGS = ['zh', 'ja', 'en'] as const;
+
+  it('loads affect copy for every language with the internal-reference tail', () => {
+    expect(i18n.affect.zh.lines.tail).toContain('不要说出情绪名称');
+    expect(i18n.affect.zh.lines.tail).toContain('用语气和内容表现');
+    expect(i18n.affect.zh.lines.need.vent).toBe('想倾诉：多听，少提问。');
+    expect(i18n.affect.zh.lines.strategy.reflect).toBe('用一句话点出感受，别逐字复述。');
+    expect(i18n.affect.zh.lines.exhaustedHint).toContain('只换一次');
+    expect(i18n.affect.zh.declinePhrases).toContain('不想聊这个');
+    expect(i18n.affect.zh.solarTerms[0]).toEqual({ name: '小寒', month: 1, day: 5 });
+    expect(i18n.affect.zh.solarTerms.find((term) => term.name === '冬至')).toEqual({ name: '冬至', month: 12, day: 21 });
+    for (const language of LANGS) {
+      const copy = i18n.affect[language];
+      expect(copy.solarTerms).toHaveLength(24);
+      expect(new Set(copy.solarTerms.map((term) => term.name)).size).toBe(24);
+      expect(copy.solarTerms.map(({ month, day }) => [month, day]))
+        .toEqual(i18n.affect.zh.solarTerms.map(({ month, day }) => [month, day]));
+      expect(Object.keys(copy.seasons)).toEqual(['spring', 'summer', 'autumn', 'winter']);
+      expect(Object.keys(copy.timeOfDay)).toEqual(['morning', 'noon', 'afternoon', 'evening', 'night']);
+      expect(copy.declinePhrases.length).toBeGreaterThan(0);
+    }
+    expect(i18n.affect.ja.lines.tail).not.toBe(i18n.affect.zh.lines.tail);
+    expect(i18n.affect.en.lines.tail).toContain('name emotions');
+  });
+
+  it('keeps the longest affect render inside the planned per-language budget', () => {
+    // Guard until T3's startup check (maxAffectRender vs memory.json) exists. Seven '\n' separators included.
+    const planned = { zh: 150, ja: 210, en: 250 } as const;
+    const longest = (values: Record<string, string>) => Math.max(...Object.values(values).map((text) => text.length));
+    for (const language of LANGS) {
+      const { lines } = i18n.affect[language];
+      const total = lines.crisis.length + longest(lines.mood) + longest(lines.trend) + longest(lines.need)
+        + longest(lines.strategy) + lines.mismatch.length + lines.exhaustedHint.length + lines.tail.length + 7;
+      expect(total, language).toBeLessThanOrEqual(planned[language]);
+    }
+  });
+
+  it('fails fast on a missing affect pack', () => {
+    const dir = copyConfig();
+    unlinkSync(join(dir, 'i18n', 'ja', 'affect.json'));
+    expect(() => loadI18n(dir)).toThrow(/i18n_missing:ja:affect/);
+  });
+
+  it('rejects solar-term dates that differ between languages', () => {
+    const dir = copyConfig();
+    const path = join(dir, 'i18n', 'en', 'affect.json');
+    const value = JSON.parse(readFileSync(path, 'utf8')) as { solarTerms: { day: number }[] };
+    value.solarTerms[3]!.day = 18;
+    writeFileSync(path, JSON.stringify(value));
+    expect(() => loadI18n(dir)).toThrow(/i18n_affect_parity:en:solarTerms/);
+  });
+
+  it('rejects impossible, out-of-order or duplicate solar terms', () => {
+    const mutate = (edit: (terms: { name: string; month: number; day: number }[]) => void) => {
+      const dir = copyConfig();
+      const path = join(dir, 'i18n', 'zh', 'affect.json');
+      const value = JSON.parse(readFileSync(path, 'utf8')) as { solarTerms: { name: string; month: number; day: number }[] };
+      edit(value.solarTerms);
+      writeFileSync(path, JSON.stringify(value));
+      return dir;
+    };
+    expect(() => loadI18n(mutate((terms) => { terms[2] = { name: '立春', month: 2, day: 30 }; }))).toThrow(/i18n_invalid:zh:affect/);
+    expect(() => loadI18n(mutate((terms) => { [terms[0], terms[1]] = [terms[1]!, terms[0]!]; }))).toThrow(/i18n_invalid:zh:affect/);
+    expect(() => loadI18n(mutate((terms) => { terms[1]!.name = terms[0]!.name; }))).toThrow(/i18n_invalid:zh:affect/);
+    expect(() => loadI18n(mutate((terms) => { terms.pop(); }))).toThrow(/i18n_invalid:zh:affect/);
+  });
+
+  it('rejects unknown keys and empty lines', () => {
+    const dir = copyConfig();
+    const path = join(dir, 'i18n', 'zh', 'affect.json');
+    const value = JSON.parse(readFileSync(path, 'utf8')) as { lines: Record<string, unknown> };
+    value.lines.extra = 'x';
+    writeFileSync(path, JSON.stringify(value));
+    expect(() => loadI18n(dir)).toThrow(/i18n_invalid:zh:affect/);
+
+    const empty = copyConfig();
+    const emptyPath = join(empty, 'i18n', 'ja', 'affect.json');
+    const emptyValue = JSON.parse(readFileSync(emptyPath, 'utf8')) as { lines: { tail: string } };
+    emptyValue.lines.tail = '';
+    writeFileSync(emptyPath, JSON.stringify(emptyValue));
+    expect(() => loadI18n(empty)).toThrow(/i18n_invalid:ja:affect/);
+  });
+});

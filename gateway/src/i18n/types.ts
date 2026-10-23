@@ -83,6 +83,26 @@ export interface SilenceRules {
   maxCheckinChars: number;
 }
 
+/** Fixed state-card copy and time words for one language (config/i18n/<lang>/affect.json). */
+export interface AffectCopy {
+  lines: {
+    crisis: string;
+    /** low = crisis or isLow; sad = mild sadness that is not low. */
+    mood: { low: string; sad: string; happy: string; love: string; neutral: string };
+    trend: { better: string; worse: string };
+    need: Record<'vent' | 'share_joy' | 'help' | 'chat' | 'topic_exhausted', string>;
+    strategy: Record<'comfort' | 'reflect' | 'affirm' | 'ask' | 'disclose' | 'suggest', string>;
+    mismatch: string;
+    exhaustedHint: string;
+    tail: string;
+  };
+  declinePhrases: readonly string[];
+  /** Approximate dates; month 1-12, day 1-31. */
+  solarTerms: readonly { name: string; month: number; day: number }[];
+  seasons: { spring: string; summer: string; autumn: string; winter: string };
+  timeOfDay: { morning: string; noon: string; afternoon: string; evening: string; night: string };
+}
+
 /** Loaded localization bundle: per-language copy plus merged scan lists. */
 export interface I18nBundle {
   language: LanguageRules;
@@ -93,4 +113,5 @@ export interface I18nBundle {
   safety: SafetyRules;
   emotion: EmotionConfig;
   silence: Record<Language, SilenceRules>;
+  affect: Record<Language, AffectCopy>;
 }

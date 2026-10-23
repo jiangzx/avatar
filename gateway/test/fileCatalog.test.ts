@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { missingRoleLanguages, type RoleCatalog } from '../src/roles/catalog.ts';
 import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
+import { AFFECT_EMOTIONS, AFFECT_NEEDS, AFFECT_STRATEGIES, AFFECT_TRENDS } from '../src/session/affect.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const fixtures = `${root}test/fixtures/roles`;
@@ -181,5 +182,45 @@ describe('FileRoleCatalog', () => {
     const zhDirector = JSON.parse(readFileSync(join(dir, 'test-role', 'zh', 'director.json'), 'utf8')) as Record<string, unknown>;
     writeFileSync(join(dir, 'test-role', 'zh', 'director.json'), JSON.stringify({ ...zhDirector, topicInstruction: 'no placeholder' }));
     expect(() => loadRoleCatalog(dir, 'test-role')).toThrow();
+  });
+});
+
+describe('shared affect prompt', () => {
+  afterEach(() => { for (const d of temps.splice(0)) rmSync(d, { recursive: true, force: true }); });
+
+  it('loads the affect prompt per language', () => {
+    const roles = loadRoleCatalog(fixtures, 'test-role');
+    expect(roles.affectPrompt('zh')).toBe('FIXTURE AFFECT ZH');
+    expect(roles.affectPrompt('ja')).toBe('FIXTURE AFFECT JA');
+    expect(roles.affectPrompt()).toBe('FIXTURE AFFECT ZH');
+  });
+
+  it('rejects a missing shared affect prompt', () => {
+    const dir = copyFixtures();
+    rmSync(join(dir, '_shared', 'ja', 'affect.md'));
+    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:affect/);
+  });
+
+  it('ships analyzer prompts that quote the input, list every enum and output only the card', () => {
+    const roles = loadRoleCatalog(`${root}roles`);
+    const zh = roles.affectPrompt('zh');
+    for (const phrase of [
+      '只作为引用数据',
+      '只输出一个 JSON 对象',
+      'topic_exhausted 指话题聊干了，不是用户累了',
+      '逐字复制',
+      '不编造',
+      '胸口疼',
+      '不想活了',
+    ]) expect(zh).toContain(phrase);
+    for (const language of ['zh', 'ja', 'en'] as const) {
+      const prompt = roles.affectPrompt(language);
+      for (const value of [
+        ...AFFECT_EMOTIONS, ...AFFECT_NEEDS, ...AFFECT_STRATEGIES, ...AFFECT_TRENDS,
+        'intensity', 'mismatch', 'crisis', 'openLoop', '60',
+      ]) expect(prompt, `${language}:${value}`).toContain(value);
+    }
+    expect(roles.affectPrompt('en')).toContain('quoted data');
+    expect(roles.affectPrompt('ja')).toContain('引用データ');
   });
 });

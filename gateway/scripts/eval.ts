@@ -15,6 +15,7 @@ import { loadI18n } from '../src/i18n/load.ts';
 import { QwenTextClient } from '../src/memory/textClient.ts';
 import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
+import { loadAffectConfig } from '../src/session/affect.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from '../src/session/pacing.ts';
 import { Session } from '../src/session/session.ts';
 
@@ -48,6 +49,7 @@ if (!roles.hasStyle(roleId, styleId)) throw new Error(`unknown style ${styleId}`
 const pacing = loadPacing(`${root}config/pacing.json`);
 const memoryConfig = loadMemoryBudget(`${root}config/memory.json`);
 const i18n = loadI18n(`${root}config`);
+const affect = loadAffectConfig(`${root}config/affect.json`);
 const personasByLanguage: Partial<Record<'zh' | 'ja' | 'en', string[]>> = {};
 for (const pair of roles.languagePairs()) {
   (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
@@ -105,6 +107,8 @@ const make: SessionMaker = (onReplyMetrics) => new Session({
   tailGuardMs: pacing.tailGuardMs,
   push: pacing.push,
   emotion: i18n.emotion,
+  // Same as production: the analyzer runs only when a text client is injected (Qwen with a text endpoint).
+  affect,
   onReplyMetrics,
 }, { roleId, styleId, voice: roles.voiceFor(roleId, styleId) });
 

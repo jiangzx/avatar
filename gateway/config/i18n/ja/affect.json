@@ -1,0 +1,54 @@
+{
+  "lines": {
+    "crisis": "自死の思いや急病の恐れ：真剣に受け止め、家族か救急への連絡を勧め、話をそらさない。",
+    "mood": { "low": "相手は沈んでいる。", "sad": "相手は少し悲しそう。", "happy": "相手は機嫌がいい。", "love": "相手は親しみを感じている。", "neutral": "相手は落ち着いている。" },
+    "trend": { "better": "さっきより良い。", "worse": "さっきより悪い。" },
+    "need": {
+      "vent": "聞いてほしい：よく聞き、質問は控えめに。",
+      "share_joy": "喜びを話したい：一緒に喜ぶ。",
+      "help": "助けがほしい：できないことは言う。",
+      "chat": "気楽に話したい：軽く応じる。",
+      "topic_exhausted": "話題が尽きた：掘り下げない。"
+    },
+    "strategy": {
+      "comfort": "まず慰め、やわらかく。",
+      "reflect": "気持ちを一言で言い当て、繰り返さない。",
+      "affirm": "気持ちを肯定する。",
+      "ask": "小さな開いた質問を一つ。",
+      "disclose": "自分の気持ちを少し話す。",
+      "suggest": "小さな提案をそっと、説教しない。"
+    },
+    "mismatch": "平気と言うが、つらいかもしれない。",
+    "exhaustedHint": "また短い返事なら、軽い話題か自分の話に一度だけ変え、好奇心を見せる。",
+    "tail": "以上は内部メモ。読み上げず感情名も言わず、口調と内容で表す。"
+  },
+  "declinePhrases": ["その話はしたくない", "話したくない", "聞かないで", "もういい", "やめとく"],
+  "solarTerms": [
+    { "name": "小寒", "month": 1, "day": 5 },
+    { "name": "大寒", "month": 1, "day": 20 },
+    { "name": "立春", "month": 2, "day": 4 },
+    { "name": "雨水", "month": 2, "day": 19 },
+    { "name": "啓蟄", "month": 3, "day": 5 },
+    { "name": "春分", "month": 3, "day": 20 },
+    { "name": "清明", "month": 4, "day": 4 },
+    { "name": "穀雨", "month": 4, "day": 20 },
+    { "name": "立夏", "month": 5, "day": 5 },
+    { "name": "小満", "month": 5, "day": 21 },
+    { "name": "芒種", "month": 6, "day": 5 },
+    { "name": "夏至", "month": 6, "day": 21 },
+    { "name": "小暑", "month": 7, "day": 7 },
+    { "name": "大暑", "month": 7, "day": 22 },
+    { "name": "立秋", "month": 8, "day": 7 },
+    { "name": "処暑", "month": 8, "day": 23 },
+    { "name": "白露", "month": 9, "day": 7 },
+    { "name": "秋分", "month": 9, "day": 22 },
+    { "name": "寒露", "month": 10, "day": 8 },
+    { "name": "霜降", "month": 10, "day": 23 },
+    { "name": "立冬", "month": 11, "day": 7 },
+    { "name": "小雪", "month": 11, "day": 22 },
+    { "name": "大雪", "month": 12, "day": 7 },
+    { "name": "冬至", "month": 12, "day": 21 }
+  ],
+  "seasons": { "spring": "春", "summer": "夏", "autumn": "秋", "winter": "冬" },
+  "timeOfDay": { "morning": "朝", "noon": "昼", "afternoon": "午後", "evening": "夕方", "night": "夜" }
+}

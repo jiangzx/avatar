@@ -10,6 +10,8 @@ import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import type { ReplyMetrics } from '../src/session/metrics.ts';
 import type { MemoryStore } from '../src/memory/store.ts';
+import type { TextModelClient } from '../src/memory/textClient.ts';
+import { loadAffectConfig } from '../src/session/affect.ts';
 import { InterruptCoordinator } from '../src/session/interrupt.ts';
 import type { PacingConfig } from '../src/session/pacing.ts';
 import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
@@ -1837,5 +1839,97 @@ describe('Session', () => {
     expect(rebuilds).toHaveLength(1);
     expect(Object.keys(rebuilds[0]!).sort()).toEqual(['bridge', 'elapsedMs', 'event', 'reason', 't']);
     expect(chunks.join('')).not.toContain(slimOn.bridge.zh);
+  });
+});
+
+describe('Session affect tracker', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  const affectConfig = loadAffectConfig(fileURLToPath(new URL('../config/affect.json', import.meta.url)));
+  const sadCard = '{"emotion":"sad","intensity":2,"trend":"flat","need":"vent","strategy":"comfort","mismatch":false,"crisis":false}';
+  const recordingClient = () => {
+    const inputs: Array<{ system: string; user: string }> = [];
+    const client: TextModelClient = {
+      complete: async (input) => {
+        inputs.push({ system: input.system, user: input.user });
+        return sadCard;
+      },
+    };
+    return { inputs, client };
+  };
+
+  it('analyzes non-light finals with the affect prompt and skips light ones', async () => {
+    const { inputs, client } = recordingClient();
+    const s = setup({ textClient: client, affect: affectConfig });
+    s.mocks[0]!.emit('userTranscript', '嗯', true);
+    s.mocks[0]!.emit('userTranscript', '今天腰有点疼，心里也闷', true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]!.system).toBe('FIXTURE AFFECT');
+    expect(JSON.parse(inputs[0]!.user)).toEqual({
+      language: 'zh',
+      current: '今天腰有点疼，心里也闷',
+      history: [{ role: 'user', text: '嗯' }],
+    });
+    s.session.end();
+  });
+
+  it('keeps the analyzer off without the affect config or when it is disabled', async () => {
+    const { inputs, client } = recordingClient();
+    for (const overrides of [{ textClient: client }, { textClient: client, affect: { ...affectConfig, enabled: false } }]) {
+      const s = setup(overrides);
+      s.mocks[0]!.emit('userTranscript', '今天腰有点疼', true);
+      await vi.advanceTimersByTimeAsync(10);
+      s.session.end();
+    }
+    expect(inputs).toHaveLength(0);
+  });
+
+  it('does not analyze finals dropped during a memory-tool turn', async () => {
+    const { inputs, client } = recordingClient();
+    const s = setup({ textClient: client, affect: affectConfig });
+    // Narrow cast: the forget/decline wait state without driving a whole tool turn.
+    (s.session as unknown as { dropUserFinals: boolean }).dropUserFinals = true;
+    s.mocks[0]!.emit('userTranscript', '今天腰有点疼', true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(inputs).toHaveLength(0);
+    s.session.end();
+  });
+
+  it('logs a content-free affect summary once at session end', async () => {
+    const writes: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+    const { client } = recordingClient();
+    const s = setup({ textClient: client, affect: affectConfig });
+    s.mocks[0]!.emit('userTranscript', '今天腰有点疼，心里也闷', true);
+    await vi.advanceTimersByTimeAsync(10);
+    s.session.end();
+    s.session.end();
+    const summaries = writes
+      .map((line) => { try { return JSON.parse(line) as Record<string, unknown>; } catch { return null; } })
+      .filter((event): event is Record<string, unknown> => event?.event === 'affect_summary');
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      calls: 1, failures: 0, crisis: 0, exhaustedArmed: 0, exhaustedRevoked: 0,
+      emotionNeutral: 0, emotionHappy: 0, emotionSad: 1, emotionLove: 0,
+    });
+    expect(writes.join('')).not.toContain('腰');
+  });
+
+  it('resets the tracker when a forget rebuild starts', async () => {
+    const { client } = recordingClient();
+    const s = setup({ textClient: client, affect: affectConfig });
+    s.mocks[0]!.emit('userTranscript', '今天腰有点疼，心里也闷', true);
+    await vi.advanceTimersByTimeAsync(10);
+    const view = s.session as unknown as { affect: { card: unknown }; rebuild(reason: string, keepToolTurn?: boolean): Promise<void> };
+    expect(view.affect.card).not.toBeNull();
+    void view.rebuild('forget', true);
+    expect(view.affect.card).toBeNull();
+    await vi.advanceTimersByTimeAsync(10);
+    s.session.end();
   });
 });

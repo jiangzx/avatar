@@ -1,0 +1,54 @@
+{
+  "lines": {
+    "crisis": "可能有轻生念头或急症：认真接住，劝找家人或叫急救，不转话题。",
+    "mood": { "low": "对方很低落。", "sad": "对方有点难过。", "happy": "对方心情不错。", "love": "对方感到温暖亲近。", "neutral": "对方情绪平稳。" },
+    "trend": { "better": "比刚才好转。", "worse": "比刚才变差。" },
+    "need": {
+      "vent": "想倾诉：多听，少提问。",
+      "share_joy": "想分享喜事：跟着高兴。",
+      "help": "想求助：做不到就直说。",
+      "chat": "想随便聊聊：轻松接话。",
+      "topic_exhausted": "话题聊干了：别再追问。"
+    },
+    "strategy": {
+      "comfort": "先安慰，语气放软。",
+      "reflect": "用一句话点出感受，别逐字复述。",
+      "affirm": "肯定对方的感受。",
+      "ask": "可以问一个开放的小问题。",
+      "disclose": "可以说说你自己的感受。",
+      "suggest": "可以轻轻给个小建议，不说教。"
+    },
+    "mismatch": "嘴上说没事，心里可能难受。",
+    "exhaustedHint": "若对方仍只简短回应：换个轻松话头或说说自己、表达好奇，只换一次。",
+    "tail": "以上别念出来；不要说出情绪名称，用语气和内容表现。"
+  },
+  "declinePhrases": ["不想聊这个", "不想聊了", "不想说这个", "不想说了", "别问了", "不要问了", "算了"],
+  "solarTerms": [
+    { "name": "小寒", "month": 1, "day": 5 },
+    { "name": "大寒", "month": 1, "day": 20 },
+    { "name": "立春", "month": 2, "day": 4 },
+    { "name": "雨水", "month": 2, "day": 19 },
+    { "name": "惊蛰", "month": 3, "day": 5 },
+    { "name": "春分", "month": 3, "day": 20 },
+    { "name": "清明", "month": 4, "day": 4 },
+    { "name": "谷雨", "month": 4, "day": 20 },
+    { "name": "立夏", "month": 5, "day": 5 },
+    { "name": "小满", "month": 5, "day": 21 },
+    { "name": "芒种", "month": 6, "day": 5 },
+    { "name": "夏至", "month": 6, "day": 21 },
+    { "name": "小暑", "month": 7, "day": 7 },
+    { "name": "大暑", "month": 7, "day": 22 },
+    { "name": "立秋", "month": 8, "day": 7 },
+    { "name": "处暑", "month": 8, "day": 23 },
+    { "name": "白露", "month": 9, "day": 7 },
+    { "name": "秋分", "month": 9, "day": 22 },
+    { "name": "寒露", "month": 10, "day": 8 },
+    { "name": "霜降", "month": 10, "day": 23 },
+    { "name": "立冬", "month": 11, "day": 7 },
+    { "name": "小雪", "month": 11, "day": 22 },
+    { "name": "大雪", "month": 12, "day": 7 },
+    { "name": "冬至", "month": 12, "day": 21 }
+  ],
+  "seasons": { "spring": "春天", "summer": "夏天", "autumn": "秋天", "winter": "冬天" },
+  "timeOfDay": { "morning": "早上", "noon": "中午", "afternoon": "下午", "evening": "傍晚", "night": "夜里" }
+}

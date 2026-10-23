@@ -17,6 +17,7 @@ import type { TextModelClient } from '../memory/textClient.ts';
 import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
+import { AffectTracker, affectSummaryFields, type AffectConfig } from './affect.ts';
 import type { TranscriptWriter } from '../memory/writer.ts';
 import { DEFAULT_I18N } from '../i18n/load.ts';
 import { containsPhrase } from '../i18n/text.ts';
@@ -113,6 +114,8 @@ export interface SessionDeps {
   now?: () => number;
   /** Emotion lexicon (gateway/config/emotion.json); undefined = no avatar.emotion messages. */
   emotion?: EmotionConfig;
+  /** Affect analyzer (gateway/config/affect.json). Runs only with a textClient and enabled=true. */
+  affect?: AffectConfig;
   /** Optional. flush() returns immediately when this is absent. */
   writer?: TranscriptWriter;
   /** Optional. Dev sessions omit this, so turns and silence do not enqueue extraction. */
@@ -177,6 +180,8 @@ export class Session {
   private transport: Transport | null = null;
   private readonly director: Director;
   private readonly emotion: EmotionTagger | null;
+  /** Null without a text model client or when affect.json disables it: lexicon-only emotion, as before. */
+  private readonly affect: AffectTracker | null;
   private readonly interrupt: InterruptCoordinator;
   private readonly actions = new ActionRouter();
   /** One registry per language; recall copy and tool handling follow the current language. */
@@ -303,6 +308,19 @@ export class Session {
       this.language,
     );
     this.emotion = deps.emotion ? new EmotionTagger(deps.emotion, (emotion) => this.send({ type: 'avatar.emotion', emotion })) : null;
+    const affectConfig = deps.affect;
+    this.affect = deps.textClient && affectConfig?.enabled
+      ? new AffectTracker({
+          client: deps.textClient,
+          config: affectConfig,
+          prompt: (language) => deps.roles.affectPrompt(language),
+          history: () => this.ledger.recent,
+          evidence: this.i18n.evidence,
+          safety: this.i18n.safety,
+          // Accepted cards stay on the tracker (this.affect.card); nothing reacts to them yet.
+          onCard: () => {},
+        })
+      : null;
     this.interrupt = new InterruptCoordinator({
       confirmWindowMs: deps.confirmWindowMs ?? 300,
       cancel: (seq, source) => this.cancel(seq, source),
@@ -536,6 +554,10 @@ export class Session {
     this.stopKeepalive();
     this.director.stop();
     this.emotion?.dispose();
+    if (this.affect) {
+      log('affect_summary', affectSummaryFields(this.affect.summary()));
+      this.affect.dispose();
+    }
     this.interrupt.dispose();
     this.adapter.removeAllListeners();
     this.adapter.close();
@@ -971,6 +993,11 @@ export class Session {
     }
     this.director.onUserFinal(text);
     this.emotion?.onUserFinal(text);
+    // Same whole-utterance light check as the Director; light replies never cost a model call.
+    if (this.affect) {
+      if (this.director.isLightFinal(text)) this.affect.onLightFinal(text, this.language);
+      else this.affect.onUserFinal(text, this.language);
+    }
     const action = this.actions.fromKeyword(text);
     if (action) this.send({ type: 'avatar.action', action, source: 'keyword' });
     this.maybeSummarize();
@@ -1230,7 +1257,11 @@ export class Session {
     let connected = false;
     let bridge = false;
     try {
-      if (reason === 'forget' || reason === 'decline') this.refreshMemorySnapshot();
+      if (reason === 'forget' || reason === 'decline') {
+        // The store just dropped user content; the analyzer must not keep its own copy.
+        this.affect?.reset();
+        this.refreshMemorySnapshot();
+      }
       await this.adapter.connect(this.sessionConfig());
       connected = true;
       // connect() carried the latest instructions and voice; nothing is left to push.

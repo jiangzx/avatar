@@ -739,3 +739,25 @@ describe('Director', () => {
     expect(reqs.at(-1)?.cue).toBe('followup');
   });
 });
+
+describe('Director light-reply check', () => {
+  it('reports whole-utterance light replies without touching state', () => {
+    const { d, calls } = make();
+    expect(d.isLightFinal('嗯。')).toBe(true);
+    expect(d.isLightFinal(' 好的！')).toBe(true);
+    expect(d.isLightFinal('。。')).toBe(true);
+    expect(d.isLightFinal('好的，我明天去复查')).toBe(false);
+    expect(d.isLightFinal('别说了')).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it('uses the current language pack', () => {
+    const en: DirectorConfig = { ...cfg, lightPhrases: ['ok', 'got it'] };
+    const d = new Director((language) => language === 'en' ? en : cfg, { requestResponse: () => {} });
+    expect(d.isLightFinal('ok.')).toBe(false);
+    d.setLanguage('en');
+    expect(d.isLightFinal('ok.')).toBe(true);
+    expect(d.isLightFinal('Got it')).toBe(false); // the Director check is case-sensitive; unchanged
+    expect(d.isLightFinal('got it')).toBe(true);
+  });
+});

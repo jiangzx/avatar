@@ -40,7 +40,7 @@ const TopicsSchema = z.array(z.object({
   fallbackText: z.string().min(1).max(60),
 }).strict()).min(1).max(50);
 
-export interface SharedText { safety: string; actions: string; extract: string; recall: string }
+export interface SharedText { safety: string; actions: string; extract: string; recall: string; affect: string }
 interface LoadedStyle { text: string; voice: string | undefined }
 interface LoadedActivity { title: string; summary: string; text: string }
 interface LoadedLanguage {
@@ -85,6 +85,7 @@ export class FileRoleCatalog implements RoleCatalog {
         actions: readShared('actions'),
         extract: readShared('extract'),
         recall: readShared('recall'),
+        affect: readShared('affect'),
       });
     }
     const roles = new Map<string, LoadedRole>();
@@ -137,6 +138,10 @@ export class FileRoleCatalog implements RoleCatalog {
 
   recallPrompt(language = this.defaultLanguage(this.fallbackRole)): string {
     return this.sharedFor(language).recall;
+  }
+
+  affectPrompt(language = this.defaultLanguage(this.fallbackRole)): string {
+    return this.sharedFor(language).affect;
   }
 
   pairs(): Array<{ roleId: string; styleId: string }> {

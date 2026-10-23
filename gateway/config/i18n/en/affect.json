@@ -1,0 +1,54 @@
+{
+  "lines": {
+    "crisis": "Possible danger: urge family or emergency help.",
+    "mood": { "low": "Feeling low.", "sad": "A bit sad.", "happy": "Feeling good.", "love": "Feeling close.", "neutral": "Calm." },
+    "trend": { "better": "Better now.", "worse": "Worse now." },
+    "need": {
+      "vent": "Wants to vent: listen.",
+      "share_joy": "Sharing joy: be glad.",
+      "help": "Wants help.",
+      "chat": "Light chat.",
+      "topic_exhausted": "Topic ran dry."
+    },
+    "strategy": {
+      "comfort": "Comfort softly.",
+      "reflect": "Name the feeling; don't echo.",
+      "affirm": "Affirm it.",
+      "ask": "One small question.",
+      "disclose": "Share a bit of yourself.",
+      "suggest": "One gentle idea."
+    },
+    "mismatch": "Says fine; may hurt.",
+    "exhaustedHint": "If replies stay brief, switch once to a light topic.",
+    "tail": "Internal; don't read out or name emotions."
+  },
+  "declinePhrases": ["don't want to talk about", "rather not talk", "stop asking", "never mind", "drop it"],
+  "solarTerms": [
+    { "name": "Minor Cold", "month": 1, "day": 5 },
+    { "name": "Major Cold", "month": 1, "day": 20 },
+    { "name": "Start of Spring", "month": 2, "day": 4 },
+    { "name": "Rain Water", "month": 2, "day": 19 },
+    { "name": "Awakening of Insects", "month": 3, "day": 5 },
+    { "name": "Spring Equinox", "month": 3, "day": 20 },
+    { "name": "Clear and Bright", "month": 4, "day": 4 },
+    { "name": "Grain Rain", "month": 4, "day": 20 },
+    { "name": "Start of Summer", "month": 5, "day": 5 },
+    { "name": "Grain Buds", "month": 5, "day": 21 },
+    { "name": "Grain in Ear", "month": 6, "day": 5 },
+    { "name": "Summer Solstice", "month": 6, "day": 21 },
+    { "name": "Minor Heat", "month": 7, "day": 7 },
+    { "name": "Major Heat", "month": 7, "day": 22 },
+    { "name": "Start of Autumn", "month": 8, "day": 7 },
+    { "name": "End of Heat", "month": 8, "day": 23 },
+    { "name": "White Dew", "month": 9, "day": 7 },
+    { "name": "Autumn Equinox", "month": 9, "day": 22 },
+    { "name": "Cold Dew", "month": 10, "day": 8 },
+    { "name": "Frost's Descent", "month": 10, "day": 23 },
+    { "name": "Start of Winter", "month": 11, "day": 7 },
+    { "name": "Minor Snow", "month": 11, "day": 22 },
+    { "name": "Major Snow", "month": 12, "day": 7 },
+    { "name": "Winter Solstice", "month": 12, "day": 21 }
+  ],
+  "seasons": { "spring": "spring", "summer": "summer", "autumn": "autumn", "winter": "winter" },
+  "timeOfDay": { "morning": "morning", "noon": "noon", "afternoon": "afternoon", "evening": "evening", "night": "night" }
+}

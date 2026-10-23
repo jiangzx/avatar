@@ -13,6 +13,7 @@ import {
   type EmotionLexicon,
 } from './emotion.ts';
 import type {
+  AffectCopy,
   EvidenceRules,
   I18nBundle,
   LanguageRules,
@@ -96,6 +97,43 @@ const SilenceFileSchema = z.object({
   listening: PhraseList,
   anytime: PhraseList,
   maxCheckinChars: z.number().int().min(1).max(500),
+}).strict();
+
+const AffectLine = z.string().min(1).max(200);
+/** Leap-year February so 2/29 is accepted; approximate dates never need it. */
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+const dateKey = (term: { month: number; day: number }) => term.month * 100 + term.day;
+
+const SolarTermSchema = z.object({
+  name: z.string().min(1).max(30),
+  month: z.number().int().min(1).max(12),
+  day: z.number().int().min(1).max(31),
+}).strict().refine((term) => term.day <= DAYS_IN_MONTH[term.month - 1]!, { message: 'day out of range' });
+
+const AffectFileSchema = z.object({
+  lines: z.object({
+    crisis: AffectLine,
+    mood: z.object({ low: AffectLine, sad: AffectLine, happy: AffectLine, love: AffectLine, neutral: AffectLine }).strict(),
+    trend: z.object({ better: AffectLine, worse: AffectLine }).strict(),
+    need: z.object({
+      vent: AffectLine, share_joy: AffectLine, help: AffectLine, chat: AffectLine, topic_exhausted: AffectLine,
+    }).strict(),
+    strategy: z.object({
+      comfort: AffectLine, reflect: AffectLine, affirm: AffectLine, ask: AffectLine, disclose: AffectLine, suggest: AffectLine,
+    }).strict(),
+    mismatch: AffectLine,
+    exhaustedHint: AffectLine,
+    tail: AffectLine,
+  }).strict(),
+  declinePhrases: PhraseList,
+  // Calendar order with unique names, so a date lookup never depends on file order quirks.
+  solarTerms: z.array(SolarTermSchema).length(24)
+    .refine((terms) => terms.every((term, i) => i === 0 || dateKey(term) > dateKey(terms[i - 1]!)), { message: 'solar terms out of order' })
+    .refine((terms) => new Set(terms.map((term) => term.name)).size === terms.length, { message: 'duplicate solar term' }),
+  seasons: z.object({ spring: AffectLine, summer: AffectLine, autumn: AffectLine, winter: AffectLine }).strict(),
+  timeOfDay: z.object({
+    morning: AffectLine, noon: AffectLine, afternoon: AffectLine, evening: AffectLine, night: AffectLine,
+  }).strict(),
 }).strict();
 
 type LanguageFile = z.infer<typeof LanguageFileSchema>;
@@ -224,6 +262,20 @@ function loadSilence(configRoot: string): Record<Language, SilenceRules> {
   return rules;
 }
 
+/** Every pack must name the same 24 dates, so a solar term never moves with the language. */
+function loadAffect(configRoot: string): Record<Language, AffectCopy> {
+  const copy = {} as Record<Language, AffectCopy>;
+  for (const language of LANGUAGES) copy[language] = parseFile(AffectFileSchema, configRoot, language, 'affect');
+  const reference = copy.zh.solarTerms;
+  for (const language of LANGUAGES) {
+    const terms = copy[language].solarTerms;
+    if (terms.some((term, i) => dateKey(term) !== dateKey(reference[i]!))) {
+      throw new Error(`i18n_affect_parity:${language}:solarTerms`);
+    }
+  }
+  return copy;
+}
+
 /** Load and validate every language pack plus the shared scan lists. Fails fast on any gap. */
 export function loadI18n(configRoot: string): I18nBundle {
   const language = mergeLanguageRules(loadLanguageFiles(configRoot));
@@ -252,7 +304,7 @@ export function loadI18n(configRoot: string): I18nBundle {
   const safety = mergeSafety(loadSharedSafety(join(configRoot, 'safety.json')), loadSafety(configRoot));
   const emotion = mergeEmotion(loadSharedEmotion(join(configRoot, 'emotion.json')), loadEmotion(configRoot));
 
-  return { language, memory, evidence, recentQueries, safety, emotion, silence: loadSilence(configRoot) };
+  return { language, memory, evidence, recentQueries, safety, emotion, silence: loadSilence(configRoot), affect: loadAffect(configRoot) };
 }
 
 /** Loaded once for tests and default parameters; production startup calls loadI18n explicitly. */
