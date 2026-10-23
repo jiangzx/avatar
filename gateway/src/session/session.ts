@@ -1566,6 +1566,8 @@ export class Session {
       { timeoutMs: care.timeoutMs, maxChars: care.maxChars[language], maxTokens: care.maxTokens, temperature: care.temperature },
       this.i18n.safety,
     ).then((line) => {
+      // end() may race the model: never touch a disposed session.
+      if (this.ended) return;
       const ms = this.now() - startedAt;
       if (!line) {
         log('care_opening', { outcome: 'failed', ms });

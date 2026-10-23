@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 /**
  * Ordered schema steps; step i brings PRAGMA user_version to i + 1.
- * Append only: never edit a shipped step. Plan C appends step 1 (memory tables); Plan D may append step 2 for activities.
+ * Append only: never edit a shipped step. Current steps end at 5 (memory tables, then Plan 4 care quote).
  */
 export const MIGRATIONS: readonly string[] = [
   `
