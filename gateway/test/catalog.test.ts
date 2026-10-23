@@ -9,6 +9,10 @@ const director = {
 } satisfies DirectorConfig;
 
 describe('fixedRoleCatalog', () => {
+  it('stubs the care prompt', () => {
+    expect(fixedRoleCatalog('P', director).carePrompt()).toBe('FIXTURE CARE');
+  });
+
   it('exposes the default role with both stub styles sharing one persona', () => {
     const roles = fixedRoleCatalog('P', director);
     expect(roles.defaultRole()).toBe(DEFAULT_ROLE);

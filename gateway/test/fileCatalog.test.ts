@@ -118,6 +118,20 @@ describe('FileRoleCatalog', () => {
     expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:extract/);
   });
 
+  it('rejects a missing shared care prompt', () => {
+    const dir = copyFixtures();
+    rmSync(join(dir, '_shared', 'ja', 'care.md'));
+    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:care/);
+  });
+
+  it('reads the care prompt per language', () => {
+    const fixture = loadRoleCatalog(fixtures, 'test-role');
+    expect(fixture.carePrompt('zh')).toBe('FIXTURE CARE ZH');
+    expect(fixture.carePrompt('ja')).toBe('FIXTURE CARE JA');
+    const shipped = loadRoleCatalog(`${root}roles`);
+    for (const language of ['zh', 'ja', 'en'] as const) expect(shipped.carePrompt(language)).toContain('userLine');
+  });
+
   it('reports a missing shared directory with the language', () => {
     const dir = copyFixtures();
     rmSync(join(dir, '_shared', 'ja'), { recursive: true, force: true });

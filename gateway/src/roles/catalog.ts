@@ -17,6 +17,8 @@ export interface RoleCatalog {
   extractPrompt(language?: Language): string;
   /** Shared recall-phrasing system prompt for this language. */
   recallPrompt(language?: Language): string;
+  /** Shared care-opening system prompt for this language. */
+  carePrompt(language?: Language): string;
   /** Shared affect-analyzer system prompt for this language. */
   affectPrompt(language?: Language): string;
   pairs(): Array<{ roleId: string; styleId: string }>;
@@ -67,6 +69,7 @@ export function fixedRoleCatalog(
     director: (_roleId, language = defaultLanguage) => directors[language] ?? director,
     extractPrompt: () => 'FIXTURE EXTRACT',
     recallPrompt: () => 'FIXTURE RECALL',
+    carePrompt: () => 'FIXTURE CARE',
     affectPrompt: () => 'FIXTURE AFFECT',
     pairs: () => STUB_STYLES.map((styleId) => ({ roleId: DEFAULT_ROLE, styleId })),
   };
