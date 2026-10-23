@@ -1,28 +1,42 @@
-// Usage (from gateway/): node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter mock|qwen [--style grandchild|old-friend] [--only id1,id2] [--out ../docs/testing/plan-a-eval/<file>.md]
-// Scenarios are zh-only; multilingual behavior is covered by gateway/test/multilingual.test.ts.
-import { writeFileSync } from 'node:fs';
+// Usage (from gateway/): node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter mock|qwen [--style grandchild|old-friend] [--only id1,id2]
+//   [--scenarios ../docs/testing/<set>/scenarios.json] [--judge ../docs/testing/<set>/rubric.md] [--out ../docs/testing/<set>/<file>.md|.json]
+// Default scenarios: docs/testing/plan-a-eval (the only gated set). Scenarios are zh-only; multilingual behavior is covered by gateway/test/multilingual.test.ts.
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MockAdapter, loadMockScript } from '../src/adapters/mock.ts';
 import { QwenAdapter } from '../src/adapters/qwen.ts';
 import { loadConfig } from '../src/config.ts';
-import { parseEvalArgs, resolveEvalOut } from '../src/eval/cli.ts';
-import { loadEvalConfig, loadScenarios, renderReport, runScenario, summarize, type ReplyRecord, type SessionMaker } from '../src/eval/harness.ts';
+import { evalExitCode, isGatedSet, parseEvalArgs, planOutput, resolveEvalOut, resolveTestingPath } from '../src/eval/cli.ts';
+import { buildEvalResults, loadEvalConfig, loadScenarios, renderReport, runScenario, summarize, toJudgeInput, type ScenarioOutcome, type SessionMaker } from '../src/eval/harness.ts';
+import { judgeScenario, type JudgeScores } from '../src/eval/judge.ts';
 import { loadI18n } from '../src/i18n/load.ts';
+import { QwenTextClient } from '../src/memory/textClient.ts';
 import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from '../src/session/pacing.ts';
 import { Session } from '../src/session/session.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const usage = 'usage: eval.ts --adapter mock|qwen [--style id] [--only id1,id2] [--out ../docs/testing/<file>.md]';
+const repoRoot = path.resolve(root, '..');
+const testingDir = path.resolve(root, '../docs/testing');
+const planAScenarios = path.join(testingDir, 'plan-a-eval/scenarios.json');
+const usage = 'usage: eval.ts --adapter mock|qwen [--style id] [--only id1,id2] [--scenarios ../docs/testing/<set>/scenarios.json] [--judge ../docs/testing/<set>/rubric.md] [--out ../docs/testing/<file>.md|.json]';
 const fail = (msg: string): never => { process.stderr.write(`error: ${msg}\n${usage}\n`); return process.exit(2); };
 let args: ReturnType<typeof parseEvalArgs> = {};
 let outPath: string | undefined;
+let scenariosPath = planAScenarios;
+let rubricPath: string | undefined;
+let outFormat: 'md' | 'json' | null = null;
 try {
   args = parseEvalArgs(process.argv.slice(2));
-  if (args.out !== undefined) outPath = resolveEvalOut(args.out, path.resolve(root, '../docs/testing'));
+  if (args.out !== undefined) outPath = resolveEvalOut(args.out, testingDir);
+  if (args.scenarios !== undefined) scenariosPath = resolveTestingPath('--scenarios', args.scenarios, testingDir, ['.json']);
+  if (args.judge !== undefined) rubricPath = resolveTestingPath('--judge', args.judge, testingDir, ['.md']);
+  outFormat = planOutput({ ...(outPath !== undefined ? { outPath } : {}), gated: isGatedSet(scenariosPath, planAScenarios), judging: rubricPath !== undefined });
 } catch (e) { fail((e as Error).message); }
+const gated = isGatedSet(scenariosPath, planAScenarios);
 const adapter = args.adapter ?? 'mock';
 if (adapter !== 'mock' && adapter !== 'qwen') fail('--adapter must be mock or qwen');
 
@@ -42,7 +56,28 @@ const report = validateBudgets(pacing, memoryConfig, config.ledger, personasByLa
 const evalCfg = loadEvalConfig(`${root}config/eval.json`);
 const script = loadMockScript(`${root}mock/script.json`);
 const only = args.only;
-const scenarios = loadScenarios(`${root}../docs/testing/plan-a-eval/scenarios.json`).filter((s) => !only || only.includes(s.id));
+const scenarios = loadScenarios(scenariosPath).filter((s) => !only || only.includes(s.id));
+
+// Same shared text client as src/index.ts: the silence planner uses it in real sessions, the judge scores with it.
+const textModel = memoryConfig.extractModel ?? 'qwen-plus';
+const textClient = config.qwenApiKey && config.summarizerEndpoint
+  ? new QwenTextClient({ apiKey: config.qwenApiKey, endpoint: config.summarizerEndpoint, model: textModel })
+  : null;
+if (rubricPath !== undefined && !textClient) fail('--judge needs DASHSCOPE_API_KEY and QWEN_SUMMARIZER_ENDPOINT');
+if (rubricPath !== undefined && !config.summarizerEndpoint.startsWith('https://')) fail('QWEN_SUMMARIZER_ENDPOINT must use https');
+const rubric = rubricPath !== undefined ? readFileSync(rubricPath, 'utf8') : null;
+
+// Results record the code they measured; read before the results file exists.
+let commit = 'unknown';
+let dirty = false;
+if (outFormat === 'json') {
+  try {
+    commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+    dirty = execFileSync('git', ['status', '--porcelain'], { cwd: repoRoot, encoding: 'utf8' }).trim().length > 0;
+  } catch {
+    fail('git is required to record the commit hash');
+  }
+}
 
 const make: SessionMaker = (onReplyMetrics) => new Session({
   adapterFactory: () => adapter === 'qwen'
@@ -51,6 +86,7 @@ const make: SessionMaker = (onReplyMetrics) => new Session({
   summarizer: new MockSummarizer(),
   roles,
   ledger: config.ledger,
+  ...(adapter !== 'mock' && textClient ? { textClient } : {}),
   modelOwnsTurns: adapter === 'qwen',
   budget: report.budget,
   budgets: report.budgets,
@@ -72,15 +108,38 @@ const make: SessionMaker = (onReplyMetrics) => new Session({
   onReplyMetrics,
 }, { roleId, styleId, voice: roles.voiceFor(roleId, styleId) });
 
-const records: ReplyRecord[] = [];
+const outcomes: ScenarioOutcome[] = [];
 for (const s of scenarios) {
+  // Ids only: never print scenario text or replies.
   process.stderr.write(`scenario ${s.id}\n`);
-  records.push(...(await runScenario(make, s, evalCfg)));
+  const records = await runScenario(make, s, evalCfg);
+  let scores: JudgeScores | null = null;
+  if (rubric !== null && textClient) {
+    scores = await judgeScenario(textClient, rubric, toJudgeInput(s, records), evalCfg.judge.policy, undefined, {
+      maxTokens: evalCfg.judge.maxTokens,
+      temperature: evalCfg.judge.temperature,
+    });
+    if (!scores) process.stderr.write(`judge_failed ${s.id}\n`);
+  }
+  outcomes.push({ scenario: s, records, scores });
 }
+const records = outcomes.flatMap((o) => o.records);
 const summary = summarize(records, evalCfg.gate);
-const md = renderReport(summary, records, { adapter, style: styleId, date: new Date().toISOString().slice(0, 10) });
-if (outPath) writeFileSync(outPath, md);
-process.stdout.write(`${JSON.stringify(summary)}\n`);
+const date = new Date().toISOString().slice(0, 10);
+const results = buildEvalResults({
+  commit,
+  dirty,
+  date,
+  adapter,
+  style: styleId,
+  scenarioFile: path.relative(repoRoot, scenariosPath),
+  rubricFile: rubricPath !== undefined ? path.relative(repoRoot, rubricPath) : null,
+  judgeModel: rubric !== null ? textModel : null,
+}, outcomes, summary, gated);
+if (outPath && outFormat === 'md') writeFileSync(outPath, renderReport(summary, records, { adapter, style: styleId, date }));
+if (outPath && outFormat === 'json') writeFileSync(outPath, `${JSON.stringify(results, null, 2)}\n`);
+const line = gated ? { ...summary } : { ...results.summary };
+process.stdout.write(`${JSON.stringify(results.judge ? { ...line, judge: results.judge } : line)}\n`);
 if (scenarios.length === 0) process.stderr.write('error: no scenarios matched\n');
 if (summary.failure) process.stderr.write(`error: ${summary.failure}\n`);
-process.exit(scenarios.length > 0 && !summary.failure && summary.pass.questionRatio && summary.pass.avgChars ? 0 : 1);
+process.exit(evalExitCode({ scenarioCount: scenarios.length, failure: summary.failure, gated, pass: summary.pass, judgeFailures: results.judge?.failures ?? 0 }));

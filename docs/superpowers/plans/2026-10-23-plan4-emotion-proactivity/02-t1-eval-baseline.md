@@ -64,7 +64,7 @@ export function summarizeScores(rows: readonly JudgeScores[]): JudgeScores; // p
 
 ---
 
-- [ ] **Step 1: 确认前置**
+- [x] **Step 1: 确认前置**
 
 在仓库根目录执行：
 
@@ -78,7 +78,7 @@ git log --oneline b7c9a97..HEAD -- gateway/scripts/eval.ts gateway/src/eval
 
 期望：两行 `ok`/命中，`push` 段存在，`SessionDeps` 有 `push?:`。最后一条列出的提交（如有）只能来自 T0；如果 T0 已经在 `gateway/scripts/eval.ts` 里加了 `push: pacing.push`，Step 10 的完整版本已经包含这一行，不要重复。任何一项不满足：T0 没合入，停止本任务并报告。
 
-- [ ] **Step 2: 写评委的失败测试**
+- [x] **Step 2: 写评委的失败测试**
 
 创建 `gateway/test/judge.test.ts`：
 
@@ -216,7 +216,7 @@ describe('summarizeScores', () => {
 });
 ````
 
-- [ ] **Step 3: 运行，确认失败**
+- [x] **Step 3: 运行，确认失败**
 
 ```bash
 npx vitest run --root gateway test/judge.test.ts
@@ -224,7 +224,7 @@ npx vitest run --root gateway test/judge.test.ts
 
 期望：FAIL，原因是无法加载 `../src/eval/judge.ts`。
 
-- [ ] **Step 4: 实现 `judge.ts`**
+- [x] **Step 4: 实现 `judge.ts`**
 
 创建 `gateway/src/eval/judge.ts`：
 
@@ -298,7 +298,7 @@ export function summarizeScores(rows: readonly JudgeScores[]): JudgeScores {
 }
 ````
 
-- [ ] **Step 5: 运行，确认评委逻辑通过**
+- [x] **Step 5: 运行，确认评委逻辑通过**
 
 ```bash
 npx vitest run --root gateway test/judge.test.ts
@@ -306,7 +306,7 @@ npx vitest run --root gateway test/judge.test.ts
 
 期望：10 passed、1 failed。唯一失败的是 `ships a rubric that names every dimension and asks for JSON only`，原因是 `ENOENT ... plan4-empathy-eval/rubric.md`，Step 9 写入后会通过。其他失败都要先修好再继续。
 
-- [ ] **Step 6: 写 harness 与 CLI 的失败测试**
+- [x] **Step 6: 写 harness 与 CLI 的失败测试**
 
 用下面的完整内容替换 `gateway/test/harness.test.ts`（保留了原有 5 个测试，断言不变，只在 `parses flags strictly` 中追加了新参数的断言）：
 
@@ -519,7 +519,7 @@ npx vitest run --root gateway test/harness.test.ts
 
 期望：FAIL。`ships 12 valid synthetic empathy scenarios` 报 `ENOENT`；`accepts silenceAfterMs ...` 报 `ZodError`（未知字段）；`keeps collecting proactive replies ...` 报 `expected 0 to be greater than or equal to 2`；`toJudgeInput is not a function`、`buildEvalResults is not a function`、`resolveTestingPath is not a function` 等。原有 4 个测试仍通过；`parses flags strictly` 因新断言报 `unknown flag --scenarios`（Step 8 才加这两个参数），这是预期。
 
-- [ ] **Step 7: 修改 `gateway/config/eval.json` 与 `harness.ts`**
+- [x] **Step 7: 修改 `gateway/config/eval.json` 与 `harness.ts`**
 
 `gateway/config/eval.json`，把最后的 `run` 行：
 
@@ -763,7 +763,7 @@ export function buildEvalResults(meta: EvalResultsMeta, outcomes: readonly Scena
 }
 ```
 
-- [ ] **Step 8: 替换 `gateway/src/eval/cli.ts`**
+- [x] **Step 8: 替换 `gateway/src/eval/cli.ts`**
 
 用下面的完整内容替换（`parseEvalArgs` 的严格解析规则不变，`resolveEvalOut` 改为委托 `resolveTestingPath`，错误信息仍含 `docs/testing`）：
 
@@ -840,7 +840,7 @@ export function evalExitCode(o: EvalOutcome): 0 | 1 {
 }
 ```
 
-- [ ] **Step 9: 写场景集与评分标准**
+- [x] **Step 9: 写场景集与评分标准**
 
 创建 `docs/testing/plan4-empathy-eval/scenarios.json`（全部是手写合成语句；覆盖悲伤 ×2（含转好）、喜事、抱怨、孤单、身体不适、嘴上说没事、话题聊干、长沉默、危机，加召回、否认 2 个回归；`silenceAfterMs` 20000 大约覆盖 context + check 两段，45000 覆盖 context/check/leave/checkin 四段，按 `director.json` 的 6s/8s/10s/10s 计算）：
 
@@ -1065,7 +1065,7 @@ export function evalExitCode(o: EvalOutcome): 0 | 1 {
 上面的数字只是格式示例，请按实际对话打分。
 ````
 
-- [ ] **Step 10: 接线 `gateway/scripts/eval.ts`**
+- [x] **Step 10: 接线 `gateway/scripts/eval.ts`**
 
 用下面的完整内容替换。相对现有版本的变化：`--scenarios` / `--judge` / JSON 输出；门槛只对 plan-a 集；JSON 结果记录 `git rev-parse HEAD` 与工作区是否干净（在写结果之前读取）；Qwen 会话注入共享 `textClient`（与 `src/index.ts` 第 97–103、130 行同一条件和模型）和 T0 的 `push`；进度行只打印场景 id。
 
@@ -1217,7 +1217,7 @@ if (summary.failure) process.stderr.write(`error: ${summary.failure}\n`);
 process.exit(evalExitCode({ scenarioCount: scenarios.length, failure: summary.failure, gated, pass: summary.pass, judgeFailures: results.judge?.failures ?? 0 }));
 ```
 
-- [ ] **Step 11: 运行目标测试，确认全部通过**
+- [x] **Step 11: 运行目标测试，确认全部通过**
 
 ```bash
 npx vitest run --root gateway test/judge.test.ts test/harness.test.ts test/questions.test.ts
@@ -1225,7 +1225,7 @@ npx vitest run --root gateway test/judge.test.ts test/harness.test.ts test/quest
 
 期望：3 个文件全部通过（judge 11 项、harness 13 项，questions 原样通过，说明新的 `judge` 配置段能被 `loadEvalConfig` 读入）。沉默测试用真实计时，约 3 秒；连续跑 3 次都应通过，偶发失败要查 Director 阶梯，不要放宽断言。
 
-- [ ] **Step 12: Mock 冒烟（不调用真实模型）**
+- [x] **Step 12: Mock 冒烟（不调用真实模型）**
 
 在 `gateway/` 下执行。`APP_SECRET` 只为通过 `loadConfig` 校验，Mock 不使用它：
 
@@ -1261,7 +1261,7 @@ cd ..
 
 期望：最后一行仍是原来的完整 summary（含 `avgChars`、`pass`），`exit=0`。
 
-- [ ] **Step 13: 全量回归**
+- [x] **Step 13: 全量回归**
 
 ```bash
 npm test -w gateway
@@ -1271,7 +1271,7 @@ git diff --check
 
 期望：gateway 全部测试通过、0 失败；typecheck 无输出错误；`git diff --check` 无输出。把实际的文件数/测试数写进任务报告。
 
-- [ ] **Step 14: 提交代码**
+- [x] **Step 14: 提交代码**
 
 ```bash
 git add gateway/src/eval/judge.ts gateway/src/eval/harness.ts gateway/src/eval/cli.ts gateway/scripts/eval.ts gateway/config/eval.json gateway/test/judge.test.ts gateway/test/harness.test.ts docs/testing/plan4-empathy-eval/scenarios.json docs/testing/plan4-empathy-eval/rubric.md docs/superpowers/plans/2026-10-23-plan4-emotion-proactivity/02-t1-eval-baseline.md

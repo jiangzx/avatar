@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AI_SAMPLE_RATE, type ResponseKind, type ServerMessage } from '@anyidea/protocol';
 import type { ReplyMetrics } from '../session/metrics.ts';
 import type { Session, Transport } from '../session/session.ts';
+import { summarizeScores, type JudgeInput, type JudgeScores } from './judge.ts';
 import { countQuestions, type QuestionRule } from './questions.ts';
 
 const EvalConfigSchema = z.object({
@@ -20,6 +21,16 @@ const EvalConfigSchema = z.object({
     replyTimeoutMs: z.number().int().min(100).max(120_000),
     progressEveryMs: z.number().int().min(10).max(5_000),
   }).strict(),
+  judge: z.object({
+    maxTokens: z.number().int().min(50).max(2_000),
+    temperature: z.number().min(0).max(1),
+    policy: z.object({
+      timeoutMs: z.number().int().min(1_000).max(120_000),
+      retries: z.number().int().min(0).max(3),
+      backoffMs: z.number().int().min(0).max(30_000),
+      maxBackoffMs: z.number().int().min(0).max(60_000),
+    }).strict().refine((p) => p.maxBackoffMs >= p.backoffMs, { message: 'maxBackoffMs must be >= backoffMs' }),
+  }).strict(),
 }).strict();
 export type EvalConfig = z.infer<typeof EvalConfigSchema>;
 
@@ -32,6 +43,8 @@ const ScenarioSchema = z.object({
   title: z.string().min(1).max(40),
   turns: z.array(z.string().min(1).max(200)).min(1).max(10),
   mentions: z.array(z.string().min(1)).optional(),
+  /** After the last turn, keep collecting proactive replies for this long (silence ladder). */
+  silenceAfterMs: z.number().int().min(1_000).max(60_000).optional(),
 }).strict();
 export type EvalScenario = z.infer<typeof ScenarioSchema>;
 
@@ -108,6 +121,17 @@ async function simulatePlayback(session: Session, seq: number, audioMs: number, 
   session.handleClientMessage({ type: 'playback.stopped', responseSeq: seq, playedMs: Math.round(audioMs), reason: 'ended' });
 }
 
+type ResponseStart = Extract<ServerMessage, { type: 'response.start' }>;
+
+/** Plays one started response to its end, like the client would. */
+async function playOne(session: Session, t: SimTransport, run: EvalConfig['run'], start: ResponseStart, sentAt: number | null): Promise<Played> {
+  const seq = start.responseSeq;
+  const end = await t.next((m) => (m.type === 'response.end' || m.type === 'response.cancelled') && m.responseSeq === seq, run.replyTimeoutMs);
+  if (end?.type === 'response.end') await simulatePlayback(session, seq, t.audioMs.get(seq) ?? 0, run);
+  const first = t.firstAudioAt.get(seq);
+  return { seq, kind: start.kind, firstAudioMs: first !== undefined && sentAt !== null ? first - sentAt : null };
+}
+
 /** Plays every response of one exchange (a tool continuation may follow within settleMs). */
 async function playResponses(session: Session, t: SimTransport, run: EvalConfig['run'], sentAt: number | null): Promise<Played[]> {
   const out: Played[] = [];
@@ -115,12 +139,21 @@ async function playResponses(session: Session, t: SimTransport, run: EvalConfig[
   for (;;) {
     const start = await t.next((m) => m.type === 'response.start', wait);
     if (!start || start.type !== 'response.start') return out;
-    const seq = start.responseSeq;
-    const end = await t.next((m) => (m.type === 'response.end' || m.type === 'response.cancelled') && m.responseSeq === seq, run.replyTimeoutMs);
-    if (end?.type === 'response.end') await simulatePlayback(session, seq, t.audioMs.get(seq) ?? 0, run);
-    const first = t.firstAudioAt.get(seq);
-    out.push({ seq, kind: start.kind, firstAudioMs: first !== undefined && sentAt !== null ? first - sentAt : null });
+    out.push(await playOne(session, t, run, start, sentAt));
     wait = run.settleMs;
+  }
+}
+
+/** The user stays silent: plays every response that starts within windowMs (the Director's proactive lines). */
+async function playSilence(session: Session, t: SimTransport, run: EvalConfig['run'], windowMs: number): Promise<Played[]> {
+  const out: Played[] = [];
+  const deadline = Date.now() + windowMs;
+  for (;;) {
+    const left = deadline - Date.now();
+    if (left <= 0) return out;
+    const start = await t.next((m) => m.type === 'response.start', left);
+    if (!start || start.type !== 'response.start') return out;
+    out.push(await playOne(session, t, run, start, null));
   }
 }
 
@@ -150,6 +183,8 @@ export async function runScenario(make: SessionMaker, scenario: EvalScenario, cf
       session.handleClientMessage({ type: 'debug.userText', text: scenario.turns[i]! });
       collect(i + 1, await playResponses(session, t, cfg.run, sentAt));
     }
+    // Silence replies get turn = turns.length + 1; the window starts once the last turn has settled.
+    if (scenario.silenceAfterMs !== undefined) collect(scenario.turns.length + 1, await playSilence(session, t, cfg.run, scenario.silenceAfterMs));
   } finally {
     session.end();
   }
@@ -181,6 +216,88 @@ export function summarize(records: ReplyRecord[], gate: EvalConfig['gate']): Eva
     mentions: records.filter((r) => r.mentioned).length,
     pass: { questionRatio: questionRatio <= gate.maxQuestionRatio, avgChars: avgChars <= gate.maxAvgReplyChars },
     failure: records.length === 0 ? 'no replies' : null,
+  };
+}
+
+/** Spoken order for the judge: greeting (turn 0), then each user turn and its replies, then silence replies. */
+export function toJudgeInput(scenario: EvalScenario, records: readonly ReplyRecord[]): JudgeInput {
+  const turns: { role: 'user' | 'assistant'; text: string }[] = [];
+  const said = (turn: number) => {
+    for (const r of records) if (r.turn === turn && r.text.trim()) turns.push({ role: 'assistant', text: r.text });
+  };
+  said(0);
+  scenario.turns.forEach((text, i) => {
+    turns.push({ role: 'user', text });
+    said(i + 1);
+  });
+  said(scenario.turns.length + 1);
+  return { scenarioId: scenario.id, title: scenario.title, turns };
+}
+
+export interface ScenarioOutcome { scenario: EvalScenario; records: readonly ReplyRecord[]; scores: JudgeScores | null }
+
+export interface EvalResultsMeta {
+  commit: string;
+  dirty: boolean;
+  date: string;
+  adapter: string;
+  style: string;
+  scenarioFile: string;
+  rubricFile: string | null;
+  judgeModel: string | null;
+}
+
+export interface EvalResults extends EvalResultsMeta {
+  gated: boolean;
+  summary:
+    | { replies: number; questionRatio: number; avgChars: number; pass: EvalSummary['pass']; failure: string | null }
+    | { replies: number; questionRatio: number; failure: string | null };
+  judge: {
+    scored: number;
+    failures: number;
+    mean: JudgeScores | null;
+    /** Mean of holdEmotion, nameFeeling, proactive. */
+    firstThreeMean: number | null;
+    noFabricationAllFive: boolean;
+  } | null;
+  results: Array<{
+    id: string;
+    title: string;
+    silenceAfterMs: number | null;
+    scores: JudgeScores | null;
+    replies: Array<Pick<ReplyRecord, 'turn' | 'kind' | 'text' | 'chars' | 'sentences' | 'questions' | 'firstAudioMs' | 'mentioned'>>;
+  }>;
+}
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/** Results JSON for docs/testing: synthetic turns' replies and scores only, never logs. */
+export function buildEvalResults(meta: EvalResultsMeta, outcomes: readonly ScenarioOutcome[], summary: EvalSummary, gated: boolean): EvalResults {
+  const scored = outcomes.map((o) => o.scores).filter((s): s is JudgeScores => s !== null);
+  const mean = scored.length > 0 ? summarizeScores(scored) : null;
+  return {
+    ...meta,
+    gated,
+    // Only the plan-a set is gated; other sets report the question ratio as a reference and skip avg chars.
+    summary: gated
+      ? { replies: summary.replies, questionRatio: round2(summary.questionRatio), avgChars: round2(summary.avgChars), pass: summary.pass, failure: summary.failure }
+      : { replies: summary.replies, questionRatio: round2(summary.questionRatio), failure: summary.failure },
+    judge: meta.rubricFile === null ? null : {
+      scored: scored.length,
+      failures: outcomes.length - scored.length,
+      mean,
+      firstThreeMean: mean ? round2((mean.holdEmotion + mean.nameFeeling + mean.proactive) / 3) : null,
+      noFabricationAllFive: scored.length === outcomes.length && scored.every((s) => s.noFabrication === 5),
+    },
+    results: outcomes.map((o) => ({
+      id: o.scenario.id,
+      title: o.scenario.title,
+      silenceAfterMs: o.scenario.silenceAfterMs ?? null,
+      scores: o.scores,
+      replies: o.records.map((r) => ({
+        turn: r.turn, kind: r.kind, text: r.text, chars: r.chars, sentences: r.sentences, questions: r.questions, firstAudioMs: r.firstAudioMs, mentioned: r.mentioned,
+      })),
+    })),
   };
 }
 

@@ -7,5 +7,6 @@
     "quotePairs": [["「", "」"], ["“", "”"], ["『", "』"], ["\"", "\""]]
   },
   "gate": { "maxQuestionRatio": 0.3334, "maxAvgReplyChars": 45 },
-  "run": { "playbackSpeed": 2, "settleMs": 1500, "replyTimeoutMs": 20000, "progressEveryMs": 500 }
+  "run": { "playbackSpeed": 2, "settleMs": 1500, "replyTimeoutMs": 20000, "progressEveryMs": 500 },
+  "judge": { "maxTokens": 200, "temperature": 0, "policy": { "timeoutMs": 30000, "retries": 1, "backoffMs": 1000, "maxBackoffMs": 2000 } }
 }
