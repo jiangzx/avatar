@@ -1351,3 +1351,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Q5：openLoop 在代码里也只给 context/check。** spec 只在提示词里约束。T4 在 `planContext` 里同样过滤（greeting/leave/checkin/rest 拿不到），提示词规则 14 保留，两层都有。
 
 **Q6：T2 内部位置是假定的。** Step 16 假定 T2 在 `summary()` 里写的是字面量 `exhaustedArmed: 0` / `exhaustedRevoked: 0`，有 `this.deps.onCard(card)` 这一行，并且构造参数存在 `this.deps`。实际写法不同时，按 Step 16 的语义找到对应位置修改，不要改 T2 的对外接口。如果 T2 把短答（≤ `shortMaxChars`）也路由到 `onLightFinal`，`TopicExhaustion` 照样计为短答，不受影响。
+
+## 2026-10-23 评估后修正（T7 之后）
+
+规则 13/15 在三语 `director.json` 中收紧：context 只接 `userText` 里已有的细节，check 最多再问一个相关问题，leave/checkin 不起新话题、不问新问题；timeOfDay/season/solarTerm 只能用于 greeting 的寒暄措辞，不得当任何阶段的话题或问题。`Director.planProactiveLine` 增加确定性去重：规划句规范化后若与 `previousTexts` 某句相同，记 `proactive_decision_rejected { code: 'duplicate' }` 并回退该阶段配置文案；`director-silence.test.ts` 覆盖。三语 `exhaustedHint` 缩短以提高遵从率，`exhaustedArmed` 的强制渲染见 T3 计划。

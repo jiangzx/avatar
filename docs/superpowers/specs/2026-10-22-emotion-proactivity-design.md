@@ -2,7 +2,7 @@
 
 ## 状态
 
-已批准（2026-10-23；2026-10-22 起草，独立审查两轮后通过）。客户原话例子拿不到，评估集只用合成场景；实施分期按本文不变。本文只记录设计，不含实现。决策来源：2026-10-22 grilling 四轮逐项确认（下文「已确认决策」），能力边界来自同日探针（`docs/research/emotion-proactivity-probes-2026-10-22.md`，blockers #47/#48）。实施见 Plan 4（2026-10-23 完成 T0–T7，评估门槛未通过）。
+已批准（2026-10-23；2026-10-22 起草，独立审查两轮后通过）。客户原话例子拿不到，评估集只用合成场景；实施分期按本文不变。本文只记录设计，不含实现。决策来源：2026-10-22 grilling 四轮逐项确认（下文「已确认决策」），能力边界来自同日探针（`docs/research/emotion-proactivity-probes-2026-10-22.md`，blockers #47/#48）。实施见 Plan 4（2026-10-23 完成 T0–T7；评估后修正已实施，共情门槛仍未通过，`firstThreeDelta +0.28`）。
 
 本文改动高风险区（开场、四段沉默规划器、人设、记忆注入）。用户已在 grilling 中授权，前提是保留 roadmap「打断与沉默」「记忆与回忆」两节的全部坑位契约，只按第 5 节修订第 4 条。
 
@@ -228,6 +228,8 @@ session start ──► store.careFollowup ──► CareLine（文本模型 + g
 - 不改 Director 的轻回应处理，也不让沉默链因此开口。
 
 婉拒：用户终稿命中 `i18n/<lang>/affect.json` 的 `declinePhrases`（如「不想聊这个」「算了」「别问了」，按 `containsPhrase` 匹配）时，`cooldown = declineCooldownTurns(10)`，并清除 `exhaustedArmed`。
+
+2026-10-23 评估后修正：`exhaustedArmed` 且不低落时，渲染强制使用 `need.topic_exhausted` 与 `strategy.disclose`，并带缩短后的提示句，避免与卡片的 ask/reflect 策略冲突；规划器返回与 `previousTexts` 重复的句子时回退该阶段配置文案；规划器规则 13/15 收紧为 context 只接细节、check 最多一个相关问题、leave/checkin 不起新话题，时间/节气不得当话题。
 
 ### 5. 跨会话关怀回访
 

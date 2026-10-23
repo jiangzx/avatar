@@ -1253,3 +1253,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Q4（T2 内部名字）：** 冻结接口没有约定 Session 里分析器实例的字段名。T3 假定是 `this.affect`，构造参数里有 `onCard`。实现时以 T2 的实际名字为准（Step 0 的 grep 会显示）。
 
 **Q5：** 只要 `budget.affectMaxChars` 有值，就按它预留，`affect.enabled=false` 时也一样（摘要会稍早触发）。这样配置简单，也和启动校验一致；如果要求关闭时完全回到现状，需要另加按 `enabled` 传 0 的逻辑。
+
+## 2026-10-23 评估后修正（T7 之后）
+
+`renderAffect` 在 `exhaustedArmed && !low && !crisis` 时强制使用 `need.topic_exhausted` 与 `strategy.disclose`，避免与卡片的 ask/reflect 策略冲突；`maxAffectRender` 上界与 `affect-render.test.ts` 的 47→46 预期同步更新。三语 `exhaustedHint` 缩短为更具指令性的句子，仍满足 `memory.json` 的 affect 预算。
