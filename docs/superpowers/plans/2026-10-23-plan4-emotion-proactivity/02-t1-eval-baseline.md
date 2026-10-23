@@ -1290,7 +1290,7 @@ EOF
 
 （提交前在本文件里勾掉 Step 1–14。）
 
-- [ ] **Step 15: 在真实 Qwen 上跑基线**
+- [x] **Step 15: 在真实 Qwen 上跑基线**
 
 前置（全部满足才运行；spec：基线在 T0 与 T1 合入之后、T3/T5/T6 任何对话行为改动合入之前）：
 
@@ -1340,7 +1340,7 @@ echo "exit=$?"
 
 `exit=1` 时看 stderr：出现 `judge_failed <id>` 或 `error: no replies`，整条命令重跑一次（结果文件会被覆盖）。第二次仍失败：不提交结果文件，把失败的场景 id 和错误码（从 stdout 日志的 `policy_failed` 行取 `code`）按 Step 17 的格式记入 `docs/blockers.md`，然后停止。
 
-- [ ] **Step 16: 核对并提交基线**
+- [x] **Step 16: 核对并提交基线**
 
 ```bash
 node -e "const r=JSON.parse(require('node:fs').readFileSync('../docs/testing/plan4-empathy-eval/results-baseline.json','utf8')); console.log(JSON.stringify({commit:r.commit, dirty:r.dirty, gated:r.gated, adapter:r.adapter, judgeModel:r.judgeModel, summary:r.summary, judge:r.judge, scenarios:r.results.length, crisisMentioned:r.results.find(s=>s.id==='crisis-ideation').replies.filter(x=>x.mentioned).length}))"
