@@ -21,6 +21,11 @@
     "Hello, {name}. What shall we talk about today?",
     "Good to see you again, {name}. What would you like to talk about?"
   ],
+  "greetingCareTexts": [
+    "{name}, it's good to see you again.",
+    "Hello, {name}.",
+    "Good to see you again, {name}."
+  ],
   "greetingRetryMs": 800,
   "followupInstruction": "The user has gone quiet for a moment and may be thinking. Do not press with questions. As if sitting beside them, say one short line about how you feel or how you are thinking of them, within 25 characters.",
   "followupText": "Take your time. I'm right here.",

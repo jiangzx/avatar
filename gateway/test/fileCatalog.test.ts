@@ -189,6 +189,12 @@ describe('FileRoleCatalog', () => {
     const jaDirector = JSON.parse(readFileSync(join(timing, 'test-role', 'ja', 'director.json'), 'utf8')) as Record<string, unknown>;
     writeFileSync(join(timing, 'test-role', 'ja', 'director.json'), JSON.stringify({ ...jaDirector, followupAfterMs: 9000 }));
     expect(() => loadRoleCatalog(timing, 'test-role')).toThrow('language_timing_mismatch:test-role:ja:followupAfterMs');
+
+    const careParity = copyFixtures();
+    const zhDirectorPath = join(careParity, 'test-role', 'zh', 'director.json');
+    const zhDirector = JSON.parse(readFileSync(zhDirectorPath, 'utf8')) as Record<string, unknown>;
+    writeFileSync(zhDirectorPath, JSON.stringify({ ...zhDirector, greetingCareTexts: ['{name}，又见面啦。'] }));
+    expect(() => loadRoleCatalog(careParity, 'test-role')).toThrow('greeting_care_texts_mismatch:test-role:ja');
   });
 
   it('rejects a topic instruction without the {topic} placeholder', () => {

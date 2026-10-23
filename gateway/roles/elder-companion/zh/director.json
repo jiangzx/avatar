@@ -22,6 +22,11 @@
     "您好呀，{name}，今天想聊点啥？",
     "又见到您了，{name}，今天咱们聊点什么？"
   ],
+  "greetingCareTexts": [
+    "{name}，又见面啦。",
+    "您好呀，{name}。",
+    "又见到您了，{name}。"
+  ],
   "greetingRetryMs": 800,
   "followupInstruction": "用户安静了一会儿，可能在想事情。不要追问，像陪在旁边一样轻轻说一句接着刚才话题的感受或关心，不超过 25 个字。",
   "followupText": "嗯，我在听，您慢慢说，不着急。",

@@ -87,6 +87,8 @@ export interface DirectorConfig {
   greetingMemoryText?: string;
   /** Safe opening variants when only the name is known; `{name}` is replaced. */
   greetingNameTexts?: readonly string[];
+  /** Care opening heads; `{name}` is replaced and the generated care line follows. No question here. */
+  greetingCareTexts?: readonly string[];
   /** How long to wait before repeating an opening that was cut off. */
   greetingRetryMs?: number;
   followupInstruction: string;

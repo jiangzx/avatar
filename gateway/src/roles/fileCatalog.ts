@@ -237,6 +237,7 @@ function loadRole(dir: string, dirName: string): LoadedRole {
   }
   validateTopics(role.id, languages);
   validateTimings(role.id, languages);
+  validateCareTexts(role.id, languages);
   return {
     defaultStyle: role.defaultStyle,
     defaultLanguage: role.defaultLanguage,
@@ -274,6 +275,15 @@ function validateTimings(roleId: string, languages: Map<Language, LoadedLanguage
       }
     }
   }
+}
+
+/** Care openings exist in every language or in none, so care never turns off silently for one language. */
+function validateCareTexts(roleId: string, languages: Map<Language, LoadedLanguage>): void {
+  const entries = [...languages.entries()];
+  const has = ([, pack]: [Language, LoadedLanguage]) => (pack.director.greetingCareTexts?.length ?? 0) > 0;
+  if (!entries.some(has)) return;
+  const missing = entries.find((entry) => !has(entry));
+  if (missing) throw new Error(`greeting_care_texts_mismatch:${roleId}:${missing[0]}`);
 }
 
 function readText(path: string): string {
