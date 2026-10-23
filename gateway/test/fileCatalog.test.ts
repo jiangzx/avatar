@@ -94,9 +94,30 @@ describe('FileRoleCatalog', () => {
       expect(persona).toContain('没有身体');
       expect(persona).toContain('除了开场，回复不要用名字开头');
       expect(persona).toContain('不要编造用户说过的话');
-      expect(persona).toContain('不先加应答词');
+      // Plan 4: emotional openers allowed, bare acknowledgements still banned.
+      expect(persona).toContain('不用应答词起头');
+      expect(persona).not.toContain('不先加应答词');
+      // Roadmap pitfall: words quoted inside a "don't" rule get read aloud, so negations carry no examples.
+      expect(persona).not.toContain('"好的"');
+      expect(persona).not.toContain('我感觉到您很难过');
+      expect(persona).toContain('不逐字复述对方的话');
+      expect(persona).toContain('用自己的话点出对方的感受');
+      expect(persona).toContain('可以说满 3 句、60 字左右');
+      expect(persona).toContain('三句话里最多一句是问句');
       expect(persona).toContain('标成"用户："的是对方原话');
       expect(persona).toContain('不声称上次聊过什么');
+    }
+    for (const style of ['grandchild', 'old-friend'] as const) {
+      const ja = roles.buildPersona('elder-companion', style, 'ja');
+      expect(ja).toContain('相づちから始めません');
+      expect(ja).toContain('自分の言葉で相手の気持ちに触れます');
+      expect(ja).not.toContain('先に相づちを入れず');
+      expect(ja).not.toContain('「はい」');
+      const en = roles.buildPersona('elder-companion', style, 'en');
+      expect(en).toContain('never a bare acknowledgement');
+      expect(en).toContain('Name their feeling in your own words');
+      expect(en).not.toContain('no filler acknowledgement');
+      expect(en).not.toContain('"OK,"');
     }
     expect(roles.director('elder-companion', 'zh').topics?.length).toBeGreaterThanOrEqual(5);
     expect(roles.activityText('elder-companion', 'reminisce', 'zh')).toContain('回忆往事');

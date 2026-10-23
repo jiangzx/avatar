@@ -19,7 +19,7 @@
 
 ---
 
-- [ ] **Step 1: 改断言，写出失败测试**
+- [x] **Step 1: 改断言，写出失败测试**
 
 把 `gateway/test/fileCatalog.test.ts` 第 91–99 行的循环：
 
@@ -72,12 +72,12 @@
 
 写法约定（roadmap「打断与沉默」「记忆与回忆」坑位：否定句里出现的词，模型也会照读）：否定句里不举例。允许的感叹词可以在肯定句里举例（spec §3：哎呀、哟、真的呀）；「不要用某某开头」「不说某某这种话」一律只描述类别，不列具体词。spec §3 原文列了「好」「好的」「嗯」「行」，是给人看的约束，不原样写进人设。
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `cd gateway && npx vitest run test/fileCatalog.test.ts`
 Expected: FAIL，提示 `expected ... to contain '不用应答词起头'`。
 
-- [ ] **Step 3: 修改 zh grandchild**
+- [x] **Step 3: 修改 zh grandchild**
 
 `gateway/roles/elder-companion/zh/styles/grandchild.md`
 
@@ -111,7 +111,7 @@ Expected: FAIL，提示 `expected ... to contain '不用应答词起头'`。
 
 注意：第三条里必须保留连续子串「不逐字复述对方的话」，Step 1 的断言依赖它。
 
-- [ ] **Step 4: 修改 zh old-friend**
+- [x] **Step 4: 修改 zh old-friend**
 
 `gateway/roles/elder-companion/zh/styles/old-friend.md`
 
@@ -145,7 +145,7 @@ Expected: FAIL，提示 `expected ... to contain '不用应答词起头'`。
 
 「语气平稳，少用感叹号……」这一条保留不动。
 
-- [ ] **Step 5: 修改 ja 两个风格**
+- [x] **Step 5: 修改 ja 两个风格**
 
 `gateway/roles/elder-companion/ja/styles/grandchild.md`
 
@@ -207,7 +207,7 @@ Expected: FAIL，提示 `expected ... to contain '不用应答词起头'`。
 - 相手の言葉をそのまま繰り返さず、気持ちに触れるときは自分の言葉で言います。
 ```
 
-- [ ] **Step 6: 修改 en 两个风格**
+- [x] **Step 6: 修改 en 两个风格**
 
 `gateway/roles/elder-companion/en/styles/grandchild.md`
 
@@ -267,12 +267,12 @@ Expected: FAIL，提示 `expected ... to contain '不用应答词起头'`。
 - A short feeling word may open ("Oh no," "That's hard"), never a bare acknowledgement. Don't echo their words.
 ```
 
-- [ ] **Step 7: 运行目标测试，确认通过**
+- [x] **Step 7: 运行目标测试，确认通过**
 
 Run: `cd gateway && npx vitest run test/fileCatalog.test.ts test/pacing.test.ts`
 Expected: PASS。`pacing.test.ts` 用真实角色跑 `validateBudgets`，人设变长后预算检查必须仍然通过（2026-10-23 计划审查后用真实人设 + 本文替换文本按 `historyBudget` 实算，affect 预留含标题与 4 个换行：历史空间比 1200 多出 zh 67/78、ja 62/53、en 304/81，按 grandchild/old-friend 计）。如果报 `instruction_budget_too_small`，停下来报告实际数字，不要改 `memory.json` 的预算。
 
-- [ ] **Step 8: 全量回归**
+- [x] **Step 8: 全量回归**
 
 Run（仓库根目录）：
 
@@ -284,7 +284,7 @@ git diff --check
 
 Expected：全部通过，`git diff --check` 无输出。
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add gateway/roles/elder-companion/zh/styles/grandchild.md gateway/roles/elder-companion/zh/styles/old-friend.md \
