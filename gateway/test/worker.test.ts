@@ -286,3 +286,58 @@ describe('MemoryWorker queue', () => {
     expect(seen).toEqual([{ ownerId: 'owner-1', reason: 'session_end', language: 'ja' }]);
   });
 });
+
+describe('followup quotes in the worker', () => {
+  const quoteRules = { maxChars: 80, safety: i18n.safety, evidence: i18n.evidence };
+  const followups = (db: DatabaseSync) => db.prepare('SELECT text, quote, sensitive FROM followups ORDER BY text').all();
+
+  function quoted(store: SqliteMemoryStore, client: TextModelClient) {
+    return new MemoryWorker({ store, client, systemPrompt: '陈述。', maxTokens: 80, policy, quote: quoteRules });
+  }
+
+  it('keeps a quote copied from a user line and drops one copied from the assistant', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '我明天要去医院复查腰，有点担心。', bigrams: '', now: 2 });
+    store.insertMessage({ id: 'm2', sessionId: 's1', ownerId: created.ownerId, role: 'assistant', text: '别担心，复查完就踏实了。', bigrams: '', now: 3 });
+    const client: TextModelClient = {
+      complete: async () => JSON.stringify({ ops: [
+        { op: 'add', table: 'followups', text: '问问腰部复查', dueAt: 9_000, quote: '我明天要去医院复查腰', sensitive: true },
+        { op: 'add', table: 'followups', text: '问问是否踏实', dueAt: 9_000, quote: '复查完就踏实了' },
+      ] }),
+    };
+    await quoted(store, client).extractOwner(created.ownerId, 'session_end');
+    expect(followups(db)).toEqual([
+      { text: '问问是否踏实', quote: null, sensitive: 0 },
+      { text: '问问腰部复查', quote: '我明天要去医院复查腰', sensitive: 1 },
+    ]);
+  });
+
+  it('drops every quote when no quote rules are configured', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '我明天要去医院复查腰。', bigrams: '', now: 2 });
+    const client: TextModelClient = {
+      complete: async () => JSON.stringify({ ops: [{ op: 'add', table: 'followups', text: '问问腰部复查', dueAt: 9_000, quote: '我明天要去医院复查腰' }] }),
+    };
+    await worker(store, client).extractOwner(created.ownerId, 'session_end');
+    expect(followups(db)).toEqual([{ text: '问问腰部复查', quote: null, sensitive: 0 }]);
+  });
+
+  it('never shows a stored quote to the extractor', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    store.immediate(() => store.writeExtraction(created.ownerId, {
+      now: 5, messageIds: [], facts: [], notes: [], episodes: [],
+      followups: [{ op: 'add', text: '问问复查结果', dueAt: 99, quote: '我下周二去医院复查膝盖' }],
+    }));
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天天气不错', bigrams: '', now: 6 });
+    let seen = '';
+    await quoted(store, { complete: async (input) => { seen = input.user; return '{"ops":[]}'; } }).extractOwner(created.ownerId, 'turns');
+    expect(seen).toContain('问问复查结果');
+    expect(seen).not.toContain('我下周二去医院复查膝盖');
+  });
+});

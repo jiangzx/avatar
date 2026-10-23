@@ -7,7 +7,7 @@ import { log } from '../log.ts';
 import { errorCodeOf, runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import type { SessionContext } from '../session/context.ts';
 import type { SessionLifecycle } from '../session/manager.ts';
-import { applyExtractOps, parseExtractOps, type TextModelClient } from './extract.ts';
+import { applyExtractOps, parseExtractOps, vetFollowupQuotes, type QuoteRules, type TextModelClient } from './extract.ts';
 import type { ExtractMemory, MemoryStore, PendingMessage } from './store.ts';
 
 export type ExtractReason = 'session_end' | 'turns' | 'silence' | 'startup';
@@ -31,6 +31,8 @@ export interface MemoryWorkerOptions {
   contextMaxChars?: number;
   /** Clock for the model prompt. Defaults to Date.now. */
   now?: () => number;
+  /** Followup quote checks for the care revisit. Absent = every quote is dropped. */
+  quote?: QuoteRules;
 }
 
 /** One queue per owner. Jobs never overlap; a later job starts only after the earlier one settles. */
@@ -148,7 +150,9 @@ export class MemoryWorker implements MemoryExtractor {
       log('memory_extract_failed', { reason, code: 'extract_parse' });
       return;
     }
-    const applied = applyExtractOps(this.opts.store, ownerId, epoch, ops, consumed.map((row) => row.id));
+    // Quotes must be verbatim user statements from the lines the model saw; anything else loses its quote.
+    const vetted = vetFollowupQuotes(ops, users.map((row) => row.text), this.opts.quote);
+    const applied = applyExtractOps(this.opts.store, ownerId, epoch, vetted, consumed.map((row) => row.id));
     if (applied === 'incomplete') {
       log('memory_extract_failed', { reason, code: 'extract_incomplete', ops: ops.length, messages: consumed.length });
       return;

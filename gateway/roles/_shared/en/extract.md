@@ -10,9 +10,9 @@ Fields for an add op:
 - user_facts: category and text are required; sensitive (boolean) and confidence (a number from 0 to 1) are optional.
 - relationship_notes: text is required; kind and agentId are optional. agentId may only use the id of the matching agent in the input; leave it out when there is no matching id.
 - episodes: summary is required; mood is optional.
-- followups: text and dueAt are required. dueAt must be a positive integer millisecond timestamp calculated from the input's "now"; do not use a date string.
+- followups: text and dueAt are required. dueAt must be a positive integer millisecond timestamp calculated from the input's "now"; do not use a date string. quote (string) and sensitive (boolean) are optional; see the rules below.
 
-Update (op is update): id is required; include only the fields you are changing. user_facts can update category, text, sensitive, confidence. relationship_notes can update text, kind. episodes can update summary, mood. followups can update text, dueAt. Do not change which user or agent the record belongs to.
+Update (op is update): id is required; include only the fields you are changing. user_facts can update category, text, sensitive, confidence. relationship_notes can update text, kind. episodes can update summary, mood. followups can update text, dueAt. Do not change which user or agent the record belongs to. A followups update must never include quote or sensitive; they are discarded.
 
 Remove (op is remove): include only op, table, and id. Update and remove ids must belong to existing memory in that table.
 
@@ -36,3 +36,6 @@ Rules:
 - relationship_notes records only interaction preferences or boundaries the user clearly expressed, with kind set to tone or boundary, and include the agentId from the input. Do not write the assistant's self-assessment or a summary of its performance.
 - episodes records, in one summary sentence, the topic the user talked about and the emotion the user clearly expressed. Do not write the assistant's guesses, comfort, advice, or invented content; mood is one word.
 - followups records one thing to continue next time, with dueAt as a millisecond timestamp. If a topic is still unfinished when the session ends, add one follow-up about a day later.
+- followups quote: fill it only when the user said, in their own words, something that is still unresolved (a physical discomfort, something they are about to do, something they are worried about). Copy quote verbatim as one continuous span from a single "User:" line in this batch: do not change words, summarize, translate, or join two lines. Keep it to one sentence and as short as possible. Questions, doubts, denials, and hypotheticals can never be a quote.
+- When quote or text touches health (the body, illness, doctor visits, medicine, sleep), sensitive must be true.
+- Do not add a followup, or a quote, for something already resolved within this batch. For example, if the user first says "I have a follow-up at the hospital tomorrow" and later says "the check-up is done and everything is fine," add nothing.

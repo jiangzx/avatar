@@ -117,8 +117,14 @@ const worker = store && textClient
       policy: memory.extractPolicy ?? pacing.policies.summarize,
       transcriptMaxChars: memory.extractTranscriptMaxChars ?? 6_000,
       contextMaxChars: memory.extractContextMaxChars ?? 4_000,
+      // Care quotes are stored only while the care feature is on (data minimization).
+      ...(affect.enabled ? { quote: { maxChars: affect.care.quoteMaxChars, safety: i18n.safety, evidence: i18n.evidence } } : {}),
     })
   : null;
+// session.start() may wait up to care.timeoutMs for the care line; it must fit inside the start timeout.
+if (affect.enabled && affect.care.timeoutMs >= config.sessionStartTimeoutMs) {
+  throw new Error(`care_timeout_exceeds_session_start: ${affect.care.timeoutMs} >= ${config.sessionStartTimeoutMs}`);
+}
 if (store && !textClient) log('memory_extract_unconfigured', {});
 // Sessions get the text client only for real adapters; Mock runs stay lexicon-only.
 log('affect_analyzer', { enabled: affect.enabled && config.adapter !== 'mock' && textClient !== null });
@@ -250,6 +256,13 @@ async function expireTranscripts(): Promise<void> {
       log('memory_retention_batch', { deleted, ms: Math.round(performance.now() - started) });
       if (deleted < limit) break;
       await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    // Quotes older than the care window can never be asked about; drop them even when care is off (data minimization).
+    try {
+      const cleared = store.clearStaleCareQuotes(ownerId, Date.now() - affect.care.maxAgeDays * DAY_MS);
+      if (cleared > 0) log('care_quote_retention', { cleared });
+    } catch {
+      log('care_quote_retention_failed', {});
     }
   }
 }

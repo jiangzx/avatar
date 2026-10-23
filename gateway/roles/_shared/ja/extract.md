@@ -10,9 +10,9 @@
 - user_facts：category、text が必須。sensitive（真偽値）、confidence（0 から 1 の数値）は任意。
 - relationship_notes：text が必須。kind、agentId は任意。agentId は入力にある対応するエージェントの id だけを使い、対応する id がなければ入れないでください。
 - episodes：summary が必須。mood は任意。
-- followups：text、dueAt が必須。dueAt は正の整数ミリ秒タイムスタンプで、入力の「現在」から計算してください。日付文字列は使わないでください。
+- followups：text、dueAt が必須。dueAt は正の整数ミリ秒タイムスタンプで、入力の「現在」から計算してください。日付文字列は使わないでください。quote（文字列）と sensitive（真偽値）は任意で、規則は下に書きます。
 
-更新（op が update）：id が必須で、ほかに更新するフィールドだけを書いてください。user_facts は category、text、sensitive、confidence を更新できます。relationship_notes は text、kind を更新できます。episodes は summary、mood を更新できます。followups は text、dueAt を更新できます。レコードの所属するユーザーやエージェントは変えないでください。
+更新（op が update）：id が必須で、ほかに更新するフィールドだけを書いてください。user_facts は category、text、sensitive、confidence を更新できます。relationship_notes は text、kind を更新できます。episodes は summary、mood を更新できます。followups は text、dueAt を更新できます。レコードの所属するユーザーやエージェントは変えないでください。followups の update に quote や sensitive を入れてはいけません。入れても捨てられます。
 
 削除（op が remove）：op、table、id だけを書いてください。更新と削除の id は、その表に既にある記憶のものでなければなりません。
 
@@ -36,3 +36,6 @@ text、summary は空でない文字列で、それぞれ 300 文字以内。cat
 - relationship_notes は、ユーザーがはっきり示した付き合い方の好みや境界だけを書き、kind は tone または boundary を使い、入力の agentId を添えてください。アシスタント自身への評価や出来のまとめは書きません。
 - episodes は、ユーザーが話した主題とユーザーがはっきり表した気持ちを一文の summary で書き、アシスタントの推測、慰め、助言、でっち上げた内容は書きません。mood は一語で書きます。
 - followups は次回また話せそうなことを一つ書き、dueAt はミリ秒タイムスタンプにしてください。会話の終わりにまだ終わっていない話題があれば、約一日後のフォローを一つ加えてください。
+- followups の quote：ユーザーがまだ片づいていないこと（体の不調、これからすること、心配なこと）を自分の口で話したときだけ入れてください。quote は今回のどれか一つの「ユーザー：」の文から、連続した部分をそのまま一字も変えずに写してください。言い換え、要約、翻訳、二つの文のつなぎ合わせはしないでください。一文以内で、できるだけ短くしてください。質問、疑い、否定、仮の話は quote にしてはいけません。
+- quote または text が体、病気、通院、薬、睡眠など健康に関わるときは、sensitive を必ず true にしてください。
+- 今回の会話の中ですでに片づいたことは followups に加えず、quote も入れないでください。たとえば「明日病院で再検査」と言ったあとで「再検査が終わって、何ともなかった」と言ったなら、加えません。

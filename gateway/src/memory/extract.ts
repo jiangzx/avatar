@@ -2,6 +2,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Language } from '@anyidea/protocol';
 import { z } from 'zod';
+import type { SafetyRules } from '../config.ts';
+import { isMemoryEvidence, type EvidenceRules } from './evidence.ts';
+import { normalizeForMatch } from './grounding.ts';
+import { scanText } from './scan.ts';
 import { ExtractIncompleteError, type MemoryStore } from './store.ts';
 export type { TextModelClient } from './textClient.ts';
 
@@ -64,7 +68,11 @@ const FollowupAdd = z.object({
   table: z.literal('followups'),
   text: Text,
   dueAt: z.number().int().positive(),
+  /** Verbatim user words. Length and evidence are checked by vetFollowupQuotes, so a long quote never fails the batch here. */
+  quote: z.string().max(2_000).optional(),
+  sensitive: z.boolean().optional(),
 });
+// Unknown keys are stripped (zod default): update can never change or re-flag a quote, and a stray key does not fail the batch.
 const FollowupUpdate = z.object({
   op: z.literal('update'),
   table: z.literal('followups'),
@@ -83,6 +91,38 @@ const OpSchema = z.union([
 const ExtractSchema = z.object({ ops: z.array(OpSchema).max(40) });
 
 export type ExtractOp = z.infer<typeof OpSchema>;
+
+export interface QuoteRules {
+  /** care.quoteMaxChars from gateway/config/affect.json. */
+  maxChars: number;
+  safety: SafetyRules;
+  evidence: EvidenceRules;
+}
+
+/**
+ * High-risk care contract (roadmap "记忆与回忆：已踩过的坑" #1, #10): a followup keeps its quote only
+ * when the quote is a verbatim slice of one user statement in this batch. Otherwise the quote is
+ * dropped and the row is still written. No rules = every quote is dropped.
+ */
+export function vetFollowupQuotes(ops: readonly ExtractOp[], userLines: readonly string[], rules: QuoteRules | undefined): ExtractOp[] {
+  return ops.map((op) => {
+    if (op.table !== 'followups' || op.op !== 'add' || op.quote === undefined) return op;
+    const { quote: raw, ...rest } = op;
+    const quote = (raw ?? '').trim();
+    return rules && quoteAllowed(quote, userLines, rules) ? { ...rest, quote } : rest;
+  });
+}
+
+function quoteAllowed(quote: string, userLines: readonly string[], rules: QuoteRules): boolean {
+  if (!quote || [...quote].length > rules.maxChars) return false;
+  if (scanText(quote, rules.safety) === 'reject' || !isMemoryEvidence(quote, rules.evidence)) return false;
+  const key = normalizeForMatch(quote);
+  if (!key) return false;
+  // The source line must itself be a statement: a slice of a question or a denial is not evidence.
+  return userLines.some((line) => normalizeForMatch(line).includes(key)
+    && isMemoryEvidence(line, rules.evidence)
+    && scanText(line, rules.safety) !== 'reject');
+}
 
 /** Zod. Throws on malformed JSON or a missing op. */
 export function parseExtractOps(raw: unknown): ExtractOp[] {

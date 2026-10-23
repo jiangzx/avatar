@@ -10,9 +10,9 @@
 - user_facts：必填 category、text；可选 sensitive（布尔值）、confidence（0 到 1 的数值）。
 - relationship_notes：必填 text；可选 kind、agentId。agentId 只能取输入里对应智能体的 id，没有对应 id 就不填。
 - episodes：必填 summary；可选 mood。
-- followups：必填 text、dueAt。dueAt 必须是正整数毫秒时间戳，根据输入的“现在”计算，不要用日期字符串。
+- followups：必填 text、dueAt。dueAt 必须是正整数毫秒时间戳，根据输入的“现在”计算，不要用日期字符串。可选 quote（字符串）、sensitive（布尔值），规则见下文。
 
-更新（op 为 update）：必填 id，另外只填写要更新的字段。user_facts 可更新 category、text、sensitive、confidence；relationship_notes 可更新 text、kind；episodes 可更新 summary、mood；followups 可更新 text、dueAt。不要改变记录所属的用户或智能体。
+更新（op 为 update）：必填 id，另外只填写要更新的字段。user_facts 可更新 category、text、sensitive、confidence；relationship_notes 可更新 text、kind；episodes 可更新 summary、mood；followups 可更新 text、dueAt。不要改变记录所属的用户或智能体。followups 的 update 不能带 quote 或 sensitive，带了也会被丢弃。
 
 删除（op 为 remove）：只填 op、table、id。更新和删除的 id 必须属于该表的已有记忆。
 
@@ -36,3 +36,6 @@ text、summary 必须是非空字符串，每条不超过 300 字；category、k
 - relationship_notes 只写用户明确表达的相处偏好或边界，kind 用 tone 或 boundary，并带上输入里的 agentId；不要写助手对自己的评价或表现总结。
 - episodes 用一句 summary 记下用户说过的主题和用户明确表达的情绪，不写助手的猜测、安慰、建议或编造的内容；mood 用一个词。
 - followups 写下次可以接着聊的一件事，dueAt 用毫秒时间戳。会话结束时如果还有未完成的话题，加一条大约一天后的跟进。
+- followups 的 quote：只有用户亲口说了一件还没了结的事（身体不适、要去做的事、担心的事）时才填。quote 必须从本轮某一条「用户：」原话里逐字复制一段连续的文字，不改字、不概括、不翻译、不把两句拼在一起；只取一句，尽量短。提问、质疑、否认、假设的话不能当 quote。
+- quote 或 text 涉及身体、疾病、看病、吃药、睡眠等健康内容时，sensitive 必须为 true。
+- 本轮里已经了结的事不要加 followup，也不要填 quote。例如用户先说「明天去医院复查」，后来又说「复查完了，没事」，就不加。
