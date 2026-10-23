@@ -229,7 +229,7 @@ session start ──► store.careFollowup ──► CareLine（文本模型 + g
 
 婉拒：用户终稿命中 `i18n/<lang>/affect.json` 的 `declinePhrases`（如「不想聊这个」「算了」「别问了」，按 `containsPhrase` 匹配）时，`cooldown = declineCooldownTurns(10)`，并清除 `exhaustedArmed`。
 
-2026-10-23 评估后修正：`exhaustedArmed` 且不低落时，渲染强制使用 `need.topic_exhausted` 与 `strategy.disclose`，并带缩短后的提示句，避免与卡片的 ask/reflect 策略冲突；规划器返回与 `previousTexts` 重复的句子时回退该阶段配置文案；规划器规则 13/15 收紧为 context 只接细节、check 最多一个相关问题、leave/checkin 不起新话题，时间/节气不得当话题。
+2026-10-23 评估后修正：`exhaustedArmed` 且不低落、非危机时，渲染只保留强提示句和尾注（不再带卡片的 mood/need/strategy），提示要求这一句必须换轻松话头或说 AI 的小事；规划器返回与 `previousTexts` 重复的句子时回退该阶段配置文案；规划器规则 13/15 收紧为 context 只接细节、check 最多一个相关问题、leave/checkin 不起新话题，时间/节气不得当话题。
 
 ### 5. 跨会话关怀回访
 
