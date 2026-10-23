@@ -124,6 +124,12 @@ export const MIGRATIONS: readonly string[] = [
   `
   CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
   `,
+  // Plan 4 care revisit: verbatim user quote, sensitivity, and creation time. Legacy rows stay NULL/0 and are never used for care.
+  `
+  ALTER TABLE followups ADD COLUMN quote TEXT;
+  ALTER TABLE followups ADD COLUMN sensitive INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE followups ADD COLUMN created_at INTEGER;
+  `,
 ];
 
 /** Applies pending steps, each in its own transaction. Returns the resulting schema version. */

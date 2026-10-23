@@ -98,7 +98,7 @@ export interface MemoryStore {
   /** Persists the kana backfill cursor so the next startup resumes instead of rescanning page one. */
   setKanaBackfillCursor(rowid: number): void;
   /**
-   * Deletes facts, notes, episodes, and followups whose text contains `query`.
+   * Deletes facts, notes, episodes, and followups whose text (or followup quote) contains `query`.
    * Blanks FTS hits, the triggering user line when its text is given, and related diffs.
    * Returns how many user-visible rows were removed or blanked so the caller can
    * avoid confirming a delete that matched nothing.
@@ -113,6 +113,15 @@ export interface MemoryStore {
   deleteExpiredMessages(ownerId: string, olderThan: number, limit: number): number;
   /** Owner ids for the daily retention pass. */
   ownerIds(): string[];
+  /**
+   * Newest open followup with a verbatim quote, created within maxAgeMs, whose source session
+   * has ended and is not the current one. The only path that reads followup quotes.
+   */
+  careFollowup(ownerId: string, currentSessionId: string, now: number, maxAgeMs: number): { id: string; quote: string; createdAt: number } | undefined;
+  /** Marks the followup done and clears its quote; the audit diff never carries the quote. */
+  closeCareFollowup(ownerId: string, id: string, now: number): void;
+  /** Daily retention: clears quotes created before `olderThan` (they can never be used for care). Returns rows changed. */
+  clearStaleCareQuotes(ownerId: string, olderThan: number): number;
 }
 
 export interface PendingMessage {
@@ -151,7 +160,7 @@ export type EpisodeChange =
   | { op: 'update'; id: string; summary?: string; mood?: string | null }
   | { op: 'remove'; id: string };
 export type FollowupChange =
-  | { op: 'add'; text: string; dueAt: number }
+  | { op: 'add'; text: string; dueAt: number; quote?: string; sensitive?: boolean }
   | { op: 'update'; id: string; text?: string; dueAt?: number }
   | { op: 'remove'; id: string };
 
@@ -265,7 +274,20 @@ function prepareStatements(db: DatabaseSync) {
     updateEpisode: p(`UPDATE episodes SET summary = COALESCE(?, summary), mood = COALESCE(?, mood)
       WHERE id = ? AND owner_id = ?`),
     deleteEpisode: p('DELETE FROM episodes WHERE id = ? AND owner_id = ?'),
-    insertFollowup: p('INSERT INTO followups (id, owner_id, text, due_at, done_at, source_session_id) VALUES (?, ?, ?, ?, NULL, ?)'),
+    insertFollowup: p(`INSERT INTO followups (id, owner_id, text, due_at, done_at, source_session_id, quote, sensitive, created_at)
+      VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)`),
+    careFollowup: p(`SELECT f.id, f.quote, f.created_at FROM followups f
+      JOIN sessions s ON s.id = f.source_session_id
+      JOIN agents a ON a.id = s.agent_id AND a.owner_id = f.owner_id
+      WHERE f.owner_id = ? AND f.done_at IS NULL AND f.quote IS NOT NULL
+        AND f.created_at IS NOT NULL AND f.created_at >= ?
+        AND s.ended_at IS NOT NULL AND s.id != ?
+      ORDER BY f.created_at DESC, f.rowid DESC
+      LIMIT 1`),
+    closeCareFollowup: p('UPDATE followups SET done_at = ?, quote = NULL WHERE id = ? AND owner_id = ? AND done_at IS NULL'),
+    insertCareChange: p(`INSERT INTO memory_changes (id, owner_id, table_name, row_id, op, diff, actor, created_at)
+      VALUES (?, ?, 'followups', ?, 'close', '', 'care', ?)`),
+    clearStaleCareQuotes: p('UPDATE followups SET quote = NULL WHERE owner_id = ? AND quote IS NOT NULL AND created_at < ?'),
     updateFollowup: p(`UPDATE followups SET text = COALESCE(?, text), due_at = COALESCE(?, due_at)
       WHERE id = ? AND owner_id = ?`),
     deleteFollowup: p('DELETE FROM followups WHERE id = ? AND owner_id = ?'),
@@ -294,7 +316,7 @@ function prepareStatements(db: DatabaseSync) {
     deleteFactsInstr: p('DELETE FROM user_facts WHERE owner_id = ? AND instr(text, ?) > 0'),
     deleteNotesInstr: p('DELETE FROM relationship_notes WHERE owner_id = ? AND instr(text, ?) > 0'),
     deleteEpisodesInstr: p('DELETE FROM episodes WHERE owner_id = ? AND instr(summary, ?) > 0'),
-    deleteFollowupsInstr: p('DELETE FROM followups WHERE owner_id = ? AND instr(text, ?) > 0'),
+    deleteFollowupsInstr: p("DELETE FROM followups WHERE owner_id = ? AND (instr(text, ?) > 0 OR instr(COALESCE(quote, ''), ?) > 0)"),
     blankDiffs: p(`UPDATE memory_changes SET diff = '' WHERE owner_id = ? AND instr(diff, ?) > 0`),
     deleteMessages: p('DELETE FROM messages WHERE owner_id = ?'),
     deleteAllFacts: p('DELETE FROM user_facts WHERE owner_id = ?'),
@@ -528,7 +550,7 @@ export class SqliteMemoryStore implements MemoryStore {
       const facts = Number(this.q.deleteFactsInstr.run(ownerId, query).changes);
       const notes = Number(this.q.deleteNotesInstr.run(ownerId, query).changes);
       const episodes = Number(this.q.deleteEpisodesInstr.run(ownerId, query).changes);
-      const followups = Number(this.q.deleteFollowupsInstr.run(ownerId, query).changes);
+      const followups = Number(this.q.deleteFollowupsInstr.run(ownerId, query, query).changes);
       this.q.blankDiffs.run(ownerId, query);
       return { messages, facts, notes, episodes, followups };
     });
@@ -560,6 +582,21 @@ export class SqliteMemoryStore implements MemoryStore {
 
   ownerIds(): string[] {
     return this.q.ownerIds.all().map((r) => r.id as string);
+  }
+
+  careFollowup(ownerId: string, currentSessionId: string, now: number, maxAgeMs: number): { id: string; quote: string; createdAt: number } | undefined {
+    const row = this.q.careFollowup.get(ownerId, now - maxAgeMs, currentSessionId);
+    return row ? { id: row.id as string, quote: row.quote as string, createdAt: row.created_at as number } : undefined;
+  }
+
+  closeCareFollowup(ownerId: string, id: string, now: number): void {
+    this.tx(() => {
+      if (this.q.closeCareFollowup.run(now, id, ownerId).changes === 1) this.q.insertCareChange.run(randomUUID(), ownerId, id, now);
+    });
+  }
+
+  clearStaleCareQuotes(ownerId: string, olderThan: number): number {
+    return Number(this.q.clearStaleCareQuotes.run(ownerId, olderThan).changes);
   }
 
   private runExpired(ownerId: string, olderThan: number, limit: number) {
@@ -650,7 +687,10 @@ export class SqliteMemoryStore implements MemoryStore {
   private writeFollowup(ownerId: string, op: FollowupChange, sessionId: string | null, now: number): void {
     if (op.op === 'add') {
       const id = randomUUID();
-      this.q.insertFollowup.run(id, ownerId, op.text, op.dueAt, sessionId);
+      // Quoted user words are always sensitive (spec §8); health followups also set it explicitly.
+      const sensitive = op.sensitive === true || op.quote !== undefined ? 1 : 0;
+      this.q.insertFollowup.run(id, ownerId, op.text, op.dueAt, sessionId, op.quote ?? null, sensitive, now);
+      // The audit diff carries the model's summary only, never the quote.
       this.audit(ownerId, 'followups', id, 'add', op.text, now);
       return;
     }

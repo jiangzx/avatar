@@ -261,10 +261,10 @@ describe('SqliteMemoryStore', () => {
 });
 
 describe('memory tables', () => {
-  it('reaches schema version 4, finds a message by bigram, and cascades with the owner', () => {
+  it('reaches schema version 5, finds a message by bigram, and cascades with the owner', () => {
     const db = open();
-    expect(MIGRATIONS).toHaveLength(4);
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 4 });
+    expect(MIGRATIONS).toHaveLength(5);
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 5 });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('messages_owner_created', 'messages_owner_pending') ORDER BY name").all())
       .toEqual([{ name: 'messages_owner_created' }, { name: 'messages_owner_pending' }]);
     const created = owner(new SqliteMemoryStore(db), 'h-mem');
@@ -333,8 +333,8 @@ describe('memory tables', () => {
     db.exec('PRAGMA foreign_keys = ON');
     expect(migrate(db, MIGRATIONS.slice(0, 1))).toBe(1);
     db.prepare('INSERT INTO owners (id, created_at, last_seen_at) VALUES (?, ?, ?)').run('owner-v1', 1, 1);
-    expect(migrate(db)).toBe(4);
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 4 });
+    expect(migrate(db)).toBe(5);
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 5 });
     expect(db.prepare('SELECT id FROM owners WHERE id = ?').get('owner-v1')).toEqual({ id: 'owner-v1' });
     expect(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'messages'").get()).toEqual({ n: 1 });
   });
@@ -357,5 +357,142 @@ describe('memory tables', () => {
     store.setKanaBackfillCursor(0);
     expect(store.kanaBackfillCursor()).toBe(0);
     expect(db.prepare("SELECT value FROM meta WHERE key = 'kana_backfill_cursor'").get()).toEqual({ value: '0' });
+  });
+});
+
+describe('care followups', () => {
+  const DAY = 24 * 60 * 60_000;
+  const WEEK = 7 * DAY;
+  const NOW = 100 * DAY;
+
+  /** One session (ended unless told otherwise) whose user line produced one followup through the extract write path. */
+  function addFollowup(
+    store: SqliteMemoryStore,
+    who: { ownerId: string; agentId: string },
+    sessionId: string,
+    input: { text: string; createdAt: number; quote?: string; sensitive?: boolean; ended?: boolean },
+  ): void {
+    store.recordSessionStart(sessionId, who.agentId, input.createdAt - 10);
+    if (input.ended !== false) store.recordSessionEnd(sessionId, who.agentId, input.createdAt - 5);
+    store.insertMessage({
+      id: `m-${sessionId}`, sessionId, ownerId: who.ownerId, role: 'user', text: input.quote ?? input.text, bigrams: '', now: input.createdAt - 8,
+    });
+    store.immediate(() => store.writeExtraction(who.ownerId, {
+      now: input.createdAt,
+      messageIds: [`m-${sessionId}`],
+      facts: [],
+      notes: [],
+      episodes: [],
+      followups: [{
+        op: 'add',
+        text: input.text,
+        dueAt: input.createdAt + DAY,
+        ...(input.quote !== undefined ? { quote: input.quote } : {}),
+        ...(input.sensitive !== undefined ? { sensitive: input.sensitive } : {}),
+      }],
+    }));
+  }
+
+  const idOf = (db: DatabaseSync, text: string): string =>
+    (db.prepare('SELECT id FROM followups WHERE text = ?').get(text) as { id: string }).id;
+
+  it('adds quote, sensitive and created_at to followups', () => {
+    const db = open();
+    const columns = db.prepare('PRAGMA table_info(followups)').all().map((row) => (row as { name: string }).name);
+    expect(columns).toEqual(expect.arrayContaining(['quote', 'sensitive', 'created_at']));
+  });
+
+  it('upgrades a version-4 database: legacy followups have no quote and are never chosen', () => {
+    const db = new DatabaseSync(':memory:');
+    dbs.push(db);
+    db.exec('PRAGMA foreign_keys = ON');
+    expect(migrate(db, MIGRATIONS.slice(0, 4))).toBe(4);
+    db.prepare('INSERT INTO owners (id, created_at, last_seen_at) VALUES (?, ?, ?)').run('owner-v4', 1, 1);
+    db.prepare(`INSERT INTO agents (id, owner_id, role_id, style_id, created_at) VALUES ('agent-v4', 'owner-v4', 'elder-companion', 'grandchild', 1)`).run();
+    db.prepare(`INSERT INTO sessions (id, agent_id, started_at, ended_at) VALUES ('s-v4', 'agent-v4', 1, 2)`).run();
+    db.prepare(`INSERT INTO followups (id, owner_id, text, due_at, source_session_id) VALUES ('fu-v4', 'owner-v4', '问问腰', 99, 's-v4')`).run();
+    expect(migrate(db)).toBe(5);
+    expect(db.prepare("SELECT quote, sensitive, created_at FROM followups WHERE id = 'fu-v4'").get())
+      .toEqual({ quote: null, sensitive: 0, created_at: null });
+    expect(new SqliteMemoryStore(db).careFollowup('owner-v4', 's-now', 10, WEEK)).toBeUndefined();
+  });
+
+  it('stores the quote as sensitive, stamps created_at, and keeps the quote out of the audit diff', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'care-write');
+    addFollowup(store, a, 's-1', { text: '问问腰部复查', quote: '我明天去医院复查腰', createdAt: NOW });
+    addFollowup(store, a, 's-2', { text: '问问旅行计划', createdAt: NOW + 1 });
+    expect(db.prepare('SELECT text, quote, sensitive, created_at FROM followups ORDER BY created_at').all()).toEqual([
+      { text: '问问腰部复查', quote: '我明天去医院复查腰', sensitive: 1, created_at: NOW },
+      { text: '问问旅行计划', quote: null, sensitive: 0, created_at: NOW + 1 },
+    ]);
+    expect(db.prepare("SELECT diff FROM memory_changes WHERE table_name = 'followups' AND op = 'add' ORDER BY created_at").all())
+      .toEqual([{ diff: '问问腰部复查' }, { diff: '问问旅行计划' }]);
+  });
+
+  it('picks the newest open quoted followup from an ended earlier session within maxAge', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'care-pick');
+    const b = owner(store, 'care-pick-other');
+    addFollowup(store, a, 's-older', { text: 'older', quote: '我下周去看牙', createdAt: NOW - 3 * DAY });
+    addFollowup(store, a, 's-newer', { text: 'newer', quote: '我明天去医院复查腰', createdAt: NOW - DAY });
+    addFollowup(store, a, 's-expired', { text: 'expired', quote: '我要去爬山', createdAt: NOW - WEEK - 1 });
+    addFollowup(store, a, 's-noquote', { text: 'noquote', createdAt: NOW - 100 });
+    addFollowup(store, a, 's-open', { text: 'open', quote: '我晚上去散步', createdAt: NOW - 90, ended: false });
+    addFollowup(store, a, 's-current', { text: 'current', quote: '我等会儿去买菜', createdAt: NOW - 80 });
+    addFollowup(store, a, 's-closed', { text: 'closed', quote: '我中午去取药', createdAt: NOW - 70 });
+    store.closeCareFollowup(a.ownerId, idOf(db, 'closed'), NOW - 60);
+    addFollowup(store, b, 's-b', { text: 'other-owner', quote: '我明天去复查', createdAt: NOW - 50 });
+
+    expect(store.careFollowup(a.ownerId, 's-current', NOW, WEEK))
+      .toEqual({ id: idOf(db, 'newer'), quote: '我明天去医院复查腰', createdAt: NOW - DAY });
+    expect(store.careFollowup(a.ownerId, 's-current', NOW, DAY - 1)).toBeUndefined();
+  });
+
+  it('closes once: done_at set, quote cleared, audit without the quote, owner-scoped', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'care-close');
+    const b = owner(store, 'care-close-other');
+    addFollowup(store, a, 's-1', { text: '问问腰部复查', quote: '我明天去医院复查腰', createdAt: NOW - DAY });
+    const id = idOf(db, '问问腰部复查');
+    store.closeCareFollowup(b.ownerId, id, NOW);
+    expect(store.careFollowup(a.ownerId, 's-now', NOW, WEEK)?.id).toBe(id);
+    store.closeCareFollowup(a.ownerId, id, NOW);
+    store.closeCareFollowup(a.ownerId, id, NOW + 1);
+    expect(db.prepare('SELECT done_at, quote FROM followups WHERE id = ?').get(id)).toEqual({ done_at: NOW, quote: null });
+    expect(db.prepare('SELECT op, diff, actor FROM memory_changes WHERE row_id = ? ORDER BY created_at, rowid').all(id)).toEqual([
+      { op: 'add', diff: '问问腰部复查', actor: 'extract' },
+      { op: 'close', diff: '', actor: 'care' },
+    ]);
+    expect(store.careFollowup(a.ownerId, 's-now', NOW, WEEK)).toBeUndefined();
+  });
+
+  it('forgets a followup whose keyword appears only in its quote', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'care-forget');
+    addFollowup(store, a, 's-1', { text: '问问复查结果', quote: '我下周二去医院复查膝盖', createdAt: NOW - DAY });
+    expect(store.forgetMatches(a.ownerId, '膝盖', null, 's-now').followups).toBe(1);
+    expect(db.prepare('SELECT count(*) AS n FROM followups').get()).toEqual({ n: 0 });
+  });
+
+  it('clears quotes that aged out of the care window, keeps the followup, and stays owner-scoped', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = owner(store, 'care-expire');
+    const b = owner(store, 'care-expire-other');
+    addFollowup(store, a, 's-old', { text: 'old', quote: '我要去爬山', createdAt: NOW - WEEK - 1 });
+    addFollowup(store, a, 's-fresh', { text: 'fresh', quote: '我明天去医院复查腰', createdAt: NOW - DAY });
+    addFollowup(store, b, 's-b-old', { text: 'b-old', quote: '我下周去看牙', createdAt: NOW - WEEK - 1 });
+    expect(store.clearStaleCareQuotes(a.ownerId, NOW - WEEK)).toBe(1);
+    expect(db.prepare('SELECT text, quote FROM followups ORDER BY text').all()).toEqual([
+      { text: 'b-old', quote: '我下周去看牙' },
+      { text: 'fresh', quote: '我明天去医院复查腰' },
+      { text: 'old', quote: null },
+    ]);
+    expect(store.clearStaleCareQuotes(a.ownerId, NOW - WEEK)).toBe(0);
   });
 });
