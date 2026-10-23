@@ -432,6 +432,6 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 不存在的文件（例如 Step 5 门槛没过而没有生成 `results-after.json`）不要加进去。
 
-- [ ] **Step 12: 代码审查与收尾**
+- [x] **Step 12: 代码审查与收尾**
 
 按 AGENTS.md 第 3 节：先用 requesting-code-review 审查整个 Plan 4 的改动（基准为 T0 第一个提交的父提交），修完审查意见后，再用 finishing-a-development-branch 收尾。是否推送到远端、是否合入 `master`，都要先问用户。
