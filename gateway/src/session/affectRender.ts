@@ -33,10 +33,15 @@ export function renderAffect(card: AffectCard | null, copy: AffectCopy, flags: A
   if (card.crisis) parts.push(lines.crisis);
   parts.push(moodLine(card, lines, low));
   if (card.trend === 'better' || card.trend === 'worse') parts.push(lines.trend[card.trend]);
-  parts.push(lines.need[card.need], lines.strategy[card.strategy]);
+  // An armed topic-exhaustion hint is a coherent light-topic turn, not the card's ask/reflect plan.
+  const exhausted = flags.exhaustedArmed && !low && !card.crisis;
+  parts.push(
+    exhausted ? lines.need.topic_exhausted : lines.need[card.need],
+    exhausted ? lines.strategy.disclose : lines.strategy[card.strategy],
+  );
   if (card.mismatch) parts.push(lines.mismatch);
   // A low or crisis turn never gets the change-topic hint.
-  if (flags.exhaustedArmed && !low) parts.push(lines.exhaustedHint);
+  if (exhausted) parts.push(lines.exhaustedHint);
   parts.push(lines.tail);
   return parts.join('\n');
 }

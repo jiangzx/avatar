@@ -19,7 +19,7 @@
       "suggest": "One gentle idea."
     },
     "mismatch": "Says fine; may hurt.",
-    "exhaustedHint": "If replies stay brief, switch once to a light topic.",
+    "exhaustedHint": "Brief replies: switch once to a light topic or yourself.",
     "tail": "Internal; don't read out or name emotions."
   },
   "declinePhrases": ["don't want to talk about", "rather not talk", "stop asking", "never mind", "drop it"],

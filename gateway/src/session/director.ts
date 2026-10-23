@@ -515,6 +515,12 @@ export class Director {
         this.requestSilenceStep(step);
         return;
       }
+      // The planner saw previousTexts but may still repeat one; a duplicate is a new topic, not a stage.
+      if (this.ladderTexts.some((previous) => normalizeUtterance(previous) === normalizeUtterance(text))) {
+        log('proactive_decision_rejected', { stage: step, code: 'duplicate' });
+        this.requestSilenceStep(step);
+        return;
+      }
       this.pending = step;
       if (step !== 'rest') this.rememberLadderText(text);
       this.deps.requestResponse('followup', {

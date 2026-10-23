@@ -299,9 +299,9 @@ describe('config', () => {
     const zh = load('zh');
     expect(zh).toContain('12) affect 是对方此刻状态的内部参考，可能没有；其中 low 为 true 时（优先于第 3 条），context、check 不起新话题');
     expect(zh).toContain('crisis 为 true 时，任何阶段都不起新话题，只表达你一直在，并劝对方联系家人或身边的人');
-    expect(zh).toContain('13) affect.need 为 share_joy 或 chat、且 low 不为 true 时，context、check 可以主动起一个和 userText 相关的小话题。');
+    expect(zh).toContain('13) affect.need 为 share_joy 或 chat、且 low 不为 true 时，context 可以接住 userText 里已有的细节，check 最多再问一个和它相关的小问题；leave、checkin 不再起新话题或问新问题');
     expect(zh).toContain('14) openLoop 是对方本次说过、还没说完的事，可能没有；只在 context、check 阶段可用，用法同 userText');
-    expect(zh).toContain('15) timeOfDay、season、solarTerm 是当地时段、季节和前后几天内的节气（日期是约数），只用于寒暄措辞，不要编造天气');
+    expect(zh).toContain('15) timeOfDay、season、solarTerm 是当地时段、季节和前后几天内的节气（日期是约数），只用于 greeting 的寒暄措辞，不要编造天气');
     expect(zh).toContain('10) 只能使用输入里已经出现过的具体人名、作品名、地名和事件；不要补充输入里没有的具体名字或作品名。');
     expect(zh).toContain('checkin：必须问对方是否还在听，并说明随时都可以接着聊；不超过 30 个字');
     expect(zh.indexOf('11) ')).toBeLessThan(zh.indexOf('12) '));
@@ -311,6 +311,7 @@ describe('config', () => {
     expect(ja).toContain('12) affect は相手の今の様子の内部参考で、ないこともある。');
     expect(ja).toContain('crisis が true のときは、どの段階でも新しい話題を出さず');
     expect(ja).toContain('13) affect.need が share_joy または chat で');
+    expect(ja).toContain('leave と checkin では新しい話題も新しい質問も出さず');
     expect(ja).toContain('14) openLoop は相手が今回話した、まだ終わっていない事柄で');
     expect(ja).toContain('15) timeOfDay、season、solarTerm は現地の時間帯、季節、前後数日以内の節気（日付はおおよそ）');
     expect(ja).toContain('10) 入力に出てきた具体的な人名、作品名、地名、出来事だけを使う。');
@@ -322,6 +323,7 @@ describe('config', () => {
     expect(en).toContain('12) affect is internal guidance about how they feel right now and may be absent.');
     expect(en).toContain('When affect.crisis is true, do not start a new topic at any stage');
     expect(en).toContain('13) When affect.need is share_joy or chat and affect.low is not true');
+    expect(en).toContain('in leave and checkin do not start a new topic or ask a new question');
     expect(en).toContain('14) openLoop is something they said earlier in this conversation that is not finished');
     expect(en).toContain('15) timeOfDay, season, and solarTerm are the local time of day');
     expect(en).toContain('never invent the weather');

@@ -47,13 +47,13 @@ describe('renderAffect', () => {
   it('uses the low mood only when low, the mild sad line otherwise, and drops the hint while low', () => {
     expect(renderAffect(card({ emotion: 'sad', intensity: 2 }), copy, flags(true))).toBe('LOW\nCHAT\nREFLECT\nTAIL');
     expect(renderAffect(card({ emotion: 'sad', intensity: 1, trend: 'worse' }), copy, flags(true))).toBe('LOW\nWORSE\nCHAT\nREFLECT\nTAIL');
-    // Mild sadness is not low: its own mood line, and the armed hint stays.
-    expect(renderAffect(card({ emotion: 'sad', intensity: 1, trend: 'better' }), copy, flags(true))).toBe('SAD\nBETTER\nCHAT\nREFLECT\nHINT\nTAIL');
+    // Mild sadness is not low: its own mood line, and an unarmed hint stays out.
+    expect(renderAffect(card({ emotion: 'sad', intensity: 1, trend: 'better' }), copy, flags())).toBe('SAD\nBETTER\nCHAT\nREFLECT\nTAIL');
   });
 
   it('maps the other emotions one to one and adds the trend only for better or worse', () => {
-    expect(renderAffect(card({ emotion: 'happy', trend: 'better', need: 'share_joy', strategy: 'affirm' }), copy, flags(true)))
-      .toBe('HAPPY\nBETTER\nJOY\nAFFIRM\nHINT\nTAIL');
+    expect(renderAffect(card({ emotion: 'happy', trend: 'better', need: 'share_joy', strategy: 'affirm' }), copy, flags()))
+      .toBe('HAPPY\nBETTER\nJOY\nAFFIRM\nTAIL');
     expect(renderAffect(card({ emotion: 'love', need: 'help', strategy: 'suggest' }), copy, flags())).toBe('LOVE\nHELP\nSUGGEST\nTAIL');
     expect(renderAffect(card({ need: 'topic_exhausted', strategy: 'disclose' }), copy, flags())).toBe('NEUTRAL\nDRY\nDISCLOSE\nTAIL');
   });
@@ -63,9 +63,15 @@ describe('renderAffect', () => {
     expect(text).not.toContain('SECRET-LOOP');
   });
 
+  it('forces a light-topic close when the exhaustion hint is armed, but not while low', () => {
+    expect(renderAffect(card({ need: 'chat', strategy: 'ask' }), copy, flags(true))).toBe('NEUTRAL\nDRY\nDISCLOSE\nHINT\nTAIL');
+    expect(renderAffect(card({ emotion: 'sad', intensity: 3, need: 'vent', strategy: 'comfort' }), copy, flags(true)))
+      .toBe('LOW\nVENT\nCOMFORT\nTAIL');
+  });
+
   it('bounds every combination with maxAffectRender', () => {
-    // NEUTRAL + BETTER + VENT + DISCLOSE + MISMATCH + HINT + TAIL = 41 chars + 6 newlines.
-    expect(maxAffectRender(copy)).toBe(47);
+    // NEUTRAL + BETTER + DRY + DISCLOSE + MISMATCH + HINT + TAIL = 40 chars + 6 newlines.
+    expect(maxAffectRender(copy)).toBe(46);
   });
 });
 
@@ -73,10 +79,10 @@ describe('checkAffectBudgets', () => {
   it('fails startup when a language render does not fit its room', () => {
     const copies: Record<Language, AffectCopy> = { ...DEFAULT_I18N.affect, zh: copy };
     expect(() => checkAffectBudgets({ zh: { totalChars: 1000, snapshotMaxChars: 0, summaryMaxChars: 100, affectMaxChars: 10 } }, copies))
-      .toThrow('affect_budget_too_small:zh: render 47 > max 10');
+      .toThrow('affect_budget_too_small:zh: render 46 > max 10');
     expect(() => checkAffectBudgets({ zh: { totalChars: 1000, snapshotMaxChars: 0, summaryMaxChars: 100 } }, copies))
-      .toThrow('affect_budget_too_small:zh: render 47 > max 0');
-    expect(() => checkAffectBudgets({ zh: { totalChars: 1000, snapshotMaxChars: 0, summaryMaxChars: 100, affectMaxChars: 47 } }, copies))
+      .toThrow('affect_budget_too_small:zh: render 46 > max 0');
+    expect(() => checkAffectBudgets({ zh: { totalChars: 1000, snapshotMaxChars: 0, summaryMaxChars: 100, affectMaxChars: 46 } }, copies))
       .not.toThrow();
   });
 

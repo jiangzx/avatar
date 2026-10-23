@@ -311,6 +311,26 @@ describe('substantive conversation silence', () => {
     s.d.stop();
   });
 
+  it('never repeats a planned line from an earlier stage: the stage copy speaks instead', async () => {
+    const stages: string[] = [];
+    const { d, requests } = setup((context) => {
+      stages.push(context.stage);
+      return { text: '同一句。' };
+    });
+    d.onUserFinal('今天走了很多路，脚有点酸。');
+    d.onAiTurnStarted();
+    d.onAiTurnEnded('今天走了不少地方。');
+    await vi.advanceTimersByTimeAsync(cfg.contextAfterMs);
+    expect(requests.at(-1)?.fallbackText).toBe('同一句。');
+    d.onAiTurnStarted();
+    d.onAiTurnEnded('同一句。');
+    await vi.advanceTimersByTimeAsync(cfg.checkAfterMs);
+    expect(stages).toEqual(['context', 'check']);
+    expect(requests.at(-1)?.fallbackText).not.toBe('同一句。');
+    expect(requests.at(-1)?.fallbackText.length).toBeGreaterThan(0);
+    d.stop();
+  });
+
   it('does not restart the silence ladder after a noise-hearing repair', async () => {
     const s = setup();
     s.d.onAiTurnEnded();
