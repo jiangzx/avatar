@@ -18,7 +18,7 @@
 
 ---
 
-- [ ] **Step 0: 前置检查**
+- [x] **Step 0: 前置检查**
 
 ```bash
 git status --porcelain                     # 必须为空
@@ -30,7 +30,7 @@ cd gateway && node --env-file-if-exists=.env -e "for (const k of ['APP_SECRET','
 
 Expected：工作区干净；7 个源文件和基线文件都存在；四个变量都是 `set`。任何一个变量 `MISSING`：跳过 Step 1–5 的真实模型部分，按 Step 9 记 blocker，继续做 Step 6–8。
 
-- [ ] **Step 1: 写分析器探针**
+- [x] **Step 1: 写分析器探针**
 
 新建 `docs/testing/plan4-affect-probe.mjs`：
 
@@ -123,7 +123,7 @@ main().then(() => process.exit(0)).catch((error) => {
 });
 ```
 
-- [ ] **Step 2: 运行分析器探针**
+- [x] **Step 2: 运行分析器探针**
 
 ```bash
 node --env-file-if-exists=gateway/.env --import tsx docs/testing/plan4-affect-probe.mjs > /tmp/plan4-affect-probe.log; echo "exit=$?"
@@ -133,7 +133,7 @@ grep -c '老伴\|腰\|孙子' /tmp/plan4-affect-probe.log
 
 Expected：`exit=0`；最后一行 `{"cases":10,"matched":M,"failed":F}`；`grep -c` 输出 `0`。验收线：`failed` ≤ 1；两条危机用例（`crisis`、`emergency`）必须 `pass:true`；`matched` ≥ 7。危机用例不通过属于阻塞问题：停下来报告，不要往下合并。其余不达标的情况照实写进报告，由用户决定是否调整 `affect.md`。
 
-- [ ] **Step 3: 写并运行关怀句探针**
+- [x] **Step 3: 写并运行关怀句探针**
 
 与 spec「真实模型探针」的差异（2026-10-23 计划审查确认）：本探针只用真实文本模型测关怀句的生成与校验通过率，不写临时 SQLite、不走 Session 开场。存储选取（`careFollowup`）、回退、关闭（`closeCareFollowup`）、过期清理都已由 T5 的单元测试（`memory-store.test.ts`、`care-opening.test.ts`）用确定性数据覆盖，真实模型对这些路径没有影响。
 
@@ -210,7 +210,7 @@ grep -c '腰\|复查\|孙子' /tmp/plan4-care-probe.log
 
 Expected：`exit=0`；`grep -c` 输出 `0`；每条 `accepted:true` 的行都是 `stillGrounded:true`，并且 `chars ≤ 40`。验收线：`accepted` ≥ 6/8。人工打开 `docs/testing/plan4-care-probe-results.json` 逐条看：必须是开放式关心，不预设结果，不出现原话里没有的作品名、人名、地名。`movie-title` 那条如果被接受，只能引用《城南旧事》本身。有任何一条编造了细节，就停下来报告。
 
-- [ ] **Step 4: Qwen 一次部分 `session.update` 探针（T0 接口疑问 6）**
+- [x] **Step 4: Qwen 一次部分 `session.update` 探针（T0 接口疑问 6）**
 
 新建 `docs/testing/plan4-qwen-session-update-probe.mjs`：
 
@@ -265,7 +265,7 @@ node --env-file-if-exists=gateway/.env --import tsx docs/testing/plan4-qwen-sess
 
 Expected：`{"errors":[],"started":1,"audio":true,"done":1}`，`exit=0`。如果 `errors` 非空，记下错误码，作为 T0 的回归问题报告：Qwen 的合并 update 需要拆成两次发送，由用户决定。不要在本任务里改适配器。
 
-- [ ] **Step 5: 跑改后的共情评估并对比**
+- [x] **Step 5: 跑改后的共情评估并对比**
 
 新建 `docs/testing/plan4-empathy-eval/compare.mjs`：
 
@@ -334,7 +334,7 @@ node -e "const lines=require('node:fs').readFileSync('/tmp/plan4-after-stdout.lo
 
 把结果写进报告。
 
-- [ ] **Step 6: plan-a 现有门槛（真实 Qwen）**
+- [x] **Step 6: plan-a 现有门槛（真实 Qwen）**
 
 ```bash
 cd gateway
@@ -345,7 +345,7 @@ cd ..
 
 Expected：`exit=0`；最后一行 `pass.questionRatio:true`、`pass.avgChars:true`。不通过就报告实际的 `questionRatio` / `avgChars`，由用户决定（T6 放宽人设是最可能的原因）。
 
-- [ ] **Step 7: 全量回归与记忆回归**
+- [x] **Step 7: 全量回归与记忆回归**
 
 ```bash
 npm test -w gateway
@@ -379,7 +379,7 @@ Expected：
 
 用户不同意或暂时不方便：跳过本步，在 roadmap 写明「真机复试 NOT RUN」。
 
-- [ ] **Step 9: 更新 blockers**
+- [x] **Step 9: 更新 blockers**
 
 `docs/blockers.md`：
 - #48 的「状态」列改为：`已规避（2026-10-2x，T0 统一推送闸门：所有 session 变更只在缝隙推送；单元测试覆盖播报中零 session.update）。真机 Seeduplex 复验 NOT RUN`（日期写实际日期）。
@@ -391,7 +391,7 @@ Expected：
 
 - 本任务中任何没跑或不达标的步骤，都各追加一行，写清缺什么、试过什么、影响和解除条件。只写变量名，不写值。
 
-- [ ] **Step 10: 更新 roadmap 与契约**
+- [x] **Step 10: 更新 roadmap 与契约**
 
 `docs/project/roadmap.md`：
 
@@ -418,7 +418,7 @@ Expected：
 
 勾选本计划各任务文件中已完成的步骤。
 
-- [ ] **Step 11: 提交**
+- [x] **Step 11: 提交**
 
 ```bash
 git add docs/testing/plan4-affect-probe.mjs docs/testing/plan4-care-probe.mjs docs/testing/plan4-qwen-session-update-probe.mjs \

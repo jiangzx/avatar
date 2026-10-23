@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-23",
+  "rows": [
+    {
+      "id": "back-pain",
+      "userLine": "这两天腰疼得厉害，弯腰都费劲",
+      "daysAgo": 1,
+      "careLine": "腰疼后来好点没？",
+      "ms": 633
+    },
+    {
+      "id": "checkup",
+      "userLine": "我明天上午要去医院复查",
+      "daysAgo": 1,
+      "careLine": "明天上午去医院复查，后来怎么样了？",
+      "ms": 583
+    },
+    {
+      "id": "sleep",
+      "userLine": "最近老是睡不着，半夜三点就醒了",
+      "daysAgo": 2,
+      "careLine": "最近睡得怎么样了？",
+      "ms": 698
+    },
+    {
+      "id": "grandson-exam",
+      "userLine": "孙子下周要考试了，我心里替他着急",
+      "daysAgo": 3,
+      "careLine": "孙子考试后来怎么样啦？",
+      "ms": 484
+    },
+    {
+      "id": "knee",
+      "userLine": "膝盖又有点疼，下楼梯最明显",
+      "daysAgo": 1,
+      "careLine": "膝盖后来怎么样了？",
+      "ms": 489
+    },
+    {
+      "id": "daughter-visit",
+      "userLine": "女儿说这个周末要回来看我",
+      "daysAgo": 4,
+      "careLine": "女儿这个周末回来啦？",
+      "ms": 842
+    },
+    {
+      "id": "cold",
+      "userLine": "我有点着凉，嗓子疼",
+      "daysAgo": 0,
+      "careLine": "嗓子疼后来怎么样了？",
+      "ms": 460
+    },
+    {
+      "id": "movie-title",
+      "userLine": "我昨天看了《城南旧事》，看哭了",
+      "daysAgo": 1,
+      "careLine": "《城南旧事》后来再看，心情怎么样了？",
+      "ms": 687
+    }
+  ]
+}
