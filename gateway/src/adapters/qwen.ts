@@ -98,6 +98,19 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     this.voice = voice ?? this.opts.voice;
     if (this.connected) this.send({ type: 'session.update', session: { audio: { output: { voice: this.voice } } } });
   }
+  /** One partial session.update with only the changed fields; same keys as the connect payload. */
+  updateSession(update: { instructions?: string; voice?: { value: string | undefined } }): void {
+    const session: Json = {};
+    if (update.instructions !== undefined) {
+      this.instructions = update.instructions;
+      session.instructions = update.instructions;
+    }
+    if (update.voice) {
+      this.voice = update.voice.value ?? this.opts.voice;
+      session.audio = { output: { voice: this.voice } };
+    }
+    if (this.connected && Object.keys(session).length > 0) this.send({ type: 'session.update', session });
+  }
   createResponse(request?: ProactiveRequest): void {
     if (!this.connected) return;
     if (!request) { this.send({ type: 'response.create' }); return; }

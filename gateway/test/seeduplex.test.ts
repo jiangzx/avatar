@@ -100,6 +100,33 @@ describe('SeeduplexAdapter', () => {
     adapter.close();
   });
 
+  it('sends one full session.update for a combined instructions and voice change', async () => {
+    const server = new WebSocketServer({ port: 0 }); servers.push(server);
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const port = (server.address() as { port: number }).port;
+    type Sent = { type: string; session?: { instructions?: string; tools?: unknown[]; audio?: { output?: { voice?: string } } } };
+    const sent: Sent[] = [];
+    server.on('connection', (socket) => socket.on('message', (raw) => {
+      const event = JSON.parse(raw.toString()) as Sent;
+      sent.push(event);
+      if (event.type === 'session.create') socket.send(JSON.stringify({ type: 'session.created' }));
+    }));
+    const adapter = new SeeduplexAdapter({ apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${port}`, voice: 'voice-default' });
+    await adapter.connect({ ...config, voice: 'voice-en' });
+    adapter.updateSession({ instructions: 'next fixture', voice: { value: 'voice-zh' } });
+    adapter.updateSession({ instructions: 'third fixture' });
+    adapter.updateSession({ voice: { value: undefined } });
+    adapter.updateSession({});
+    await wait();
+    const updates = sent.filter((event) => event.type === 'session.update').map((event) => event.session);
+    expect(updates).toHaveLength(3);
+    expect(updates[0]).toMatchObject({ instructions: 'next fixture', audio: { output: { voice: 'voice-zh' } } });
+    expect(updates[0]?.tools).toHaveLength(1);
+    expect(updates[1]).toMatchObject({ instructions: 'third fixture', audio: { output: { voice: 'voice-zh' } } });
+    expect(updates[2]).toMatchObject({ instructions: 'third fixture', audio: { output: { voice: 'voice-default' } } });
+    adapter.close();
+  });
+
   it('does not become ready or send audio until session.created arrives', async () => {
     const server = new WebSocketServer({ port: 0 }); servers.push(server);
     await new Promise<void>((resolve) => server.once('listening', resolve));

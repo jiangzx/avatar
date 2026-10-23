@@ -152,6 +152,7 @@ const manager = new SessionManager(
       ...(pacing.output.maxTokens !== null ? { maxOutputTokens: pacing.output.maxTokens } : {}),
       tailGuardMs: pacing.tailGuardMs,
       slim: pacing.slim,
+      push: pacing.push,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
       emotion: i18n.emotion,
       languageRules: i18n.language,

@@ -93,6 +93,13 @@ export class SeeduplexAdapter extends EventEmitter<AdapterEvents> implements Rea
   }
   updateInstructions(text: string): void { this.instructions = text; this.pushSession(); }
   updateVoice(voice: string | undefined): void { this.voice = voice ?? this.opts.voice; this.pushSession(); }
+  /** Both changes in one full payload: P4 showed back-to-back updates must be merged (blockers #48). */
+  updateSession(update: { instructions?: string; voice?: { value: string | undefined } }): void {
+    if (update.instructions === undefined && !update.voice) return;
+    if (update.instructions !== undefined) this.instructions = update.instructions;
+    if (update.voice) this.voice = update.voice.value ?? this.opts.voice;
+    this.pushSession();
+  }
   createResponse(request?: ProactiveRequest): void {
     // High-risk tool/proactive path: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
     // speech_text_buffer.commit is direct TTS; committing the Director prompt would speak it verbatim.

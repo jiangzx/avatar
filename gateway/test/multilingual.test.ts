@@ -206,7 +206,7 @@ describe('multilingual session', () => {
     session.end();
   });
 
-  it('returns to zh and moves the voice when a ja session hears a longer Han sentence', async () => {
+  it('returns to zh and moves the voice at the next seam when a ja session hears a longer Han sentence', async () => {
     const adapter = new FakeAdapter();
     const roles = fixedRoleCatalog('P-zh', director, {
       languages: ['zh', 'ja', 'en'],
@@ -221,7 +221,15 @@ describe('multilingual session', () => {
     adapter.emit('userTranscript', '今天天气不错', true);
 
     expect(session.currentLanguage).toBe('zh');
-    expect(adapter.voices).toContain('voice-zh');
+    expect(adapter.voices).toEqual([]); // the reply is due: no session.update yet
+    adapter.beginResponse();
+    adapter.done();
+    expect(adapter.voices).toEqual([]);
+    session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    // No updateSession on this fake: the gate falls back to voice, then instructions.
+    expect(adapter.voices).toEqual(['voice-zh']);
+    expect(adapter.pushes).toHaveLength(1);
+    expect(adapter.pushes[0]).toContain('P-zh');
     session.end();
   });
 

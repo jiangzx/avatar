@@ -33,6 +33,11 @@ const PacingSchema = z.object({
       en: z.string().min(1).max(80),
     }).strict(),
   }).strict(),
+  /** Session updates wait for a seam (blockers #48); the reply watch only logs. */
+  push: z.object({
+    minIntervalMs: z.number().int().min(0).max(10_000),
+    noResponseAfterMs: z.number().int().min(1_000).max(30_000),
+  }).strict(),
 }).strict();
 
 /** Fallback when a test omits SessionDeps.toolTurnTimeoutMs. Same value as gateway/config/memory.json. */

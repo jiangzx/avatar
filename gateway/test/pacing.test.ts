@@ -105,6 +105,7 @@ describe('pacing and budget config', () => {
       tailGuardMs: 400,
       output: { maxTokens: null },
       policies: { summarize: { timeoutMs: 15_000, retries: 1, backoffMs: 1000, maxBackoffMs: 4000 } },
+      push: { minIntervalMs: 1_000, noResponseAfterMs: 5_000 },
     };
     writeFileSync(join(dir, 'pacing.json'), JSON.stringify(base));
     expect(() => loadPacing(join(dir, 'pacing.json'))).toThrow();
@@ -132,6 +133,7 @@ describe('pacing and budget config', () => {
       tailGuardMs: 400,
       output: { maxTokens: null },
       policies: { summarize: { timeoutMs: 15_000, retries: 1, backoffMs: 1000, maxBackoffMs: 4000 } },
+      push: { minIntervalMs: 1_000, noResponseAfterMs: 5_000 },
     };
     writeFileSync(join(dir, 'pacing.json'), JSON.stringify({
       ...base,
@@ -146,6 +148,31 @@ describe('pacing and budget config', () => {
     expect(() => loadPacing(join(dir, 'pacing.json'))).toThrow();
   });
 
+  it('ships push pacing and rejects a missing or out-of-range push block', () => {
+    expect(loadPacing(`${root}config/pacing.json`).push).toEqual({ minIntervalMs: 1_000, noResponseAfterMs: 5_000 });
+    const dir = mkdtempSync(join(tmpdir(), 'pace-'));
+    const shipped = JSON.parse(readFileSync(join(root, 'config/pacing.json'), 'utf8')) as Record<string, unknown>;
+    const write = (push: unknown) => {
+      const next: Record<string, unknown> = { ...shipped, push };
+      if (push === undefined) delete next.push;
+      writeFileSync(join(dir, 'pacing.json'), JSON.stringify(next));
+    };
+    for (const push of [
+      undefined,
+      { minIntervalMs: -1, noResponseAfterMs: 5_000 },
+      { minIntervalMs: 10_001, noResponseAfterMs: 5_000 },
+      { minIntervalMs: 1_000, noResponseAfterMs: 999 },
+      { minIntervalMs: 1_000, noResponseAfterMs: 30_001 },
+      { minIntervalMs: 1.5, noResponseAfterMs: 5_000 },
+      { minIntervalMs: 1_000, noResponseAfterMs: 5_000, extra: 1 },
+    ]) {
+      write(push);
+      expect(() => loadPacing(join(dir, 'pacing.json'))).toThrow();
+    }
+    write({ minIntervalMs: 0, noResponseAfterMs: 1_000 });
+    expect(loadPacing(join(dir, 'pacing.json')).push).toEqual({ minIntervalMs: 0, noResponseAfterMs: 1_000 });
+  });
+
   it('rejects personas that leave too little room for history, and inconsistent ledger turns', () => {
     const slim = {
       enabled: true,
@@ -154,7 +181,7 @@ describe('pacing and budget config', () => {
       bridgeAfterMs: 400,
       bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。', en: 'Let me think about where we were.' },
     };
-    const pacing: PacingConfig = { rebuild: { contextChars: 2000, triggerRatio: 1, afterTurns: 30 }, tailGuardMs: 400, output: { maxTokens: null }, policies: { summarize: { timeoutMs: 1000, retries: 0, backoffMs: 0, maxBackoffMs: 0 } }, slim };
+    const pacing: PacingConfig = { rebuild: { contextChars: 2000, triggerRatio: 1, afterTurns: 30 }, tailGuardMs: 400, output: { maxTokens: null }, policies: { summarize: { timeoutMs: 1000, retries: 0, backoffMs: 0, maxBackoffMs: 0 } }, slim, push: { minIntervalMs: 1_000, noResponseAfterMs: 5_000 } };
     const memory: MemoryBudgetConfig = {
       instructions: { budgetRatio: 0.4, snapshotMaxChars: 100, summaryMaxChars: 200, minHistoryChars: 100 },
       toolTurnTimeoutMs: 15_000,

@@ -67,6 +67,7 @@ const make: SessionMaker = (onReplyMetrics) => new Session({
   summarizePolicy: pacing.policies.summarize,
   ...(pacing.output.maxTokens !== null ? { maxOutputTokens: pacing.output.maxTokens } : {}),
   tailGuardMs: pacing.tailGuardMs,
+  push: pacing.push,
   emotion: i18n.emotion,
   onReplyMetrics,
 }, { roleId, styleId, voice: roles.voiceFor(roleId, styleId) });

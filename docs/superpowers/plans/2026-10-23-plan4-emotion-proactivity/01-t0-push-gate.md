@@ -84,7 +84,7 @@ flush 调用点（全部都会先过 `seamOpen`，不满足就继续保留待推
 
 ## Cycle 1：PushGate 纯逻辑
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `gateway/test/push-gate.test.ts`:
 
@@ -222,12 +222,12 @@ describe('PushGate', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run（仓库根目录）: `npx vitest run --root gateway test/push-gate.test.ts`
 Expected: FAIL：模块不存在（vitest 的文案类似 `Failed to load url ../src/session/pushGate.ts` 或 `Failed to resolve import`，以实际输出为准）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 Create `gateway/src/session/pushGate.ts`:
 
@@ -327,7 +327,7 @@ export class PushGate {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run --root gateway test/push-gate.test.ts`
 Expected: PASS（10 passed）。
@@ -336,7 +336,7 @@ Expected: PASS（10 passed）。
 
 ## Cycle 2：适配器 `updateSession`
 
-- [ ] **Step 5: 写失败测试（三个适配器）**
+- [x] **Step 5: 写失败测试（三个适配器）**
 
 `gateway/test/seeduplex.test.ts`：在 L103 `it('does not become ready or send audio until session.created arrives', ...` 之前插入：
 
@@ -417,12 +417,12 @@ Expected: PASS（10 passed）。
 
 ```
 
-- [ ] **Step 6: 跑测试确认失败**
+- [x] **Step 6: 跑测试确认失败**
 
 Run: `npx vitest run --root gateway test/seeduplex.test.ts test/qwen.test.ts test/mock.test.ts`
 Expected: FAIL 3 项，`TypeError: m.updateSession is not a function` / `a.updateSession is not a function` / `adapter.updateSession is not a function`。
 
-- [ ] **Step 7: 实现**
+- [x] **Step 7: 实现**
 
 `gateway/src/adapters/types.ts`，L66–67 之后加一行：
 
@@ -484,7 +484,7 @@ Expected: FAIL 3 项，`TypeError: m.updateSession is not a function` / `a.updat
   }
 ```
 
-- [ ] **Step 8: 跑测试确认通过**
+- [x] **Step 8: 跑测试确认通过**
 
 Run: `npx vitest run --root gateway test/seeduplex.test.ts test/qwen.test.ts test/mock.test.ts`
 Expected: PASS（39 passed）。
@@ -493,7 +493,7 @@ Expected: PASS（39 passed）。
 
 ## Cycle 3：`pacing.json` 的 `push`
 
-- [ ] **Step 9: 写失败测试**
+- [x] **Step 9: 写失败测试**
 
 `gateway/test/pacing.test.ts` 改三处，再加一个用例。
 
@@ -548,12 +548,12 @@ Expected: PASS（39 passed）。
 
 ```
 
-- [ ] **Step 10: 跑测试确认失败**
+- [x] **Step 10: 跑测试确认失败**
 
 Run: `npx vitest run --root gateway test/pacing.test.ts`
 Expected: FAIL 2 项：`requires slim pacing config`（strict schema 不认识 `push` 键而抛错）与 `ships push pacing ...`（`push` 为 undefined）。
 
-- [ ] **Step 11: 实现**
+- [x] **Step 11: 实现**
 
 `gateway/src/session/pacing.ts`，`PacingSchema` 末尾（L35 `slim` 的 `}).strict(),` 之后、L36 `}).strict();` 之前）加：
 
@@ -584,7 +584,7 @@ Expected: FAIL 2 项：`requires slim pacing config`（strict schema 不认识 `
 }
 ```
 
-- [ ] **Step 12: 跑测试确认通过**
+- [x] **Step 12: 跑测试确认通过**
 
 Run: `npx vitest run --root gateway test/pacing.test.ts`
 Expected: PASS（12 passed）。
@@ -593,7 +593,7 @@ Expected: PASS（12 passed）。
 
 ## Cycle 4：Session 全部推送路径迁移到闸门
 
-- [ ] **Step 13: 写失败测试**
+- [x] **Step 13: 写失败测试**
 
 (a) Create `gateway/test/push-seam.test.ts`（Seeduplex 本地上游断言线上事件；Mock 断言重连清空、无回复到期 flush、连接前不推送）：
 
@@ -982,12 +982,12 @@ const drivePush = (session: Session): void =>
   });
 ```
 
-- [ ] **Step 14: 跑测试确认失败**
+- [x] **Step 14: 跑测试确认失败**
 
 Run: `npx vitest run --root gateway test/session.test.ts test/multilingual.test.ts test/push-seam.test.ts`
 Expected: FAIL 10 项。典型原因：`expected [ 'voice-zh' ] to deeply equal []`（旧 `applyLanguage` 立即 `updateVoice`）；Seeduplex 两例 `expected [ { type: 'session.update', … } ] to have a length of +0 but got 1`（终稿时或回复中就推了）；`TypeError: Cannot read properties of undefined (reading 'hasPending')`（还没有 `gate`）；`expected [] to have a length of 1`（旧代码不走 `updateSession`）；`expected "updateSession" to be called 1 times, but got 0 times`。
 
-- [ ] **Step 15: 实现 `session.ts` 迁移**
+- [x] **Step 15: 实现 `session.ts` 迁移**
 
 以下每处「原文」都按当前 `dev-master` 逐字给出，行号为改动前。
 
@@ -1330,7 +1330,7 @@ const DEFAULT_PUSH: PacingConfig['push'] = { minIntervalMs: 0, noResponseAfterMs
 
 15.22 自检：`grep -n "maybePushLanguage\|languagePushPending" gateway/src/session/session.ts` 无输出；`grep -n "updateVoice\|updateInstructions" gateway/src/session/session.ts` 只剩 `sendSessionUpdate` 里的两行退路。
 
-- [ ] **Step 16: 接线 `index.ts` 与 eval 脚本**
+- [x] **Step 16: 接线 `index.ts` 与 eval 脚本**
 
 `gateway/src/index.ts` L154：
 
@@ -1346,7 +1346,7 @@ const DEFAULT_PUSH: PacingConfig['push'] = { minIntervalMs: 0, noResponseAfterMs
   push: pacing.push,
 ```
 
-- [ ] **Step 17: 跑测试确认通过**
+- [x] **Step 17: 跑测试确认通过**
 
 Run: `npx vitest run --root gateway test/session.test.ts test/multilingual.test.ts test/push-seam.test.ts`
 Expected: PASS（Seeduplex 两例用真实计时器与本地 WebSocket，单例约 100 ms）。
@@ -1358,7 +1358,7 @@ Expected: 无错误输出。
 
 ## Cycle 5：`no_response_after_final` 观测
 
-- [ ] **Step 18: 写失败测试**
+- [x] **Step 18: 写失败测试**
 
 Create `gateway/test/no-response.test.ts`:
 
@@ -1524,12 +1524,12 @@ describe('no_response_after_final', () => {
 });
 ```
 
-- [ ] **Step 19: 跑测试确认失败**
+- [x] **Step 19: 跑测试确认失败**
 
 Run: `npx vitest run --root gateway test/no-response.test.ts`
 Expected: FAIL 1 项：`logs once, content-free, when a substantive final gets no response`（`expected [] to have a length of 1`，Cycle 4 的 watch 从不记日志）。其余 6 项此时已通过，Step 21 后它们负责防止误报（已验证：去掉轻回应判定，`does not time a light reply` 会失败；去掉 `responseSinceSpeech` 判定，`does not time a final whose reply already started after the speaking edge` 会失败）。
 
-- [ ] **Step 20: 实现 `Director.isLightFinal`**
+- [x] **Step 20: 实现 `Director.isLightFinal`**
 
 `gateway/src/session/director.ts`，L229 `/** A new assistant response started: the silence timer no longer applies. */` 之前插入（复用私有 `isLight` 与文件内 `normalizeUtterance`，与 `onUserFinal` 判定一致）：
 
@@ -1542,7 +1542,7 @@ Expected: FAIL 1 项：`logs once, content-free, when a substantive final gets n
 
 ```
 
-- [ ] **Step 21: 实现观测条件**
+- [x] **Step 21: 实现观测条件**
 
 `gateway/src/session/session.ts`，把 Step 15.13 写入的 `onTurnFinal` 整段替换为：
 
@@ -1559,7 +1559,7 @@ Expected: FAIL 1 项：`logs once, content-free, when a substantive final gets n
 
 说明：spec §0 的两条「不计时」在这里体现为「不记日志」。终稿到达时已有活跃回复（`responseLive || modelGenerating`）就不启动 watch；本句开口后已出现过 `response.start`（`responseSinceSpeech`）仍启动 watch 以关住缝隙，但到期不记日志。轻回应同理。
 
-- [ ] **Step 22: 跑测试确认通过**
+- [x] **Step 22: 跑测试确认通过**
 
 Run: `npx vitest run --root gateway test/no-response.test.ts`
 Expected: PASS（7 passed）。
@@ -1568,22 +1568,22 @@ Expected: PASS（7 passed）。
 
 ## 收尾验证与提交
 
-- [ ] **Step 23: 全量测试**
+- [x] **Step 23: 全量测试**
 
 Run: `npm test -w gateway`
 Expected: 全部通过。参考值：改动前 `dev-master` 为 45 个文件 / 651 项；本任务新增 26 项，预期 48 个文件 / 677 项（若基线已变，以「0 failed」为准，并在报告写实际数字）。
 
-- [ ] **Step 24: 类型检查**
+- [x] **Step 24: 类型检查**
 
 Run: `npm run typecheck -w gateway`
 Expected: 无错误输出。
 
-- [ ] **Step 25: 空白检查**
+- [x] **Step 25: 空白检查**
 
 Run: `git diff --check`
 Expected: 无输出。
 
-- [ ] **Step 26: Mock 冒烟（只看启动日志，不连手机）**
+- [x] **Step 26: Mock 冒烟（只看启动日志，不连手机）**
 
 Run（仓库根目录；用一次性端口与假密钥，不读 `.env`，不要用 `app/dev.json`）：
 
@@ -1593,7 +1593,7 @@ Run（仓库根目录；用一次性端口与假密钥，不读 `.env`，不要�
 
 Expected: 一行 `{"event":"gateway_listening","port":18787,"adapter":"mock"}`，无 `Error`（证明 `pacing.json` 的 `push` 通过启动校验并注入）。
 
-- [ ] **Step 27: 真实记忆库召回探针（高风险区回归门槛）**
+- [x] **Step 27: 真实记忆库召回探针（高风险区回归门槛）**
 
 本任务改了主动开口路径的推送时机（`requestResponse`），按总览要求跑：
 
@@ -1603,7 +1603,7 @@ node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --real-db "$H
 
 Expected：zh「上次聊到哪儿了」`hits:true`；「上次聊过电影吗」`hits:true`；「我说过喜欢喝茶吗」`hits:false`；`newTitleFlag:false`。真实库不存在时不要声称通过：在报告里写「未跑，原因：库路径不存在」。
 
-- [ ] **Step 28: 提交**
+- [x] **Step 28: 提交**
 
 先 `git status` 确认只有本任务的文件；不要动 `docs/superpowers/specs/2026-10-22-emotion-proactivity-design.md` 等与本任务无关的改动。勾选本文件已完成的步骤后：
 

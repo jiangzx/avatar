@@ -127,6 +127,30 @@ describe('QwenAdapter', () => {
     a.close();
   });
 
+  it('sends one partial session.update for a combined instructions and voice change', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
+    const sent: Array<Record<string, unknown>> = [];
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString()) as Record<string, unknown>;
+      sent.push(e);
+      if (e.type === 'session.update' && sent.length === 1) { ws.send(JSON.stringify({ type: 'session.created' })); ws.send(JSON.stringify({ type: 'session.updated' })); }
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'voice-default' });
+    await a.connect({ instructions: 'fixture', tools: [], voice: 'voice-en' });
+    a.updateSession({ instructions: 'next', voice: { value: 'voice-zh' } });
+    a.updateSession({ instructions: 'only instructions' });
+    a.updateSession({ voice: { value: undefined } });
+    a.updateSession({});
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const updates = sent.filter((e) => e.type === 'session.update').map((e) => e.session);
+    expect(updates.slice(1)).toEqual([
+      { instructions: 'next', audio: { output: { voice: 'voice-zh' } } },
+      { instructions: 'only instructions' },
+      { audio: { output: { voice: 'voice-default' } } },
+    ]);
+    a.close();
+  });
+
   it('waits for session.created before resolving or sending audio', async () => {
     const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
     let release!: () => void;

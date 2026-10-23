@@ -65,6 +65,8 @@ export interface RealtimeAdapter extends EventEmitter<AdapterEvents> {
   updateInstructions(text: string): void;
   /** Move the session to another voice without reconnecting; undefined = the adapter default. */
   updateVoice(voice: string | undefined): void;
+  /** One combined session change. Seeduplex sends a single full session.update; Qwen a single partial one. */
+  updateSession?(update: { instructions?: string; voice?: { value: string | undefined } }): void;
   createResponse(request?: ProactiveRequest): void;
   cancelResponse(): void;
   sendToolResult(callId: string, result: unknown): void;

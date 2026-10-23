@@ -15,5 +15,6 @@
       "ja": "さっきの続きを思い出すね。",
       "en": "Let me think about where we were."
     }
-  }
+  },
+  "push": { "minIntervalMs": 1000, "noResponseAfterMs": 5000 }
 }

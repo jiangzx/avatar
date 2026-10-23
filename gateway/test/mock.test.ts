@@ -133,6 +133,19 @@ describe('MockAdapter', () => {
     expect(m.toolResults).toEqual([{ callId: 'c1', result: { ok: true } }]);
   });
 
+  it('records combined session updates and applies them', async () => {
+    const m = make();
+    await m.connect({ instructions: 'v1', tools: [], voice: 'voice-en' });
+    m.updateSession({ instructions: 'v2', voice: { value: 'voice-zh' } });
+    m.updateSession({ voice: { value: undefined } });
+    expect(m.sessionUpdates).toEqual([
+      { instructions: 'v2', voice: { value: 'voice-zh' } },
+      { voice: { value: undefined } },
+    ]);
+    expect(m.instructions).toBe('v2');
+    expect(m.voice).toBeUndefined();
+  });
+
   it('simulateDrop emits error then closed', () => {
     const m = make();
     const seen: string[] = [];

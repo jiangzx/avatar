@@ -183,7 +183,7 @@ const bilingualRoles = (): RoleCatalog => fixedRoleCatalog('P-zh', director, {
 
 /** Narrow cast: the guard tests need one push attempt without a real model request. */
 const drivePush = (session: Session): void =>
-  (session as unknown as { maybePushLanguage(): void }).maybePushLanguage();
+  (session as unknown as { gate: { flush(): void } }).gate.flush();
 
 const of = <T extends ServerMessage['type']>(sent: ServerMessage[], type: T) =>
   sent.filter((m): m is Extract<ServerMessage, { type: T }> => m.type === type);
@@ -519,6 +519,12 @@ describe('Session', () => {
     s.session.handleClientMessage({ type: 'debug.userText', text: '第二句' });
     await vi.advanceTimersByTimeAsync(10);
     expect(s.session.ledger.summary).toBe('助手：你好呀；用户：第一句；助手：我在听');
+    // The summary waits for the seam: the reply to 第二句 is still due.
+    expect(s.mocks[0].sessionUpdates).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(s.mocks[0].sessionUpdates).toEqual([]);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 3, playedMs: 300, reason: 'ended' });
+    expect(s.mocks[0].sessionUpdates).toHaveLength(1);
     expect(s.mocks[0].instructions).toContain('助手：你好呀；用户：第一句；助手：我在听');
     expect(s.mocks[0].instructions).toContain('用户：第二句');
   });
@@ -974,58 +980,73 @@ describe('Session', () => {
     expect(s.session.ledger.recent.at(-1)?.interrupted).toBe(true);
   });
 
-  it('moves the adapter voice when the session language changes', async () => {
+  it('moves voice and instructions in one update at the next seam, once per turn', async () => {
     const s = setup({
       roles: bilingualRoles(),
       voiceFor: (language) => language === 'en' ? 'voice-en' : 'voice-zh',
     }, { ...ownedCtx });
     await greetAndFinish(s);
-    const update = vi.spyOn(s.mocks[0]!, 'updateVoice');
+    const updates = s.mocks[0]!.sessionUpdates;
 
-    s.session.setInitialLanguage('en');
-    expect(update).toHaveBeenCalledWith('voice-en');
+    s.session.setInitialLanguage('en'); // seam open: sent now
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ voice: { value: 'voice-en' } });
+    expect(updates[0]!.instructions).toContain('P-en');
     expect(s.mocks[0]!.voice).toBe('voice-en');
 
-    s.session.setInitialLanguage('zh');
-    expect(update).toHaveBeenLastCalledWith('voice-zh');
+    s.session.setInitialLanguage('zh'); // same turn: held
+    expect(updates).toHaveLength(1);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '你好' });
+    await vi.advanceTimersByTimeAsync(1000); // reply streamed, still playing on the client
+    expect(updates).toHaveLength(1);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    expect(updates).toHaveLength(2);
+    expect(updates[1]).toMatchObject({ voice: { value: 'voice-zh' } });
+    expect(updates[1]!.instructions).toContain('P-zh');
     expect(s.mocks[0]!.voice).toBe('voice-zh');
     s.session.end();
   });
 
-  it('pushes new-language instructions before the next proactive request', async () => {
+  it('pushes held new-language instructions right before the next proactive request', async () => {
     const s = setup({ roles: bilingualRoles() }, { ...ownedCtx });
     await greetAndFinish(s);
-    const push = vi.spyOn(s.mocks[0]!, 'updateInstructions');
+    const push = vi.spyOn(s.mocks[0]!, 'updateSession');
+    const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
+    s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 0 });
     s.session.setInitialLanguage('en');
-    expect(push).not.toHaveBeenCalled();
+    s.session.handleClientMessage({ type: 'vad', state: 'silent', t: 400 });
+    expect(push).not.toHaveBeenCalled(); // a silent edge is not a seam: a reply may still form
     await vi.advanceTimersByTimeAsync(8_500); // silence follow-up goes through requestResponse
-    expect(push).toHaveBeenCalled();
-    expect(push.mock.calls.at(-1)?.[0]).toContain('P-en');
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push.mock.calls[0]?.[0].instructions).toContain('P-en');
+    expect(creates).toHaveBeenCalled();
+    expect(push.mock.invocationCallOrder[0]!).toBeLessThan(creates.mock.invocationCallOrder[0]!);
     s.session.end();
   });
 
   it('defers new-language instructions while the user is speaking', async () => {
     const s = setup({ roles: bilingualRoles() }, { ...ownedCtx });
     await greetAndFinish(s);
-    const push = vi.spyOn(s.mocks[0]!, 'updateInstructions');
-    s.session.setInitialLanguage('en');
+    const push = vi.spyOn(s.mocks[0]!, 'updateSession');
     s.session.handleClientMessage({ type: 'vad', state: 'speaking', t: 0 });
+    s.session.setInitialLanguage('en');
     drivePush(s.session);
     expect(push).not.toHaveBeenCalled();
     s.session.handleClientMessage({ type: 'vad', state: 'silent', t: 400 });
+    expect(push).not.toHaveBeenCalled();
     drivePush(s.session);
     expect(push).toHaveBeenCalledTimes(1);
-    expect(push.mock.calls[0]?.[0]).toContain('P-en');
+    expect(push.mock.calls[0]?.[0].instructions).toContain('P-en');
     s.session.end();
   });
 
   it('does not push new-language instructions when an interruption finalizes the reply', async () => {
     const s = setup({ roles: bilingualRoles() }, { ...ownedCtx });
     await greetAndFinish(s);
-    const push = vi.spyOn(s.mocks[0]!, 'updateInstructions');
+    const push = vi.spyOn(s.mocks[0]!, 'updateSession');
+    s.session.handleClientMessage({ type: 'debug.userText', text: '你好' });
+    await vi.advanceTimersByTimeAsync(150); // reply seq 2 is live
     s.session.setInitialLanguage('en');
-    s.session.handleClientMessage({ type: 'debug.userText', text: 'hello' });
-    await vi.advanceTimersByTimeAsync(150);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 50, reason: 'interrupted' });
     expect(push).not.toHaveBeenCalled();
     s.session.end();

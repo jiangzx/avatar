@@ -226,6 +226,12 @@ export class Director {
     if (this.bargeIn && !this.aiBusy) this.armBargeReplyWait();
   }
 
+  /** Whole-utterance light reply (lightPhrases) or an empty one. Quiet phrases are not light. */
+  isLightFinal(text: string): boolean {
+    const key = normalizeUtterance(text);
+    return !key || this.isLight(key);
+  }
+
   /** A new assistant response started: the silence timer no longer applies. */
   onAiTurnStarted(): void {
     this.aiBusy = true;

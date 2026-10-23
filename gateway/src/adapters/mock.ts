@@ -60,6 +60,8 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
   voice: string | undefined;
   readonly notes: string[] = [];
   readonly toolResults: Array<{ callId: string; result: unknown }> = [];
+  /** Every combined session change, in order (tests assert the push gate). */
+  readonly sessionUpdates: Array<{ instructions?: string; voice?: { value: string | undefined } }> = [];
 
   private turnIndex = 0;
   private speaking = false;
@@ -111,6 +113,12 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
 
   updateVoice(voice: string | undefined): void {
     this.voice = voice;
+  }
+
+  updateSession(update: { instructions?: string; voice?: { value: string | undefined } }): void {
+    this.sessionUpdates.push({ ...update });
+    if (update.instructions !== undefined) this.instructions = update.instructions;
+    if (update.voice) this.voice = update.voice.value;
   }
 
   createResponse(request?: ProactiveRequest): void {

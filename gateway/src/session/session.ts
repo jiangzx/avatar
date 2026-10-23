@@ -32,6 +32,7 @@ import { detectLanguage } from './language.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
 import { DEFAULT_TOOL_TURN_TIMEOUT_MS, type PacingConfig } from './pacing.ts';
+import { PushGate, type PushRequest } from './pushGate.ts';
 import { shouldSpeakBridge, slimClockAction } from './slim.ts';
 import { ToolTurn } from './toolTurn.ts';
 import { createSilencePlanner } from './silence.ts';
@@ -106,6 +107,8 @@ export interface SessionDeps {
   rebuildTriggerRatio?: number;
   /** Interval slim rebuild (gateway/config/pacing.json slim). */
   slim?: PacingConfig['slim'];
+  /** Push seam pacing (gateway/config/pacing.json push). Omitted in tests: DEFAULT_PUSH. */
+  push?: PacingConfig['push'];
   /** Clock for tests; production uses Date.now. */
   now?: () => number;
   /** Emotion lexicon (gateway/config/emotion.json); undefined = no avatar.emotion messages. */
@@ -150,6 +153,9 @@ const BARGE_PREROLL_RMS = 200;
 /** Used only when no policy is injected (tests); production reads gateway/config/pacing.json. */
 const DEFAULT_SUMMARIZE_POLICY: PolicySpec = { timeoutMs: 15_000, retries: 0, backoffMs: 1_000, maxBackoffMs: 1_000 };
 
+/** Used only when SessionDeps.push is omitted (tests); production reads gateway/config/pacing.json. */
+const DEFAULT_PUSH: PacingConfig['push'] = { minIntervalMs: 0, noResponseAfterMs: 5_000 };
+
 export class Session {
   readonly ledger: ConversationLedger;
   readonly context: SessionContext;
@@ -158,7 +164,15 @@ export class Session {
   private language: Language;
   private readonly personas = new Map<Language, string>();
   private readonly silencePlanners = new Map<Language, ReturnType<typeof createSilencePlanner>>();
-  private languagePushPending = false;
+  /** Every live session.update goes through here (blockers #48). */
+  private readonly gate: PushGate;
+  private readonly push: PacingConfig['push'];
+  /** True once connect() succeeded on the current adapter; false while rebuilding. */
+  private adapterReady = false;
+  /** Runs from a user final (or a proactive request) until a response starts; closes the push seam. */
+  private replyWatch: NodeJS.Timeout | null = null;
+  /** A response started since the last speaking edge; a later final is then not reported. */
+  private responseSinceSpeech = false;
   private adapter: RealtimeAdapter;
   private transport: Transport | null = null;
   private readonly director: Director;
@@ -248,6 +262,13 @@ export class Session {
     this.writer = deps.writer;
     this.context = ctx;
     this.i18n = deps.i18n ?? DEFAULT_I18N;
+    this.push = deps.push ?? DEFAULT_PUSH;
+    this.gate = new PushGate({
+      seamOpen: () => this.pushSeamOpen(),
+      send: (update) => this.sendSessionUpdate(update),
+      now: () => this.now(),
+      minIntervalMs: this.push.minIntervalMs,
+    });
     this.language = this.resolveLanguage(ctx.language ?? deps.roles.defaultLanguage(ctx.roleId));
     // The resolver rendered with the role's default language; render again in the session language.
     this.refreshMemorySnapshot();
@@ -301,7 +322,9 @@ export class Session {
   async start(transport: Transport): Promise<void> {
     this.transport = transport;
     await this.adapter.connect(this.sessionConfig());
-    this.languagePushPending = false;
+    // connect() already carried the latest instructions and voice.
+    this.adapterReady = true;
+    this.gate.clearPending();
     if (this.ended) {
       this.adapter.close();
       return;
@@ -373,6 +396,7 @@ export class Session {
       case 'vad': {
         const speaking = msg.state === 'speaking';
         this.userSpeaking = speaking;
+        if (speaking) this.onSpeakingEdge();
         // A new speaking edge marks a new utterance: late finals of the memory-tool turn
         // arrived before this edge and stay dropped, while this utterance is stored.
         if (speaking) this.dropUserFinals = false;
@@ -436,9 +460,8 @@ export class Session {
           this.bargePreroll.length = 0;
           this.finalize(s, false);
           this.interrupt.onResponseFinished(msg.responseSeq);
-          // finalize() ran while this response was still the active interrupt, so push here
-          // instead: a language switch made during the reply must reach the live model now.
-          this.maybePushLanguage();
+          // finalize() ran while this response was still the active interrupt; this is the seam.
+          this.gate.flush();
           this.uplinkResumeAt = Date.now() + (this.deps.tailGuardMs ?? 0);
           this.finishNotice(msg.responseSeq);
           if (toolOrigin) {
@@ -465,6 +488,7 @@ export class Session {
         }
         this.interrupt.cancelActive('local');
         this.dropUserFinals = false; // a deliberate new turn, not a late transcript
+        this.responseSinceSpeech = false;
         this.onUserFinal(msg.text, true);
         this.adapter.sendUserText(msg.text);
         break;
@@ -503,6 +527,8 @@ export class Session {
     if (this.ended) return;
     this.ended = true;
     this.clearToolTimer();
+    this.clearReplyWatch();
+    this.gate.dispose();
     this.stopSlimClock();
     if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
     this.rebuildTimer = null;
@@ -521,20 +547,17 @@ export class Session {
     return this.language;
   }
 
-  /** Initial language from session.start; pushed once the adapter has connected. */
+  /** Initial language from session.start; before connect it simply rides on the connect payload. */
   setInitialLanguage(language: Language): void {
-    this.applyLanguage(language, true);
+    this.applyLanguage(language);
   }
 
-  private applyLanguage(language: Language, push: boolean): void {
+  private applyLanguage(language: Language): void {
     const next = this.resolveLanguage(language);
     // Session-end extraction reads this context, so it must track the latest language.
     this.context.language = next;
     if (next === this.language) return;
     this.language = next;
-    // The adapter picks its voice at connect; move it now so a stale en/ja voice does not
-    // keep speaking the new language. Undefined falls back to the adapter's configured default.
-    this.adapter.updateVoice(this.voiceFor(next));
     this.director.setLanguage(next);
     const budget = this.budgetFor(next);
     if (budget) {
@@ -543,7 +566,8 @@ export class Session {
     }
     // Same store data, new labels, addressing patterns, and evidence rules.
     this.refreshMemorySnapshot();
-    this.languagePushPending = push;
+    // Voice and instructions travel together at the next seam. Undefined voice = adapter default.
+    this.gate.request({ instructions: true, voice: { value: this.voiceFor(next) } });
   }
 
   private resolveLanguage(language: Language): Language {
@@ -575,12 +599,6 @@ export class Session {
       this.silencePlanners.set(this.language, planner);
     }
     return planner(context, signal);
-  }
-
-  private maybePushLanguage(): void {
-    if (!this.languagePushPending || this.ended || this.modelGenerating || !this.slimSeamOpen()) return;
-    this.languagePushPending = false;
-    this.pushInstructions();
   }
 
   private send(msg: ServerMessage): void {
@@ -628,11 +646,66 @@ export class Session {
     return tools;
   }
 
-  /** Sends fresh instructions to the live model session and remembers their size. */
+  /** Queues fresh instructions for the next push seam. */
   private pushInstructions(): void {
-    const instructions = this.instructions();
-    this.lastInstructionsChars = instructions.length;
-    this.adapter.updateInstructions(instructions);
+    this.gate.request({ instructions: true });
+  }
+
+  /** Seam for session.update: slim seam, nothing generating, no reply awaited, adapter connected. */
+  private pushSeamOpen(): boolean {
+    return !this.ended && this.adapterReady && !this.modelGenerating && this.replyWatch === null && this.slimSeamOpen();
+  }
+
+  /** The gate's only sink. Instructions are rendered now, so the newest state is what goes out. */
+  private sendSessionUpdate(update: PushRequest): void {
+    const instructions = update.instructions ? this.instructions() : undefined;
+    if (instructions !== undefined) this.lastInstructionsChars = instructions.length;
+    log('session_push', { instructions: instructions !== undefined, voice: update.voice !== undefined });
+    if (this.adapter.updateSession) {
+      this.adapter.updateSession({
+        ...(instructions !== undefined ? { instructions } : {}),
+        ...(update.voice ? { voice: update.voice } : {}),
+      });
+      return;
+    }
+    if (update.voice) this.adapter.updateVoice(update.voice.value);
+    if (instructions !== undefined) this.adapter.updateInstructions(instructions);
+  }
+
+  /** Local or server speech began: a new utterance, so drop the reply watch. */
+  private onSpeakingEdge(): void {
+    this.responseSinceSpeech = false;
+    this.clearReplyWatch();
+  }
+
+  /**
+   * Holds the push seam shut until a response starts. After a substantive final, expiry logs
+   * no_response_after_final (content-free); either way it flushes, since no reply formed.
+   */
+  private watchReply(logOnExpiry: boolean): void {
+    this.clearReplyWatch();
+    const startedAt = this.now();
+    this.replyWatch = setTimeout(() => {
+      this.replyWatch = null;
+      if (this.ended) return;
+      if (logOnExpiry) log('no_response_after_final', { sinceFinalMs: this.now() - startedAt });
+      this.gate.flush();
+    }, this.push.noResponseAfterMs);
+    this.replyWatch.unref?.();
+  }
+
+  private clearReplyWatch(): void {
+    if (this.replyWatch) clearTimeout(this.replyWatch);
+    this.replyWatch = null;
+  }
+
+  /** A stored final opens a new push turn and shuts the seam until its reply starts. */
+  private onTurnFinal(text: string): void {
+    this.gate.onUserFinal();
+    // A live reply already shuts the seam and is this final's answer.
+    if (this.responseLive || this.modelGenerating) return;
+    // Qwen can finalize the transcript after its reply started: stay shut, but do not report.
+    this.watchReply(!this.responseSinceSpeech && !this.director.isLightFinal(text));
   }
 
   private requestResponse(kind: ResponseKind, request: ProactiveRequest): void {
@@ -648,7 +721,10 @@ export class Session {
       this.noticeVerbatim = this.adapter.verbatimFallback;
     }
     this.pendingKind = kind;
-    this.maybePushLanguage();
+    // Last seam before the proactive line; the watch keeps it shut until that line starts.
+    this.gate.flush();
+    // Watch before createResponse: an adapter that emits responseStarted synchronously clears it at once.
+    this.watchReply(false);
     this.adapter.createResponse(request);
   }
 
@@ -702,6 +778,7 @@ export class Session {
 
     a.on('userSpeechStarted', () => {
       if (!current()) return;
+      this.onSpeakingEdge();
       this.director.onUserActivity();
       this.interrupt.onModelSpeechStarted();
     });
@@ -737,6 +814,8 @@ export class Session {
         this.noticeSeq = s.seq;
       }
       log('response_start', { seq: s.seq, kind: s.kind });
+      this.clearReplyWatch();
+      this.responseSinceSpeech = true;
       this.metrics.onResponseStarted(s.seq, s.kind);
       this.emotion?.onResponseStart(s.seq);
       this.modelGenerating = true;
@@ -857,13 +936,13 @@ export class Session {
     // Do not session.update here. An instructions refresh in the middle of a barge-in
     // drops the audio the server is still hearing, so the next question never lands.
     this.maybeSummarize();
-    // An interrupted reply keeps the pending push for the next safe seam.
-    if (!interrupted) this.maybePushLanguage();
   }
 
   private onUserFinal(text: string, echo: boolean): void {
+    // Before the language check: its push must find the seam already shut.
+    if (!this.dropUserFinals) this.onTurnFinal(text);
     const nextLanguage = detectLanguage(text, this.language, this.deps.languageRules);
-    if (nextLanguage !== this.language) this.applyLanguage(nextLanguage, true);
+    if (nextLanguage !== this.language) this.applyLanguage(nextLanguage);
     if (echo) this.send({ type: 'transcript.user', text, final: true });
     if (this.dropUserFinals) return;
     this.turnUserText = text;
@@ -1082,6 +1161,7 @@ export class Session {
     if (this.ended) return;
     // Continuation playback rearms silence later. Timeout and barge-in rearm now.
     this.director.releasePause(!allowSpeech);
+    this.gate.flush();
   }
 
   private maybeSummarize(): void {
@@ -1117,6 +1197,10 @@ export class Session {
       if (reason === 'forget' || reason === 'decline') this.rebuildAgain = reason;
       return;
     }
+    // The old upstream will never answer; the new one is not ready for session.update yet.
+    // Must come before releaseToolTurn, whose flush would otherwise send to the closing adapter.
+    this.clearReplyWatch();
+    this.adapterReady = false;
     if (!keepToolTurn && this.toolTurn.onRebuild()) this.releaseToolTurn(false);
     this.director.pause();
     if (this.noticePendingRequest) {
@@ -1149,7 +1233,9 @@ export class Session {
       if (reason === 'forget' || reason === 'decline') this.refreshMemorySnapshot();
       await this.adapter.connect(this.sessionConfig());
       connected = true;
-      this.languagePushPending = false;
+      // connect() carried the latest instructions and voice; nothing is left to push.
+      this.adapterReady = true;
+      this.gate.clearPending();
       this.syncInputMute();
       const buffered = this.rebuildMicBuffer.splice(0);
       if (!this.muted) for (const pcm of buffered) this.adapter.sendAudio(pcm);
@@ -1192,6 +1278,7 @@ export class Session {
     const line = slim ? slim.bridge[this.language] : '';
     if (line && shouldSpeakBridge(this.now() - startedAt, slim!.bridgeAfterMs, slim!.enabled)) {
       // Do not send presence ready: the bridge audio is what ends the thinking pose.
+      this.watchReply(false);
       this.adapter.createResponse({ cue: 'contextBridge', instruction: line, fallbackText: line });
       return true;
     }
