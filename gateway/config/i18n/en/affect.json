@@ -13,7 +13,7 @@
     "strategy": {
       "comfort": "Comfort softly.",
       "reflect": "Name the feeling; don't echo.",
-      "affirm": "Name and affirm; add one feeling or question; no advice.",
+      "affirm": "Name their feeling in one line, affirm it, and hold the advice.",
       "ask": "One small question.",
       "disclose": "Share a bit of yourself.",
       "suggest": "One concrete suggestion, no lecture."
