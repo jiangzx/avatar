@@ -1,5 +1,7 @@
 # Plan 5：共情补句（结构性主动机制）实施计划
 
+> **2026-10-24: implementation reverted (`9b7470b`).** Kept as the design/evaluation record; the code is not on the branch. Two eval runs scored +0.37/+0.59 (mean +0.48), and a tuning round scored +0.31/+0.26; neither beat the pre-existing +0.48.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在主回复播放结束后，由共享文本模型规划一句很短的后续，提升共情评估的 `proactive`，同时不损害 `crisis`、`noFabrication` 与 `noIntrusion`。
