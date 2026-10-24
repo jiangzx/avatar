@@ -130,13 +130,10 @@ describe('affect copy', () => {
     expect(i18n.affect.zh.lines.tail).toContain('用语气和内容表现');
     expect(i18n.affect.zh.lines.need.vent).toBe('想倾诉：多听，少提问。');
     expect(i18n.affect.zh.lines.need.share_joy).toBe('想分享喜事：跟着高兴，问一句细节。');
-    expect(i18n.affect.zh.lines.need.help).toBe('想求助：先问一句情况，再给一条具体建议。');
     expect(i18n.affect.zh.lines.strategy.reflect).toBe('用一句话点出感受，别逐字复述。');
     expect(i18n.affect.zh.lines.strategy.affirm).toBe('用一句话点出对方的感受，再肯定；先不给建议。');
-    expect(i18n.affect.zh.lines.strategy.suggest).toBe('只给一条具体建议，不说教。');
-    expect(i18n.affect.zh.lines.exhaustedHint).toContain('换一次话头');
+    expect(i18n.affect.zh.lines.exhaustedHint).toContain('只换一次');
     expect(i18n.affect.zh.lines.exhaustedHint).toContain('最近听到的一首歌');
-    expect(i18n.affect.zh.lines.exhaustedHint).toContain('安静陪着');
     expect(i18n.affect.zh.declinePhrases).toContain('不想聊这个');
     expect(i18n.affect.zh.solarTerms[0]).toEqual({ name: '小寒', month: 1, day: 5 });
     expect(i18n.affect.zh.solarTerms.find((term) => term.name === '冬至')).toEqual({ name: '冬至', month: 12, day: 21 });

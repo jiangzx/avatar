@@ -6,7 +6,7 @@
     "need": {
       "vent": "Wants to vent: listen.",
       "share_joy": "Sharing joy: be glad, ask one detail.",
-      "help": "Wants help: ask one detail, then one suggestion.",
+      "help": "Wants help.",
       "chat": "Light chat.",
       "topic_exhausted": "Topic ran dry."
     },
@@ -16,11 +16,11 @@
       "affirm": "Name their feeling in one line, affirm it, and hold the advice.",
       "ask": "One small question.",
       "disclose": "Share a bit of yourself.",
-      "suggest": "One concrete suggestion, no lecture."
+      "suggest": "One gentle idea."
     },
     "mismatch": "Says fine; may hurt.",
-    "exhaustedHint": "Short answers may mean fatigue. Share one small AI-life detail once; if they stay short, just sit with them.",
-    "tail": "Internal; don't read or name emotions."
+    "exhaustedHint": "Share one small AI-life detail (a song you heard, a line you read), not a question.",
+    "tail": "Internal; don't read out or name emotions."
   },
   "declinePhrases": ["don't want to talk about", "rather not talk", "stop asking", "never mind", "drop it"],
   "solarTerms": [
