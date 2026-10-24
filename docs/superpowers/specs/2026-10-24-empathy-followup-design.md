@@ -2,7 +2,7 @@
 
 ## 状态
 
-已批准（2026-10-24，设计对话逐项确认），并已实施（提交 `c174d53`）。两轮真实 Qwen 共情评估：`firstThree 3.67/3.89`（`+0.37/+0.59`，均值 `+0.48`），未达 `+1`；`noIntrusion 4.00/4.42`，均值低于基线；plan-a 通过。机制能出声但未抬起 proactive；保留/调参/回退待定。实施见 Plan 5：`docs/superpowers/plans/2026-10-24-empathy-followup/`。本机制建立在 Plan 4 的 `AffectTracker`、`renderAffect`、`PushGate` 与共享文本模型之上，不改记忆召回、四段式沉默文案或协议消息。
+已批准（2026-10-24，设计对话逐项确认），并已实施（`c174d53`），调参版见 `eaf69ca`。原版两轮真实 Qwen 共情评估：`firstThree 3.67/3.89`（`+0.37/+0.59`，均值 `+0.48`），未达 `+1`；调参版（去掉低落补句、timeout 1500）两轮 `3.61/3.56`（`+0.31/+0.26`），更差；两版 `noIntrusion` 均值均低于基线；plan-a 两版均通过。机制未抬起 proactive；回退/保留待定。实施见 Plan 5：`docs/superpowers/plans/2026-10-24-empathy-followup/`。本机制建立在 Plan 4 的 `AffectTracker`、`renderAffect`、`PushGate` 与共享文本模型之上，不改记忆召回、四段式沉默文案或协议消息。
 
 ## 1. 问题与目标
 
