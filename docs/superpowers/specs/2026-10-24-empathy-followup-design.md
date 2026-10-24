@@ -60,7 +60,7 @@ Plan 4 的共情评估在固定文案调优后停在 `firstThreeDelta +0.45～0.
 - `createFollowUpPlanner(client, config, prompt)`：复用 `QwenTextClient`，按 `runWithPolicy` 的短超时调用一次，返回去空白后的单句或 null；输出必须 ≤ `maxChars`、低落时不含 `？` 或 `?`、通过 `scanText`。
 - 规划输入只含当前用户原话、状态卡枚举与最近用户陈述；不输入主回复（规划在主回复结束前开始，主回复尚未定稿）。
 
-新增角色提示词 `gateway/roles/_shared/{zh,ja,en}/followup.md`：系统提示要求“一句很短的口语后续；喜事/好转问一个细节或说一句相关感受；求助问一句当前情况；低落只说一句陪伴；不提建议、不列清单、不说情绪名称、不声称身体或现实动作”。角色目录增加读取该提示词的方法。
+新增角色提示词 `gateway/roles/_shared/{zh,ja,en}/followup.md`：系统提示要求“一句很短的口语后续；喜事/好转问一个细节或说一句相关感受；求助问一句当前情况；低落只说一句陪伴；不提建议、不列清单、不说情绪名称、不声称身体或现实动作”。另加 `followup-speak.md`（含 `{line}` 的 Qwen 播报指令模板）。角色目录增加 `followupPrompt(language)` 与 `followupSpeakInstruction(language)` 两个方法；`SharedText` 增加 `followup` 与 `followupSpeak` 两个字段。
 
 ### 4.2 配置
 
@@ -104,7 +104,7 @@ user final ──► affect analyze (async) ──► card(cardTurn)
 
 ## 5. 观测与错误处理
 
-- 新日志 `empathy_followup`：`trigger`、`outcome`（`planned`/`spoken`/`skipped`）、`code`（`crisis`/`stale`/`limit`/`already_asked`/`user_speech`/`interrupted`/`planner_timeout`/`planner_empty`/`unsafe`/`ended`）、`ms`。不记录任何正文。
+- 新日志 `empathy_followup`：`trigger`、`outcome`（`planned`/`spoken`/`skipped`）、`code`（`crisis`/`stale`/`limit`/`already_asked`/`user_speech`/`interrupted`/`new_turn`/`no_trigger`/`planner_timeout`/`planner_empty`/`unsafe`/`ended`）、`ms`。不记录任何正文。
 - 规划失败/超时/不合法：跳过并记 `code`，不播固定兜底句。
 - 没有共享文本模型：`followup.enabled` 无效，机制不启动（与 affect 分析器一致）。
 - Mock/测试：可用配置关闭；单元测试用假文本模型控制延迟与输出。
