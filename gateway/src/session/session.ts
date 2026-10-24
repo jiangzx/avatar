@@ -156,6 +156,8 @@ interface ResponseState {
   responseDone: boolean;
   /** Set when playback.stopped reason=ended arrives for this seq. */
   playbackEnded: boolean;
+  /** Direct session lines (tool continuation, confirm, context bridge) are never main replies. */
+  noFollowUp: boolean;
 }
 
 const MAX_REBUILD_MIC_FRAMES = 25;
@@ -291,6 +293,10 @@ export class Session {
   private affectCardTurn = 0;
   /** User turn whose main reply started; only such a turn may follow up. */
   private replyTurn = 0;
+  /** Seq of the main reply still live for the current turn; Qwen may start it before the final. */
+  private replyInFlightSeq: number | null = null;
+  /** The next responseStarted belongs to a direct session line, not a requested main reply. */
+  private pendingNoFollowUp = false;
   /** Follow-ups actually requested this session (max from affect.json). */
   private followUpUsed = 0;
   private followUpTimer: NodeJS.Timeout | null = null;
@@ -905,7 +911,7 @@ export class Session {
   private scheduleFollowUp(s: ResponseState, userText: string | null): void {
     const config = this.deps.affect;
     if (!config?.followup.enabled || !this.followUpPlanner || this.ended) return;
-    if (s.kind !== 'reply' || this.userTurnSeq === 0) return;
+    if (s.kind !== 'reply' || s.noFollowUp || this.userTurnSeq === 0) return;
     const turn = this.userTurnSeq;
     this.followUpTurn = { turn, userText: userText ?? this.lastUserText() ?? '', replyText: s.text, startedAt: this.now() };
     if (this.followUpTimer) clearTimeout(this.followUpTimer);
@@ -947,15 +953,20 @@ export class Session {
       maxPerSession: config.followup.maxPerSession,
     });
     if (skip) { this.skipFollowUp(skip, plan.trigger, started); return; }
+    const request: ProactiveRequest = {
+      cue: 'followup',
+      instruction: this.deps.roles.followupSpeakInstruction(this.language).replaceAll('{line}', text),
+      fallbackText: text,
+    };
+    // Count and log only once the request is actually accepted by the adapter seam.
+    if (!this.requestResponse('followup', request)) {
+      this.skipFollowUp('interrupted', plan.trigger, started);
+      return;
+    }
     this.followUpUsed += 1;
     log('empathy_followup', { trigger: plan.trigger, outcome: 'spoken', code: null, ms: this.now() - started });
     this.followUpTurn = null;
     this.followUpPlan = null;
-    this.requestResponse('followup', {
-      cue: 'followup',
-      instruction: this.deps.roles.followupSpeakInstruction(this.language).replaceAll('{line}', text),
-      fallbackText: text,
-    });
   }
 
   private waitForFollowUpPlan(turn: number, timeoutMs: number): Promise<void> {
@@ -983,7 +994,7 @@ export class Session {
     for (const wake of this.followUpPlanWaiters.splice(0)) wake();
   }
 
-  private cancelFollowUp(code: 'new_turn' | 'user_speech' | 'ended'): void {
+  private cancelFollowUp(code: 'new_turn' | 'user_speech' | 'ended' | 'interrupted'): void {
     const had = this.followUpTimer !== null || this.followUpPlan !== null || this.followUpTurn !== null;
     if (this.followUpTimer) { clearTimeout(this.followUpTimer); this.followUpTimer = null; }
     if (this.followUpPlan) { this.followUpPlan.controller.abort(); this.followUpPlan = null; }
@@ -992,11 +1003,11 @@ export class Session {
     if (had) log('empathy_followup', { trigger: null, outcome: 'skipped', code, ms: 0 });
   }
 
-  private requestResponse(kind: ResponseKind, request: ProactiveRequest): void {
+  private requestResponse(kind: ResponseKind, request: ProactiveRequest): boolean {
     // Tool turns speak only through maybeContinue.
-    if (this.toolTurn.active || this.ended || this.interrupt.active !== null || this.modelGenerating) {
+    if (this.toolTurn.active || this.ended || this.interrupt.active !== null || this.modelGenerating || !this.adapterReady) {
       if (request.cue === 'memoryNotice') this.director.onNoticeMissed();
-      return;
+      return false;
     }
     if (request.cue === 'memoryNotice') {
       this.noticePendingRequest = true;
@@ -1007,10 +1018,18 @@ export class Session {
     // Remember which opening text actually went out; only the care one closes its followup.
     if (kind === 'greeting') this.greetingText = request.fallbackText;
     this.pendingKind = kind;
+    this.pendingNoFollowUp = false;
     // Last seam before the proactive line; the watch keeps it shut until that line starts.
     this.gate.flush();
     // Watch before createResponse: an adapter that emits responseStarted synchronously clears it at once.
     this.watchReply(false);
+    this.adapter.createResponse(request);
+    return true;
+  }
+
+  /** Direct lines bypass requestResponse; mark the next start so it is never taken for a main reply. */
+  private createDirectResponse(request: ProactiveRequest): void {
+    this.pendingNoFollowUp = true;
     this.adapter.createResponse(request);
   }
 
@@ -1083,7 +1102,9 @@ export class Session {
     });
     a.on('responseStarted', (id) => {
       if (!current()) return;
-      const s: ResponseState = { seq: ++this.seqCounter, kind: this.pendingKind ?? 'reply', text: '', audioMs: 0, playedMs: 0, finalized: false, flushed: false, responseDone: false, playbackEnded: false };
+      const noFollowUp = this.pendingNoFollowUp;
+      this.pendingNoFollowUp = false;
+      const s: ResponseState = { seq: ++this.seqCounter, kind: this.pendingKind ?? 'reply', text: '', audioMs: 0, playedMs: 0, finalized: false, flushed: false, responseDone: false, playbackEnded: false, noFollowUp };
       this.pendingKind = null;
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
@@ -1100,8 +1121,9 @@ export class Session {
         this.noticeSeq = s.seq;
       }
       if (s.kind === 'greeting') this.closeCareIfSpoken();
-      if (s.kind === 'reply') {
+      if (s.kind === 'reply' && !s.noFollowUp) {
         this.replyTurn = this.userTurnSeq;
+        this.replyInFlightSeq = s.seq;
         // The card may have arrived before this response; start the planner now that the turn is real.
         if (this.affectCard) this.startFollowUpPlan(this.affectCard);
       }
@@ -1216,6 +1238,7 @@ export class Session {
   private finalize(s: ResponseState, interrupted: boolean): void {
     if (s.finalized) return;
     s.finalized = true;
+    if (s.seq === this.replyInFlightSeq) this.replyInFlightSeq = null;
     const m = this.metrics.finish(s.seq, interrupted ? 'interrupted' : 'ended');
     if (m) {
       log('reply_metrics', metricFields(m));
@@ -1239,6 +1262,8 @@ export class Session {
     if (echo) this.send({ type: 'transcript.user', text, final: true });
     if (this.dropUserFinals) return;
     this.userTurnSeq += 1;
+    // Qwen can start the main reply before this final arrives: that live reply belongs to this turn.
+    if (this.replyInFlightSeq !== null) this.replyTurn = this.userTurnSeq;
     this.turnUserText = text;
     this.ledger.addUser(text, Date.now());
     if (this.writer && this.context.ownerId) {
@@ -1397,12 +1422,12 @@ export class Session {
       return;
     }
     if (line) {
-      this.adapter.createResponse({ cue: 'toolContinue', instruction: line, fallbackText: line });
+      this.createDirectResponse({ cue: 'toolContinue', instruction: line, fallbackText: line });
       return;
     }
     if (speak) {
       // The line quotes the user's own retrieved words; never let the model rewrite it.
-      this.adapter.createResponse({
+      this.createDirectResponse({
         cue: 'toolContinue',
         instruction: `请直接说下面这句话，不要改写：${speak.text}`,
         fallbackText: speak.text,
@@ -1410,7 +1435,7 @@ export class Session {
       return;
     }
     const cfg = this.deps.roles.director(this.context.roleId, this.language);
-    this.adapter.createResponse({
+    this.createDirectResponse({
       cue: 'toolContinue',
       instruction: cfg.toolContinueInstruction,
       fallbackText: cfg.toolContinueText,
@@ -1427,7 +1452,7 @@ export class Session {
     const line = this.confirmLine;
     if (!line) return;
     this.confirmLine = null;
-    this.adapter.createResponse({ cue: 'toolContinue', instruction: line, fallbackText: line });
+    this.createDirectResponse({ cue: 'toolContinue', instruction: line, fallbackText: line });
   }
 
   private armToolTimer(): void {
@@ -1500,6 +1525,8 @@ export class Session {
     }
     // The old upstream will never answer; the new one is not ready for session.update yet.
     // Must come before releaseToolTurn, whose flush would otherwise send to the closing adapter.
+    this.cancelFollowUp('interrupted');
+    this.replyInFlightSeq = null;
     this.clearReplyWatch();
     this.adapterReady = false;
     if (!keepToolTurn && this.toolTurn.onRebuild()) this.releaseToolTurn(false);
@@ -1585,7 +1612,7 @@ export class Session {
     if (line && shouldSpeakBridge(this.now() - startedAt, slim!.bridgeAfterMs, slim!.enabled)) {
       // Do not send presence ready: the bridge audio is what ends the thinking pose.
       this.watchReply(false);
-      this.adapter.createResponse({ cue: 'contextBridge', instruction: line, fallbackText: line });
+      this.createDirectResponse({ cue: 'contextBridge', instruction: line, fallbackText: line });
       return true;
     }
     this.send({ type: 'presence', phase: 'ready' });

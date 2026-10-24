@@ -23,10 +23,11 @@ const happyCard: AffectCard = { emotion: 'happy', intensity: 2, trend: 'flat', n
 const lowCard: AffectCard = { emotion: 'sad', intensity: 2, trend: 'flat', need: 'vent', strategy: 'comfort', mismatch: false, crisis: false };
 const crisisCard: AffectCard = { ...lowCard, crisis: true };
 
-const script = (reply: string): MockScript => ({ greeting: '你好呀', followup: '还在吗', fallbackReply: reply, turns: [] });
+const script = (reply: string, turns: MockScript['turns'] = []): MockScript => ({ greeting: '你好呀', followup: '还在吗', fallbackReply: reply, turns });
 
-function setup(reply: string, card: AffectCard, followUp: string) {
+function setup(reply: string, card: AffectCard, followUp: string, turns: MockScript['turns'] = []) {
   const requests: ProactiveRequest[] = [];
+  const adapters: MockAdapter[] = [];
   const client: TextModelClient = {
     complete: async (input) => {
       if (input.system === 'FIXTURE AFFECT') return JSON.stringify(card);
@@ -36,7 +37,8 @@ function setup(reply: string, card: AffectCard, followUp: string) {
   };
   const session = new Session({
     adapterFactory: () => {
-      const m = new MockAdapter({ script: script(reply), replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+      const m = new MockAdapter({ script: script(reply, turns), replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+      adapters.push(m);
       const create = m.createResponse.bind(m);
       m.createResponse = (request?: ProactiveRequest) => {
         if (request) requests.push(request);
@@ -51,7 +53,7 @@ function setup(reply: string, card: AffectCard, followUp: string) {
   }, { roleId: 'elder-companion', styleId: 'grandchild', language: 'zh' });
   const sent: ServerMessage[] = [];
   const transport: Transport = { send: (m) => sent.push(m), sendAudio: () => {} };
-  return { session, transport, requests, sent };
+  return { session, transport, requests, sent, adapters };
 }
 
 async function startAndFinishGreeting(s: ReturnType<typeof setup>) {
@@ -119,6 +121,69 @@ describe('empathy follow-up session', () => {
     await vi.advanceTimersByTimeAsync(100);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 3, playedMs: 300, reason: 'ended' });
     await sayAndFinishMain(s, '他考的是本校。', 4);
+    await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
+    expect(followUps(s)).toHaveLength(1);
+  });
+
+  it('still follows up when the reply starts before the final transcript', async () => {
+    const s = setup('孙子真争气。', happyCard, '后来呢？');
+    await startAndFinishGreeting(s);
+    const adapter = s.adapters[0]!;
+    // Qwen can start speaking before the ASR final for that utterance arrives.
+    adapter.emit('responseStarted', 'early-reply');
+    adapter.emit('textDelta', 'early-reply', '孙子真争气。');
+    adapter.emit('userTranscript', '孙子考上研究生了', true);
+    await vi.advanceTimersByTimeAsync(10); // the card and its plan arrive while the reply is live
+    adapter.emit('responseDone', 'early-reply');
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(followUps(s)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
+    expect(followUps(s)).toHaveLength(1);
+    expect(followUps(s)[0]?.fallbackText).toBe('后来呢？');
+  });
+
+  it('does not follow up after a tool continuation', async () => {
+    const s = setup('孙子真争气。', happyCard, '后来呢？', [
+      { match: '挥', user: '跟我挥挥手', reply: '好呀', tool: { name: 'perform_action', args: { action: 'wave' } } },
+    ]);
+    await startAndFinishGreeting(s);
+    s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
+    await vi.advanceTimersByTimeAsync(1000); // origin reply, tool call, then the continuation (seq 3)
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 3, playedMs: 100, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
+    expect(followUps(s)).toHaveLength(0);
+  });
+
+  it('does not spend the one-shot when the session ends before the delay', async () => {
+    const s = setup('孙子真争气。', happyCard, '后来呢？');
+    await startAndFinishGreeting(s);
+    await sayAndFinishMain(s, '孙子考上研究生了');
+    const chunks: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+      chunks.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+    s.session.end();
+    await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
+    spy.mockRestore();
+    expect(followUps(s)).toHaveLength(0);
+    const spoken = chunks
+      .map((line) => { try { return JSON.parse(line) as Record<string, unknown>; } catch { return null; } })
+      .filter((event) => event?.event === 'empathy_followup' && event.outcome === 'spoken');
+    expect(spoken).toHaveLength(0);
+  });
+
+  it('does not spend the one-shot when a rebuild cancels delivery', async () => {
+    const s = setup('孙子真争气。', happyCard, '后来呢？');
+    await startAndFinishGreeting(s);
+    await sayAndFinishMain(s, '孙子考上研究生了');
+    s.adapters[0]!.simulateDrop();
+    await vi.advanceTimersByTimeAsync(0); // the replacement adapter connects
+    await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
+    expect(followUps(s)).toHaveLength(0);
+    // A later reply in the same session must still get the one follow-up.
+    await sayAndFinishMain(s, '他又拿了奖学金', 3);
     await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
     expect(followUps(s)).toHaveLength(1);
   });
