@@ -2,7 +2,7 @@
 
 ## 状态
 
-已批准（2026-10-24，设计对话逐项确认）。本文只记录设计，不含实现。实施见 Plan 5：`docs/superpowers/plans/2026-10-24-empathy-followup/`。本机制建立在 Plan 4 的 `AffectTracker`、`renderAffect`、`PushGate` 与共享文本模型之上，不改记忆召回、四段式沉默文案或协议消息。
+已批准（2026-10-24，设计对话逐项确认），并已实施（提交 `c174d53`）。两轮真实 Qwen 共情评估：`firstThree 3.67/3.89`（`+0.37/+0.59`，均值 `+0.48`），未达 `+1`；`noIntrusion 4.00/4.42`，均值低于基线；plan-a 通过。机制能出声但未抬起 proactive；保留/调参/回退待定。实施见 Plan 5：`docs/superpowers/plans/2026-10-24-empathy-followup/`。本机制建立在 Plan 4 的 `AffectTracker`、`renderAffect`、`PushGate` 与共享文本模型之上，不改记忆召回、四段式沉默文案或协议消息。
 
 ## 1. 问题与目标
 
@@ -78,13 +78,13 @@ Plan 4 的共情评估在固定文案调优后停在 `firstThreeDelta +0.45～0.
 }
 ```
 
-约束：`delayMs` 100–1000，`timeoutMs` 200–2000，`maxChars` 10–60，`maxTokens` 20–120，`temperature` 0–1；`maxPerSession` 本计划固定为 1（schema 允许 1–2 仅作后续实验，默认 1）。缺省值由代码提供，配置仍必须通过启动校验。`enabled=false` 时机制完全不启动，便于回退。
+约束：`delayMs` 100–1000，`timeoutMs` 200–2000，`maxChars` 10–60，`maxTokens` 20–120，`temperature` 0–1；`maxPerSession` 本计划固定为 1（schema 允许 1–2 仅作后续实验，默认 1）。`followup` 段为必填；缺失即启动错误（不提供代码默认值），与项目 fail-fast 配置规则一致。`enabled=false` 时机制完全不启动，便于回退。
 
 ### 4.3 会话接入
 
 - `Session` 记录 `currentUserTurn`（每次用户终稿自增）与 `affectCardTurn`（`onAffectCard` 时写入当前轮次）。
 - 主回复生成期间，若 `onAffectCard` 收到本轮合格卡，立即启动规划（与主回复并行），把结果存为 `pendingFollowUp`；主回复结束时若规划已就绪，等待 `delayMs` 后投递。
-- 若卡片在主回复结束后才到，仍可启动规划，但必须在 `timeoutMs` 内完成；赶不上就跳过，不延长首音或等待窗口。
+- 若卡片在主回复结束后才到，仍可启动规划；等待卡片/规划启动最多 `timeoutMs`，规划本身也受 `timeoutMs` 约束，总延迟上限约 `delayMs + 2×timeoutMs`。赶不上评测/播放窗口就跳过，不延长首音或等待窗口。
 - 投递走现有 `requestResponse('followup', { cue: 'followup', instruction, fallbackText: line })`：Qwen 用 instruction 让实时模型说出这句，Seeduplex 用 `fallbackText` 直接播。两边使用同一句规划文本；Qwen 的自然改写允许。
 - 补句请求前再次检查守卫；用户已开口、会话结束、主回复被中断、次数用完或卡片过期则丢弃。
 - 补句是一个普通响应；其结束后 Director 的沉默阶梯按现有逻辑重新武装。**不改 Director 的四段式实现**；如果实现时发现必须改 Director 才能避免抢占，停止并报告，不自行改高风险区。
@@ -104,7 +104,7 @@ user final ──► affect analyze (async) ──► card(cardTurn)
 
 ## 5. 观测与错误处理
 
-- 新日志 `empathy_followup`：`trigger`、`outcome`（`planned`/`spoken`/`skipped`）、`code`（`crisis`/`stale`/`limit`/`already_asked`/`user_speech`/`interrupted`/`new_turn`/`no_trigger`/`planner_timeout`/`planner_empty`/`unsafe`/`ended`）、`ms`。不记录任何正文。
+- 新日志 `empathy_followup`：`trigger`、`outcome`（`planned`/`spoken`/`skipped`）、`code`（`stale`/`limit`/`already_asked`/`user_speech`/`interrupted`/`new_turn`/`planner_timeout`/`planner_empty`/`ended`；`planner_empty` 含空串、超长与不安全输出；crisis/no-trigger 当前不单独发码，可能以 `planner_timeout` 收尾）、`ms`。不记录任何正文。
 - 规划失败/超时/不合法：跳过并记 `code`，不播固定兜底句。
 - 没有共享文本模型：`followup.enabled` 无效，机制不启动（与 affect 分析器一致）。
 - Mock/测试：可用配置关闭；单元测试用假文本模型控制延迟与输出。
