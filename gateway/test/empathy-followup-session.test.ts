@@ -187,4 +187,49 @@ describe('empathy follow-up session', () => {
     await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
     expect(followUps(s)).toHaveLength(1);
   });
+
+  it('sends a low companionship sentence without a question', async () => {
+    const s = setup('我在听。', lowCard, '我陪您坐一会儿。');
+    await startAndFinishGreeting(s);
+    await sayAndFinishMain(s, '心里空落落的');
+    await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
+    const request = followUps(s)[0];
+    expect(request?.fallbackText).toBe('我陪您坐一会儿。');
+    expect(request?.fallbackText).not.toMatch(/[?？]/);
+    expect(request?.instruction).toContain('我陪您坐一会儿。');
+  });
+
+  it('drops a low follow-up that contains a question', async () => {
+    const s = setup('我在听。', lowCard, '您想说说吗？');
+    await startAndFinishGreeting(s);
+    await sayAndFinishMain(s, '心里空落落的');
+    await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
+    expect(followUps(s)).toHaveLength(0);
+  });
+
+  it('builds the Qwen instruction from the planned line and keeps it as the Seeduplex fallback', async () => {
+    const s = setup('孙子真争气。', happyCard, '后来呢？');
+    await startAndFinishGreeting(s);
+    await sayAndFinishMain(s, '孙子考上研究生了');
+    await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
+    const request = followUps(s)[0];
+    expect(request).toMatchObject({ cue: 'followup', fallbackText: '后来呢？' });
+    expect(request?.instruction).toContain('后来呢？');
+    expect(request?.instruction).toContain('FIXTURE FOLLOWUP SPEAK');
+  });
+
+  it('re-arms the Director silence ladder after the follow-up ends', async () => {
+    const s = setup('孙子真争气。', happyCard, '后来呢？');
+    await startAndFinishGreeting(s);
+    await sayAndFinishMain(s, '孙子考上研究生了');
+    await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
+    expect(followUps(s)).toHaveLength(1);
+    // Let the follow-up finish generating (charMs 100), then end its playback; the Director
+    // silence ladder must still arm. Advancing past the first step (6s default) proves it.
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 3, playedMs: 300, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(8000);
+    const ladder = followUps(s).filter((r) => r.fallbackText === 'followup');
+    expect(ladder.length).toBeGreaterThanOrEqual(1);
+  });
 });
