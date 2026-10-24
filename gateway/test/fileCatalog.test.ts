@@ -51,6 +51,9 @@ describe('FileRoleCatalog', () => {
     expect(roles.buildPersona('test-role', 'second', 'ja')).toBe('FIXTURE SAFETY RULES JA\n\nFIXTURE SECOND STYLE JA\n\nFIXTURE ACTIONS JA\n\n## FIXTURE ACTIVITIES JA\n- 活動一：最初の活動');
     expect(roles.activityText('test-role', 'one', 'zh')).toBe('FIXTURE ACTIVITY ONE');
     expect(roles.activityText('test-role', 'one', 'ja')).toBe('FIXTURE ACTIVITY ONE JA');
+    expect(roles.followupPrompt('zh')).toBe('FIXTURE FOLLOWUP');
+    expect(roles.followupPrompt('ja')).toBe('FIXTURE FOLLOWUP JA');
+    expect(roles.followupSpeakInstruction('zh')).toContain('{line}');
     expect(roles.director('test-role', 'ja').greetingText).toBe('greeting-ja');
     expect(roles.pairs()).toEqual([
       { roleId: 'test-role', styleId: 'plain' },
@@ -74,6 +77,8 @@ describe('FileRoleCatalog', () => {
     for (const language of ['zh', 'ja', 'en'] as const) {
       expect(roles.extractPrompt(language)).not.toHaveLength(0);
       expect(roles.recallPrompt(language)).not.toHaveLength(0);
+      expect(roles.followupPrompt(language)).not.toHaveLength(0);
+      expect(roles.followupSpeakInstruction(language)).toContain('{line}');
       expect(roles.director('elder-companion', language).topics?.map((t) => t.id)).toEqual(
         roles.director('elder-companion', 'zh').topics?.map((t) => t.id),
       );
@@ -143,6 +148,18 @@ describe('FileRoleCatalog', () => {
     const dir = copyFixtures();
     rmSync(join(dir, '_shared', 'ja', 'care.md'));
     expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:care/);
+  });
+
+  it('fails when a language is missing the follow-up planner prompt', () => {
+    const dir = copyFixtures();
+    rmSync(join(dir, '_shared', 'ja', 'followup.md'));
+    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:followup/);
+  });
+
+  it('fails when a language is missing the follow-up speak prompt', () => {
+    const dir = copyFixtures();
+    rmSync(join(dir, '_shared', 'ja', 'followup-speak.md'));
+    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:followupSpeak/);
   });
 
   it('reads the care prompt per language', () => {

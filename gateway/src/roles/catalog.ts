@@ -21,6 +21,10 @@ export interface RoleCatalog {
   carePrompt(language?: Language): string;
   /** Shared affect-analyzer system prompt for this language. */
   affectPrompt(language?: Language): string;
+  /** Shared follow-up planner system prompt for this language. */
+  followupPrompt(language?: Language): string;
+  /** Shared Qwen follow-up speak-instruction template; contains {line}. */
+  followupSpeakInstruction(language?: Language): string;
   pairs(): Array<{ roleId: string; styleId: string }>;
 }
 
@@ -71,6 +75,8 @@ export function fixedRoleCatalog(
     recallPrompt: () => 'FIXTURE RECALL',
     carePrompt: () => 'FIXTURE CARE',
     affectPrompt: () => 'FIXTURE AFFECT',
+    followupPrompt: (language = defaultLanguage) => language === 'ja' ? 'FIXTURE FOLLOWUP JA' : 'FIXTURE FOLLOWUP',
+    followupSpeakInstruction: (language = defaultLanguage) => language === 'ja' ? 'FIXTURE FOLLOWUP SPEAK JA {line}' : 'FIXTURE FOLLOWUP SPEAK {line}',
     pairs: () => STUB_STYLES.map((styleId) => ({ roleId: DEFAULT_ROLE, styleId })),
   };
 }

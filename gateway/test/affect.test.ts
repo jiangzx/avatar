@@ -27,6 +27,7 @@ type ConfigJson = Record<string, unknown> & {
   policy: Record<string, unknown>;
   exhausted: Record<string, unknown>;
   care: Record<string, unknown>;
+  followup: Record<string, unknown>;
 };
 
 function writeConfig(patch: (value: ConfigJson) => void): string {
@@ -56,6 +57,7 @@ describe('affect config', () => {
       lowIntensity: 2,
       exhausted: { shortMaxChars: 4, shortStreakTrigger: 2, cooldownTurns: 4, declineCooldownTurns: 10 },
       care: { maxAgeDays: 7, timeoutMs: 1500, maxChars: { zh: 40, ja: 50, en: 120 }, quoteMaxChars: 80, maxTokens: 120, temperature: 0.7 },
+      followup: { enabled: true, delayMs: 400, maxPerSession: 1, timeoutMs: 800, maxChars: 40, maxTokens: 60, temperature: 0.3 },
       timeZone: 'Asia/Shanghai',
       solarTermWindowDays: 3,
     });
@@ -169,6 +171,25 @@ function setup(options: { config?: AffectConfig; history?: LedgerEntry[]; honorA
   trackers.push(tracker);
   return { tracker, calls, cards };
 }
+
+describe('followup config', () => {
+  it('loads the shipped follow-up block', () => {
+    expect(baseConfig.followup).toEqual({
+      enabled: true,
+      delayMs: 400,
+      maxPerSession: 1,
+      timeoutMs: 800,
+      maxChars: 40,
+      maxTokens: 60,
+      temperature: 0.3,
+    });
+  });
+
+  it('rejects an out-of-range follow-up delay', () => {
+    const path = writeConfig((value) => { value.followup.delayMs = 99; });
+    expect(() => loadAffectConfig(path)).toThrow();
+  });
+});
 
 describe('AffectTracker', () => {
   let writes: string[] = [];
