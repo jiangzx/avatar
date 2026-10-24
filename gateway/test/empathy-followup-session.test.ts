@@ -188,19 +188,8 @@ describe('empathy follow-up session', () => {
     expect(followUps(s)).toHaveLength(1);
   });
 
-  it('sends a low companionship sentence without a question', async () => {
+  it('does not follow up on a low card', async () => {
     const s = setup('我在听。', lowCard, '我陪您坐一会儿。');
-    await startAndFinishGreeting(s);
-    await sayAndFinishMain(s, '心里空落落的');
-    await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);
-    const request = followUps(s)[0];
-    expect(request?.fallbackText).toBe('我陪您坐一会儿。');
-    expect(request?.fallbackText).not.toMatch(/[?？]/);
-    expect(request?.instruction).toContain('我陪您坐一会儿。');
-  });
-
-  it('drops a low follow-up that contains a question', async () => {
-    const s = setup('我在听。', lowCard, '您想说说吗？');
     await startAndFinishGreeting(s);
     await sayAndFinishMain(s, '心里空落落的');
     await vi.advanceTimersByTimeAsync(affect.followup.delayMs + 10);

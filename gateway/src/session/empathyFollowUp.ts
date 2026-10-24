@@ -6,14 +6,14 @@ import type { TextModelClient } from '../memory/textClient.ts';
 import { runWithPolicy } from '../reliability/policy.ts';
 import { isLow, type AffectCard, type FollowUpConfig } from './affect.ts';
 
-export type FollowUpTrigger = 'share_joy' | 'trend_better' | 'help' | 'low';
+export type FollowUpTrigger = 'share_joy' | 'trend_better' | 'help';
 export type FollowUpSkipCode =
-  | 'crisis' | 'stale' | 'limit' | 'already_asked'
+  | 'stale' | 'limit' | 'already_asked'
   | 'user_speech' | 'interrupted' | 'ended';
 
 export function followUpTrigger(card: AffectCard, lowIntensity: number): FollowUpTrigger | null {
   if (card.crisis) return null;
-  if (isLow(card, lowIntensity)) return 'low';
+  if (isLow(card, lowIntensity)) return null;
   if (card.need === 'share_joy') return 'share_joy';
   if (card.trend === 'better') return 'trend_better';
   if (card.need === 'help') return 'help';
@@ -38,7 +38,7 @@ export function followUpSkipCode(input: FollowUpGuardInput): FollowUpSkipCode | 
   if (input.interrupted) return 'interrupted';
   if (input.used >= input.maxPerSession) return 'limit';
   if (input.cardTurn !== input.userTurn) return 'stale';
-  if (input.trigger !== 'low' && input.mainReplyHasQuestion) return 'already_asked';
+  if (input.mainReplyHasQuestion) return 'already_asked';
   return null;
 }
 
@@ -92,7 +92,6 @@ export function createFollowUpPlanner(deps: {
     if (!result.ok) return null;
     const text = parsePhrase(result.value);
     if (!text || [...text].length > config.maxChars) return null;
-    if (input.trigger === 'low' && hasQuestionMark(text)) return null;
     if (scanText(text, deps.safety) === 'reject') return null;
     return text;
   };

@@ -34,9 +34,10 @@ function clientReply(raw: string, seen?: Array<Record<string, unknown>>): TextMo
 }
 
 describe('followUpTrigger', () => {
-  it('prioritizes crisis, then low, then share_joy, trend better, help', () => {
+  it('prioritizes crisis, then suppresses low, then share_joy, trend better, help', () => {
     expect(followUpTrigger(card({ crisis: true }), 2)).toBeNull();
-    expect(followUpTrigger(card({ emotion: 'sad', intensity: 2, need: 'share_joy' }), 2)).toBe('low');
+    expect(followUpTrigger(card({ emotion: 'sad', intensity: 2, need: 'share_joy' }), 2)).toBeNull();
+    expect(followUpTrigger(card({ emotion: 'sad', intensity: 1, need: 'share_joy' }), 2)).toBe('share_joy');
     expect(followUpTrigger(card({ need: 'share_joy' }), 2)).toBe('share_joy');
     expect(followUpTrigger(card({ trend: 'better', need: 'chat' }), 2)).toBe('trend_better');
     expect(followUpTrigger(card({ need: 'help' }), 2)).toBe('help');
@@ -68,8 +69,10 @@ describe('followUpSkipCode', () => {
     expect(followUpSkipCode(base)).toBeNull();
   });
 
-  it('allows a low companionship line even when the main reply asked a question', () => {
-    expect(followUpSkipCode({ ...base, trigger: 'low', mainReplyHasQuestion: true })).toBeNull();
+  it('rejects every trigger when the main reply asked a question', () => {
+    for (const trigger of ['share_joy', 'trend_better', 'help'] as const) {
+      expect(followUpSkipCode({ ...base, trigger, mainReplyHasQuestion: true })).toBe('already_asked');
+    }
   });
 });
 
@@ -98,17 +101,6 @@ describe('createFollowUpPlanner', () => {
     expect(seen[0]).toMatchObject({ trigger: 'share_joy', userText: '孙子考上研究生了' });
     expect(seen[0]?.card).toBeDefined();
     expect(seen[0]?.card).not.toHaveProperty('openLoop');
-  });
-
-  it('rejects a low line that asks a question', async () => {
-    const planner = createFollowUpPlanner({ client: clientReply('{"text":"您想说说吗？"}'), config, prompt: () => 'P', safety });
-    await expect(planner({ language: 'zh', trigger: 'low', userText: '心里难受', card: card({ emotion: 'sad', intensity: 2 }) }, new AbortController().signal)).resolves.toBeNull();
-  });
-
-  it('accepts a low companionship statement', async () => {
-    const planner = createFollowUpPlanner({ client: clientReply('{"text":"我陪您坐一会儿。"}'), config, prompt: () => 'P', safety });
-    await expect(planner({ language: 'zh', trigger: 'low', userText: '心里难受', card: card({ emotion: 'sad', intensity: 2 }) }, new AbortController().signal))
-      .resolves.toBe('我陪您坐一会儿。');
   });
 
   it('rejects too long and unsafe lines', async () => {
