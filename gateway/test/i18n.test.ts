@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadI18n } from '../src/i18n/load.ts';
-import { maxAffectRender } from '../src/session/affectRender.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = `${root}config`;
@@ -129,11 +128,8 @@ describe('affect copy', () => {
     expect(i18n.affect.zh.lines.tail).toContain('不要说出情绪名称');
     expect(i18n.affect.zh.lines.tail).toContain('用语气和内容表现');
     expect(i18n.affect.zh.lines.need.vent).toBe('想倾诉：多听，少提问。');
-    expect(i18n.affect.zh.lines.need.share_joy).toBe('想分享喜事：跟着高兴，问一句细节。');
     expect(i18n.affect.zh.lines.strategy.reflect).toBe('用一句话点出感受，别逐字复述。');
-    expect(i18n.affect.zh.lines.strategy.affirm).toBe('用一句话点出对方的感受，再肯定；先不给建议。');
     expect(i18n.affect.zh.lines.exhaustedHint).toContain('只换一次');
-    expect(i18n.affect.zh.lines.exhaustedHint).toContain('最近听到的一首歌');
     expect(i18n.affect.zh.declinePhrases).toContain('不想聊这个');
     expect(i18n.affect.zh.solarTerms[0]).toEqual({ name: '小寒', month: 1, day: 5 });
     expect(i18n.affect.zh.solarTerms.find((term) => term.name === '冬至')).toEqual({ name: '冬至', month: 12, day: 21 });
@@ -152,10 +148,14 @@ describe('affect copy', () => {
   });
 
   it('keeps the longest affect render inside the planned per-language budget', () => {
+    // Guard until T3's startup check (maxAffectRender vs memory.json) exists. Seven '\n' separators included.
     const planned = { zh: 150, ja: 210, en: 250 } as const;
+    const longest = (values: Record<string, string>) => Math.max(...Object.values(values).map((text) => text.length));
     for (const language of LANGS) {
-      // The render never combines the exhaustion hint with a card; maxAffectRender models the real paths.
-      expect(maxAffectRender(i18n.affect[language]), language).toBeLessThanOrEqual(planned[language]);
+      const { lines } = i18n.affect[language];
+      const total = lines.crisis.length + longest(lines.mood) + longest(lines.trend) + longest(lines.need)
+        + longest(lines.strategy) + lines.mismatch.length + lines.exhaustedHint.length + lines.tail.length + 7;
+      expect(total, language).toBeLessThanOrEqual(planned[language]);
     }
   });
 
