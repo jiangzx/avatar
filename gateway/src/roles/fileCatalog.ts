@@ -40,7 +40,7 @@ const TopicsSchema = z.array(z.object({
   fallbackText: z.string().min(1).max(60),
 }).strict()).min(1).max(50);
 
-export interface SharedText { safety: string; actions: string; extract: string; recall: string; affect: string; care: string; followup: string; followupSpeak: string }
+export interface SharedText { safety: string; actions: string; extract: string; recall: string; affect: string; care: string }
 interface LoadedStyle { text: string; voice: string | undefined }
 interface LoadedActivity { title: string; summary: string; text: string }
 interface LoadedLanguage {
@@ -75,10 +75,10 @@ export class FileRoleCatalog implements RoleCatalog {
     for (const language of LANGUAGES) {
       const dir = join(rootDir, '_shared', language);
       if (!existsSync(dir)) continue;
-      const readShared = (name: keyof SharedText, file: string = name): string => {
-        const path = join(dir, `${file}.md`);
-        if (!existsSync(path)) throw new Error(`shared_missing:${language}:${name}`);
-        return readText(path);
+      const readShared = (name: keyof SharedText): string => {
+        const file = join(dir, `${name}.md`);
+        if (!existsSync(file)) throw new Error(`shared_missing:${language}:${name}`);
+        return readText(file);
       };
       shared.set(language, {
         safety: readShared('safety'),
@@ -87,8 +87,6 @@ export class FileRoleCatalog implements RoleCatalog {
         recall: readShared('recall'),
         care: readShared('care'),
         affect: readShared('affect'),
-        followup: readShared('followup'),
-        followupSpeak: readShared('followupSpeak', 'followup-speak'),
       });
     }
     const roles = new Map<string, LoadedRole>();
@@ -149,14 +147,6 @@ export class FileRoleCatalog implements RoleCatalog {
 
   affectPrompt(language = this.defaultLanguage(this.fallbackRole)): string {
     return this.sharedFor(language).affect;
-  }
-
-  followupPrompt(language = this.defaultLanguage(this.fallbackRole)): string {
-    return this.sharedFor(language).followup;
-  }
-
-  followupSpeakInstruction(language = this.defaultLanguage(this.fallbackRole)): string {
-    return this.sharedFor(language).followupSpeak;
   }
 
   pairs(): Array<{ roleId: string; styleId: string }> {

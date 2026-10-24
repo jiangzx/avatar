@@ -51,16 +51,6 @@ export const AffectCardSchema: z.ZodType<AffectCard> = z.object({
   openLoop: OpenLoopSchema.optional(),
 }).strict();
 
-export interface FollowUpConfig {
-  enabled: boolean;
-  delayMs: number;
-  maxPerSession: number;
-  timeoutMs: number;
-  maxChars: number;
-  maxTokens: number;
-  temperature: number;
-}
-
 export interface AffectConfig {
   enabled: boolean;
   historyEntries: number;
@@ -72,7 +62,6 @@ export interface AffectConfig {
   lowIntensity: number;
   exhausted: { shortMaxChars: number; shortStreakTrigger: number; cooldownTurns: number; declineCooldownTurns: number };
   care: { maxAgeDays: number; timeoutMs: number; maxChars: Record<Language, number>; quoteMaxChars: number; maxTokens: number; temperature: number };
-  followup: FollowUpConfig;
   timeZone: string;
   solarTermWindowDays: number;
 }
@@ -116,15 +105,6 @@ const AffectConfigSchema = z.object({
     maxChars: z.object({ zh: z.number().int().min(10).max(200), ja: z.number().int().min(10).max(200), en: z.number().int().min(10).max(200) }).strict(),
     quoteMaxChars: z.number().int().min(10).max(500),
     maxTokens: z.number().int().min(32).max(400),
-    temperature: z.number().min(0).max(1),
-  }).strict(),
-  followup: z.object({
-    enabled: z.boolean(),
-    delayMs: z.number().int().min(100).max(1_000),
-    maxPerSession: z.number().int().min(1).max(2),
-    timeoutMs: z.number().int().min(200).max(2_000),
-    maxChars: z.number().int().min(10).max(60),
-    maxTokens: z.number().int().min(20).max(120),
     temperature: z.number().min(0).max(1),
   }).strict(),
   timeZone: z.string().min(1).refine(validTimeZone, { message: 'unknown time zone' }),
