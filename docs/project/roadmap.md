@@ -1,5 +1,16 @@
 # Roadmap
 
+## Duix 真人形象引擎（2026-10-25 起）
+
+状态：**实现完成，验收未全部通过**。分支 `duix-avatar`，实现提交 `737396c`（从 `master` `b3818ea` 拉出）。Task 1–12 已提交。Task 13 的记录见 [验收](../testing/2026-10-25-duix-acceptance.md)。未合并、未推送。
+
+- 交付：引擎接口（3D 走 `WebViewAvatarEngine`）、Duix 引擎（24 kHz 播放、口型时钟、渲染）、App 内下载与校验、主页切换开关、崩溃保护。`gateway/`、`protocol/`、`avatar-core/` 无改动。
+- 必须通过：M1 通过（约 4 分 30 秒无崩溃，结束画面 Lily 可见）；M2 通过（用户确认嘴跟着声音动）；M3 通过（至少 5 次 `outcome=interrupted`）；M4 通过（3 次短回复 `outcome=ended`）。M5、M6、M7 未执行。M8 未通过：没有 `guiji` / `duix` / `vshow`，但有 `content-autofill.googleapis.com`；`debugOnly` 仍为 false。
+- 实测摘要：R4 平均 fps 23.85（参考 ≥ 24）；R7 页大小 4096；R8 `lips=false` 3 次。R1、R2、R3、R5、R6 为 NOT RUN。
+- 回归（2026-10-25）：`flutter test` 265 项通过；`flutter analyze` 无问题；`./gradlew :app:testDebugUnitTest` BUILD SUCCESSFUL，JUnit 报告 39 项、0 失败；`npm test` protocol 6 / gateway 839 / avatar-core 125 通过；`npm run typecheck` 通过；相对 `master`，`gateway`、`protocol`、`avatar-core` 无差异，`git diff --check` 无输出。
+- 上线前门槛（spec §11，这次不做）：商用模特、月活超过 1000 的许可、"Powered by Duix.com" 与 Notice、16 KB 页对齐、iOS。
+- 下一步：不合并、不推送，直到用户决定。未关闭项是 blockers #54–#58。
+
 ## Plan 4 情感共鸣与主动性（2026-10-23）
 
 状态：T0–T7 已实施并提交；**共情评估合并门槛接受 +0.48（用户 2026-10-24 决定；Plan 5 结构补句两版均未超过 +0.48，代码已全部回退，保留设计/计划/评估记录）；plan-a 通过；用户于 2026-10-23 决定保留 `plan4-emotion-proactivity` 分支，暂不合并、不推送**。真机验收完成：网关已按当前代码重启（launchd PID 60012，`gateway_listening` adapter=qwen），App 已安装并连接。用户确认 item 1–6 全部符合预期；item 4 第一次因新装 App 生成新 owner（`f5ae4a61…`，grandchild）且无称呼而失败（旧记忆在旧 owner `0218df26…`，old-friend，328 条消息），补充回答称呼、挂断、等待抽取后重开，日志 `care_opening ready`（851ms）→ `closed`，关怀出现并通过。旧 owner 的 328 条历史仍未接入新 owner；如需要另立重绑/迁移计划。详见 blocker #53。提交范围 `a89140e^..HEAD`（T0 首提交至本段所在提交）。
@@ -192,6 +203,7 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
   ```
 
   Worktrees: plan3-a (A1 → A2 serial), plan3-b. Device gates run one at a time on the Xiaomi; ask the user before restarting the 8787 gateway; smoke runs use 8797.
+- 构建带 Duix 的 App 前先运行 `./scripts/duix/build-sdk.sh`。前置环境见 `docs/superpowers/plans/2026-10-25-duix-avatar-engine/00-overview.md`。没有 AAR 时 App 会自动编成纯 3D 版。
 - Untracked `.codegraph/` is the user's CodeGraph index; not ignored or committed by this work (user's call).
 - Progress ledger for this session lives in the git-ignored `.superpowers/sdd/` (per-task briefs, reports, diffs).
 - 2026-10-12: host Flutter was upgraded 3.41.2 → 3.47.7 (latest stable, via `flutter upgrade`; Dart 3.13.5, DevTools 2.60.0, revision abaf9c523), Android licenses accepted; `flutter doctor` all green. Re-ran `cd app && flutter pub get && flutter analyze && flutter test` → 19 passed, no issues. Version pins updated in the migration guide and plan overview.
