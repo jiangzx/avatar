@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../avatar_engine/ui/engine_copy.dart';
 import 'companion_picker.dart';
 import 'device_identity.dart';
 import 'styles.dart';
@@ -11,6 +12,9 @@ String identityErrorText(String reason) => switch (reason) {
   'http_400' => '这个伙伴暂时不可用，请换一个',
   'http_401' => '应用配置有误，请联系家人',
   'invalid_avatar' => '这个形象暂时不可用，请换一个',
+  'abi_unsupported' || 'low_memory' || 'storage_unavailable' || 'duix_unsupported' => unsupportedText(
+    reason == 'duix_unsupported' ? null : reason,
+  ),
   'http_429' || 'http_503' => '现在注册的人太多了，请稍后再试',
   _ => '出错了（$reason），请稍后再试',
 };

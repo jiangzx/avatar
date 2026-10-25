@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'avatars.dart';
+import 'characters.dart';
 import 'companion_picker.dart';
 
 class AvatarPickerPage extends StatefulWidget {
@@ -28,7 +28,7 @@ class AvatarPickerPage extends StatefulWidget {
 }
 
 class _AvatarPickerPageState extends State<AvatarPickerPage> {
-  late String _selected = avatarOptionFor(widget.initial).id;
+  late String _selected = activeCharacter(widget.initial);
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +57,7 @@ class _AvatarPickerPageState extends State<AvatarPickerPage> {
               Expanded(
                 child: ListView(
                   children: [
-                    for (final option in avatarOptions)
+                    for (final option in characterOptions)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 16),
                         child: SelectionCard(

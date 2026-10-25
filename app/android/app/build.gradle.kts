@@ -9,7 +9,7 @@ val duixAar = file("libs/duix-sdk-release.aar")
 val duixAvailable = duixAar.exists()
 
 android {
-    namespace = "com.anyidea.avatar_app"
+    namespace = "com.aihero.avatar.bontime"
     // permission_handler_android 14.1.0 requires compileSdk >= 37 (flutter default is 36).
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.anyidea.avatar_app"
+        applicationId = "com.aihero.avatar.bontime"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

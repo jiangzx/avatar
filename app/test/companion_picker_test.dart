@@ -4,6 +4,13 @@ import 'package:avatar_app/identity/device_identity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+Future<void> tapCard(WidgetTester tester, Key key) async {
+  final finder = find.byKey(key);
+  await tester.scrollUntilVisible(finder, 160);
+  await tester.tapAt(tester.getTopLeft(finder) + const Offset(32, 24));
+  await tester.pump();
+}
+
 void main() {
   testWidgets('avatar picker shows all appearances and confirms the tapped one', (tester) async {
     final chosen = <String>[];
@@ -16,17 +23,15 @@ void main() {
       ),
     ));
 
-    expect(find.text('可爱小女孩'), findsOneWidget);
-    expect(find.text('可爱小男孩'), findsOneWidget);
-    expect(find.text('青年美女'), findsOneWidget);
+    expect(find.text('Lily'), findsOneWidget);
+    expect(find.text('小柔'), findsOneWidget);
+    expect(find.text('看着亲切，陪您慢慢聊天'), findsOneWidget);
     expect(find.descendant(of: find.byKey(const Key('avatar-default')), matching: find.byIcon(Icons.check_circle)), findsOneWidget);
-    await tester.scrollUntilVisible(find.byKey(const Key('avatar-young-man')), 300);
-    expect(find.text('青年俊男'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('avatar-young-woman')));
+    await tapCard(tester, const Key('avatar-lily'));
     await tester.pump();
     await tester.tap(find.byKey(const Key('avatar-confirm')));
-    expect(chosen, ['young-woman']);
+    expect(chosen, ['lily']);
   });
 
   testWidgets('avatar picker disables cards and confirm while busy', (tester) async {
@@ -42,8 +47,7 @@ void main() {
       ),
     ));
 
-    await tester.scrollUntilVisible(find.byKey(const Key('avatar-young-man')), 300);
-    await tester.tap(find.byKey(const Key('avatar-young-man')));
+    await tapCard(tester, const Key('avatar-lily'));
     await tester.tap(find.byKey(const Key('avatar-confirm')));
     await tester.pump();
     expect(chosen, isEmpty);
@@ -70,13 +74,12 @@ void main() {
 
     expect(find.text('聊天风格'), findsOneWidget);
     expect(find.text('形象'), findsOneWidget);
-    await tester.scrollUntilVisible(find.byKey(const Key('avatar-cute-boy')), 300);
-    await tester.tap(find.byKey(const Key('avatar-cute-boy')));
+    await tapCard(tester, const Key('avatar-lily'));
     await tester.tap(find.byKey(const Key('companion-confirm')));
     await tester.pumpAndSettle();
 
     expect(styles, isEmpty);
-    expect(avatars, ['cute-boy']);
+    expect(avatars, ['lily']);
   });
 
   testWidgets('combined settings keeps the page and shows a failed save', (tester) async {
@@ -89,8 +92,7 @@ void main() {
       ),
     ));
 
-    await tester.scrollUntilVisible(find.byKey(const Key('avatar-cute-girl')), 300);
-    await tester.tap(find.byKey(const Key('avatar-cute-girl')));
+    await tapCard(tester, const Key('avatar-lily'));
     await tester.tap(find.byKey(const Key('companion-confirm')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('手机保存身份信息失败，请重试'), 300);

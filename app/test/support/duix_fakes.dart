@@ -26,6 +26,7 @@ class FakeDuixBridge implements DuixBridge {
   final pushes = <(int, int, int)>[]; // seq, pcm16 bytes, pcm24 bytes
   final installErrors = <String, DuixBridgeError>{};
   DuixBridgeError? prepareError;
+  DuixBridgeError? bundleError;
   DuixBridgeError? stopError;
   DuixPrepared prepared = const DuixPrepared(width: 540, height: 960, motions: []);
   Completer<void>? installGate;
@@ -57,6 +58,15 @@ class FakeDuixBridge implements DuixBridge {
     final error = installErrors[asset.id];
     if (error != null) throw error;
     installed[asset.id] = true;
+  }
+
+  @override
+  Future<void> ensureBundled() async {
+    calls.add('ensureBundled');
+    final error = bundleError;
+    if (error != null) throw error;
+    installed['gj_dh_res'] = true;
+    installed['lily'] = true;
   }
 
   @override

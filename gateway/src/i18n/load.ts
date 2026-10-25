@@ -64,6 +64,29 @@ const MemoryFileSchema = z.object({
     toolDescription: z.string().min(1),
     actionDescription: z.string().min(1),
   }).strict(),
+  weather: z.object({
+    toolDescription: z.string().min(1),
+    locationDescription: z.string().min(1),
+    line: z.string().min(1),
+    missingLocationText: z.string().min(1),
+    notFoundText: z.string().min(1),
+    unavailableText: z.string().min(1),
+    conditions: z.object({
+      clear: z.string().min(1),
+      mainlyClear: z.string().min(1),
+      partlyCloudy: z.string().min(1),
+      overcast: z.string().min(1),
+      fog: z.string().min(1),
+      drizzle: z.string().min(1),
+      rain: z.string().min(1),
+      freezingRain: z.string().min(1),
+      snow: z.string().min(1),
+      showers: z.string().min(1),
+      snowShowers: z.string().min(1),
+      thunder: z.string().min(1),
+      unknown: z.string().min(1),
+    }).strict(),
+  }).strict(),
   evidence: z.object({
     questionPatterns: StringList,
     // Optional: default to the recall lists when a language keeps one copy.
@@ -231,6 +254,7 @@ function loadMemoryCopy(configRoot: string, language: Language): MemoryCopy {
       queryFramePatterns: raw.recall.queryFramePatterns.map((source) => compilePattern(source, language, 'queryFramePatterns')),
     },
     performAction: raw.performAction,
+    weather: raw.weather,
     evidence: {
       questionPatterns: raw.evidence.questionPatterns.map((source) => compilePattern(source, language, 'questionPatterns')),
       skipPatterns: raw.evidence.skipPatterns ?? raw.recall.skipPatterns,

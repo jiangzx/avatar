@@ -46,84 +46,62 @@ EngineSwitchController engines(MemoryCredentialStore store, FakeDuixBridge bridg
 
 Map<String, String> returning() => {tokenKey: 'device-token-0123456789', styleKey: 'grandchild', avatarKey: 'default'};
 
-Future<void> chooseAvatar(WidgetTester tester, String id) async {
-  await tester.scrollUntilVisible(find.byKey(Key('avatar-$id')), 300);
-  if (id != 'default') {
-    await tester.drag(find.byType(ListView), const Offset(0, -120));
-    await tester.pump();
-  }
-  await tester.tap(find.byKey(Key('avatar-$id')));
-  await tester.tap(find.byKey(const Key('avatar-confirm')));
-  await tester.pumpAndSettle();
+/// Cards can extend under the bottom buttons. Tap inside the visible top of the card.
+Future<void> tapCard(WidgetTester tester, Key key) async {
+  final finder = find.byKey(key);
+  await tester.scrollUntilVisible(finder, 160);
+  await tester.tapAt(tester.getTopLeft(finder) + const Offset(32, 24));
+  await tester.pump();
 }
 
 void main() {
   testWidgets(
-    'first launch: pick a style, then an avatar, then open the chat',
+    'first launch: pick a style, then open Lily',
     (tester) async {
       final store = MemoryCredentialStore();
       final backend = FakeBackend();
-      await tester.pumpWidget(
-        app(DeviceIdentity(store: store, backend: backend)),
-      );
+      final identity = DeviceIdentity(store: store, backend: backend);
+      await tester.pumpWidget(app(identity, engines: engines(store, FakeDuixBridge())));
       await tester.pumpAndSettle();
       expect(find.text('选一位陪您聊天的伙伴'), findsOneWidget);
       await tester.tap(find.byKey(const Key('style-old-friend')));
       await tester.tap(find.byKey(const Key('style-confirm')));
       await tester.pumpAndSettle();
-      expect(find.text('选一个聊天形象'), findsOneWidget);
-      await chooseAvatar(tester, 'young-woman');
-      expect(find.text('AVATAR-young-woman'), findsOneWidget);
+      expect(find.text('DUIX-lily'), findsOneWidget);
       expect(backend.registered, ['old-friend']);
-      expect(store.values, {
-        tokenKey: 'device-token-0123456789',
-        styleKey: 'old-friend',
-        avatarKey: 'young-woman',
-      });
+      expect(store.values[styleKey], 'old-friend');
+      expect(store.values.containsKey(avatarKey), isFalse);
     },
   );
 
-  testWidgets('returning user goes straight to the selected avatar', (
-    tester,
-  ) async {
+  testWidgets('a retired avatar opens Lily', (tester) async {
     final backend = FakeBackend();
-    await tester.pumpWidget(
-      app(
-        DeviceIdentity(
-          store: MemoryCredentialStore({
-            tokenKey: 't-0123456789abcdef',
-            styleKey: 'grandchild',
-            avatarKey: 'cute-boy',
-          }),
-          backend: backend,
-        ),
-      ),
-    );
+    final store = MemoryCredentialStore({
+      tokenKey: 't-0123456789abcdef',
+      styleKey: 'grandchild',
+      avatarKey: 'cute-boy',
+    });
+    await tester.pumpWidget(app(
+      DeviceIdentity(store: store, backend: backend),
+      engines: engines(store, FakeDuixBridge()),
+    ));
     await tester.pumpAndSettle();
-    expect(find.text('AVATAR-cute-boy'), findsOneWidget);
+    expect(find.text('DUIX-lily'), findsOneWidget);
     expect(find.byKey(const Key('settings')), findsOneWidget);
     expect(backend.registered, isEmpty);
   });
 
-  testWidgets('returning user without an avatar gets the avatar picker', (
-    tester,
-  ) async {
-    final backend = FakeBackend();
-    await tester.pumpWidget(
-      app(
-        DeviceIdentity(
-          store: MemoryCredentialStore({
-            tokenKey: 't-0123456789abcdef',
-            styleKey: 'grandchild',
-          }),
-          backend: backend,
-        ),
-      ),
-    );
+  testWidgets('a returning user with no saved avatar opens Lily', (tester) async {
+    final store = MemoryCredentialStore({
+      tokenKey: 't-0123456789abcdef',
+      styleKey: 'grandchild',
+    });
+    await tester.pumpWidget(app(
+      DeviceIdentity(store: store, backend: FakeBackend()),
+      engines: engines(store, FakeDuixBridge()),
+    ));
     await tester.pumpAndSettle();
-    expect(find.text('选一个聊天形象'), findsOneWidget);
-    await chooseAvatar(tester, 'default');
-    expect(find.text('AVATAR-default'), findsOneWidget);
+    expect(find.text('DUIX-lily'), findsOneWidget);
   });
 
   testWidgets('registration failure keeps the style picker and explains why', (
@@ -163,13 +141,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('style-confirm')));
       await tester.pumpAndSettle();
-      await chooseAvatar(tester, 'default');
       expect(find.text('AVATAR-default'), findsOneWidget);
-      expect(store.values, {styleKey: 'grandchild', avatarKey: 'default'});
+      expect(store.values, {styleKey: 'grandchild'});
     },
   );
 
-  testWidgets('settings changes style and avatar together and confirms', (
+  testWidgets('settings changes style and character and restarts the chat', (
     tester,
   ) async {
     final store = MemoryCredentialStore({
@@ -178,9 +155,8 @@ void main() {
       avatarKey: 'default',
     });
     final backend = FakeBackend();
-    await tester.pumpWidget(
-      app(DeviceIdentity(store: store, backend: backend)),
-    );
+    final identity = DeviceIdentity(store: store, backend: backend);
+    await tester.pumpWidget(app(identity, engines: engines(store, FakeDuixBridge())));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('settings')));
     await tester.pumpAndSettle();
@@ -193,18 +169,14 @@ void main() {
       findsOneWidget,
     );
     await tester.tap(find.byKey(const Key('style-grandchild')));
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('avatar-young-woman')),
-      300,
-    );
-    await tester.tap(find.byKey(const Key('avatar-young-woman')));
+    await tapCard(tester, const Key('avatar-lily'));
     await tester.tap(find.byKey(const Key('companion-confirm')));
     await tester.pumpAndSettle();
-    expect(find.text('AVATAR-young-woman'), findsOneWidget);
-    expect(find.text('已换好，下次聊天时生效'), findsOneWidget);
+    expect(find.text('DUIX-lily'), findsOneWidget);
+    expect(find.text('已换好，下次聊天时生效'), findsNothing);
     expect(backend.patched, [('device-token-0123456789', 'grandchild')]);
     expect(store.values[styleKey], 'grandchild');
-    expect(store.values[avatarKey], 'young-woman');
+    expect(store.values[avatarKey], 'lily');
   });
 
   testWidgets(
@@ -255,8 +227,6 @@ void main() {
       expect(backend.registerCalls, 1);
       backend.release();
       await tester.pumpAndSettle();
-      expect(find.text('选一个聊天形象'), findsOneWidget);
-      await chooseAvatar(tester, 'default');
       expect(find.text('AVATAR-default'), findsOneWidget);
       expect(backend.registerCalls, 1);
     },
@@ -302,71 +272,62 @@ void main() {
     expect(find.byKey(const Key('engine-switch')), findsNothing);
   });
 
-  testWidgets('switching to Duix asks first, then rebuilds the page', (tester) async {
+  testWidgets('settings switches to Lily and rebuilds the page', (tester) async {
     final store = MemoryCredentialStore(returning());
     final identity = DeviceIdentity(store: store, backend: FakeBackend());
-    final bridge = FakeDuixBridge(installed: {'gj_dh_res': true, 'lily': true});
-    await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('真人形象'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('先不换'));
+    await tester.pumpWidget(app(identity, engines: engines(store, FakeDuixBridge())));
     await tester.pumpAndSettle();
     expect(find.text('AVATAR-default'), findsOneWidget);
-    await tester.tap(find.text('真人形象'));
+    expect(find.byKey(const Key('engine-switch')), findsNothing);
+    await tester.tap(find.byKey(const Key('settings')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('现在换'));
+    await tapCard(tester, const Key('avatar-lily'));
+    await tester.tap(find.byKey(const Key('companion-confirm')));
     await tester.pumpAndSettle();
-    expect(find.text('DUIX-default'), findsOneWidget);
-    expect(store.values[DeviceIdentity.engineKey], 'duix');
+    expect(find.text('DUIX-lily'), findsOneWidget);
+    expect(store.values[avatarKey], 'lily');
   });
 
-  testWidgets('an unsupported phone explains why', (tester) async {
+  testWidgets('an unsupported phone keeps 小柔 and explains why', (tester) async {
     final store = MemoryCredentialStore(returning());
     final identity = DeviceIdentity(store: store, backend: FakeBackend());
     final bridge = FakeDuixBridge(support: const DuixSupport(supported: false, reason: 'low_memory'));
     await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('真人形象'));
+    await tester.tap(find.byKey(const Key('settings')));
     await tester.pumpAndSettle();
+    await tapCard(tester, const Key('avatar-lily'));
+    await tester.tap(find.byKey(const Key('companion-confirm')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('这台手机暂时用不了真人形象（需要 64 位、8GB 以上内存的手机）'),
+      200,
+    );
     expect(find.text('这台手机暂时用不了真人形象（需要 64 位、8GB 以上内存的手机）'), findsOneWidget);
+    expect(store.values[avatarKey], 'default');
+    await tester.tap(find.byKey(const Key('companion-cancel')));
+    await tester.pumpAndSettle();
     expect(find.text('AVATAR-default'), findsOneWidget);
   });
 
-  testWidgets('first use downloads, then switches from the sheet', (tester) async {
-    final store = MemoryCredentialStore(returning());
-    final identity = DeviceIdentity(store: store, backend: FakeBackend());
-    final bridge = FakeDuixBridge();
-    await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('真人形象'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('开始下载'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('现在换（会重新开始聊天）'));
-    await tester.pumpAndSettle();
-    expect(find.text('DUIX-default'), findsOneWidget);
-    expect(find.text('换成真人形象？'), findsNothing);
-  });
-
-  testWidgets('a Duix failure falls back to 3D with a notice', (tester) async {
-    final store = MemoryCredentialStore({...returning(), DeviceIdentity.engineKey: 'duix'});
+  testWidgets('a Duix failure falls back to 小柔 with a notice', (tester) async {
+    final store = MemoryCredentialStore({...returning(), avatarKey: 'lily'});
     final identity = DeviceIdentity(store: store, backend: FakeBackend());
     final bridge = FakeDuixBridge(installed: {'gj_dh_res': true, 'lily': true});
     await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
     await tester.pumpAndSettle();
-    expect(find.text('DUIX-default'), findsOneWidget);
+    expect(find.text('DUIX-lily'), findsOneWidget);
     lastRequest!.onEngineFailure!(const AvatarEngineFailure('duix_prepare_timeout'));
     await tester.pumpAndSettle();
     expect(find.text('AVATAR-default'), findsOneWidget);
     expect(find.text('真人形象没能打开，先用 3D 形象陪您聊'), findsOneWidget);
-    expect(store.values[DeviceIdentity.engineKey], 'duix');
+    expect(store.values[avatarKey], 'lily');
   });
 
   testWidgets('a crash loop is announced at launch', (tester) async {
     final store = MemoryCredentialStore({
       ...returning(),
-      DeviceIdentity.engineKey: 'duix',
+      avatarKey: 'lily',
       DuixCrashGuard.inflightKey: '1',
       DuixCrashGuard.countKey: '1',
     });
@@ -376,6 +337,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('AVATAR-default'), findsOneWidget);
     expect(find.text('真人形象上次出了问题，先换回 3D 形象'), findsOneWidget);
+    expect(store.values[avatarKey], 'default');
   });
 }
 

@@ -118,7 +118,12 @@ class EngineSwitchController extends ChangeNotifier {
 
   /// Persists [kind] and rebuilds the page with it; call after the user confirmed.
   Future<void> choose(AvatarEngineKind kind) async {
-    if (kind == AvatarEngineKind.duix && availability != DuixAvailability.ready) return;
+    if (kind == AvatarEngineKind.duix && availability != DuixAvailability.ready) {
+      _wasReady = true;
+      await _installer?.start();
+      _wasReady = _installer?.state is InstallReady;
+      if (availability != DuixAvailability.ready) return;
+    }
     if (!await prefs.saveEngine(kind)) diag(formatDiag('engine_save_failed', {'engine': kind.name}));
     _saved = kind;
     _override = null;

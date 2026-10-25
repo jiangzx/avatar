@@ -10,6 +10,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'avatar_engine/avatar_engine.dart';
 import 'avatar_engine/legacy_web_session.dart';
 import 'avatar_engine/presence_chip.dart';
+import 'identity/characters.dart';
 import 'config.dart';
 import 'diag_log.dart';
 import 'metrics.dart';
@@ -462,6 +463,7 @@ class _AvatarPageState extends State<AvatarPage> {
             status: _status,
             error: _error,
             muted: _muted,
+            name: characterNameForEngine(_engine.kind),
             onMute: _toggleMute,
             onEnd: _end,
             onRetry: _retry,

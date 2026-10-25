@@ -11,11 +11,7 @@ class AvatarOption implements PickerOption {
 
 const defaultAvatarId = 'default';
 const avatarOptions = <AvatarOption>[
-  AvatarOption(id: 'default', title: '现有形象', subtitle: '温和自然，陪您轻松聊天', assetPath: './avatars/avatar.glb'),
-  AvatarOption(id: 'cute-girl', title: '可爱小女孩', subtitle: '活泼亲切，带一点俏皮感', assetPath: './avatars/cute-girl.glb'),
-  AvatarOption(id: 'cute-boy', title: '可爱小男孩', subtitle: '阳光好奇，喜欢听您分享', assetPath: './avatars/cute-boy.glb'),
-  AvatarOption(id: 'young-woman', title: '青年美女', subtitle: '明亮从容，温柔有分寸', assetPath: './avatars/young-woman.glb'),
-  AvatarOption(id: 'young-man', title: '青年俊男', subtitle: '清爽可靠，聊天自然', assetPath: './avatars/young-man.glb'),
+  AvatarOption(id: 'default', title: '小柔', subtitle: '温和自然，陪您轻松聊天', assetPath: './avatars/avatar.glb'),
 ];
 
 AvatarOption avatarOptionFor(String? id) {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'avatars.dart';
+import 'characters.dart';
 import 'companion_picker.dart';
 import 'device_identity.dart';
 import 'style_picker_page.dart';
@@ -33,7 +33,7 @@ class CompanionSettingsPage extends StatefulWidget {
 
 class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
   late String _style = widget.currentStyle;
-  late String _avatar = avatarOptionFor(widget.currentAvatar).id;
+  late String _avatar = activeCharacter(widget.currentAvatar);
   bool _busy = false;
   String? _error;
 
@@ -90,7 +90,7 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
                     const SizedBox(height: 12),
                     const Text('形象', style: TextStyle(color: Colors.tealAccent, fontSize: 19, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
-                    for (final option in avatarOptions)
+                    for (final option in characterOptions)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: SelectionCard(
@@ -100,10 +100,14 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
                           onTap: _busy ? null : () => setState(() => _avatar = option.id),
                         ),
                       ),
-                    if (_error != null) Text(_error!, style: const TextStyle(color: Colors.amberAccent, fontSize: 18)),
                   ],
                 ),
               ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(_error!, style: const TextStyle(color: Colors.amberAccent, fontSize: 18)),
+                ),
               SizedBox(
                 height: 64,
                 child: FilledButton(

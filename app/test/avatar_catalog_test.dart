@@ -2,31 +2,10 @@ import 'package:avatar_app/identity/avatars.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('ships the existing avatar plus the four requested appearances', () {
-    expect(avatarOptions.map((option) => option.id), [
-      'default',
-      'cute-girl',
-      'cute-boy',
-      'young-woman',
-      'young-man',
-    ]);
-    expect(avatarOptions.map((option) => option.title), [
-      '现有形象',
-      '可爱小女孩',
-      '可爱小男孩',
-      '青年美女',
-      '青年俊男',
-    ]);
-  });
-
-  test('maps every catalog option to a local avatar asset', () {
-    expect(avatarOptions.map((option) => option.assetPath), [
-      './avatars/avatar.glb',
-      './avatars/cute-girl.glb',
-      './avatars/cute-boy.glb',
-      './avatars/young-woman.glb',
-      './avatars/young-man.glb',
-    ]);
+  test('the 3D catalog keeps only 小柔', () {
+    expect(avatarOptions.map((option) => option.id), ['default']);
+    expect(avatarOptions.map((option) => option.title), ['小柔']);
+    expect(avatarOptions.map((option) => option.assetPath), ['./avatars/avatar.glb']);
   });
 
   test('unknown and missing ids fall back to the existing avatar', () {

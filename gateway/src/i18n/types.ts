@@ -62,6 +62,20 @@ export interface PerformActionCopy {
   actionDescription: string;
 }
 
+/** Spoken weather copy. The line uses {place} {condition} {temp} {max} {min}. */
+export interface WeatherCopy {
+  toolDescription: string;
+  locationDescription: string;
+  line: string;
+  missingLocationText: string;
+  notFoundText: string;
+  unavailableText: string;
+  conditions: Record<
+    'clear' | 'mainlyClear' | 'partlyCloudy' | 'overcast' | 'fog' | 'drizzle' | 'rain' | 'freezingRain' | 'snow' | 'showers' | 'snowShowers' | 'thunder' | 'unknown',
+    string
+  >;
+}
+
 /** Everything one language needs for memory and evidence handling. */
 export interface MemoryCopy {
   noticeKeywords: readonly string[];
@@ -70,6 +84,7 @@ export interface MemoryCopy {
   declineConfirmedText: string;
   recall: RecallTextCopy;
   performAction: PerformActionCopy;
+  weather: WeatherCopy;
   evidence: EvidenceRules;
   addressingPatterns: readonly RegExp[];
   extractLabels: ExtractLabels;

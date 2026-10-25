@@ -46,6 +46,7 @@ abstract interface class DuixBridge {
   Future<DuixSupport> probe({required int minTotalMemMb});
   Future<Map<String, bool>> installStatus(List<DuixAsset> assets);
   Future<void> install(DuixAsset asset);
+  Future<void> ensureBundled();
   Future<void> cancelInstall(String id);
   Future<DuixPrepared> prepare(DuixConfig config);
   Future<void> startResponse(int seq);
@@ -109,6 +110,9 @@ class MethodChannelDuixBridge implements DuixBridge {
 
   @override
   Future<void> install(DuixAsset asset) => _call<void>('install', asset.toArgs());
+
+  @override
+  Future<void> ensureBundled() => _call<void>('ensureBundled');
 
   @override
   Future<void> cancelInstall(String id) => _call<void>('cancelInstall', {'id': id});

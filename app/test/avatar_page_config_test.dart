@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('builds a WebView config with the catalog avatar path', () {
     final config = buildAvatarConfig(
-      avatarId: 'young-man',
+      avatarId: 'default',
       gatewayUrl: 'http://127.0.0.1:8787',
       appSecret: 'secret',
       audioPath: 'B',
@@ -12,7 +12,7 @@ void main() {
       audioMode: 'native',
     );
 
-    expect(config['avatarUrl'], './avatars/young-man.glb');
+    expect(config['avatarUrl'], './avatars/avatar.glb');
     expect(config['audioMode'], 'native');
   });
 

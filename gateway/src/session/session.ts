@@ -1174,6 +1174,7 @@ export class Session {
     });
     this.memoryToolWaiting = false;
     if (a !== this.adapter || this.ended) return;
+    log('tool_invoked', { name: name.slice(0, 64), ok: outcome.ok, ...(outcome.error ? { code: outcome.error } : {}) });
     a.sendToolResult(callId, toolPayload(outcome));
     if (s) this.metrics.onToolCall(s.seq);
     if (outcome.ok && outcome.action && !cancelled) this.send({ type: 'avatar.action', action: outcome.action, source: 'tool' });

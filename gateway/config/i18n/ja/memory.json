@@ -22,6 +22,29 @@
     "toolDescription": "ユーザーがアバターに動作を頼んだときに呼び出します。列挙された動作だけができ、呼び出したら一文で自然に応えてください。動作の過程は説明しないでください。",
     "actionDescription": "wave=手を振る, nod=うなずく, smile=ほほえむ, turn=振り向く, heart=ハートを作る"
   },
+  "weather": {
+    "toolDescription": "ある場所の今日の天気、気温、雨を調べます。天気、寒さ、服装を聞かれたら呼び出してください。返ってきた内容だけを話し、記憶で天気を作らないでください。場所がなければ location は空のままにします。",
+    "locationDescription": "ユーザーが言った都市や地域。言っていなければ推測せず空にします。",
+    "line": "{place}は今日{condition}です。今は{temp}度くらい、最高{max}度、最低{min}度です。",
+    "missingLocationText": "どの街の天気を知りたいですか？",
+    "notFoundText": "その場所は見つかりませんでした。別の都市名で言ってもらえますか？",
+    "unavailableText": "今は天気を調べられませんでした。少ししてからもう一度聞いてください。",
+    "conditions": {
+      "clear": "晴れ",
+      "mainlyClear": "ほぼ晴れ",
+      "partlyCloudy": "曇りがち",
+      "overcast": "曇り",
+      "fog": "霧",
+      "drizzle": "小雨",
+      "rain": "雨",
+      "freezingRain": "凍雨",
+      "snow": "雪",
+      "showers": "にわか雨",
+      "snowShowers": "にわか雪",
+      "thunder": "雷雨",
+      "unknown": "変わりやすい天気"
+    }
+  },
   "evidence": {
     "questionPatterns": ["(?:ですか|ますか|ませんか|かしら|かな|か)\\s*[。.!！…~～]*$"]
   },

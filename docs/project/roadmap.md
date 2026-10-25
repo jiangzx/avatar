@@ -4,10 +4,11 @@
 
 状态：**实现完成，验收未全部通过**。从 `master` `b3818ea` 拉出。Task 1–12 已提交。Task 13 的记录见 [验收](../testing/2026-10-25-duix-acceptance.md)。已合并到本地 `master`，未推送。
 
-- 交付：引擎接口（3D 走 `WebViewAvatarEngine`）、Duix 引擎（24 kHz 播放、口型时钟、渲染）、App 内下载与校验、主页切换开关、崩溃保护。`gateway/`、`protocol/`、`avatar-core/` 无改动。
+- 交付：引擎接口（3D 走 `WebViewAvatarEngine`）、Duix 引擎（24 kHz 播放、口型时钟、渲染）、崩溃保护。形象决定用哪条渲染：Lily 走 Duix，小柔走 WebView。两个模型包打进 APK，安装和升级时拷出，不再在运行时下载。
+- 2026-10-25 产品调整（工作区，未提交）：应用名和窗口标题是「智伴」。Android `applicationId` 与 Kotlin 包是 `com.aihero.avatar.bontime`，和旧的 `com.anyidea.avatar_app` 不是同一个应用，不迁移旧数据。聊天伙伴只保留 Lily（默认，真人）和 小柔（原来的 3D `default`）。主页不再切换引擎。风格或形象变了就立刻重开；这台手机跑不了 Lily 时留在小柔并说明原因。打包进 APK 的 Lily 帧已涂掉 `duix.com`，渲染前再盖同一块背景。桌面核对：改写后的第 1、50、200、400 帧，原水印框里近白像素为 0（未改的包约 373–382），人脸还在。真机上的水印和包名还没复验。
 - 必须通过：M1 通过（约 4 分 30 秒无崩溃，结束画面 Lily 可见）；M2 通过（用户确认嘴跟着声音动）；M3 通过（至少 5 次 `outcome=interrupted`）；M4 通过（3 次短回复 `outcome=ended`）。M5 已从验收删除。M6、M7 未执行。M8 未通过：没有 `guiji` / `duix` / `vshow`，但有 `content-autofill.googleapis.com`；`debugOnly` 仍为 false。
 - 实测摘要：R4 平均 fps 23.85（参考 ≥ 24）；R7 页大小 4096；R8 `lips=false` 3 次。R1、R2、R3、R5 为 NOT RUN。R6 随 M5 删除。
-- 回归（2026-10-25）：`flutter test` 268 项通过；改动的 6 个 Dart 文件 `flutter analyze` 无问题；`./gradlew :app:testDebugUnitTest` BUILD SUCCESSFUL，JUnit 报告 43 项、0 失败；`npm test` protocol 6 / gateway 839 / avatar-core 125 通过；`npm run typecheck` 通过；相对合并前的 `master`，`gateway`、`protocol`、`avatar-core` 无差异，`git diff --check` 无输出。
+- 回归（2026-10-25，智伴这次）：`cd app && flutter test` 268 项通过；改动的 Dart 库 `flutter analyze` 无问题；`./gradlew :app:testDebugUnitTest --offline` BUILD SUCCESSFUL，JUnit 45 项、0 失败；`npm test -w avatar-core` 121 项通过，`npm run typecheck -w avatar-core` 通过。此前合并时的 protocol 6 / gateway 839 这次没再跑。M6、M7 仍未执行，M8 仍未通过。
 - 上线前门槛（spec §11，这次不做）：商用模特、月活超过 1000 的许可、"Powered by Duix.com" 与 Notice、16 KB 页对齐、iOS。
 - 下一步：未推送。未关闭项是 blockers #55–#58。#54 已删除。M6、M7 未执行，M8 未通过。
 

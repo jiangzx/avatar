@@ -34,7 +34,7 @@ class AvatarApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final problem = AppConfig.validate();
     return MaterialApp(
-      title: '小柔',
+      title: '智伴',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorSchemeSeed: Colors.teal,

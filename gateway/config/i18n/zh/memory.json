@@ -22,6 +22,29 @@
     "toolDescription": "当用户请求虚拟人做动作时调用。只能做列出的动作；调用后用一句话自然回应，不要描述动作过程。",
     "actionDescription": "wave=挥手, nod=点头, smile=微笑, turn=转身, heart=比心"
   },
+  "weather": {
+    "toolDescription": "查询某个地方今天的天气、气温和是否下雨。用户问天气、冷不冷、要不要添衣服时调用。只根据返回的内容说，不要凭记忆编天气。用户没说城市时，location 留空。",
+    "locationDescription": "用户说的城市或区县。没说就留空，不要自己猜。",
+    "line": "{place}今天{condition}，现在大约{temp}度，最高{max}度，最低{min}度。",
+    "missingLocationText": "您想问哪个城市的天气呀？",
+    "notFoundText": "这个地方我没查到，您换个城市名再说说？",
+    "unavailableText": "这会儿没查到天气，您过一会儿再问我。",
+    "conditions": {
+      "clear": "晴",
+      "mainlyClear": "大致晴朗",
+      "partlyCloudy": "多云",
+      "overcast": "阴",
+      "fog": "有雾",
+      "drizzle": "有小雨",
+      "rain": "下雨",
+      "freezingRain": "冻雨",
+      "snow": "下雪",
+      "showers": "阵雨",
+      "snowShowers": "阵雪",
+      "thunder": "雷雨",
+      "unknown": "天气变化比较大"
+    }
+  },
   "evidence": {
     "questionPatterns": ["(?:吗|呢|么|嘛|来着)\\s*[。.!！…~～]*$"]
   },

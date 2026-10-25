@@ -25,6 +25,29 @@
     "toolDescription": "Call when the user asks the avatar to perform an action. Only the listed actions are available; after calling, reply naturally in one sentence without describing the motion.",
     "actionDescription": "wave=wave, nod=nod, smile=smile, turn=turn around, heart=make a heart"
   },
+  "weather": {
+    "toolDescription": "Look up today's weather, temperature, and rain for a place. Call this when the user asks about the weather, how cold it is, or what to wear. Speak only the returned text. Leave location empty when the user did not name a place.",
+    "locationDescription": "The city or district the user named. Leave it empty instead of guessing.",
+    "line": "{place} today is {condition}. It is about {temp} degrees now, with a high of {max} and a low of {min}.",
+    "missingLocationText": "Which city would you like the weather for?",
+    "notFoundText": "I couldn't find that place. Could you try another city name?",
+    "unavailableText": "I couldn't check the weather just now. Please ask me again in a little while.",
+    "conditions": {
+      "clear": "clear",
+      "mainlyClear": "mostly clear",
+      "partlyCloudy": "partly cloudy",
+      "overcast": "overcast",
+      "fog": "foggy",
+      "drizzle": "drizzling",
+      "rain": "rainy",
+      "freezingRain": "freezing rain",
+      "snow": "snowy",
+      "showers": "showery",
+      "snowShowers": "snow showers",
+      "thunder": "thunderstorms",
+      "unknown": "changeable"
+    }
+  },
   "evidence": {
     "questionPatterns": [
       "^(?:what|where|when|who|why|how)\\s+(?:did|do|does|is|are|was|were|have|has|had|can|could|would|should|will)\\b",

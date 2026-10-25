@@ -15,6 +15,7 @@ void main() {
           status: '网络有点慢，稍等我一下',
           error: null,
           muted: false,
+          name: '小柔',
           onMute: () => muteTaps++,
           onEnd: () => endTaps++,
           onToggleDebug: () => debugToggles++,
@@ -35,7 +36,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: AvatarOverlay(
-          userLine: '', aiLine: '', status: '', error: '需要麦克风权限才能聊天', muted: true,
+          userLine: '', aiLine: '', status: '', error: '需要麦克风权限才能聊天', muted: true, name: '小柔',
           onMute: () {}, onEnd: () {}, onToggleDebug: () {},
         ),
       ),
@@ -49,7 +50,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: AvatarOverlay(
-          userLine: '', aiLine: '', status: '', error: '启动失败', muted: false,
+          userLine: '', aiLine: '', status: '', error: '启动失败', muted: false, name: 'Lily',
           onMute: () {}, onEnd: () {}, onToggleDebug: () {}, onRetry: () => retries++,
         ),
       ),
@@ -62,7 +63,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: AvatarOverlay(
-          userLine: '', aiLine: '王叔好', status: '', error: null, muted: false,
+          userLine: '', aiLine: '王叔好', status: '', error: null, muted: false, name: '小柔',
           onMute: () {}, onEnd: () {}, onToggleDebug: () {},
           presence: const Text('PRESENCE'),
         ),

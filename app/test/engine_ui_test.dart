@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:avatar_app/avatar_engine/avatar_engine.dart';
 import 'package:avatar_app/avatar_engine/engine_switch_controller.dart';
 import 'package:avatar_app/avatar_engine/ui/duix_download_sheet.dart';
@@ -63,8 +61,8 @@ void main() {
     expect(await result, isFalse);
   });
 
-  testWidgets('the download sheet walks from idle to ready', (tester) async {
-    final bridge = FakeDuixBridge(installed: {'gj_dh_res': true})..installGate = Completer<void>();
+  testWidgets('copying the bundled models goes from idle to ready', (tester) async {
+    final bridge = FakeDuixBridge();
     final installer = DuixInstaller(bridge: bridge, config: loadTestDuixConfig(), diag: (_) {});
     late Future<bool> result;
     await tester.pumpWidget(host(Builder(
@@ -74,19 +72,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('需要下载约 174MB，建议连上 Wi-Fi 再下载。'), findsOneWidget);
     await tester.tap(find.text('开始下载'));
-    await tester.pump();
-    expect(find.text('取消下载'), findsOneWidget);
-    expect(find.text('已下载 0MB / 174MB'), findsOneWidget);
-    bridge.installGate!.complete();
     await tester.pumpAndSettle();
     expect(find.text('真人形象准备好了'), findsOneWidget);
+    expect(bridge.calls, contains('ensureBundled'));
     await tester.tap(find.text('现在换（会重新开始聊天）'));
     await tester.pumpAndSettle();
     expect(await result, isTrue);
   });
 
-  testWidgets('a failed download offers retry', (tester) async {
-    final bridge = FakeDuixBridge()..installErrors['gj_dh_res'] = const DuixBridgeError('network');
+  testWidgets('a failed copy offers retry', (tester) async {
+    final bridge = FakeDuixBridge()..bundleError = const DuixBridgeError('network');
     final installer = DuixInstaller(bridge: bridge, config: loadTestDuixConfig(), diag: (_) {});
     await tester.pumpWidget(host(DuixDownloadSheet(installer: installer)));
     await tester.tap(find.text('开始下载'));

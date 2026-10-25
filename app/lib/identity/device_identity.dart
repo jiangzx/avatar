@@ -5,7 +5,7 @@ import '../avatar_engine/avatar_engine.dart';
 import '../native_gateway/gateway_client.dart';
 import 'credential_store.dart';
 import 'identity_api.dart';
-import 'avatars.dart';
+import 'characters.dart';
 
 sealed class IdentityResult {
   const IdentityResult();
@@ -93,18 +93,18 @@ class DeviceIdentity implements DeviceTokenProvider, EnginePrefs {
     return const IdentityOk();
   });
 
-  /// Avatar appearance is local-only and takes effect on the next session.
+  /// Character id is local-only. Lily and 小柔 are the only choices.
   Future<IdentityResult> changeAvatar(String avatarId) => _guard(() async {
-    if (!isAvatarId(avatarId)) return const IdentityFailed('invalid_avatar');
+    if (!isCharacterId(avatarId)) return const IdentityFailed('invalid_avatar');
     await store.write(avatarKey, avatarId);
     return const IdentityOk();
   });
 
-  /// Avatar renderer, local only; unknown values and storage errors read as the 3D avatar.
+  /// The character decides the renderer. A missing id is Lily. Storage trouble reads as 3D.
   @override
   Future<AvatarEngineKind> savedEngine() async {
     try {
-      return parseEngineKind(await store.read(engineKey));
+      return engineForCharacter(activeCharacter(await store.read(avatarKey)));
     } on Exception {
       return AvatarEngineKind.webview;
     }
@@ -113,7 +113,7 @@ class DeviceIdentity implements DeviceTokenProvider, EnginePrefs {
   @override
   Future<bool> saveEngine(AvatarEngineKind engine) async {
     try {
-      await store.write(engineKey, engine.name);
+      await store.write(avatarKey, engine == AvatarEngineKind.duix ? characterLily : characterXiaorou);
       return true;
     } on Exception {
       return false;

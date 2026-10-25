@@ -13,6 +13,7 @@ import type { ConversationLedger } from '../ledger.ts';
 import { consentTool } from './consent.ts';
 import { forgetTool } from './forget.ts';
 import { recallTool } from './recall.ts';
+import { loadWeatherConfig, weatherTool, type WeatherFetch } from './weather.ts';
 
 export interface ToolContext {
   ownerId?: string;
@@ -60,6 +61,8 @@ export interface ToolRegistryOptions {
   safety: SafetyRules;
   clipChars: number;
   phraseTimeoutMs: number;
+  /** Test double. Production uses global fetch. */
+  weatherFetch?: WeatherFetch;
 }
 
 const ZH_RECALL_PROMPT = readFileSync(
@@ -91,7 +94,7 @@ function performActionTool(options: ToolRegistryOptions): ToolHandler {
   };
 }
 
-/** Recall, forget, consent, and perform_action. Unknown names do not throw. */
+/** Recall, forget, consent, perform_action, and weather. Unknown names do not throw. */
 export class ToolRegistry {
   constructor(private readonly tools: readonly ToolHandler[]) {}
 
@@ -140,5 +143,11 @@ export function createToolRegistry(options: ToolRegistryOptions = defaultToolOpt
       confirmedText: options.memory.declineConfirmedText,
       toolDescription: options.memory.recall.consentToolDescription,
     }),
+    weatherTool(
+      options.memory.weather,
+      loadWeatherConfig(),
+      options.language,
+      options.weatherFetch ?? ((url, signal) => fetch(url, { signal })),
+    ),
   ]);
 }

@@ -52,7 +52,7 @@
   "avatars": [
     {
       "id": "default",
-      "title": "现有形象",
+      "title": "小柔",
       "description": "温和自然，陪您轻松聊天",
       "assetPath": "./avatars/avatar.glb",
       "body": "F"
@@ -63,7 +63,7 @@
 
 | 字段 | 含义 |
 |---|---|
-| `id` | 本地存储的 `avatar_id`；未知 id 回退 `default` |
+| `id` | 本地存储的 `avatar_id`。聊天伙伴里未知 id 下次会打开 Lily；这份 GLB 目录里未知路径仍回退 `default` |
 | `title` / `description` | Flutter 选择页主标题 / 副标题 |
 | `assetPath` | WebView 相对路径，必须形如 `./avatars/<file>.glb`，且出现在白名单中 |
 | `body` | `"F"` 或 `"M"`，传给 TalkingHead `showAvatar` |
@@ -86,15 +86,11 @@ node scripts/generate-avatar-catalog.mjs
 | `avatar-core/public/avatars/<name>.glb` | 开发与 Vite 构建的源资源（**git 忽略**） |
 | `app/assets/web/avatars/` | `./scripts/build-web.sh` 拷贝后的 Flutter 内嵌资源（**git 忽略**） |
 
-当前默认五个文件名（与目录一致）：
+当前产品目录只有小柔这一份 GLB。Lily 是真人形象，模型在 APK 内的 Duix 压缩包里，不走这个目录。
 
-| id | 文件 |
-|---|---|
-| `default` | `avatar.glb` |
-| `cute-girl` | `cute-girl.glb` |
-| `cute-boy` | `cute-boy.glb` |
-| `young-woman` | `young-woman.glb` |
-| `young-man` | `young-man.glb` |
+| id | 文件 | 说明 |
+|---|---|---|
+| `default` | `avatar.glb` | 小柔，WebView 3D |
 
 仅替换外观、保持 id 不变时：用新 GLB **覆盖同名文件**，再重建 Web bundle。增减形象则同时改 `avatar-catalog.json` 并重新生成。
 
@@ -103,23 +99,23 @@ node scripts/generate-avatar-catalog.mjs
 `./scripts/fetch-assets.sh` 会：
 
 1. 生成目录代码；
-2. 按 `scripts/avatar-assets.json` **恢复/派生**四个上游示例模型，并逐个校验 SHA-256（`FORCE_AVATAR=1` 会重新下载非派生资源）；
+2. 按 `scripts/avatar-assets.json` 恢复 `placeholder.glb` 并校验 SHA-256（`FORCE_AVATAR=1` 会重新下载）；
 3. 仅当 `avatar.glb` 不存在时，把已校验的 `placeholder.glb` 复制过去作为占位；**已有的 `avatar.glb` 永不覆盖**。
 
-`avatar.glb`（`default` 形象）是本地自备的 Avaturn 默认模型，不进入上游 manifest，也不参与 checksum。这样 `fetch-assets.sh` 不会把自建模型换回占位模型。
+`avatar.glb`（小柔）是本地自备模型，不进入上游 manifest，也不参与 checksum。`fetch-assets.sh` 不会把它换回占位模型，也不会再拉回已删除的四个示例形象。
 
 **用 Avaturn 自建模型替换后：**
 
 - 把 GLB 直接放进 `avatar-core/public/avatars/`，更新 `avatar-catalog.json`，跑生成脚本 + `build-web.sh`。
-- 上游示例（`young-woman.glb`、`young-man.glb`、派生的 `cute-girl.glb` / `cute-boy.glb`）由 manifest 管理；替换它们时同步更新 `avatar-assets.json` 的 checksum，否则脚本会按校验失败退出。
+- 不要把已移除的 `cute-girl.glb`、`cute-boy.glb`、`young-woman.glb`、`young-man.glb` 加回 manifest；设置页不再提供这些形象。
 
 ## 5. 替换步骤（推荐清单）
 
-### A. 同名替换现有五个形象
+### A. 替换小柔
 
-1. 在 Avaturn 导出 5 个 GLB（均勾 ARKit）。
-2. 分别命名为上表文件名，复制到 `avatar-core/public/avatars/`。
-3. （可选）若标题/描述/性别变了，编辑 `scripts/avatar-catalog.json` 后执行 `node scripts/generate-avatar-catalog.mjs`。
+1. 在 Avaturn 导出 GLB（勾选 ARKit）。
+2. 命名为 `avatar.glb`，复制到 `avatar-core/public/avatars/`。
+3. 若标题、描述或性别变了，编辑 `scripts/avatar-catalog.json` 后执行 `node scripts/generate-avatar-catalog.mjs`。
 4. 构建并安装：
 
    ```bash
@@ -127,7 +123,7 @@ node scripts/generate-avatar-catalog.mjs
    # 再按现有流程 flutter run / 打 debug APK，使用 app/dev.json
    ```
 
-5. 在 App 设置里切换形象，**下次进入会话**后应看到新模型（当前会话不热切换）。
+5. 在聊天伙伴设置里选中小柔并保存。保存后当前聊天会结束并立刻用新形象重开。
 
 ### B. 增删或改 id
 

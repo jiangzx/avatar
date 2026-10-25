@@ -31,7 +31,7 @@ void main() {
   });
 
   test('no config hides Duix and the session uses 3D', () async {
-    store.values[DeviceIdentity.engineKey] = 'duix';
+    store.values[DeviceIdentity.avatarKey] = 'lily';
     final c = controller(useConfig: false);
     await c.load();
     expect(c.availability, DuixAvailability.hidden);
@@ -48,7 +48,7 @@ void main() {
   });
 
   test('an unsupported phone keeps the saved choice but runs 3D', () async {
-    store.values[DeviceIdentity.engineKey] = 'duix';
+    store.values[DeviceIdentity.avatarKey] = 'lily';
     bridge.support = const DuixSupport(supported: false, reason: 'low_memory');
     final c = controller();
     await c.load();
@@ -58,33 +58,27 @@ void main() {
     expect(c.savedEngine, AvatarEngineKind.duix);
   });
 
-  test('missing models need a download; installed models are ready', () async {
-    store.values[DeviceIdentity.engineKey] = 'duix';
-    bridge.installed.remove('lily');
+  test('a failed bundle keeps Lily on 3D for this launch', () async {
+    store.values[DeviceIdentity.avatarKey] = 'lily';
+    bridge.bundleError = const DuixBridgeError('asset_missing');
     final missing = controller();
     await missing.load();
     expect(missing.availability, DuixAvailability.needsDownload);
     expect(missing.sessionEngine, AvatarEngineKind.webview);
-
-    bridge.installed['lily'] = true;
-    final ready = controller();
-    await ready.load();
-    expect(ready.availability, DuixAvailability.ready);
-    expect(ready.sessionEngine, AvatarEngineKind.duix);
   });
 
-  test('repeated crashes switch the saved engine back to 3D', () async {
-    store.values.addAll({DeviceIdentity.engineKey: 'duix', DuixCrashGuard.inflightKey: '1', DuixCrashGuard.countKey: '1'});
+  test('repeated crashes switch the saved character back to 小柔', () async {
+    store.values.addAll({DeviceIdentity.avatarKey: 'lily', DuixCrashGuard.inflightKey: '1', DuixCrashGuard.countKey: '1'});
     final c = controller();
     await c.load();
     expect(c.savedEngine, AvatarEngineKind.webview);
-    expect(store.values[DeviceIdentity.engineKey], 'webview');
+    expect(store.values[DeviceIdentity.avatarKey], 'default');
     expect(c.takeNotice(), EngineNotice.crashDisabled);
     expect(c.takeNotice(), isNull);
   });
 
   test('a failed save keeps the crash count and still runs 3D', () async {
-    store.values.addAll({DeviceIdentity.engineKey: 'duix', DuixCrashGuard.inflightKey: '1', DuixCrashGuard.countKey: '1'});
+    store.values.addAll({DeviceIdentity.avatarKey: 'lily', DuixCrashGuard.inflightKey: '1', DuixCrashGuard.countKey: '1'});
     final failing = _FailEngineWrite(store);
     final c = EngineSwitchController(
       prefs: DeviceIdentity(store: failing, backend: FakeBackend()),
@@ -97,7 +91,7 @@ void main() {
     await c.load();
     expect(c.sessionEngine, AvatarEngineKind.webview);
     expect(c.savedEngine, AvatarEngineKind.duix);
-    expect(store.values[DeviceIdentity.engineKey], 'duix');
+    expect(store.values[DeviceIdentity.avatarKey], 'lily');
     expect(store.values[DuixCrashGuard.countKey], '2');
     expect(c.takeNotice(), isNull);
   });
@@ -107,13 +101,13 @@ void main() {
     await c.load();
     final epoch = c.pageEpoch;
     await c.choose(AvatarEngineKind.duix);
-    expect(store.values[DeviceIdentity.engineKey], 'duix');
+    expect(store.values[DeviceIdentity.avatarKey], 'lily');
     expect(c.sessionEngine, AvatarEngineKind.duix);
     expect(c.pageEpoch, epoch + 1);
   });
 
   test('a Duix failure falls back for this session only', () async {
-    store.values[DeviceIdentity.engineKey] = 'duix';
+    store.values[DeviceIdentity.avatarKey] = 'lily';
     final c = controller();
     await c.load();
     c.reportDuixFailure(const AvatarEngineFailure('duix_not_installed'));
@@ -124,23 +118,23 @@ void main() {
     expect(c.takeNotice(), isNull); // already on 3D
   });
 
-  test('finishing a download announces that Duix is ready', () async {
-    bridge.installed.remove('lily');
+  test('bundling during load does not ask the user to switch', () async {
     final c = controller();
     await c.load();
-    await c.installer!.start();
     expect(c.availability, DuixAvailability.ready);
-    expect(c.takeNotice(), EngineNotice.duixReady);
+    expect(c.takeNotice(), isNull);
   });
 
-  test('choosing Duix before it is ready does nothing', () async {
-    bridge.installed.remove('lily');
+  test('choosing Lily copies the bundle and then switches', () async {
+    store.values[DeviceIdentity.avatarKey] = 'default';
+    bridge.bundleError = const DuixBridgeError('asset_missing');
     final c = controller();
     await c.load();
-    await c.choose(AvatarEngineKind.duix);
     expect(c.sessionEngine, AvatarEngineKind.webview);
-    expect(store.values[DeviceIdentity.engineKey], isNull);
-    expect(c.installer!.state, isA<InstallIdle>());
+    bridge.bundleError = null;
+    await c.choose(AvatarEngineKind.duix);
+    expect(c.sessionEngine, AvatarEngineKind.duix);
+    expect(store.values[DeviceIdentity.avatarKey], 'lily');
   });
 }
 
@@ -154,7 +148,7 @@ class _FailEngineWrite implements CredentialStore {
 
   @override
   Future<void> write(String key, String value) async {
-    if (key == DeviceIdentity.engineKey) throw Exception('disk');
+    if (key == DeviceIdentity.avatarKey) throw Exception('disk');
     await inner.write(key, value);
   }
 }

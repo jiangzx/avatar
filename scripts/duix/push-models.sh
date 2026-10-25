@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Dev shortcut (spec D9): download the pinned Duix assets once and push them into an app's external files dir.
-#   ./scripts/duix/push-models.sh com.anyidea.avatar_app
-# Install and launch the app once first. If the app cannot read the pushed files (spec A7), delete them
-# with `adb shell rm -rf /sdcard/Android/data/<pkg>/files/duix` and use the in-app download instead.
+# Dev shortcut: download the pinned Duix assets once and push them into an app's external files dir.
+# The installed app copies the same zips out of its own assets; this script is only for a desk push.
+#   ./scripts/duix/push-models.sh com.aihero.avatar.bontime
+# Install and launch the app once first. If the app cannot read the pushed files, delete them
+# with `adb shell rm -rf /sdcard/Android/data/<pkg>/files/duix` and relaunch so it recopies the bundle.
 set -euo pipefail
 PKG="${1:?usage: $0 <android package>}"
 case "$PKG" in *[!A-Za-z0-9._]*) echo "bad package name" >&2; exit 2 ;; esac

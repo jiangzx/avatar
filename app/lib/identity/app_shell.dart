@@ -4,13 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../avatar_engine/avatar_engine.dart';
 import '../avatar_engine/engine_switch_controller.dart';
-import '../avatar_engine/ui/duix_download_sheet.dart';
-import '../avatar_engine/ui/engine_confirm_dialog.dart';
 import '../avatar_engine/ui/engine_copy.dart';
-import '../avatar_engine/ui/engine_switch.dart';
+import '../duix/duix_installer.dart';
 import '../native_gateway/gateway_client.dart';
-import 'avatar_picker_page.dart';
-import 'avatars.dart';
+import 'characters.dart';
 import 'companion_settings_page.dart';
 import 'device_identity.dart';
 import 'style_picker_page.dart';
@@ -60,7 +57,6 @@ class _AppShellState extends State<AppShell> {
   String? _avatar;
   bool _busy = false;
   String? _error;
-  bool _sheetOpen = false;
 
   @override
   void initState() {
@@ -90,54 +86,11 @@ class _AppShellState extends State<AppShell> {
       case EngineNotice.crashDisabled:
         messenger.showSnackBar(_snack(crashDisabledText));
       case EngineNotice.duixReady:
-        if (_sheetOpen) return; // the sheet already shows the ready state
-        messenger.showSnackBar(
-          SnackBar(
-            content: const Text(duixReadyText, style: TextStyle(fontSize: 18)),
-            duration: const Duration(seconds: 8),
-            action: SnackBarAction(
-              label: duixReadyAction,
-              onPressed: () => unawaited(_switchTo(AvatarEngineKind.duix)),
-            ),
-          ),
-        );
+        messenger.showSnackBar(_snack(duixReadyText));
     }
   }
 
   static SnackBar _snack(String text) => SnackBar(content: Text(text, style: const TextStyle(fontSize: 18)));
-
-  Future<void> _onEngineTap(AvatarEngineKind kind) async {
-    final engines = widget.engines;
-    if (engines == null || kind == engines.sessionEngine) return;
-    if (kind == AvatarEngineKind.duix) {
-      switch (engines.availability) {
-        case DuixAvailability.unsupported:
-          ScaffoldMessenger.of(context).showSnackBar(_snack(unsupportedText(engines.unsupportedReason)));
-          return;
-        case DuixAvailability.needsDownload || DuixAvailability.downloading:
-          final installer = engines.installer;
-          if (installer == null) return;
-          _sheetOpen = true;
-          final switchNow = await showDuixDownloadSheet(context, installer);
-          _sheetOpen = false;
-          if (switchNow && mounted) await engines.choose(AvatarEngineKind.duix);
-          return;
-        case DuixAvailability.ready:
-          break;
-        case DuixAvailability.checking || DuixAvailability.hidden:
-          return;
-      }
-    }
-    await _switchTo(kind);
-  }
-
-  /// Asks first: switching ends the current chat and starts a fresh one.
-  Future<void> _switchTo(AvatarEngineKind kind) async {
-    final engines = widget.engines;
-    if (engines == null || !mounted || kind == engines.sessionEngine) return;
-    if (!await confirmEngineSwitch(context, kind)) return;
-    await engines.choose(kind);
-  }
 
   Future<void> _load() async {
     String? style;
@@ -156,24 +109,6 @@ class _AppShellState extends State<AppShell> {
       _avatar = avatar;
       _error = error;
       _loading = false;
-    });
-  }
-
-  Future<void> _chooseFirstAvatar(String avatar) async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    final result = await widget.identity.changeAvatar(avatar);
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      switch (result) {
-        case IdentityOk():
-          _avatar = avatar;
-        case IdentityFailed(:final reason):
-          _error = identityErrorText(reason);
-      }
     });
   }
 
@@ -198,28 +133,42 @@ class _AppShellState extends State<AppShell> {
   Future<void> _openSettings() async {
     final current = _style;
     if (current == null) return;
-    final avatar = _avatar;
-    if (avatar == null) return;
     final saved = await Navigator.of(context).push<CompanionSelection>(
       MaterialPageRoute(
         builder: (_) => CompanionSettingsPage(
           currentStyle: current,
-          currentAvatar: avatar,
+          currentAvatar: activeCharacter(_avatar),
           onSaveStyle: widget.identity.changeStyle,
-          onSaveAvatar: widget.identity.changeAvatar,
+          onSaveAvatar: (next) async {
+            final engines = widget.engines;
+            if (next == characterLily && (engines == null || engines.availability == DuixAvailability.unsupported)) {
+              return IdentityFailed(engines?.unsupportedReason ?? 'duix_unsupported');
+            }
+            return widget.identity.changeAvatar(next);
+          },
         ),
       ),
     );
     if (!mounted || saved == null) return;
+    final styleChanged = saved.style != _style;
+    final avatarChanged = saved.avatar != activeCharacter(_avatar);
+    if (!styleChanged && !avatarChanged) return;
     setState(() {
       _style = saved.style;
       _avatar = saved.avatar;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('已换好，下次聊天时生效', style: TextStyle(fontSize: 18)),
-      ),
-    );
+    final engines = widget.engines;
+    final target = engineForCharacter(saved.avatar);
+    if (engines != null && target != engines.sessionEngine) {
+      await engines.choose(target);
+      if (mounted && target == AvatarEngineKind.duix && engines.sessionEngine != AvatarEngineKind.duix) {
+        final state = engines.installer?.state;
+        final code = state is InstallFailed ? state.code : null;
+        ScaffoldMessenger.of(context).showSnackBar(_snack(unsupportedText(
+          code == 'abi_unsupported' || code == 'low_memory' || code == 'storage_unavailable' ? code : null,
+        )));
+      }
+    }
   }
 
   @override
@@ -240,16 +189,6 @@ class _AppShellState extends State<AppShell> {
         onConfirm: _chooseFirst,
       );
     }
-    if (_avatar == null) {
-      return AvatarPickerPage(
-        title: '选一个聊天形象',
-        confirmLabel: '开始聊天',
-        initial: defaultAvatarId,
-        busy: _busy,
-        error: _error,
-        onConfirm: _chooseFirstAvatar,
-      );
-    }
     final engines = widget.engines;
     if (engines == null) return _home(AvatarEngineKind.webview, 0, null);
     return ListenableBuilder(
@@ -258,42 +197,21 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  static bool _offersSwitch(DuixAvailability availability) =>
-      availability != DuixAvailability.hidden && availability != DuixAvailability.checking;
-
   Widget _home(AvatarEngineKind engine, int epoch, EngineSwitchController? engines) {
+    final shown = engine == AvatarEngineKind.duix ? characterLily : characterXiaorou;
     return Stack(
       children: [
         Positioned.fill(
           child: widget.avatarBuilder(
             AvatarPageRequest(
-              key: ValueKey('avatar-${engine.name}-$epoch'),
+              key: ValueKey('avatar-${engine.name}-$shown-${_style ?? ''}-$epoch'),
               identity: widget.identity,
-              avatarId: _avatar!,
+              avatarId: shown,
               engine: engine,
               onEngineFailure: engine == AvatarEngineKind.duix ? engines?.reportDuixFailure : null,
             ),
           ),
         ),
-        if (engines != null && _offersSwitch(engines.availability))
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 60),
-                child: Center(
-                  child: EngineSwitch(
-                    selected: engine,
-                    duix: engines.availability,
-                    downloadFraction: engines.downloadFraction,
-                    onTap: (kind) => unawaited(_onEngineTap(kind)),
-                  ),
-                ),
-              ),
-            ),
-          ),
         // Bottom-right, clear of the centered mute/end buttons in AvatarOverlay.
         Positioned(
           right: 16,

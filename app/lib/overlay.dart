@@ -9,6 +9,7 @@ class AvatarOverlay extends StatelessWidget {
     required this.status,
     required this.error,
     required this.muted,
+    required this.name,
     required this.onMute,
     required this.onEnd,
     required this.onToggleDebug,
@@ -22,6 +23,9 @@ class AvatarOverlay extends StatelessWidget {
   final String status;
   final String? error;
   final bool muted;
+
+  /// The character on screen. Long-press opens the debug panel.
+  final String name;
   final VoidCallback onMute;
   final VoidCallback onEnd;
   final VoidCallback onToggleDebug;
@@ -44,7 +48,7 @@ class AvatarOverlay extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(16)),
-                child: const Text('小柔', style: TextStyle(color: Colors.white, fontSize: 16)),
+                child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 16)),
               ),
             ),
           ),

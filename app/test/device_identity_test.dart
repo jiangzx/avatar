@@ -102,8 +102,8 @@ void main() {
     final identity = DeviceIdentity(store: store, backend: backend);
 
     expect(await identity.savedAvatar(), isNull);
-    expect(await identity.changeAvatar('cute-girl'), isA<IdentityOk>());
-    expect(await identity.savedAvatar(), 'cute-girl');
+    expect(await identity.changeAvatar('lily'), isA<IdentityOk>());
+    expect(await identity.savedAvatar(), 'lily');
     expect(backend.patched, isEmpty);
   });
 
@@ -116,7 +116,7 @@ void main() {
   });
 
   test('changeAvatar maps storage errors to a readable failure', () async {
-    final result = await DeviceIdentity(store: ThrowingCredentialStore(), backend: FakeBackend()).changeAvatar('young-woman');
+    final result = await DeviceIdentity(store: ThrowingCredentialStore(), backend: FakeBackend()).changeAvatar('lily');
 
     expect(result, isA<IdentityFailed>().having((r) => r.reason, 'reason', 'storage'));
   });
@@ -129,13 +129,16 @@ void main() {
     expect(await DeviceIdentity(store: ThrowingCredentialStore(), backend: FakeBackend()).renew(), isNull);
   });
 
-  test('engine choice is local, defaults to the 3D avatar and tolerates storage errors', () async {
+  test('a new install opens Lily; saving 小柔 writes the avatar id', () async {
     final store = MemoryCredentialStore();
     final identity = DeviceIdentity(store: store, backend: FakeBackend());
-    expect(await identity.savedEngine(), AvatarEngineKind.webview);
-    expect(await identity.saveEngine(AvatarEngineKind.duix), isTrue);
-    expect(store.values[DeviceIdentity.engineKey], 'duix');
     expect(await identity.savedEngine(), AvatarEngineKind.duix);
+    expect(await identity.saveEngine(AvatarEngineKind.duix), isTrue);
+    expect(store.values[DeviceIdentity.avatarKey], 'lily');
+    expect(await identity.savedEngine(), AvatarEngineKind.duix);
+    expect(await identity.saveEngine(AvatarEngineKind.webview), isTrue);
+    expect(store.values[DeviceIdentity.avatarKey], 'default');
+    expect(await identity.savedEngine(), AvatarEngineKind.webview);
     final broken = DeviceIdentity(store: ThrowingCredentialStore(), backend: FakeBackend());
     expect(await broken.savedEngine(), AvatarEngineKind.webview);
     expect(await broken.saveEngine(AvatarEngineKind.duix), isFalse);
