@@ -18,6 +18,7 @@ avatar-core/public/animations/*.fbx
 app/assets/web/
 coverage/
 app/dev.json
+app/android/app/libs/
 
 # local developer metadata and credential notes
 .codegraph/
