@@ -1,0 +1,26 @@
+{
+  "enabled": true,
+  "debugOnly": false,
+  "minTotalMemMb": 7000,
+  "maxUncleanExits": 2,
+  "base": {
+    "id": "gj_dh_res",
+    "dir": "gj_dh_res",
+    "url": "https://github.com/duixcom/Duix-Mobile/releases/download/v1.0.0/gj_dh_res.zip",
+    "sha256": "c3ffeca1cb250f111f70e9e221d9115c9a825a625eff9b93d260ef7da70a5457",
+    "bytes": 139403482
+  },
+  "models": [
+    {
+      "id": "lily",
+      "dir": "Lily",
+      "url": "https://github.com/duixcom/Duix-Mobile/releases/download/v2.0.1/Lily.zip",
+      "sha256": "9ec390b42b02594470dad69d87841ebbbdfbc0b22803c60092aba8cd9c5a556b",
+      "bytes": 35062448
+    }
+  ],
+  "defaultModel": "lily",
+  "playback": { "minSegmentMs": 1000, "lipReadyTimeoutMs": 1500, "prepareTimeoutMs": 60000 },
+  "vad": { "bargeInThresholdRms": 200, "bargeInGraceMs": 400 },
+  "statsIntervalMs": 5000
+}
