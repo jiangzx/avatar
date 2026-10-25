@@ -1,6 +1,6 @@
 import type { TalkingHead } from '@met4citizen/talkinghead';
 import type { ActionName } from '@anyidea/protocol';
-import { REST_SMILE } from './avatarView.ts';
+import { CAMERA_DISTANCE, REST_SMILE } from './avatarView.ts';
 
 export interface ActionAssets {
   waveFbx?: string;
@@ -263,16 +263,16 @@ export class ActionPlayer {
     this.actingDepth = 0;
   }
 
-  /** Widen the half-body shot for the spin, then return to the resting frame. */
+  /** Widen the full-body shot for the spin, then return to the resting frame. */
   private frameTurn(): void {
     this.framingTurn = true;
-    this.head.setView('mid', { cameraDistance: TURN_CAMERA_PULL });
+    this.head.setView('full', { cameraDistance: CAMERA_DISTANCE + TURN_CAMERA_PULL });
   }
 
   private releaseTurnFrame(): void {
     if (!this.framingTurn) return;
     this.framingTurn = false;
-    this.head.setView('mid', { cameraDistance: 0 });
+    this.head.setView('full', { cameraDistance: CAMERA_DISTANCE });
   }
 
   private isCurrent(generation: number): boolean {

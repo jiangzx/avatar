@@ -14,6 +14,10 @@ declare module '@met4citizen/talkinghead' {
     armature: Object3D | null;
     mtAvatar: Record<string, BlendshapeTarget | undefined>;
     gestureTemplates: Record<string, Record<string, unknown>>;
+    animMoods: { happy?: { anims?: Array<{ name?: string; idle?: { alt?: unknown[] } }> } };
+    poseName: string;
+    poseTemplates: Record<string, unknown>;
+    setPoseFromTemplate(template: unknown, ms?: number): void;
     showAvatar(avatar: Record<string, unknown>, onprogress?: ((ev: ProgressEvent) => void) | null): Promise<void>;
     setView(view: 'full' | 'mid' | 'upper' | 'head', opt?: Record<string, number>): void;
     setMood(mood: string): void;

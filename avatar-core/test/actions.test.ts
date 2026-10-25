@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TalkingHead } from '@met4citizen/talkinghead';
 import { ActionPlayer, TURN_CAMERA_PULL, looksLikeFbx } from '../src/avatar/actions.ts';
+import { CAMERA_DISTANCE } from '../src/avatar/avatarView.ts';
 
 const bytes = (s: string) => new TextEncoder().encode(s);
 const FBX_HEAD = bytes('Kaydara FBX Binary  \0\x1a\0');
@@ -103,11 +104,11 @@ describe('ActionPlayer lifecycle', () => {
     staleFrame(100);
 
     expect(root.rotation.y).toBe(0);
-    expect(head.setView).toHaveBeenLastCalledWith('mid', { cameraDistance: 0 });
+    expect(head.setView).toHaveBeenLastCalledWith('full', { cameraDistance: CAMERA_DISTANCE });
     vi.unstubAllGlobals();
   });
 
-  it('pulls the camera back for a turn and restores the half-body frame when it finishes', () => {
+  it('pulls the camera back for a turn and restores the full-body frame when it finishes', () => {
     const callbacks: Array<(now: number) => void> = [];
     vi.stubGlobal('requestAnimationFrame', (callback: (now: number) => void) => {
       callbacks.push(callback);
@@ -118,12 +119,12 @@ describe('ActionPlayer lifecycle', () => {
     const actions = new ActionPlayer(head, {}, { setActing });
 
     actions.turn();
-    expect(head.setView).toHaveBeenCalledWith('mid', { cameraDistance: TURN_CAMERA_PULL });
+    expect(head.setView).toHaveBeenCalledWith('full', { cameraDistance: CAMERA_DISTANCE + TURN_CAMERA_PULL });
     expect(setActing).toHaveBeenCalledWith(true);
     callbacks[0](performance.now() + 5_000);
 
     expect(head.armature!.rotation.y).toBe(0);
-    expect(head.setView).toHaveBeenLastCalledWith('mid', { cameraDistance: 0 });
+    expect(head.setView).toHaveBeenLastCalledWith('full', { cameraDistance: CAMERA_DISTANCE });
     vi.unstubAllGlobals();
   });
 

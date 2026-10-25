@@ -2,8 +2,9 @@ import { TalkingHead } from '@met4citizen/talkinghead';
 import type { MouthShape } from '../audio/mouth.ts';
 import type { AvatarState } from './stateMachine.ts';
 import { avatarBodyForUrl, DEFAULT_AVATAR_URL } from './catalog.ts';
+import { applyHappyIdlePoses, applyRestPose } from './idlePose.ts';
 
-const MOUTH_KEYS = ['jawOpen', 'mouthFunnel', 'mouthPucker', 'mouthStretchLeft', 'mouthStretchRight'] as const;
+const MOUTH_KEYS = ['jawOpen', 'mouthFunnel', 'mouthPucker', 'mouthStretchLeft', 'mouthStretchRight', 'mouthClose'] as const;
 const MOODS = new Set(['neutral', 'happy', 'sad', 'love']);
 
 // TUNABLE: renderer and gaze parameters. Speaking and actions use the higher cap.
@@ -20,6 +21,27 @@ export const THINK_HEAD_TILT = 0.06;
 export const NEUTRAL_SMILE = 0.15;
 /** Resting smile. Stronger than TalkingHead's happy baseline, which reads as a flat face on this model. */
 export const REST_SMILE = 0.45;
+/** Full-body framing. Distance pulls back; cameraY lifts the feet off the bottom edge (space below the feet is cameraY / 2 of the frame). */
+export const CAMERA_DISTANCE = 2;
+export const CAMERA_Y = 0.18;
+/** Avaturn teeth are one flat card. A wide jaw plus a smile peels the lips off the sides and reads as fangs. */
+export const JAW_OPEN_SCALE = 0.55;
+export const TOOTH_COVER = 0.5;
+export const STRETCH_SCALE = 0.45;
+
+/** Spoken shapes, with the lips held over the tooth card. */
+export function spokenMouth(shape: MouthShape): Record<(typeof MOUTH_KEYS)[number], number> {
+  const jawOpen = shape.jawOpen * JAW_OPEN_SCALE;
+  const stretch = shape.stretch * STRETCH_SCALE;
+  return {
+    jawOpen,
+    mouthFunnel: shape.funnel,
+    mouthPucker: shape.funnel * PUCKER_RATIO,
+    mouthStretchLeft: stretch,
+    mouthStretchRight: stretch,
+    mouthClose: jawOpen * TOOTH_COVER,
+  };
+}
 
 type ModelFpsTarget = { opt?: { modelFPS: number }; animFrameDur?: number };
 export type AvatarModelLoader = Pick<TalkingHead, 'showAvatar'>;
@@ -78,7 +100,9 @@ export class AvatarView {
     this.head = new TalkingHead(el, {
       ttsEndpoint: null,
       lipsyncModules: [], // we never use TalkingHead's TTS/lipsync; avoids dynamic imports that break when bundled
-      cameraView: 'mid', // head to waist, keeps hands in frame on a portrait phone
+      cameraView: 'full', // head to feet, matches the full-body editor frame
+      cameraDistance: CAMERA_DISTANCE,
+      cameraY: CAMERA_Y,
       cameraRotateEnable: false,
       modelFPS: IDLE_MODEL_FPS,
       modelPixelRatio: Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO),
@@ -88,6 +112,7 @@ export class AvatarView {
     const renderer = this.head.renderer;
     if (renderer?.shadowMap) renderer.shadowMap.enabled = false;
     applyModelFps(this.head, IDLE_MODEL_FPS);
+    applyHappyIdlePoses(this.head);
   }
 
   get talkingHead(): TalkingHead {
@@ -95,10 +120,15 @@ export class AvatarView {
   }
 
   async load(url: string, onFallback?: () => void): Promise<void> {
-    await loadAvatarModel(this.head, url, onFallback);
+    let loaded = url;
+    await loadAvatarModel(this.head, url, () => {
+      loaded = DEFAULT_AVATAR_URL;
+      onFallback?.();
+    });
     this.head.setMood('happy');
     this.head.setBaselineValue('eyesLookDown', 0);
     this.head.setFixedValue('mouthSmile', REST_SMILE);
+    if (avatarBodyForUrl(loaded) === 'F') applyRestPose(this.head);
   }
 
   setMouth(shape: MouthShape | null): void {
@@ -109,11 +139,7 @@ export class AvatarView {
       return;
     }
     this.mouthActive = true;
-    this.set('jawOpen', shape.jawOpen);
-    this.set('mouthFunnel', shape.funnel);
-    this.set('mouthPucker', shape.funnel * PUCKER_RATIO);
-    this.set('mouthStretchLeft', shape.stretch);
-    this.set('mouthStretchRight', shape.stretch);
+    for (const [key, value] of Object.entries(spokenMouth(shape))) this.set(key, value);
   }
 
   setActing(active: boolean): void {

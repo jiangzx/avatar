@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ACTIVE_MODEL_FPS, IDLE_MODEL_FPS, NEUTRAL_SMILE, REST_SMILE, THINK_EYES_UP, THINK_HEAD_TILT,
-  applyModelFps, modelFpsFor, poseFor, smileFor,
+  ACTIVE_MODEL_FPS, IDLE_MODEL_FPS, JAW_OPEN_SCALE, NEUTRAL_SMILE, REST_SMILE, STRETCH_SCALE, THINK_EYES_UP, THINK_HEAD_TILT, TOOTH_COVER,
+  applyModelFps, modelFpsFor, poseFor, smileFor, spokenMouth,
 } from '../src/avatar/avatarView.ts';
 import { loadAvatarModel } from '../src/avatar/avatarView.ts';
 
@@ -51,6 +51,16 @@ describe('poses and expressions', () => {
   it('looks up with a slight head tilt only while thinking', () => {
     expect(poseFor('thinking')).toEqual({ eyesLookUp: THINK_EYES_UP, headRotateZ: THINK_HEAD_TILT });
     for (const s of ['idle', 'listening', 'speaking'] as const) expect(poseFor(s)).toEqual({ eyesLookUp: null, headRotateZ: null });
+  });
+
+  it('holds the lips over the tooth card while the jaw is open', () => {
+    const spoken = spokenMouth({ jawOpen: 0.72, funnel: 0.08, stretch: 0.62 });
+    expect(spoken.jawOpen).toBeCloseTo(0.72 * JAW_OPEN_SCALE);
+    expect(spoken.mouthClose).toBeCloseTo(spoken.jawOpen * TOOTH_COVER);
+    expect(spoken.mouthStretchLeft).toBeCloseTo(0.62 * STRETCH_SCALE);
+    expect(spoken.mouthStretchRight).toBe(spoken.mouthStretchLeft);
+    expect(spoken.mouthPucker).toBeCloseTo(0.08 * 0.5);
+    expect(spokenMouth({ jawOpen: 0, funnel: 0, stretch: 0 }).mouthClose).toBe(0);
   });
 
   it('drops the fixed smile for sad so the mood is visible', () => {
