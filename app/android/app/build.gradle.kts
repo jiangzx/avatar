@@ -4,6 +4,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Built by scripts/duix/build-sdk.sh. Without it the app compiles a stub that reports library_missing.
+val duixAar = file("libs/duix-sdk-release.aar")
+val duixAvailable = duixAar.exists()
+
 android {
     namespace = "com.anyidea.avatar_app"
     // permission_handler_android 14.1.0 requires compileSdk >= 37 (flutter default is 36).
@@ -30,11 +34,18 @@ android {
         versionName = flutter.versionName
     }
 
+    sourceSets {
+        getByName("main") {
+            java.srcDir(if (duixAvailable) "src/duix/kotlin" else "src/noduix/kotlin")
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles("duix-rules.pro")
         }
     }
 }
@@ -47,4 +58,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    if (duixAvailable) implementation(files(duixAar))
+    testImplementation("junit:junit:4.13.2")
 }

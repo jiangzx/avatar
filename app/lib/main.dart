@@ -8,6 +8,7 @@ import 'identity/device_identity.dart';
 import 'identity/identity_api.dart';
 import 'identity/secure_credential_store.dart';
 import 'native_gateway/transports.dart';
+import 'spike/duix_probe_spike.dart';
 import 'spike/native_audio_spike.dart';
 import 'spike/secure_storage_spike.dart';
 
@@ -34,6 +35,7 @@ class AvatarApp extends StatelessWidget {
       home: switch (AppConfig.spike) {
         'native_audio' => const NativeAudioSpikePage(),
         'secure_storage' => const SecureStorageSpikePage(),
+        'duix_probe' => const DuixProbeSpikePage(),
         _ =>
           problem == null
               ? const _Home()

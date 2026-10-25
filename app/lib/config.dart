@@ -30,7 +30,7 @@ class AppConfig {
     defaultValue: 'index.html',
   );
 
-  /// 'native_audio' opens the path-B spike instead of the WebView.
+  /// 'native_audio' | 'secure_storage' | 'duix_probe' opens a spike page instead of the app.
   static const spike = String.fromEnvironment('SPIKE');
 
   /// Returns a user-facing problem description, or null when the config is usable.

@@ -12,4 +12,10 @@
 
 ## Task 2：App 接入
 
-（Task 2 填写）
+- 有 AAR：`flutter build apk --debug --dart-define-from-file=dev.json --dart-define=SPIKE=duix_probe` 成功。APK 内 `lib/arm64-v8a/libgjduix.so`、`lib/arm64-v8a/libonnxruntime.so`。未出现 `libc++_shared.so` 冲突，没有加 `pickFirsts`。
+- 无 AAR：挪走 AAR 后 `flutter build apk --debug --dart-define-from-file=dev.json` 成功，`./gradlew :app:testDebugUnitTest` 成功（5 项，failures=0）。AAR 已放回。
+- Kotlin：失败测试先报 `Unresolved reference 'DeviceGate'` / `DiagFormat`；实现后 `./gradlew :app:testDebugUnitTest --tests 'com.anyidea.avatar_app.duix.*'` 5 项通过，0 失败。
+- Dart：`flutter test test/duix_probe_spike_test.dart` 2 项通过；`flutter test` 184 项通过；`flutter analyze` 没有问题。
+- probe 屏幕（用户确认）：`supported=true reason=none`
+- probe 日志：`anyidea.diag event=duix_probe supported=true reason=none`。没有 `UnsatisfiedLinkError`。
+- 用户确认 3D：打开的是原来的 3D 形象；能看到形象；说一句话后能听到回复。三项都符合预期。
