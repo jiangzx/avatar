@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:avatar_app/avatar_engine/avatar_engine.dart';
+import 'package:avatar_app/avatar_engine/engine_switch_controller.dart';
+import 'package:avatar_app/duix/duix_bridge.dart';
+import 'package:avatar_app/duix/duix_crash_guard.dart';
 import 'package:avatar_app/identity/app_shell.dart';
 import 'package:avatar_app/identity/credential_store.dart';
 import 'package:avatar_app/identity/device_identity.dart';
@@ -7,18 +11,40 @@ import 'package:avatar_app/identity/identity_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/duix_fakes.dart';
 import 'support/identity_fakes.dart';
 
 const tokenKey = DeviceIdentity.tokenKey;
 const styleKey = DeviceIdentity.styleKey;
 const avatarKey = DeviceIdentity.avatarKey;
 
-Widget app(DeviceIdentity identity) => MaterialApp(
+AvatarPageRequest? lastRequest;
+
+Widget app(DeviceIdentity identity, {EngineSwitchController? engines}) => MaterialApp(
   home: AppShell(
     identity: identity,
-    avatarBuilder: (_, avatar) => Scaffold(body: Text('AVATAR-$avatar')),
+    engines: engines,
+    avatarBuilder: (request) {
+      lastRequest = request;
+      return Scaffold(
+        key: request.key,
+        body: Text(request.engine == AvatarEngineKind.duix ? 'DUIX-${request.avatarId}' : 'AVATAR-${request.avatarId}'),
+      );
+    },
   ),
 );
+
+EngineSwitchController engines(MemoryCredentialStore store, FakeDuixBridge bridge, {bool config = true}) =>
+    EngineSwitchController(
+      prefs: DeviceIdentity(store: store, backend: FakeBackend()),
+      bridge: bridge,
+      guard: DuixCrashGuard(store),
+      loadConfig: () async => config ? loadTestDuixConfig() : null,
+      debugBuild: true,
+      diag: (_) {},
+    );
+
+Map<String, String> returning() => {tokenKey: 'device-token-0123456789', styleKey: 'grandchild', avatarKey: 'default'};
 
 Future<void> chooseAvatar(WidgetTester tester, String id) async {
   await tester.scrollUntilVisible(find.byKey(Key('avatar-$id')), 300);
@@ -265,6 +291,91 @@ void main() {
     expect(find.text('AVATAR-default'), findsOneWidget);
     expect(backend.patchCalls, 1);
     expect(store.values[styleKey], 'grandchild');
+  });
+
+  testWidgets('no Duix config: no switch, 3D page', (tester) async {
+    final store = MemoryCredentialStore(returning());
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    await tester.pumpWidget(app(identity, engines: engines(store, FakeDuixBridge(), config: false)));
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-default'), findsOneWidget);
+    expect(find.byKey(const Key('engine-switch')), findsNothing);
+  });
+
+  testWidgets('switching to Duix asks first, then rebuilds the page', (tester) async {
+    final store = MemoryCredentialStore(returning());
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    final bridge = FakeDuixBridge(installed: {'gj_dh_res': true, 'lily': true});
+    await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('真人形象'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('先不换'));
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-default'), findsOneWidget);
+    await tester.tap(find.text('真人形象'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('现在换'));
+    await tester.pumpAndSettle();
+    expect(find.text('DUIX-default'), findsOneWidget);
+    expect(store.values[DeviceIdentity.engineKey], 'duix');
+  });
+
+  testWidgets('an unsupported phone explains why', (tester) async {
+    final store = MemoryCredentialStore(returning());
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    final bridge = FakeDuixBridge(support: const DuixSupport(supported: false, reason: 'low_memory'));
+    await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('真人形象'));
+    await tester.pumpAndSettle();
+    expect(find.text('这台手机暂时用不了真人形象（需要 64 位、8GB 以上内存的手机）'), findsOneWidget);
+    expect(find.text('AVATAR-default'), findsOneWidget);
+  });
+
+  testWidgets('first use downloads, then switches from the sheet', (tester) async {
+    final store = MemoryCredentialStore(returning());
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    final bridge = FakeDuixBridge();
+    await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('真人形象'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开始下载'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('现在换（会重新开始聊天）'));
+    await tester.pumpAndSettle();
+    expect(find.text('DUIX-default'), findsOneWidget);
+    expect(find.text('换成真人形象？'), findsNothing);
+  });
+
+  testWidgets('a Duix failure falls back to 3D with a notice', (tester) async {
+    final store = MemoryCredentialStore({...returning(), DeviceIdentity.engineKey: 'duix'});
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    final bridge = FakeDuixBridge(installed: {'gj_dh_res': true, 'lily': true});
+    await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
+    await tester.pumpAndSettle();
+    expect(find.text('DUIX-default'), findsOneWidget);
+    lastRequest!.onEngineFailure!(const AvatarEngineFailure('duix_prepare_timeout'));
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-default'), findsOneWidget);
+    expect(find.text('真人形象没能打开，先用 3D 形象陪您聊'), findsOneWidget);
+    expect(store.values[DeviceIdentity.engineKey], 'duix');
+  });
+
+  testWidgets('a crash loop is announced at launch', (tester) async {
+    final store = MemoryCredentialStore({
+      ...returning(),
+      DeviceIdentity.engineKey: 'duix',
+      DuixCrashGuard.inflightKey: '1',
+      DuixCrashGuard.countKey: '1',
+    });
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    final bridge = FakeDuixBridge(installed: {'gj_dh_res': true, 'lily': true});
+    await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-default'), findsOneWidget);
+    expect(find.text('真人形象上次出了问题，先换回 3D 形象'), findsOneWidget);
   });
 }
 

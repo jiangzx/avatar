@@ -1,9 +1,16 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'avatar_engine/avatar_engine.dart';
+import 'avatar_engine/engine_switch_controller.dart';
 import 'avatar_engine/webview_engine.dart';
 import 'avatar_page.dart';
 import 'config.dart';
+import 'duix/duix_bridge.dart';
+import 'duix/duix_config.dart';
+import 'duix/duix_crash_guard.dart';
+import 'duix/duix_engine.dart';
 import 'identity/app_shell.dart';
 import 'identity/device_identity.dart';
 import 'identity/identity_api.dart';
@@ -62,22 +69,48 @@ class _Home extends StatefulWidget {
 }
 
 class _HomeState extends State<_Home> {
+  static const _store = SecureCredentialStore();
   late final _identity = DeviceIdentity(
-    store: const SecureCredentialStore(),
+    store: _store,
     backend: IdentityApi(
       baseUri: Uri.parse(AppConfig.gatewayUrl),
       appSecret: AppConfig.appSecret,
       transport: const IoGatewayTransport(),
     ),
   );
+  final _bridge = MethodChannelDuixBridge();
+  late final _engines = EngineSwitchController(
+    prefs: _identity,
+    bridge: _bridge,
+    guard: DuixCrashGuard(_store),
+    loadConfig: () async => DuixConfig.parse(await rootBundle.loadString(DuixConfig.assetPath)),
+    debugBuild: kDebugMode,
+  );
+
+  @override
+  void dispose() {
+    _engines.dispose();
+    super.dispose();
+  }
+
+  AvatarEngine _engineFor(AvatarPageRequest request) {
+    final config = _engines.config;
+    if (request.engine == AvatarEngineKind.duix && config != null) {
+      return DuixAvatarEngine(bridge: _bridge, config: config, guard: DuixCrashGuard(_store));
+    }
+    return WebViewAvatarEngine(avatarId: request.avatarId);
+  }
 
   @override
   Widget build(BuildContext context) => AppShell(
     identity: _identity,
-    avatarBuilder: (identity, avatarId) => AvatarPage(
-      engineFactory: () => WebViewAvatarEngine(avatarId: avatarId),
-      identity: identity,
+    engines: _engines,
+    avatarBuilder: (request) => AvatarPage(
+      key: request.key,
+      engineFactory: () => _engineFor(request),
+      identity: request.identity,
       savedStyle: _identity.savedStyle,
+      onEngineFailure: request.onEngineFailure,
     ),
   );
 }
