@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'avatar_engine/webview_engine.dart';
 import 'avatar_page.dart';
 import 'config.dart';
 import 'identity/app_shell.dart';
@@ -74,9 +75,9 @@ class _HomeState extends State<_Home> {
   Widget build(BuildContext context) => AppShell(
     identity: _identity,
     avatarBuilder: (identity, avatarId) => AvatarPage(
+      engineFactory: () => WebViewAvatarEngine(avatarId: avatarId),
       identity: identity,
       savedStyle: _identity.savedStyle,
-      avatarId: avatarId,
     ),
   );
 }

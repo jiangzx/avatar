@@ -6,18 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_flutter_android/webview_flutter_android.dart';
 
-import 'bridge.dart';
+import 'avatar_engine/avatar_engine.dart';
+import 'avatar_engine/legacy_web_session.dart';
+import 'avatar_engine/presence_chip.dart';
 import 'config.dart';
 import 'diag_log.dart';
-import 'identity/avatars.dart';
-import 'local_asset_server.dart';
 import 'metrics.dart';
 import 'native_audio/filler_clips.dart';
-import 'native_audio/native_audio_io.dart';
-import 'native_audio/speech_detector.dart';
 import 'native_gateway/gateway_client.dart';
 import 'native_gateway/transports.dart';
 import 'native_session/events.dart';
@@ -25,6 +21,8 @@ import 'native_session/session_controller.dart';
 import 'native_session/session_start_guard.dart';
 import 'native_session/thinking_config.dart';
 import 'overlay.dart';
+
+export 'avatar_engine/webview_engine.dart' show buildAvatarConfig;
 
 const _statusLabels = {
   'loading': '加载中…',
@@ -59,47 +57,49 @@ String _errorLabel(String code) => switch (code) {
 String fillerStyle(ThinkingConfig cfg, String? saved) =>
     saved != null && cfg.styles.contains(saved) ? saved : cfg.defaultStyle;
 
-Map<String, Object?> buildAvatarConfig({
-  required String avatarId,
-  required String gatewayUrl,
-  required String appSecret,
-  required String audioPath,
-  required String echo,
-  String? audioMode,
-}) => {
-  'type': 'config',
-  'gatewayUrl': gatewayUrl,
-  'appSecret': appSecret,
-  'audioPath': audioPath,
-  'echo': echo,
-  'avatarUrl': avatarUrlFor(avatarId),
-  ...?audioMode == null ? null : {'audioMode': audioMode},
-};
+/// Platform hooks the page needs; widget tests replace them.
+class AvatarPagePlatform {
+  const AvatarPagePlatform();
+
+  Future<bool> requestMicrophone() async => (await Permission.microphone.request()).isGranted;
+
+  void setWakelock(bool on) => unawaited(WakelockPlus.toggle(enable: on));
+}
 
 class AvatarPage extends StatefulWidget {
   const AvatarPage({
     super.key,
+    required this.engineFactory,
     this.identity,
     this.savedStyle,
-    this.avatarId = defaultAvatarId,
+    this.onEngineFailure,
+    this.platform = const AvatarPagePlatform(),
   });
+
+  /// Called once; the page owns and disposes the engine.
+  final AvatarEngine Function() engineFactory;
 
   /// Device bearer source for POST /session; null = dev mode (APP_SECRET only).
   final DeviceTokenProvider? identity;
   final Future<String?> Function()? savedStyle;
-  final String avatarId;
+
+  /// Set when another engine can take over; otherwise a failure shows the retry error.
+  final void Function(AvatarEngineFailure failure)? onEngineFailure;
+  final AvatarPagePlatform platform;
 
   @override
   State<AvatarPage> createState() => _AvatarPageState();
 }
 
 class _AvatarPageState extends State<AvatarPage> {
-  final _server = LocalAssetServer(loadAsset: rootBundle.load);
+  late final AvatarEngine _engine = widget.engineFactory();
   final _metrics = MetricsStore();
   final _diag = <String, String>{};
   final _debugText = TextEditingController();
-  WebViewController? _controller;
   NativeSessionController? _session;
+  bool _engineStarted = false;
+  bool _engineFailed = false;
+  bool _startingEngine = false;
   bool _startingSession = false;
   String _userLine = '';
   String _aiLine = '';
@@ -111,95 +111,78 @@ class _AvatarPageState extends State<AvatarPage> {
   /// End/dispose invalidates an in-flight session start; it must not leave a live mic.
   final _sessionGuard = SessionStartGuard();
 
+  /// The old WebView-owned audio path (AUDIO_MODE=web); null on the native path.
+  LegacyWebSession? get _legacy => switch (_engine) {
+    final LegacyWebSession legacy when AppConfig.audioMode == 'web' => legacy,
+    _ => null,
+  };
+
   @override
   void initState() {
     super.initState();
-    WakelockPlus.enable();
-    _init();
+    widget.platform.setWakelock(true);
+    unawaited(_init());
+  }
+
+  void _update(VoidCallback change) {
+    if (mounted) setState(change);
   }
 
   Future<void> _init() async {
+    if (_startingEngine || _sessionGuard.ended) return;
+    _startingEngine = true;
+    _engineFailed = false;
     try {
-      final mic = await Permission.microphone.request();
-      if (!mic.isGranted) {
-        if (mounted) setState(() => _error = '需要麦克风权限才能聊天');
+      if (!await widget.platform.requestMicrophone()) {
+        _update(() => _error = '需要麦克风权限才能聊天');
         return;
       }
-      await _server.start();
-      final base = _server.baseUri;
-      final controller = WebViewController();
-      await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
-      await controller.setBackgroundColor(const Color(0xFF10131A));
-      await controller.addJavaScriptChannel(
-        'FlutterBridge',
-        onMessageReceived: (m) => _onJs(m.message),
-      );
-      await controller.setNavigationDelegate(
-        NavigationDelegate(
-          onNavigationRequest: (req) => req.url.startsWith(base.toString())
-              ? NavigationDecision.navigate
-              : NavigationDecision.prevent,
+      if (!mounted || _sessionGuard.ended) return;
+      await _engine.start(
+        AvatarEngineCallbacks(
+          onReady: _onEngineReady,
+          onStatus: _onStatus,
+          onError: (code) => _update(() => _error = _errorLabel(code)),
+          onDiag: (key, value) => _update(() => _diag[key] = value),
+          onFailure: _onEngineFailure,
+          onSubtitle: (role, text) => _update(() => role == 'user' ? _userLine = text : _aiLine = text),
+          onState: _onRendererState,
+          onMetric: (name, ms) => _update(() => _metrics.add(name, ms)),
         ),
       );
-      final platform = controller.platform;
-      if (platform is AndroidWebViewController) {
-        await platform.setAllowFileAccess(false);
-        await AndroidWebViewController.enableDebugging(kDebugMode);
-      }
-      if (!mounted || _sessionGuard.ended) return;
-      // Assign before loading: the page may post 'ready' before loadRequest returns, and _send needs the controller.
-      setState(() => _controller = controller);
-      await controller.loadRequest(base.resolve(AppConfig.page));
+      _engineStarted = !_engineFailed;
     } catch (_) {
       if (mounted && !_sessionGuard.ended) setState(() => _error = '初始化失败，请重试');
+    } finally {
+      _startingEngine = false;
     }
   }
 
-  void _onJs(String raw) {
-    final event = JsEvent.parse(raw);
-    if (event == null || !mounted) return;
-    switch (event) {
-      case JsReady():
-        _sendConfig();
-        if (AppConfig.audioMode == 'native') unawaited(_startNativeSession());
-      case JsSubtitle(:final role, :final text):
-        setState(() => role == 'user' ? _userLine = text : _aiLine = text);
-      case JsState(:final state):
-        setState(() {
-          _state = state;
-          _aiLine = aiLineAfterState(state, _aiLine);
-        });
-      case JsMetric(:final name, :final ms):
-        setState(() => _metrics.add(name, ms));
-      case JsStatus(:final status):
-        setState(() {
-          _status = _statusLabels[status] ?? status;
-          _error = errorAfterStatus(_error, status);
-        });
-      case JsDiag(:final key, :final value):
-        setState(() => _diag[key] = value);
-      case JsError(:final code):
-        setState(() => _error = _errorLabel(code));
+  void _onEngineReady() {
+    if (!mounted || _legacy != null) return; // AUDIO_MODE=web: the WebView runs its own session
+    unawaited(_startNativeSession());
+  }
+
+  void _onStatus(String status) => _update(() {
+    _status = _statusLabels[status] ?? status;
+    _error = errorAfterStatus(_error, status);
+  });
+
+  void _onRendererState(String state) => _update(() {
+    _state = state;
+    _aiLine = aiLineAfterState(state, _aiLine);
+  });
+
+  void _onEngineFailure(AvatarEngineFailure failure) {
+    _engineFailed = true;
+    logcatDiagSink(formatDiag('avatar_engine_failed', {'engine': _engine.kind.name, 'code': failure.code}));
+    if (_sessionGuard.ended) return;
+    final fallback = widget.onEngineFailure;
+    if (fallback != null) {
+      fallback(failure);
+      return;
     }
-  }
-
-  void _sendConfig() {
-    _send(
-      buildAvatarConfig(
-        avatarId: widget.avatarId,
-        gatewayUrl: AppConfig.gatewayUrl,
-        appSecret: AppConfig.appSecret,
-        audioPath: AppConfig.audioPath,
-        echo: AppConfig.echo,
-        audioMode: AppConfig.audioMode == 'native' ? 'native' : null,
-      ),
-    );
-  }
-
-  Future<void> _send(Map<String, Object?> message) async {
-    final controller = _controller;
-    if (controller == null) return;
-    await controller.runJavaScript(jsCall(message));
+    _update(() => _error = '初始化失败，请重试');
   }
 
   String _deviceLanguage() {
@@ -241,8 +224,8 @@ class _AvatarPageState extends State<AvatarPage> {
       return; // ended or restarted while loading
     }
     final session = NativeSessionController(
-      audio: PluginNativeAudioIO(filler: thinking?.audio),
-      detector: EnergySpeechDetector(),
+      audio: _engine.createAudio(thinking?.audio),
+      detector: _engine.createDetector(),
       client: NativeGatewayClient(
         baseUri: Uri.parse(AppConfig.gatewayUrl),
         appSecret: AppConfig.appSecret,
@@ -273,18 +256,19 @@ class _AvatarPageState extends State<AvatarPage> {
   void _retry() {
     if (_startingSession || _sessionGuard.ended) return;
     setState(() => _error = null);
-    if (_controller == null) {
+    if (!_engineStarted) {
       unawaited(_init());
       return;
     }
-    if (AppConfig.audioMode == 'native') {
-      final existing = _session;
-      _session = null;
-      if (existing != null) unawaited(existing.stop());
-      unawaited(_startNativeSession());
+    final legacy = _legacy;
+    if (legacy != null) {
+      legacy.legacyRestart();
       return;
     }
-    _sendConfig();
+    final existing = _session;
+    _session = null;
+    if (existing != null) unawaited(existing.stop());
+    unawaited(_startNativeSession());
   }
 
   Future<ThinkingConfig?> _loadThinking() async {
@@ -304,7 +288,7 @@ class _AvatarPageState extends State<AvatarPage> {
       setState(() => _diag[event.key] = event.value);
       return;
     }
-    unawaited(_send(event.toJson()));
+    _engine.onSessionEvent(event);
     switch (event) {
       case UiStatus(:final status):
         setState(() {
@@ -335,19 +319,21 @@ class _AvatarPageState extends State<AvatarPage> {
 
   void _toggleMute() {
     setState(() => _muted = !_muted);
-    if (AppConfig.audioMode == 'native') {
+    final legacy = _legacy;
+    if (legacy == null) {
       _session?.setMuted(_muted);
     } else {
-      unawaited(_send({'type': 'mute', 'muted': _muted}));
+      legacy.legacyMute(_muted);
     }
   }
 
   void _end() {
     _sessionGuard.end();
-    if (AppConfig.audioMode == 'native') {
+    final legacy = _legacy;
+    if (legacy == null) {
       unawaited(_session?.stop() ?? Future<void>.value());
     } else {
-      unawaited(_send({'type': 'end'}));
+      legacy.legacyEnd();
     }
     setState(() {
       _status = _statusLabels['closed']!;
@@ -368,7 +354,7 @@ class _AvatarPageState extends State<AvatarPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'state=$_state  audioPath=${AppConfig.audioPath}  echo=${AppConfig.echo}',
+            'engine=${_engine.kind.name}  state=$_state  audioPath=${AppConfig.audioPath}  echo=${AppConfig.echo}',
             style: const TextStyle(color: Colors.white70),
           ),
           ...summary.map(
@@ -392,10 +378,11 @@ class _AvatarPageState extends State<AvatarPage> {
                   ),
                   onSubmitted: (v) {
                     if (v.trim().isEmpty) return;
-                    if (AppConfig.audioMode == 'native') {
+                    final legacy = _legacy;
+                    if (legacy == null) {
                       _session?.debugText(v.trim());
                     } else {
-                      unawaited(_send({'type': 'debugText', 'text': v.trim()}));
+                      legacy.legacyDebugText(v.trim());
                     }
                     _debugText.clear();
                   },
@@ -417,21 +404,20 @@ class _AvatarPageState extends State<AvatarPage> {
   void dispose() {
     _sessionGuard.end();
     unawaited(_session?.stop() ?? Future<void>.value());
-    _server.stop();
+    unawaited(_engine.dispose());
     _debugText.dispose();
-    WakelockPlus.disable();
+    widget.platform.setWakelock(false);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final controller = _controller;
+    final hint = _engine.showsPresenceHint ? presenceFor(_state) : null;
     return Scaffold(
       backgroundColor: const Color(0xFF10131A),
       body: Stack(
         children: [
-          if (controller != null)
-            Positioned.fill(child: WebViewWidget(controller: controller)),
+          Positioned.fill(child: _engine.buildView()),
           AvatarOverlay(
             userLine: _userLine,
             aiLine: _aiLine,
@@ -443,6 +429,7 @@ class _AvatarPageState extends State<AvatarPage> {
             onRetry: _retry,
             onToggleDebug: () => setState(() => _debug = !_debug),
             debugPanel: _debug ? _debugPanel() : null,
+            presence: hint == null ? null : PresenceChip(hint: hint),
           ),
         ],
       ),

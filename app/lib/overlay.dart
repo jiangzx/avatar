@@ -14,6 +14,7 @@ class AvatarOverlay extends StatelessWidget {
     required this.onToggleDebug,
     this.onRetry,
     this.debugPanel,
+    this.presence,
   });
 
   final String userLine;
@@ -26,6 +27,9 @@ class AvatarOverlay extends StatelessWidget {
   final VoidCallback onToggleDebug;
   final VoidCallback? onRetry;
   final Widget? debugPanel;
+
+  /// Optional status pill shown just above the subtitle card.
+  final Widget? presence;
 
   @override
   Widget build(BuildContext context) {
@@ -54,17 +58,27 @@ class AvatarOverlay extends StatelessWidget {
             left: 16,
             right: 16,
             bottom: 104,
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (userLine.isNotEmpty) Text(userLine, style: const TextStyle(color: Colors.white70, fontSize: 18)),
-                  if (aiLine.isNotEmpty) Text(aiLine, style: const TextStyle(color: Colors.white, fontSize: 20)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (presence != null) ...[
+                  Align(alignment: Alignment.centerLeft, child: presence!),
+                  const SizedBox(height: 8),
                 ],
-              ),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (userLine.isNotEmpty) Text(userLine, style: const TextStyle(color: Colors.white70, fontSize: 18)),
+                      if (aiLine.isNotEmpty) Text(aiLine, style: const TextStyle(color: Colors.white, fontSize: 20)),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
           Positioned(
@@ -98,7 +112,7 @@ class AvatarOverlay extends StatelessWidget {
                 ),
               ),
             ),
-          if (debugPanel != null) Positioned(top: 56, left: 8, right: 8, child: debugPanel!),
+          if (debugPanel != null) Positioned(top: 128, left: 8, right: 8, child: debugPanel!),
         ],
       ),
     );

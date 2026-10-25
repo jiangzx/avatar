@@ -57,4 +57,19 @@ void main() {
     await tester.tap(find.byKey(const Key('retry')));
     expect(retries, 1);
   });
+
+  testWidgets('shows an optional presence widget above the subtitles', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AvatarOverlay(
+          userLine: '', aiLine: '王叔好', status: '', error: null, muted: false,
+          onMute: () {}, onEnd: () {}, onToggleDebug: () {},
+          presence: const Text('PRESENCE'),
+        ),
+      ),
+    ));
+    final presence = tester.getTopLeft(find.text('PRESENCE'));
+    final subtitle = tester.getTopLeft(find.text('王叔好'));
+    expect(presence.dy, lessThan(subtitle.dy));
+  });
 }
