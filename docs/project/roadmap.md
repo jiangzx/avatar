@@ -2,14 +2,14 @@
 
 ## Duix 真人形象引擎（2026-10-25 起）
 
-状态：**实现完成，验收未全部通过**。分支 `duix-avatar`，实现提交 `737396c`（从 `master` `b3818ea` 拉出）。Task 1–12 已提交。Task 13 的记录见 [验收](../testing/2026-10-25-duix-acceptance.md)。未合并、未推送。
+状态：**实现完成，验收未全部通过**。从 `master` `b3818ea` 拉出。Task 1–12 已提交。Task 13 的记录见 [验收](../testing/2026-10-25-duix-acceptance.md)。已合并到本地 `master`，未推送。
 
 - 交付：引擎接口（3D 走 `WebViewAvatarEngine`）、Duix 引擎（24 kHz 播放、口型时钟、渲染）、App 内下载与校验、主页切换开关、崩溃保护。`gateway/`、`protocol/`、`avatar-core/` 无改动。
-- 必须通过：M1 通过（约 4 分 30 秒无崩溃，结束画面 Lily 可见）；M2 通过（用户确认嘴跟着声音动）；M3 通过（至少 5 次 `outcome=interrupted`）；M4 通过（3 次短回复 `outcome=ended`）。M5、M6、M7 未执行。M8 未通过：没有 `guiji` / `duix` / `vshow`，但有 `content-autofill.googleapis.com`；`debugOnly` 仍为 false。
-- 实测摘要：R4 平均 fps 23.85（参考 ≥ 24）；R7 页大小 4096；R8 `lips=false` 3 次。R1、R2、R3、R5、R6 为 NOT RUN。
-- 回归（2026-10-25）：`flutter test` 265 项通过；`flutter analyze` 无问题；`./gradlew :app:testDebugUnitTest` BUILD SUCCESSFUL，JUnit 报告 39 项、0 失败；`npm test` protocol 6 / gateway 839 / avatar-core 125 通过；`npm run typecheck` 通过；相对 `master`，`gateway`、`protocol`、`avatar-core` 无差异，`git diff --check` 无输出。
+- 必须通过：M1 通过（约 4 分 30 秒无崩溃，结束画面 Lily 可见）；M2 通过（用户确认嘴跟着声音动）；M3 通过（至少 5 次 `outcome=interrupted`）；M4 通过（3 次短回复 `outcome=ended`）。M5 已从验收删除。M6、M7 未执行。M8 未通过：没有 `guiji` / `duix` / `vshow`，但有 `content-autofill.googleapis.com`；`debugOnly` 仍为 false。
+- 实测摘要：R4 平均 fps 23.85（参考 ≥ 24）；R7 页大小 4096；R8 `lips=false` 3 次。R1、R2、R3、R5 为 NOT RUN。R6 随 M5 删除。
+- 回归（2026-10-25）：`flutter test` 268 项通过；改动的 6 个 Dart 文件 `flutter analyze` 无问题；`./gradlew :app:testDebugUnitTest` BUILD SUCCESSFUL，JUnit 报告 43 项、0 失败；`npm test` protocol 6 / gateway 839 / avatar-core 125 通过；`npm run typecheck` 通过；相对合并前的 `master`，`gateway`、`protocol`、`avatar-core` 无差异，`git diff --check` 无输出。
 - 上线前门槛（spec §11，这次不做）：商用模特、月活超过 1000 的许可、"Powered by Duix.com" 与 Notice、16 KB 页对齐、iOS。
-- 下一步：不合并、不推送，直到用户决定。未关闭项是 blockers #54–#58。
+- 下一步：未推送。未关闭项是 blockers #55–#58。#54 已删除。M6、M7 未执行，M8 未通过。
 
 ## Plan 4 情感共鸣与主动性（2026-10-23）
 

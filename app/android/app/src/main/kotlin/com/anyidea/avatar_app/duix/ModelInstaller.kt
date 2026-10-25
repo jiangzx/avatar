@@ -13,6 +13,35 @@ import java.util.zip.ZipInputStream
 
 class InstallException(val code: String) : Exception(code)
 
+/**
+ * Replaces [dest] with [unpacked] without deleting [dest] until the new tree is in its place.
+ * A failed rename leaves the previously installed tree where it was.
+ */
+internal class InstallSwap(
+    private val rename: (File, File) -> Boolean = { from, to -> from.renameTo(to) },
+) {
+    fun replace(unpacked: File, dest: File): Boolean {
+        val parent = dest.parentFile ?: return false
+        val incoming = File(parent, "${dest.name}.incoming")
+        val previous = File(parent, "${dest.name}.previous")
+        incoming.deleteRecursively()
+        previous.deleteRecursively()
+        if (!rename(unpacked, incoming)) return false
+        val hadDest = dest.exists()
+        if (hadDest && !rename(dest, previous)) {
+            incoming.deleteRecursively()
+            return false
+        }
+        if (!rename(incoming, dest)) {
+            if (hadDest) rename(previous, dest)
+            incoming.deleteRecursively()
+            return false
+        }
+        previous.deleteRecursively()
+        return true
+    }
+}
+
 data class InstallAsset(val id: String, val dir: String, val url: String, val sha256: String, val bytes: Long) {
     companion object {
         private val token = Regex("^[A-Za-z0-9_-]{1,64}$")
@@ -86,6 +115,7 @@ class ModelInstaller(
             conn.instanceFollowRedirects = true
             if (range != null) conn.setRequestProperty("Range", range)
             val status = conn.responseCode
+            if (!conn.url.protocol.equals("https", ignoreCase = true)) throw InstallException("insecure_url")
             if (status == 416) {
                 part.delete()
                 throw InstallException("http_416")
@@ -156,12 +186,11 @@ class ModelInstaller(
             val unpacked = File(staging, asset.dir)
             if (!unpacked.isDirectory) throw InstallException("zip_layout")
             val dest = layout.dir(asset.dir)
-            dest.deleteRecursively()
-            layout.marker(asset.dir).deleteRecursively()
             dest.parentFile?.mkdirs()
-            if (!unpacked.renameTo(dest)) throw InstallException("storage")
+            if (!InstallSwap().replace(unpacked, dest)) throw InstallException("storage")
             layout.shaFile(asset.dir).writeText(asset.sha256)
             val marker = layout.marker(asset.dir)
+            marker.deleteRecursively()
             if (!marker.mkdirs() && !marker.isDirectory) throw InstallException("storage")
         } catch (e: IOException) {
             throw InstallException("storage")

@@ -5,6 +5,25 @@ import '../native_audio/speech_detector.dart';
 import '../native_session/events.dart';
 import '../native_session/thinking_config.dart';
 
+/// One release at a time. The next page waits for the previous page's session stop and engine release.
+class EngineHandoff {
+  Future<void> _pending = Future<void>.value();
+
+  Future<void> get previous => _pending;
+
+  void replace(Future<void> shutdown) {
+    _pending = _quiet(shutdown);
+  }
+
+  static Future<void> _quiet(Future<void> shutdown) async {
+    try {
+      await shutdown;
+    } catch (_) {
+      // a failed release must not block the next page forever
+    }
+  }
+}
+
 enum AvatarEngineKind { webview, duix }
 
 /// Stored engine choice; anything unknown is the existing 3D avatar.

@@ -60,6 +60,8 @@ class DuixEngine(
     @Volatile
     private var rendering = true
 
+    private val dropped = SeqDrop()
+
     /** Loads the model on the render thread and starts the 25 fps loop. Blocks the calling (control) thread. */
     fun prepare(cfg: DuixRuntimeConfig): PrepareResult {
         val latch = CountDownLatch(1)
@@ -109,6 +111,7 @@ class DuixEngine(
     fun push(seq: Int, pcm16: ByteArray, pcm24: ByteArray) {
         handler.post {
             val nc = ncnn ?: return@post
+            if (!dropped.accept(seq)) return@post
             if (seq != activeSeq || session < 0 || ended) return@post
             if (pcm16.isNotEmpty()) {
                 nc.pushpcm(session, pcm16, pcm16.size, 0)
@@ -125,6 +128,7 @@ class DuixEngine(
         handler.post {
             val nc = ncnn ?: return@post
             val cfg = config ?: return@post
+            if (!dropped.accept(seq)) return@post
             if (seq != activeSeq || session < 0 || ended) return@post
             val pad16 = SegmentPadding.pad16(pushed16, cfg.minSegmentMs)
             if (pad16 > 0) {
@@ -141,6 +145,7 @@ class DuixEngine(
     /** Barge-in: silences now on the caller thread; the render thread may be busy in feature inference. */
     fun stopNow(): DuixAudioPlayer.StopResult {
         val stopped = player.hardStop()
+        dropped.drop(stopped.seq) // queued push/end for this seq must not run pushpcm
         handler.post { clearSegment() }
         return stopped
     }

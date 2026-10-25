@@ -4,6 +4,8 @@ import 'package:avatar_app/native_audio/audio_types.dart';
 import 'package:avatar_app/native_audio/speech_detector.dart';
 import 'package:avatar_app/native_session/events.dart';
 import 'package:avatar_app/native_session/thinking_config.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,6 +16,7 @@ class FakeEngine implements AvatarEngine {
   final String? failWith;
   int starts = 0;
   bool disposed = false;
+  Completer<void>? disposeGate;
   AvatarEngineCallbacks? callbacks;
 
   @override
@@ -43,7 +46,11 @@ class FakeEngine implements AvatarEngine {
   void onSessionEvent(NativeUiEvent event) {}
 
   @override
-  Future<void> dispose() async => disposed = true;
+  Future<void> dispose() async {
+    final gate = disposeGate;
+    if (gate != null) await gate.future;
+    disposed = true;
+  }
 }
 
 class FakePlatform extends AvatarPagePlatform {
@@ -59,8 +66,10 @@ class FakePlatform extends AvatarPagePlatform {
   void setWakelock(bool on) => wakelock.add(on);
 }
 
-Widget page(FakeEngine engine, FakePlatform platform, {void Function(AvatarEngineFailure)? onFailure}) =>
-    MaterialApp(home: AvatarPage(engineFactory: () => engine, platform: platform, onEngineFailure: onFailure));
+Widget page(FakeEngine engine, FakePlatform platform, {Key? key, void Function(AvatarEngineFailure)? onFailure, EngineHandoff? handoff}) =>
+    MaterialApp(
+      home: AvatarPage(key: key, engineFactory: () => engine, platform: platform, onEngineFailure: onFailure, handoff: handoff),
+    );
 
 void main() {
   testWidgets('a denied microphone never starts the engine', (tester) async {
@@ -132,6 +141,22 @@ void main() {
     engine.callbacks!.onState('listening');
     await tester.pump();
     expect(find.text('在听您说'), findsNothing);
+  });
+
+  testWidgets('the next page waits until the previous engine is released', (tester) async {
+    final handoff = EngineHandoff();
+    final first = FakeEngine()..disposeGate = Completer<void>();
+    final second = FakeEngine();
+    await tester.pumpWidget(page(first, FakePlatform(), key: const ValueKey('first'), handoff: handoff));
+    await tester.pump();
+    expect(first.starts, 1);
+    await tester.pumpWidget(page(second, FakePlatform(), key: const ValueKey('second'), handoff: handoff));
+    await tester.pump();
+    expect(second.starts, 0);
+    first.disposeGate!.complete();
+    await tester.pump();
+    expect(first.disposed, isTrue);
+    expect(second.starts, 1);
   });
 
   testWidgets('disposing the page disposes the engine and releases the wakelock', (tester) async {

@@ -22,10 +22,16 @@ class ModelInstallerTest {
     @get:Rule
     val tmp = TemporaryFolder()
 
-    private class FakeConnection(url: URL, private val status: Int, private val body: InputStream) : HttpURLConnection(url) {
+    private class FakeConnection(
+        url: URL,
+        private val status: Int,
+        private val body: InputStream,
+        private val landed: URL? = null,
+    ) : HttpURLConnection(url) {
         val sent = HashMap<String, String>()
         override fun setRequestProperty(key: String, value: String) { sent[key] = value }
         override fun getResponseCode() = status
+        override fun getURL(): URL = landed ?: super.getURL()
         override fun getInputStream() = body
         override fun connect() {}
         override fun disconnect() {}
@@ -123,6 +129,45 @@ class ModelInstallerTest {
             ModelInstaller(layout, open = { FakeConnection(it, 200, ByteArrayInputStream(goodZip + byteArrayOf(0))) })
                 .install(asset(goodZip)) { _, _, _ -> }
         }
+    }
+
+    @Test
+    fun rejectsARedirectThatLeavesHttps() {
+        val layout = InstallLayout(tmp.root)
+        val http = URL("http://example.test/Lily.zip")
+        expectCode("insecure_url") {
+            ModelInstaller(layout, open = { FakeConnection(it, 200, ByteArrayInputStream(goodZip), landed = http) })
+                .install(asset(goodZip)) { _, _, _ -> }
+        }
+        assertFalse(layout.dir("Lily").exists())
+    }
+
+    @Test
+    fun aFailedSwapKeepsTheInstalledTree() {
+        val parent = tmp.newFolder()
+        val dest = File(parent, "Lily").apply { mkdirs(); File(this, "old").writeText("keep") }
+        val unpacked = File(parent, "stage").apply { mkdirs(); File(this, "new").writeText("next") }
+        var calls = 0
+        val ok = InstallSwap { from, to ->
+            calls++
+            if (calls == 3) false else from.renameTo(to)
+        }.replace(unpacked, dest)
+        assertFalse(ok)
+        assertEquals("keep", File(dest, "old").readText())
+        assertFalse(File(parent, "Lily.incoming").exists())
+        assertFalse(File(parent, "Lily.previous").exists())
+    }
+
+    @Test
+    fun aSwapReplacesTheInstalledTree() {
+        val parent = tmp.newFolder()
+        val dest = File(parent, "Lily").apply { mkdirs(); File(this, "old").writeText("keep") }
+        val unpacked = File(parent, "stage").apply { mkdirs(); File(this, "new").writeText("next") }
+        assertTrue(InstallSwap().replace(unpacked, dest))
+        assertEquals("next", File(dest, "new").readText())
+        assertFalse(File(dest, "old").exists())
+        assertFalse(File(parent, "Lily.incoming").exists())
+        assertFalse(File(parent, "Lily.previous").exists())
     }
 
     @Test

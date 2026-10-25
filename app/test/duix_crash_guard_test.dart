@@ -18,6 +18,8 @@ void main() {
     expect(store.values, {DuixCrashGuard.inflightKey: '0', DuixCrashGuard.countKey: '1'});
     await guard.markActive();
     expect(await guard.checkAtLaunch(maxUncleanExits: 2), isTrue);
+    expect(store.values[DuixCrashGuard.countKey], '2');
+    await guard.acknowledgeDisable();
     expect(store.values[DuixCrashGuard.countKey], '0');
     expect(await guard.checkAtLaunch(maxUncleanExits: 2), isFalse);
   });

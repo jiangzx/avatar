@@ -79,6 +79,7 @@ class _HomeState extends State<_Home> {
     ),
   );
   final _bridge = MethodChannelDuixBridge();
+  final _handoff = EngineHandoff();
   late final _engines = EngineSwitchController(
     prefs: _identity,
     bridge: _bridge,
@@ -111,6 +112,7 @@ class _HomeState extends State<_Home> {
       identity: request.identity,
       savedStyle: _identity.savedStyle,
       onEngineFailure: request.onEngineFailure,
+      handoff: _handoff,
     ),
   );
 }

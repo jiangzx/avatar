@@ -203,6 +203,11 @@ class DuixAudioPlayer(private val listener: Listener) {
             val head = track.playbackHeadPosition
             if (clock.playedFrames(head) < realFrames) return
             ended = StopResult(seq, clock.playedMs(head, realFrames))
+            // Real audio is done. Drop the padding still queued and leave the track paused,
+            // so the tail silence is not played and the track does not idle in PLAYING.
+            generation++
+            queue.clear()
+            resetTrack()
             seq = 0
             endMarked = false
         }

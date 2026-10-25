@@ -43,6 +43,7 @@ class DuixNativeAudioIO implements NativeAudioIO {
   int _acceptedChunks = 0;
   int _droppedChunks = 0;
   int? _firstPushAtMs;
+  int? _audibleAtMs;
   int? _endReportedSeq;
 
   static int _wallClockMs() => DateTime.now().millisecondsSinceEpoch;
@@ -60,7 +61,7 @@ class DuixNativeAudioIO implements NativeAudioIO {
     pendingChunks: 0,
     feedInFlight: false,
     fedSamples: _fedSamples,
-    playedMs: _playedMs,
+    playedMs: _heardMs,
     acceptedChunks: _acceptedChunks,
     droppedChunks: _droppedChunks,
   );
@@ -86,6 +87,7 @@ class DuixNativeAudioIO implements NativeAudioIO {
     _ended = false;
     _fedSamples = 0;
     _playedMs = 0;
+    _audibleAtMs = null;
     _firstPushAtMs = null;
     _resampler.reset();
     await _call(responseSeq, () => bridge.startResponse(responseSeq));
@@ -183,6 +185,7 @@ class DuixNativeAudioIO implements NativeAudioIO {
   void _onEvent(DuixEvent event) {
     switch (event) {
       case DuixPlayStart(:final seq, :final lips) when seq == _activeSeq:
+        _audibleAtMs = _now();
         final first = _firstPushAtMs;
         diag(formatDiag('duix_playback_start', {'seq': seq, 'hold_ms': first == null ? -1 : _now() - first, 'lips': lips}));
       case DuixPlayEnd(:final seq, :final playedMs) when seq == _activeSeq && _ended:
@@ -207,6 +210,15 @@ class DuixNativeAudioIO implements NativeAudioIO {
     _resampler.reset();
     _reportEnd(seq, 'error', _playedMs);
     _onPlaybackError?.call(PlayedAudio(responseSeq: seq, playedMs: _playedMs), DuixPlaybackError(code));
+  }
+
+  /// Elapsed time since audio became audible, capped at what was fed. Native playedMs wins after stop or end.
+  int get _heardMs {
+    final start = _audibleAtMs;
+    if (_activeSeq == null || start == null) return _playedMs;
+    final elapsed = _now() - start;
+    if (elapsed <= 0) return 0;
+    return elapsed > _fedMs ? _fedMs : elapsed;
   }
 
   /// False when the call failed; the reply was then dropped as a playback error.

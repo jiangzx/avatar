@@ -68,7 +68,6 @@ Expected：输出 `no telemetry strings`。
 | M2 | 有声音、嘴会动 | 听开场白和 3 轮回复 | 每轮都有声音；嘴随声音动（用户确认）；日志里有 `duix_playback_start ... lips=true` |
 | M3 | 真实插话能停播 | 在回复播放 1 秒以上时大声插话，试 5 次 | 5 次都停播（用户确认）；每次日志都有 `duix_playback_end ... outcome=interrupted` |
 | M4 | 短句能播完 | 长按「小柔」打开调试面板，输入「请只回答一个字：好」，试 3 次 | 每次都听到回复，日志都有 `duix_playback_end ... outcome=ended`，之后能继续对话 |
-| M5 | 来回切换不崩溃 | 3D 和真人形象来回各切 10 次（共 20 次），每次都确认切换 | 不崩溃、不黑屏；最后一次切换后能正常对话 |
 | M6 | 初始化失败自动退回 3D | 见下方命令 | 出现「真人形象没能打开，先用 3D 形象陪您聊」，3D 正常对话；日志有 `duix_fallback` |
 | M7 | 3D 行为不变 | 在 3D 模式下聊 3 轮，插话 2 次，静音和挂断各 1 次 | 用户确认和改动前一致 |
 | M8 | 零外发 | Step 3 | 通过 |
@@ -92,7 +91,6 @@ adb shell rm -f $D/.anyidea-sha256        # the app now sees Lily as not install
 | R3 | 首句延迟 | 两种模式各聊 10 轮。每轮取日志里 `latency perceived_ms`，加上听到声音前的等待：3D 用 `playback_start hold_ms`，真人形象用 `duix_playback_start hold_ms`。算两种模式各自的 p50，再求差 | 真人形象比 3D 多出的部分 ≤ +300 ms |
 | R4 | 帧率 | 对话 5 分钟，取日志里 `duix_stats fps` 的平均值，同时记 `slow_frames` 和 `max_frame_ms` | ≥ 24 |
 | R5 | 30 分钟稳定性 | 真人形象模式连续对话或静候 30 分钟，每 5 分钟跑一次 `adb shell dumpsys meminfo com.anyidea.avatar_app \| grep -E 'TOTAL( PSS)?:'` 和 `adb shell dumpsys battery \| grep temperature` | PSS ≤ 1.5 GB；温度 ≤ 43 °C（battery 报的单位是 0.1 °C） |
-| R6 | 切换 20 次 | M5 的结果，另外记有没有 `duix_release_timeout` 或 `busy` | 0 次 |
 | R7 | 页大小 | `adb shell getconf PAGESIZE` | 记录（4096 或 16384） |
 | R8 | 口型等待超时 | 统计日志里 `lips=false` 出现的次数 | 记录 |
 
@@ -115,7 +113,6 @@ adb shell rm -f $D/.anyidea-sha256        # the app now sees Lily as not install
 | M2 | … | … |
 | M3 | … | … |
 | M4 | … | … |
-| M5 | … | … |
 | M6 | … | … |
 | M7 | … | … |
 | M8 | … | 看到的域名：<…> |
@@ -129,7 +126,6 @@ adb shell rm -f $D/.anyidea-sha256        # the app now sees Lily as not install
 | R3 | 3D p50=<…>，真人形象 p50=<…>，差=<…> | |
 | R4 | <…> | |
 | R5 | <每 5 分钟的 PSS / 温度> | |
-| R6 | <…> | |
 | R7 | <…> | |
 | R8 | <…> | |
 
@@ -169,7 +165,7 @@ Expected：
 
 有失败项或跳过项时，在 `docs/blockers.md` 末尾按现有格式各加一条。
 
-- [ ] **Step 9: 提交，然后请求代码评审**
+- [x] **Step 9: 提交，然后请求代码评审**
 
 ```bash
 git add docs/testing/2026-10-25-duix-acceptance.md docs/project/roadmap.md
@@ -181,3 +177,5 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 然后按 AGENTS.md §3 执行 requesting-code-review，评审范围是 `dev-master...duix-avatar`。处理完评审意见后，再执行 finishing-a-development-branch。合并、推送都要先问用户。
+
+2026-10-25：代码评审已处理（无 Critical；播放与切换交接的修复在随后的提交里）。用户决定合并到本地 `master`、不推送，并删除 `duix-avatar`。

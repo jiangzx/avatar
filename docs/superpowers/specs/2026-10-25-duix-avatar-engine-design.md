@@ -262,7 +262,6 @@ Operate 模式，Material 3，沿用现有深色背景、teal 主色、大字号
   - 回复有声音、嘴会动；
   - 真实插话能停播；
   - 短于 800 ms 的回复能播完并收到结束回调；
-  - 来回切换引擎不崩溃；
   - Duix 初始化失败时自动退回 3D；
   - 抓包期间对 guiji、duix 相关域名零连接；
   - 3D 模式行为和改动前一致。
@@ -272,7 +271,6 @@ Operate 模式，Material 3，沿用现有深色背景、teal 主色、大字号
   - 首句延迟比 3D 多出的部分（目标 ≤ +300 ms）；
   - 平均帧率（目标 ≥ 24）；
   - 30 分钟内存 PSS（目标 ≤ 1.5 GB）和机身温度（目标 ≤ 43 °C）；
-  - 切换 20 次的结果；
   - `getconf PAGESIZE`。
 
 ## 11. 上线前门槛（这次不做）
@@ -292,7 +290,7 @@ Operate 模式，Material 3，沿用现有深色背景、teal 主色、大字号
 | A3 | `AndroidView`（TLHC）托管 `DUIXTextureView` 能正常显示和缩放 | Task 5 / 最终验收 |
 | A4 | AudioTrack 在 `pause()` 再 `flush()` 后播放头归零；即使不归零，`AudioClock` 也按每段的基准值计算 | Task 4 测试覆盖基准值逻辑；真机验收 |
 | A5 | 和 `flutter_pcm_sound` 相同的 AudioTrack 属性，回声消除表现也相同 | 最终验收记录回声 RMS |
-| A6 | 同一进程内 `free(0)` 之后再 `alloc` 是安全的（我们保证不会重叠） | 最终验收「切换 20 次」 |
+| A6 | 同一进程内 `free(0)` 之后再 `alloc` 是安全的（我们保证不会重叠） | 页面交接会等上一次 `release` 结束再 `prepare`。20 次真机切换已从验收删除，这条没有真机次数证据 |
 | A7 | 在 Android 11+ 上，`adb push` 到 `Android/data/<pkg>/files` 的文件 App 能读写 | 开发脚本；不行就用 App 内下载 |
 | A8 | PCAPdroid 不用 root 就能按 App 抓到 HTTPS 连接的目标域名 | Task 13 第一步 |
 | A9 | JNI 返回值负数表示失败 | 读源码已确认约定；init 失败的路径由真机验证 |

@@ -41,6 +41,20 @@ void main() {
     expect(mic.enabled, isFalse);
   });
 
+  test('playedMs advances after audio starts and stays within what was fed', () async {
+    var now = 1000;
+    final clocked = DuixNativeAudioIO(bridge: bridge, mic: mic, diag: diag.add, now: () => now);
+    await clocked.start(onFrame: (_) {}, onLevel: (_) {}, onPlaybackEnded: ended.add, onPlaybackError: (played, error) => errors.add((played, error)));
+    await clocked.startResponse(1);
+    await clocked.pushResponse(1, Int16List(24000));
+    expect(clocked.playbackSnapshot.playedMs, 0);
+    bridge.emit(const DuixPlayStart(1, lips: true));
+    now = 1250;
+    expect(clocked.playbackSnapshot.playedMs, 250);
+    now = 5000;
+    expect(clocked.playbackSnapshot.playedMs, 1000);
+  });
+
   test('sends 24 kHz audio with its 16 kHz copy', () async {
     await io.startResponse(1);
     await io.pushResponse(1, Int16List(480));

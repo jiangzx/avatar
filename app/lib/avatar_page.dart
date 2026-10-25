@@ -73,6 +73,7 @@ class AvatarPage extends StatefulWidget {
     this.identity,
     this.savedStyle,
     this.onEngineFailure,
+    this.handoff,
     this.platform = const AvatarPagePlatform(),
   });
 
@@ -85,6 +86,9 @@ class AvatarPage extends StatefulWidget {
 
   /// Set when another engine can take over; otherwise a failure shows the retry error.
   final void Function(AvatarEngineFailure failure)? onEngineFailure;
+
+  /// When set, this page waits for the previous page to stop its session and release its engine.
+  final EngineHandoff? handoff;
   final AvatarPagePlatform platform;
 
   @override
@@ -110,6 +114,7 @@ class _AvatarPageState extends State<AvatarPage> {
   bool _debug = false;
   /// End/dispose invalidates an in-flight session start; it must not leave a live mic.
   final _sessionGuard = SessionStartGuard();
+  bool _released = false;
 
   /// The old WebView-owned audio path (AUDIO_MODE=web); null on the native path.
   LegacyWebSession? get _legacy => switch (_engine) {
@@ -133,6 +138,8 @@ class _AvatarPageState extends State<AvatarPage> {
     _startingEngine = true;
     _engineFailed = false;
     try {
+      await widget.handoff?.previous;
+      if (!mounted || _sessionGuard.ended) return;
       if (!await widget.platform.requestMicrophone()) {
         _update(() => _error = '需要麦克风权限才能聊天');
         return;
@@ -401,13 +408,44 @@ class _AvatarPageState extends State<AvatarPage> {
   }
 
   @override
+  void deactivate() {
+    // dispose() runs after the next page's initState. Register the release here so the
+    // next page waits for this session and renderer to finish.
+    _handOff();
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
-    _sessionGuard.end();
-    unawaited(_session?.stop() ?? Future<void>.value());
-    unawaited(_engine.dispose());
+    _handOff();
     _debugText.dispose();
     widget.platform.setWakelock(false);
     super.dispose();
+  }
+
+  void _handOff() {
+    if (_released) return;
+    _released = true;
+    _sessionGuard.end();
+    final shutdown = _releaseEngine();
+    final handoff = widget.handoff;
+    if (handoff != null) {
+      handoff.replace(shutdown);
+    } else {
+      unawaited(shutdown);
+    }
+  }
+
+  /// Stop the session first so the microphone and player are gone, then release the renderer.
+  Future<void> _releaseEngine() async {
+    final session = _session;
+    _session = null;
+    try {
+      await session?.stop();
+    } catch (_) {
+      // the page is gone; the renderer still has to be released
+    }
+    await _engine.dispose();
   }
 
   @override

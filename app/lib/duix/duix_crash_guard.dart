@@ -21,8 +21,7 @@ class DuixCrashGuard {
         await _store.write(countKey, '$count');
       }
       if (count < maxUncleanExits) return false;
-      await _store.write(countKey, '0');
-      return true;
+      return true; // the caller clears the count only after the saved engine is actually changed
     } on Exception {
       return false; // storage trouble must never block the app
     }
@@ -36,6 +35,9 @@ class DuixCrashGuard {
 
   /// The engine was released normally.
   Future<void> markCleanExit() => _write({inflightKey: '0', countKey: '0'});
+
+  /// Crash-loop protection has taken effect and the saved engine is now 3D.
+  Future<void> acknowledgeDisable() => _write({countKey: '0'});
 
   Future<void> _write(Map<String, String> values) async {
     try {

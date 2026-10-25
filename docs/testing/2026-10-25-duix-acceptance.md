@@ -14,7 +14,6 @@
 | M2 | 通过 | 用户确认嘴跟着声音动。播放日志多次 `duix_playback_start ... lips=true`。M1 窗口内 seq=5（18:31:37）为 `lips=false` |
 | M3 | 通过 | 用户做完插话。18:36:03–18:36:30 连续 8 次 `duix_playback_end ... outcome=interrupted`，其中至少 5 次 `played_ms` 为 1000–1520 |
 | M4 | 通过 | 三次短回复都播完：seq=19 / 22 / 24，均为 `outcome=ended`，`played_ms=720`。之后 seq=25 又开始播放 |
-| M5 | 未执行 | 用户放弃 10 个回合（20 次切换），不记为通过 |
 | M6 | 未执行 | 未删 Lily 文件，未观察退回 3D |
 | M7 | 未执行 | 本次没有在最终包上重做 3D 的 3 轮对话、2 次插话、静音和挂断 |
 | M8 | 未通过 | 见下方域名。没有 `guiji` / `duix` / `vshow`。`debugOnly` 仍为 false |
@@ -28,7 +27,6 @@
 | R3 | NOT RUN | 没有按两种模式各 10 轮采集，不计算差值 |
 | R4 | 平均 fps 23.85（59 条，18:30:24–18:35:19）；`slow_frames` 合计 187；`max_frame_ms` 最大 131 | 参考目标 ≥ 24。不卡验收 |
 | R5 | NOT RUN | 未做 30 分钟 |
-| R6 | NOT RUN | 随 M5 放弃 |
 | R7 | 4096 | `adb shell getconf PAGESIZE` |
 | R8 | `lips=false` 3 次 | 18:24 seq=5、seq=7；18:31:37 seq=5 |
 
@@ -62,8 +60,8 @@ Task 12 截图（只在 `/tmp`，不入库）：开关在小柔下方居中，�
 
 ## 未通过、跳过与后续
 
-- M5：用户放弃。见 blockers #54
+- M5：已从验收删除，不再作为必须通过项。见 blockers #54
 - M6：未执行。见 blockers #55
 - M7：未执行。见 blockers #56
 - M8：`content-autofill.googleapis.com`。见 blockers #57
-- R1、R2、R5、R6：未测。见 blockers #58
+- R1、R2、R5：未测。R6 随 M5 删除。见 blockers #58

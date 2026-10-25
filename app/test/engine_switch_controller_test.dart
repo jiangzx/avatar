@@ -83,6 +83,25 @@ void main() {
     expect(c.takeNotice(), isNull);
   });
 
+  test('a failed save keeps the crash count and still runs 3D', () async {
+    store.values.addAll({DeviceIdentity.engineKey: 'duix', DuixCrashGuard.inflightKey: '1', DuixCrashGuard.countKey: '1'});
+    final failing = _FailEngineWrite(store);
+    final c = EngineSwitchController(
+      prefs: DeviceIdentity(store: failing, backend: FakeBackend()),
+      bridge: bridge,
+      guard: DuixCrashGuard(failing),
+      loadConfig: () async => loadTestDuixConfig(),
+      debugBuild: true,
+      diag: (_) {},
+    );
+    await c.load();
+    expect(c.sessionEngine, AvatarEngineKind.webview);
+    expect(c.savedEngine, AvatarEngineKind.duix);
+    expect(store.values[DeviceIdentity.engineKey], 'duix');
+    expect(store.values[DuixCrashGuard.countKey], '2');
+    expect(c.takeNotice(), isNull);
+  });
+
   test('choose persists and rebuilds the page', () async {
     final c = controller();
     await c.load();
@@ -123,4 +142,19 @@ void main() {
     expect(store.values[DeviceIdentity.engineKey], isNull);
     expect(c.installer!.state, isA<InstallIdle>());
   });
+}
+
+class _FailEngineWrite implements CredentialStore {
+  _FailEngineWrite(this.inner);
+
+  final MemoryCredentialStore inner;
+
+  @override
+  Future<String?> read(String key) => inner.read(key);
+
+  @override
+  Future<void> write(String key, String value) async {
+    if (key == DeviceIdentity.engineKey) throw Exception('disk');
+    await inner.write(key, value);
+  }
 }

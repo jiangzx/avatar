@@ -85,11 +85,20 @@ class EngineSwitchController extends ChangeNotifier {
       _hide(DuixAvailability.hidden);
       return;
     }
-    if (await guard.checkAtLaunch(maxUncleanExits: cfg.maxUncleanExits) && _saved == AvatarEngineKind.duix) {
-      _saved = AvatarEngineKind.webview;
-      await prefs.saveEngine(AvatarEngineKind.webview);
-      _notice = EngineNotice.crashDisabled;
-      diag(formatDiag('duix_crash_disabled', {}));
+    if (await guard.checkAtLaunch(maxUncleanExits: cfg.maxUncleanExits)) {
+      if (_saved == AvatarEngineKind.duix) {
+        if (await prefs.saveEngine(AvatarEngineKind.webview)) {
+          await guard.acknowledgeDisable();
+          _saved = AvatarEngineKind.webview;
+          _notice = EngineNotice.crashDisabled;
+          diag(formatDiag('duix_crash_disabled', {}));
+        } else {
+          _override = AvatarEngineKind.webview; // this launch stays on 3D; the count remains for the next one
+          diag(formatDiag('engine_save_failed', {'engine': AvatarEngineKind.webview.name}));
+        }
+      } else {
+        await guard.acknowledgeDisable();
+      }
     }
     final support = await bridge.probe(minTotalMemMb: cfg.minTotalMemMb);
     if (!support.supported) {
