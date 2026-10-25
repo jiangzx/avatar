@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 
+import '../avatar_engine/avatar_engine.dart';
 import '../native_gateway/gateway_client.dart';
 import 'credential_store.dart';
 import 'identity_api.dart';
@@ -22,12 +23,13 @@ class IdentityFailed extends IdentityResult {
 }
 
 /// Device credential and locally chosen style. The token leaves this class only as a bearer header.
-class DeviceIdentity implements DeviceTokenProvider {
+class DeviceIdentity implements DeviceTokenProvider, EnginePrefs {
   DeviceIdentity({required this.store, required this.backend});
 
   static const tokenKey = 'device_token';
   static const styleKey = 'style_id';
   static const avatarKey = 'avatar_id';
+  static const engineKey = 'avatar_engine';
 
   final CredentialStore store;
   final IdentityBackend backend;
@@ -97,6 +99,26 @@ class DeviceIdentity implements DeviceTokenProvider {
     await store.write(avatarKey, avatarId);
     return const IdentityOk();
   });
+
+  /// Avatar renderer, local only; unknown values and storage errors read as the 3D avatar.
+  @override
+  Future<AvatarEngineKind> savedEngine() async {
+    try {
+      return parseEngineKind(await store.read(engineKey));
+    } on Exception {
+      return AvatarEngineKind.webview;
+    }
+  }
+
+  @override
+  Future<bool> saveEngine(AvatarEngineKind engine) async {
+    try {
+      await store.write(engineKey, engine.name);
+      return true;
+    } on Exception {
+      return false;
+    }
+  }
 
   Future<IdentityResult> _guard(Future<IdentityResult> Function() body) async {
     try {

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:avatar_app/avatar_engine/avatar_engine.dart';
 import 'package:avatar_app/identity/credential_store.dart';
 import 'package:avatar_app/identity/device_identity.dart';
 import 'package:avatar_app/identity/identity_api.dart';
@@ -126,5 +127,17 @@ void main() {
     expect(await DeviceIdentity(store: store, backend: backend).renew(), isNull);
     expect(store.values[tokenKey], 'old-token-0123456789');
     expect(await DeviceIdentity(store: ThrowingCredentialStore(), backend: FakeBackend()).renew(), isNull);
+  });
+
+  test('engine choice is local, defaults to the 3D avatar and tolerates storage errors', () async {
+    final store = MemoryCredentialStore();
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    expect(await identity.savedEngine(), AvatarEngineKind.webview);
+    expect(await identity.saveEngine(AvatarEngineKind.duix), isTrue);
+    expect(store.values[DeviceIdentity.engineKey], 'duix');
+    expect(await identity.savedEngine(), AvatarEngineKind.duix);
+    final broken = DeviceIdentity(store: ThrowingCredentialStore(), backend: FakeBackend());
+    expect(await broken.savedEngine(), AvatarEngineKind.webview);
+    expect(await broken.saveEngine(AvatarEngineKind.duix), isFalse);
   });
 }
