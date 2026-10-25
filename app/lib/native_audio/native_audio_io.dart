@@ -9,8 +9,10 @@ import '../diag_log.dart';
 import '../native_session/thinking_config.dart';
 import 'audio_types.dart';
 import 'filler_player.dart';
-import 'pcm.dart';
+import 'mic_capture.dart';
 import 'playback_queue.dart';
+
+export 'mic_capture.dart' show nativeRecordConfig;
 
 const int nativePlaybackSampleRate = 24000;
 const int nativePlaybackChannels = 1;
@@ -18,29 +20,12 @@ const int nativePlaybackFeedThreshold = 12000; // TUNABLE: 500 ms at 24 kHz
 const int nativePlaybackStartCushionMs = 1000; // TUNABLE: cover upstream pauses right after the first words
 const int nativePlaybackStartWaitMaxMs = 1200; // TUNABLE: start anyway when the stream ramps slower than this
 
-/// Capture config for the native path. Resume after audio-focus loss: a call or
-/// navigation prompt must not leave the microphone paused for the rest of the session.
-RecordConfig nativeRecordConfig() => const RecordConfig(
-  encoder: AudioEncoder.pcm16bits,
-  sampleRate: 16000,
-  numChannels: 1,
-  echoCancel: true,
-  noiseSuppress: true,
-  autoGain: true,
-  audioInterruption: AudioInterruptionMode.pauseResume,
-  androidConfig: AndroidRecordConfig(
-    audioSource: AndroidAudioSource.voiceCommunication,
-    audioManagerMode: AudioManagerMode.modeInCommunication,
-    speakerphone: true,
-  ),
-);
-
 class PluginNativeAudioIO implements NativeAudioIO {
   PluginNativeAudioIO({AudioRecorder? recorder, FillerAudioConfig? filler})
-    : _recorder = recorder ?? AudioRecorder(),
+    : _mic = MicCapture(recorder: recorder),
       _fillerCfg = filler;
 
-  final AudioRecorder _recorder;
+  final MicCapture _mic;
   final FillerAudioConfig? _fillerCfg;
   late final FillerPlayer? _filler = _fillerCfg == null
       ? null
@@ -52,18 +37,13 @@ class PluginNativeAudioIO implements NativeAudioIO {
     startCushionSamples:
         nativePlaybackSampleRate * nativePlaybackStartCushionMs ~/ 1000,
   );
-  final PcmFrameAccumulator _frames = PcmFrameAccumulator(320);
   final Queue<_PendingChunk> _pending = Queue<_PendingChunk>();
-  StreamSubscription<Uint8List>? _subscription;
-  AudioFrameCallback? _onFrame;
-  AudioLevelCallback? _onLevel;
   void Function(PlayedAudio)? _onPlaybackEnded;
   AudioPlaybackErrorCallback? _onPlaybackError;
   int? _activeSeq;
   bool _playerReady = false;
   bool _feedInFlight = false;
   Future<void>? _feedFuture;
-  bool _inputEnabled = true;
   int _acceptedChunks = 0;
   int _droppedChunks = 0;
   // Content-free playback diagnostics: arrival gaps vs local feed waits show where a stall came from.
@@ -107,13 +87,10 @@ class PluginNativeAudioIO implements NativeAudioIO {
     required AudioPlaybackErrorCallback onPlaybackError,
   }) async {
     await stop();
-    _onFrame = onFrame;
-    _onLevel = onLevel;
     _onPlaybackEnded = onPlaybackEnded;
     _onPlaybackError = onPlaybackError;
     await _setupPlayback();
-    final stream = await _recorder.startStream(nativeRecordConfig());
-    _subscription = stream.listen(_onRecorderBytes);
+    await _mic.start(onFrame: onFrame, onLevel: onLevel);
   }
 
   @override
@@ -206,7 +183,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
 
   @override
   Future<void> setInputEnabled(bool enabled) async {
-    _inputEnabled = enabled;
+    _mic.inputEnabled = enabled;
   }
 
   @override
@@ -257,12 +234,7 @@ class PluginNativeAudioIO implements NativeAudioIO {
     _startTimer?.cancel();
     _startTimer = null;
     _filler?.stop();
-    await _subscription?.cancel();
-    _subscription = null;
-    await _recorder.stop().catchError((_) => null);
-    _frames.takeRemainder();
-    _onFrame = null;
-    _onLevel = null;
+    await _mic.stop();
     _onPlaybackEnded = null;
     _onPlaybackError = null;
     _activeSeq = null;
@@ -294,20 +266,6 @@ class PluginNativeAudioIO implements NativeAudioIO {
     await FlutterPcmSound.release().catchError((_) => null);
     _playerReady = false;
     await _setupPlayback();
-  }
-
-  void _onRecorderBytes(Uint8List bytes) {
-    if (!_inputEnabled) return;
-    for (final frame in _frames.push(bytes)) {
-      _onFrame?.call(frame);
-      _onLevel?.call(
-        AudioLevel(
-          rms: rmsInt16(frame),
-          zcr: zeroCrossingRate(frame),
-          sampleCount: frame.length,
-        ),
-      );
-    }
   }
 
   Future<void> _onFeed(int remainingFrames) async {

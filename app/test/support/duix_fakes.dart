@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:avatar_app/duix/duix_bridge.dart';
 import 'package:avatar_app/duix/duix_config.dart';
 import 'package:avatar_app/duix/duix_events.dart';
+import 'package:avatar_app/native_audio/audio_types.dart';
+import 'package:avatar_app/native_audio/mic_capture.dart';
 
 /// The real assets/config/duix.json with optional top-level overrides (flutter test runs in app/).
 DuixConfig loadTestDuixConfig([Map<String, Object?> overrides = const {}]) {
@@ -93,4 +95,23 @@ class FakeDuixBridge implements DuixBridge {
 
   @override
   Future<void> release() async => calls.add('release');
+}
+
+class FakeMic implements MicInput {
+  int starts = 0;
+  int stops = 0;
+  bool enabled = true;
+  AudioFrameCallback? onFrame;
+
+  @override
+  Future<void> start({required AudioFrameCallback onFrame, required AudioLevelCallback onLevel}) async {
+    starts++;
+    this.onFrame = onFrame;
+  }
+
+  @override
+  Future<void> stop() async => stops++;
+
+  @override
+  set inputEnabled(bool value) => enabled = value;
 }
