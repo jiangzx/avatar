@@ -200,7 +200,7 @@ describe('Plan C memory acceptance', () => {
     expect(extracted(db, ownerId, '我喜欢喝茶')).toBe(1);
     expect(extracted(db, ownerId, '好，我记下了')).toBe(1);
     expect(factRows(store, ownerId, agentId)).toEqual(expect.arrayContaining([
-      { category: 'addressing', text: '称呼：王叔' },
+      { category: 'addressing', text: '王叔' },
       { category: 'preference', text: '喜欢喝茶' },
     ]));
 
@@ -263,7 +263,7 @@ describe('Plan C memory acceptance', () => {
     expect(forgotten.ctx.memorySnapshot ?? '').not.toContain('喜欢喝茶');
     expect(instructions.at(-1)).not.toContain('泡茶的杯子');
     expect(store.searchMessages(ownerId, agentId, ftsMatch('喜欢喝茶')!, 12)).toEqual([]);
-    expect(factRows(store, ownerId, agentId).map((fact) => fact.text)).toContain('称呼：王叔');
+    expect(factRows(store, ownerId, agentId).map((fact) => fact.text)).toContain('王叔');
     expect(factRows(store, ownerId, agentId).map((fact) => fact.text)).not.toContain('喜欢喝茶');
     gate.end(sessionForget.tokens.sessionId);
     await drain(queued);

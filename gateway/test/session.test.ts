@@ -1477,7 +1477,7 @@ describe('Session', () => {
   it('enqueues extraction every configured number of user turns when a worker is injected', () => {
     const reasons: string[] = [];
     const s = setup({
-      worker: { extractOwner: async (_ownerId, reason) => { reasons.push(reason); } },
+      worker: { enqueue: async (_ownerId, _agentId, reason) => { reasons.push(reason); } },
       extractEveryUserTurns: 2,
     }, ownedCtx, 'extract-turns');
     s.session.handleClientMessage({ type: 'debug.userText', text: '第一句' });
@@ -1493,7 +1493,7 @@ describe('Session', () => {
     const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'en'], defaultLanguage: 'zh' });
     const s = setup({
       roles,
-      worker: { extractOwner: async (_ownerId, reason, language) => { seen.push({ reason, language }); } },
+      worker: { enqueue: async (_ownerId, _agentId, reason, language) => { seen.push({ reason, language }); } },
       extractEveryUserTurns: 1,
     }, ownedCtx, 'extract-language');
     s.session.handleClientMessage({ type: 'debug.userText', text: '你好' });

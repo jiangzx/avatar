@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { loadI18n } from '../src/i18n/load.ts';
 import { PROMPT_LABELS } from '../src/roles/labels.ts';
 import { buildInstructions } from '../src/session/instructions.ts';
-import { renderMemoryViews, renderSnapshot } from '../src/memory/snapshot.ts';
+import { plainAddressing, renderMemoryViews, renderSnapshot } from '../src/memory/snapshot.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const i18n = loadI18n(`${root}config`);
@@ -236,5 +236,26 @@ describe('renderMemoryViews', () => {
     expect(en.full).toContain('Address as: Hanako');
     expect(en.full).toContain('Fact: likes tea');
     expect(en.full).toContain('User: I walk every morning.');
+  });
+
+  it('labels a plain stored name in the session language', () => {
+    const zh = renderMemoryViews({ addressing: ['王叔'], facts: [], tail: [], maxChars: 600, labels: PROMPT_LABELS.zh, rules: zhRules });
+    expect(zh.full).toBe('称呼：王叔');
+    expect(zh.greeting).toBe('称呼：王叔');
+    const en = renderMemoryViews({
+      addressing: ['王叔'], facts: [], tail: [], maxChars: 600,
+      labels: PROMPT_LABELS.en, rules: { addressingPatterns: i18n.memory.en.addressingPatterns, evidence: i18n.evidence },
+    });
+    expect(en.full).toBe('Address as: 王叔');
+  });
+});
+
+describe('plainAddressing', () => {
+  it('strips any stored addressing label and folds the name to one line', () => {
+    expect(plainAddressing('称呼：王叔')).toBe('王叔');
+    expect(plainAddressing('呼び方：花子')).toBe('花子');
+    expect(plainAddressing('Address as: Hanako')).toBe('Hanako');
+    expect(plainAddressing('  老王 \n')).toBe('老王');
+    expect(plainAddressing('称呼：')).toBe('称呼：');
   });
 });

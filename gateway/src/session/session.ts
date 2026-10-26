@@ -319,6 +319,7 @@ export class Session {
     this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
     const extractor = deps.worker;
     const ownerId = ctx.ownerId;
+    const agentId = ctx.agentId;
     const hasSilencePlanner = deps.roles.supportedLanguages(ctx.roleId)
       .some((language) => deps.roles.director(ctx.roleId, language).silenceDecision !== undefined);
     this.safeGreetingWired = Boolean(deps.textClient) && hasSilencePlanner;
@@ -334,7 +335,7 @@ export class Session {
           safeGreeting: () => this.safeGreeting(),
           ...(deps.affect?.enabled ? { getPlanExtras: () => this.planExtras() } : {}),
         } : {}),
-        ...(extractor && ownerId ? { onQuietRest: () => { void extractor.extractOwner(ownerId, 'silence', this.language); } } : {}),
+        ...(extractor && ownerId && agentId ? { onQuietRest: () => { void extractor.enqueue(ownerId, agentId, 'silence', this.language); } } : {}),
       },
       this.noticePending,
       extractor ? deps.extractSilenceMs : undefined,
@@ -1116,10 +1117,11 @@ export class Session {
     this.charsSinceRebuild += text.length;
     const extractor = this.deps.worker;
     const ownerId = this.context.ownerId;
-    if (extractor && ownerId) {
+    const agentId = this.context.agentId;
+    if (extractor && ownerId && agentId) {
       this.userTurns += 1;
       const every = this.deps.extractEveryUserTurns ?? 10;
-      if (this.userTurns % every === 0) void extractor.extractOwner(ownerId, 'turns', this.language);
+      if (this.userTurns % every === 0) void extractor.enqueue(ownerId, agentId, 'turns', this.language);
     }
     this.director.onUserFinal(text);
     this.emotion?.onUserFinal(text);

@@ -5,7 +5,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadI18n } from '../src/i18n/load.ts';
-import { applyExtractOps, loadExtractPrompt, parseExtractOps, vetFollowupQuotes } from '../src/memory/extract.ts';
+import {
+  applyExtractOps, loadExtractPrompt, normalizeAddressingOps, parseExtractBatch, parseExtractOps, resolveFactSources, vetFollowupQuotes,
+} from '../src/memory/extract.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
 import { agentOf, factRows, seedOwner } from './helpers/memory.ts';
@@ -40,6 +42,102 @@ describe('parseExtractOps', () => {
 
   it('reads an ops array from a JSON string', () => {
     expect(parseExtractOps('{"ops":[{"op":"add","table":"user_facts","category":"preference","text":"喜欢喝茶"}]}')).toEqual([
+      { op: 'add', table: 'user_facts', category: 'preference', text: '喜欢喝茶' },
+    ]);
+  });
+});
+
+describe('parseExtractBatch', () => {
+  it('drops user_facts ops outside the category whitelist without failing the batch', () => {
+    const batch = parseExtractBatch({ ops: [
+      { op: 'add', table: 'user_facts', category: 'safety', text: '想写安全类' },
+      { op: 'add', table: 'user_facts', category: 'misc', text: '不在白名单' },
+      { op: 'add', table: 'user_facts', text: '没有分类' },
+      { op: 'update', table: 'user_facts', id: 'f1', category: 'secret', text: '改成怪分类' },
+      { op: 'update', table: 'user_facts', id: 'f2', text: '只改文字', sources: ['u1'] },
+      { op: 'add', table: 'user_facts', category: 'profile', text: '老家山东', sources: ['u1'] },
+      { op: 'remove', table: 'user_facts', id: 'f3' },
+    ] });
+    expect(batch.droppedCategory).toBe(4);
+    expect(batch.ops).toEqual([
+      { op: 'update', table: 'user_facts', id: 'f2', text: '只改文字', sources: ['u1'] },
+      { op: 'add', table: 'user_facts', category: 'profile', text: '老家山东', sources: ['u1'] },
+      { op: 'remove', table: 'user_facts', id: 'f3' },
+    ]);
+  });
+
+  it('accepts every whitelisted category', () => {
+    const categories = ['addressing', 'profile', 'preference', 'person', 'health', 'other'];
+    const batch = parseExtractBatch({ ops: categories.map((category) => ({ op: 'add', table: 'user_facts', category, text: category, sources: ['u1'] })) });
+    expect(batch.droppedCategory).toBe(0);
+    expect(batch.ops.map((op) => (op as { category: string }).category)).toEqual(categories);
+  });
+
+  it('treats missing or malformed sources as empty and keeps the op', () => {
+    const batch = parseExtractBatch({ ops: [
+      { op: 'add', table: 'user_facts', category: 'preference', text: '没有来源' },
+      { op: 'add', table: 'user_facts', category: 'preference', text: '来源是字符串', sources: 'u1' },
+      { op: 'add', table: 'user_facts', category: 'preference', text: '来源太长', sources: ['u1234567890'] },
+      { op: 'add', table: 'user_facts', category: 'preference', text: '来源太多', sources: Array.from({ length: 21 }, (_, i) => `u${i + 1}`) },
+      { op: 'add', table: 'user_facts', category: 'preference', text: '来源有数字', sources: [1] },
+      { op: 'add', table: 'user_facts', category: 'preference', text: '来源正常', sources: ['u1', 'u2'] },
+    ] });
+    expect(batch.missingSources).toBe(1);
+    expect(batch.invalidSources).toBe(4);
+    expect(batch.ops).toHaveLength(6);
+    expect(batch.ops.map((op) => (op as { sources?: string[] }).sources)).toEqual([undefined, undefined, undefined, undefined, undefined, ['u1', 'u2']]);
+  });
+
+  it('still rejects a malformed op, bad JSON and more than 40 ops', () => {
+    expect(() => parseExtractBatch({ ops: [{ table: 'user_facts', category: 'preference', text: '没有 op' }] })).toThrow();
+    expect(() => parseExtractBatch({ ops: [{ op: 'add', table: 'episodes' }] })).toThrow();
+    expect(() => parseExtractBatch('{')).toThrow();
+    expect(() => parseExtractBatch({ ops: Array.from({ length: 41 }, () => ({ op: 'remove', table: 'user_facts', id: 'f' })) })).toThrow();
+  });
+
+  it('keeps parseExtractOps as the ops of the batch', () => {
+    expect(parseExtractOps('```json\n{"ops":[{"op":"add","table":"user_facts","category":"other","text":"每天散步","sources":["u1"]}]}\n```'))
+      .toEqual([{ op: 'add', table: 'user_facts', category: 'other', text: '每天散步', sources: ['u1'] }]);
+  });
+});
+
+describe('resolveFactSources', () => {
+  const refs = new Map([['u1', 'm-1'], ['u2', 'm-2']]);
+
+  it('maps refs of this run to message ids, drops unknown refs, and dedupes', () => {
+    const resolved = resolveFactSources([
+      { op: 'add', table: 'user_facts', category: 'preference', text: '喜欢喝茶', sources: ['u2', 'u9', 'u2', 'm-1', 'u1'] },
+      { op: 'update', table: 'user_facts', id: 'f1', text: '新文字' },
+      { op: 'remove', table: 'user_facts', id: 'f2' },
+      { op: 'add', table: 'episodes', summary: '聊天' },
+    ], refs);
+    expect(resolved.droppedSources).toBe(2);
+    expect(resolved.ops).toEqual([
+      { op: 'add', table: 'user_facts', category: 'preference', text: '喜欢喝茶', sourceMessageIds: ['m-2', 'm-1'] },
+      { op: 'update', table: 'user_facts', id: 'f1', text: '新文字', sourceMessageIds: [] },
+      { op: 'remove', table: 'user_facts', id: 'f2' },
+      { op: 'add', table: 'episodes', summary: '聊天' },
+    ]);
+  });
+});
+
+describe('normalizeAddressingOps', () => {
+  it('stores names without the stored label, drops empty or overlong names, and follows updates to the name row', () => {
+    const result = normalizeAddressingOps([
+      { op: 'add', table: 'user_facts', category: 'addressing', text: '称呼：王叔' },
+      { op: 'add', table: 'user_facts', category: 'addressing', text: 'Address as: Hanako' },
+      { op: 'add', table: 'user_facts', category: 'addressing', text: '呼び方：' },
+      { op: 'add', table: 'user_facts', category: 'addressing', text: `称呼：${'名'.repeat(21)}` },
+      { op: 'update', table: 'user_facts', id: 'addr-1', text: '呼び方：ハナ' },
+      { op: 'update', table: 'user_facts', id: 'pref-1', text: '称呼：不是名字行' },
+      { op: 'add', table: 'user_facts', category: 'preference', text: '喜欢喝茶' },
+    ], new Set(['addr-1']));
+    expect(result.droppedAddressing).toBe(2);
+    expect(result.ops).toEqual([
+      { op: 'add', table: 'user_facts', category: 'addressing', text: '王叔' },
+      { op: 'add', table: 'user_facts', category: 'addressing', text: 'Hanako' },
+      { op: 'update', table: 'user_facts', id: 'addr-1', text: 'ハナ' },
+      { op: 'update', table: 'user_facts', id: 'pref-1', text: '称呼：不是名字行' },
       { op: 'add', table: 'user_facts', category: 'preference', text: '喜欢喝茶' },
     ]);
   });
@@ -244,7 +342,7 @@ describe('followup quotes', () => {
   });
 
   it('drops every quote without rules and leaves other ops untouched', () => {
-    const fact = { op: 'add' as const, table: 'user_facts' as const, category: 'preference', text: '喜欢喝茶' };
+    const fact = { op: 'add' as const, table: 'user_facts' as const, category: 'preference' as const, text: '喜欢喝茶' };
     expect(vetFollowupQuotes([fact, add('我明天要去医院复查腰')], ['我明天要去医院复查腰'], undefined)).toEqual([fact, add()]);
   });
 });
@@ -264,5 +362,28 @@ describe('extract prompt care rules', () => {
     expect(en).toContain('verbatim');
     expect(en).toContain('already resolved');
     expect(en).toContain('A followups update must never include quote');
+  });
+});
+
+describe('extract prompt layers and sources', () => {
+  it('teaches the profile category, the whitelist and per-run sources in every language', () => {
+    const roles = fileURLToPath(new URL('../roles', import.meta.url));
+    const zh = loadExtractPrompt();
+    const ja = loadExtractPrompt(join(roles, '_shared', 'ja', 'extract.md'), 'ja');
+    const en = loadExtractPrompt(join(roles, '_shared', 'en', 'extract.md'), 'en');
+    expect(zh).toContain('addressing、profile、preference、person、health、other');
+    expect(ja).toContain('addressing、profile、preference、person、health、other');
+    expect(en).toContain('addressing, profile, preference, person, health, other');
+    for (const prompt of [zh, ja, en]) {
+      expect(prompt).toContain('sources');
+      expect(prompt).toContain('[u1]');
+      expect(prompt).toContain('"sources":["u1"]');
+    }
+    expect(zh).toContain('健康信息永远不用 profile');
+    expect(zh).toContain('编号只用来标出处');
+    expect(ja).toContain('決して profile にせず');
+    expect(ja).toContain('出どころを示すためだけ');
+    expect(en).toContain('Never use profile for health');
+    expect(en).toContain('only mark where a fact came from');
   });
 });

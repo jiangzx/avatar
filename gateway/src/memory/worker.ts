@@ -7,13 +7,17 @@ import { log } from '../log.ts';
 import { errorCodeOf, runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import type { SessionContext } from '../session/context.ts';
 import type { SessionLifecycle } from '../session/manager.ts';
-import { applyExtractOps, parseExtractOps, vetFollowupQuotes, type QuoteRules, type TextModelClient } from './extract.ts';
+import {
+  applyExtractOps, normalizeAddressingOps, parseExtractBatch, resolveFactSources, vetFollowupQuotes,
+  type ExtractBatch, type QuoteRules, type TextModelClient,
+} from './extract.ts';
 import type { ExtractMemory, MemoryStore, PendingMessage } from './store.ts';
 
 export type ExtractReason = 'session_end' | 'turns' | 'silence' | 'startup';
 
 export interface MemoryExtractor {
-  extractOwner(ownerId: string, reason: ExtractReason, language?: Language): Promise<void>;
+  /** Queues extraction of one agent's pending messages behind this owner's current work; settles when it finishes. */
+  enqueue(ownerId: string, agentId: string, reason: ExtractReason, language?: Language): Promise<void>;
 }
 
 export interface MemoryWorkerOptions {
@@ -35,7 +39,7 @@ export interface MemoryWorkerOptions {
   quote?: QuoteRules;
 }
 
-/** One queue per owner. Jobs never overlap; a later job starts only after the earlier one settles. */
+/** One queue per owner. Jobs never overlap; a later job starts only after the earlier one settles. Each extract job handles one agent. */
 export class MemoryWorker implements MemoryExtractor {
   private readonly tail = new Map<string, Promise<void>>();
   private readonly jobs = new Map<string, Promise<boolean>>();
@@ -48,7 +52,7 @@ export class MemoryWorker implements MemoryExtractor {
   }
 
   /** Queues `job` behind this owner's current work. Returns an id for waitForJob. */
-  enqueue(ownerId: string, job: () => Promise<void>): string {
+  schedule(ownerId: string, job: () => Promise<void>): string {
     const id = randomUUID();
     const prev = this.tail.get(ownerId) ?? Promise.resolve();
     let failed = false;
@@ -73,13 +77,12 @@ export class MemoryWorker implements MemoryExtractor {
     return this.jobs.get(jobId) ?? Promise.resolve(true);
   }
 
-  /** Enqueues one job that extracts every agent of this owner with pending messages, one agent at a time. */
-  extractOwner(ownerId: string, reason: ExtractReason, language?: Language): Promise<void> {
+  /** Extracts this agent's pending messages. The returned promise settles when that job finishes. */
+  enqueue(ownerId: string, agentId: string, reason: ExtractReason, language?: Language): Promise<void> {
     return new Promise((resolve) => {
-      this.enqueue(ownerId, async () => {
+      this.schedule(ownerId, async () => {
         try {
-          const agents = this.opts.store.agentsPendingExtraction().filter((entry) => entry.ownerId === ownerId);
-          for (const { agentId } of agents) await this.run(ownerId, agentId, reason, language);
+          await this.run(ownerId, agentId, reason, language);
         } finally {
           resolve();
         }
@@ -125,7 +128,10 @@ export class MemoryWorker implements MemoryExtractor {
     if (!systemPrompt) throw new Error(`extract_prompt_missing:${chosen}`);
     const now = this.opts.now?.() ?? Date.now();
     const labels = this.opts.labels?.[chosen] ?? DEFAULT_I18N.memory[chosen].extractLabels;
-    const user = renderInput(this.opts.store.memoryForExtract(ownerId, agentId), users, this.contextMaxChars, { reason, now }, labels);
+    const memory = this.opts.store.memoryForExtract(ownerId, agentId);
+    // Q36: u1..uN are valid for this run only and map back to this agent's message ids.
+    const refs = new Map(users.map((row, index) => [`u${index + 1}`, row.id] as const));
+    const user = renderInput(memory, users, this.contextMaxChars, { reason, now }, labels);
     const result = await runWithPolicy('extract', this.opts.policy, (signal) => this.opts.client.complete({
       system: systemPrompt,
       user,
@@ -144,21 +150,32 @@ export class MemoryWorker implements MemoryExtractor {
       log('memory_extract_failed', { reason, code: result.code });
       return;
     }
-    let ops;
+    let batch: ExtractBatch;
     try {
-      ops = parseExtractOps(result.value);
+      batch = parseExtractBatch(result.value);
     } catch {
       log('memory_extract_failed', { reason, code: 'extract_parse' });
       return;
     }
+    const addressingIds = new Set(memory.facts.filter((fact) => fact.category === 'addressing').map((fact) => fact.id));
+    const named = normalizeAddressingOps(batch.ops, addressingIds);
     // Quotes must be verbatim user statements from the lines the model saw; anything else loses its quote.
-    const vetted = vetFollowupQuotes(ops, users.map((row) => row.text), this.opts.quote);
-    const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, vetted, consumed.map((row) => row.id));
+    const vetted = vetFollowupQuotes(named.ops, users.map((row) => row.text), this.opts.quote);
+    const sourced = resolveFactSources(vetted, refs);
+    const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, sourced.ops, consumed.map((row) => row.id));
+    // Counts only: never the text of an op, a source line, or a name.
+    const counts = {
+      droppedCategory: batch.droppedCategory,
+      missingSources: batch.missingSources,
+      invalidSources: batch.invalidSources,
+      droppedSources: sourced.droppedSources,
+      droppedAddressing: named.droppedAddressing,
+    };
     if (applied === 'incomplete') {
-      log('memory_extract_failed', { reason, code: 'extract_incomplete', ops: ops.length, messages: consumed.length });
+      log('memory_extract_failed', { reason, code: 'extract_incomplete', ops: batch.ops.length, messages: consumed.length, ...counts });
       return;
     }
-    log('memory_extract', { reason, result: applied, ops: ops.length, messages: consumed.length });
+    log('memory_extract', { reason, result: applied, ops: batch.ops.length, messages: consumed.length, ...counts });
   }
 }
 
@@ -168,8 +185,8 @@ export function withExtraction(base: SessionLifecycle, worker: MemoryWorker): Se
     started: (sessionId, ctx) => base.started(sessionId, ctx),
     ended: (sessionId, ctx, reason) => base.ended(sessionId, ctx, reason),
     extract: (_sessionId, ctx: SessionContext) => {
-      if (!ctx.ownerId) return;
-      void worker.extractOwner(ctx.ownerId, 'session_end', ctx.language);
+      if (!ctx.ownerId || !ctx.agentId) return;
+      void worker.enqueue(ctx.ownerId, ctx.agentId, 'session_end', ctx.language);
     },
   };
 }
@@ -206,7 +223,8 @@ function renderInput(
     kept.push(line);
     used += line.length + 1;
   }
-  const dialogue = messages.map((row) => `${labels.user}${labels.separator}${row.text}`);
+  // [uN] refs are per run; the model cites them in `sources` (Q36). Only user lines are rendered.
+  const dialogue = messages.map((row, index) => `[u${index + 1}] ${labels.user}${labels.separator}${row.text}`);
   return [
     `${labels.reason}${labels.separator}${meta.reason}`,
     `${labels.now}${labels.separator}${meta.now}`,

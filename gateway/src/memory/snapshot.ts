@@ -1,4 +1,5 @@
 // High-risk memory-view contract: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
+import { DEFAULT_I18N } from '../i18n/load.ts';
 import { PROMPT_LABELS, type PromptLabels } from '../roles/labels.ts';
 import { EMPTY_EVIDENCE_RULES, isMemoryEvidence, type EvidenceRules } from './evidence.ts';
 
@@ -76,7 +77,9 @@ export function renderMemoryViews(input: {
   labels?: PromptLabels;
   rules?: SnapshotRules;
 }): MemoryViews {
-  const nameFacts = input.addressing.filter(Boolean).map((text) => ({ category: 'addressing', text }));
+  const labels = input.labels ?? PROMPT_LABELS.zh;
+  const patterns = input.rules?.addressingPatterns ?? [];
+  const nameFacts = input.addressing.filter(Boolean).map((text) => ({ category: 'addressing', text: labelledName(text, labels, patterns) }));
   const factLines = input.facts.filter(Boolean).map((text) => ({ category: 'other', text }));
   const evidence = input.rules?.evidence ?? EMPTY_EVIDENCE_RULES;
   // Recent-session rows have no role; assistant rows are never evidence.
@@ -98,6 +101,31 @@ function oneLine(text: string): string {
 
 // Extraction may store an already-labelled name from any language; re-render it in the session language.
 const STORED_ADDRESSING = /^(?:称呼|呼び方|Address as)[：:]\s*(.+)$/iu;
+
+/** Longest stored name; matches PUT /memory/addressing text(1..20) in spec §7. */
+export const ADDRESSING_MAX_CHARS = 20;
+
+/**
+ * Plain name from a stored or extracted addressing line: drops a "称呼：/呼び方：/Address as:" label and folds
+ * it to one trimmed line. A bare label with no name stays as it is; callers treat that as not a name.
+ */
+export function plainAddressing(text: string): string {
+  const line = oneLine(text);
+  return STORED_ADDRESSING.exec(line)?.[1]?.trim() ?? line;
+}
+
+/** Stored names are plain since Task 3: label them, but keep legacy labelled or self-introduction text as before. */
+function labelledName(text: string, labels: PromptLabels, patterns: readonly RegExp[]): string {
+  const line = oneLine(text);
+  // A self-introduction may be in another language than this session; addressingText rewrites it after a switch.
+  if (STORED_ADDRESSING.test(line) || isAddressingSentence(line, patterns)) return line;
+  return `${labels.addressing}${labels.separator}${line}`;
+}
+
+function isAddressingSentence(line: string, patterns: readonly RegExp[]): boolean {
+  if (patterns.some((pattern) => pattern.test(line))) return true;
+  return Object.values(DEFAULT_I18N.memory).some((copy) => copy.addressingPatterns.some((pattern) => pattern.test(line)));
+}
 
 /** Renders a stored self-introduction as a short label so the model does not mirror the whole sentence. */
 function addressingText(text: string, labels: PromptLabels, patterns: readonly RegExp[]): string {

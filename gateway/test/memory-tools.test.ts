@@ -652,7 +652,7 @@ describe('memory tool registry', () => {
       },
     };
     const queued = worker(store, client);
-    const extract = queued.extractOwner(a.ownerId, 'turns');
+    const extract = queued.enqueue(a.ownerId, a.agentId, 'turns');
     await entered;
     const forget = createToolRegistry().handle('forget_memory', { query: '王叔' }, ctxFor(store, queued, a));
     release();
@@ -981,7 +981,7 @@ describe('session memory tools', () => {
       maxTokens: 80,
       policy: { timeoutMs: 60_000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
     });
-    const extract = queued.extractOwner(a.ownerId, 'turns');
+    const extract = queued.enqueue(a.ownerId, a.agentId, 'turns');
     await entered;
     const calls: Array<{ cue?: string; instruction?: string; fallbackText?: string }> = [];
     const mocks: MockAdapter[] = [];

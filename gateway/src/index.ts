@@ -284,6 +284,6 @@ if (registry) {
   setInterval(runCleanup, ORPHAN_CLEANUP_INTERVAL_MS).unref();
 }
 if (worker && store) {
-  const owners = new Set(store.agentsPendingExtraction().map((entry) => entry.ownerId));
-  for (const ownerId of owners) void worker.extractOwner(ownerId, 'startup');
+  // Same-owner jobs still run one after another; each job handles one character.
+  for (const { ownerId, agentId } of store.agentsPendingExtraction()) void worker.enqueue(ownerId, agentId, 'startup');
 }
