@@ -50,6 +50,7 @@ for (const language of LANGUAGES) {
   languageBudgetFields[`${language}TotalChars`] = budget.totalChars;
   languageBudgetFields[`${language}MinHistoryChars`] = perLanguage.minHistoryChars;
   languageBudgetFields[`${language}AffectMaxChars`] = budget.affectMaxChars ?? 0;
+  languageBudgetFields[`${language}PinnedMaxChars`] = budget.pinnedMaxChars ?? 0;
 }
 log('instruction_budget', {
   totalChars: budgetReport.budget.totalChars,

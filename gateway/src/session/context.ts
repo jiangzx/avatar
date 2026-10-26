@@ -18,6 +18,8 @@ export interface SessionContext {
   greetingHasTopic?: boolean;
   /** Silence planner: non-sensitive facts only; never the name or sensitive memory. */
   proactiveMemorySnapshot?: string;
+  /** Every pin of this character, sensitive ones included; rendered beside the snapshot, never clipped (Q33). */
+  pinnedMemory?: string;
 }
 
 /** Context for sessions without a device token (dev / Mock mode): no owner, no memory. */

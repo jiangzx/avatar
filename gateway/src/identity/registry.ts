@@ -3,7 +3,7 @@ import { DEFAULT_CHARACTER_ID } from '@anyidea/protocol';
 import { DEFAULT_I18N } from '../i18n/load.ts';
 import type { I18nBundle } from '../i18n/types.ts';
 import { log } from '../log.ts';
-import { renderMemoryViews } from '../memory/snapshot.ts';
+import { memoryViewSource, renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { PROMPT_LABELS } from '../roles/labels.ts';
@@ -106,15 +106,10 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     const language = roles.defaultLanguage(roleId);
     const ctx: SessionContext = { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: roles.voiceFor(roleId, styleId, language), language };
     // Read the store, not the live Session. The server flushes the previous owner before this resolve is used.
-    // Only user-grounded memory enters prompts: no episodes, notes, sensitive facts, or assistant lines.
-    const profile = store.listProfileFacts(device.ownerId);
+    // User-grounded only. Episodes, notes, extracted sensitive facts, and assistant lines stay out.
+    // A pin the user asked to keep may be sensitive; it travels in pinnedMemory, not the three views.
     const views = renderMemoryViews({
-      addressing: profile.filter((fact) => fact.category === 'addressing').map((fact) => fact.text),
-      facts: [
-        ...profile.filter((fact) => fact.category === 'profile').map((fact) => fact.text),
-        ...store.listAgentFacts(device.ownerId, agent.id).filter((fact) => !fact.sensitive).map((fact) => fact.text),
-      ],
-      tail: store.recentUserMessages(device.ownerId, agent.id, 12).slice().reverse(),
+      ...memoryViewSource(store, device.ownerId, agent.id),
       maxChars: this.snapshotMaxChars,
       labels: PROMPT_LABELS[language],
       rules: { addressingPatterns: this.i18n.memory[language].addressingPatterns, evidence: this.i18n.evidence },
@@ -125,6 +120,7 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
       ctx.greetingHasTopic = views.hasTopic;
     }
     if (views.proactive) ctx.proactiveMemorySnapshot = views.proactive;
+    if (views.pinnedBlock) ctx.pinnedMemory = views.pinnedBlock;
     return {
       ok: true,
       ctx,

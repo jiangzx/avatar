@@ -52,6 +52,7 @@ function storeStub(followup: Followup | undefined | 'throws') {
   const store = {
     listProfileFacts: () => [{ id: 'p1', category: 'addressing', text: '称呼：王叔' }],
     listAgentFacts: () => [],
+    listPinned: () => [],
     recentUserMessages: () => [],
     careFollowup,
     closeCareFollowup,

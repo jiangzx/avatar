@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { PROMPT_LABELS } from '../src/roles/labels.ts';
 import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
 import { historyBudget } from '../src/session/instructions.ts';
-import { loadMemoryBudget, loadPacing, validateBudgets, type MemoryBudgetConfig, type PacingConfig } from '../src/session/pacing.ts';
+import { loadMemoryBudget, loadPacing, pinnedMaxCharsFor, validateBudgets, type MemoryBudgetConfig, type PacingConfig } from '../src/session/pacing.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const ledger = { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6000 };
@@ -19,7 +19,7 @@ describe('pacing and budget config', () => {
     const report = validateBudgets(pacing, memory, ledger, roles.pairs().map((p) => roles.buildPersona(p.roleId, p.styleId)));
     const zhRatio = memory.instructions.languageBudgetRatio?.zh ?? memory.instructions.budgetRatio;
     expect(report.budget.totalChars).toBe(Math.floor(pacing.rebuild.contextChars * pacing.rebuild.triggerRatio * zhRatio));
-    expect(report.budget.totalChars).toBeLessThanOrEqual(Math.floor(pacing.rebuild.contextChars * pacing.rebuild.triggerRatio * 0.45));
+    expect(report.budget.totalChars).toBeLessThanOrEqual(Math.floor(pacing.rebuild.contextChars * pacing.rebuild.triggerRatio * 0.5));
     expect(report.minHistoryChars).toBeGreaterThanOrEqual(memory.instructions.summaryMaxChars + memory.instructions.minHistoryChars);
     expect(report.ledgerCapped).toBe(report.minHistoryChars < 6000);
     expect(memory.toolTurnTimeoutMs).toBe(15_000);
@@ -62,9 +62,9 @@ describe('pacing and budget config', () => {
     const report = validateBudgets(pacing, memory, ledger, {
       zh: ['中'.repeat(1800)], ja: ['日'.repeat(1900)], en: ['E'.repeat(3200)],
     });
-    expect(report.budgets.zh!.totalChars).toBe(4128);
-    expect(report.budgets.ja!.totalChars).toBe(4800);
-    expect(report.budgets.en!.totalChars).toBe(7680);
+    expect(report.budgets.zh!.totalChars).toBe(4704);
+    expect(report.budgets.ja!.totalChars).toBe(5568);
+    expect(report.budgets.en!.totalChars).toBe(8640);
     expect(report.budgets.en!.totalChars).toBeGreaterThan(report.budgets.zh!.totalChars);
     expect(report.perLanguage.en!.minHistoryChars).toBeGreaterThanOrEqual(1200);
     expect(report.budget.totalChars).toBe(report.budgets.zh!.totalChars);
@@ -76,13 +76,13 @@ describe('pacing and budget config', () => {
     expect(() => validateBudgets(pacing, memory, ledger, { zh: ['P'], en: ['P'.repeat(8000)] })).toThrow('instruction_budget_too_small:en');
   });
 
-  it('caps per-language instruction ratios at 80 percent and keeps the default ratio at 40', () => {
+  it('caps per-language instruction ratios at 90 percent and keeps the default ratio at 40', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mem-'));
     const shipped = JSON.parse(readFileSync(join(root, 'config/memory.json'), 'utf8')) as Record<string, unknown>;
     const instructions = { budgetRatio: 0.4, snapshotMaxChars: 600, summaryMaxChars: 800, minHistoryChars: 400 };
-    writeFileSync(join(dir, 'memory.json'), JSON.stringify({ ...shipped, instructions: { ...instructions, languageBudgetRatio: { en: 0.8 } } }));
-    expect(loadMemoryBudget(join(dir, 'memory.json')).instructions.languageBudgetRatio).toEqual({ en: 0.8 });
-    writeFileSync(join(dir, 'memory.json'), JSON.stringify({ ...shipped, instructions: { ...instructions, languageBudgetRatio: { en: 0.81 } } }));
+    writeFileSync(join(dir, 'memory.json'), JSON.stringify({ ...shipped, instructions: { ...instructions, languageBudgetRatio: { en: 0.9 } } }));
+    expect(loadMemoryBudget(join(dir, 'memory.json')).instructions.languageBudgetRatio).toEqual({ en: 0.9 });
+    writeFileSync(join(dir, 'memory.json'), JSON.stringify({ ...shipped, instructions: { ...instructions, languageBudgetRatio: { en: 0.91 } } }));
     expect(() => loadMemoryBudget(join(dir, 'memory.json'))).toThrow();
     writeFileSync(join(dir, 'memory.json'), JSON.stringify({ ...shipped, instructions: { ...instructions, budgetRatio: 0.45 } }));
     expect(() => loadMemoryBudget(join(dir, 'memory.json'))).toThrow();
@@ -187,6 +187,9 @@ describe('pacing and budget config', () => {
     const pacing: PacingConfig = { rebuild: { contextChars: 2000, triggerRatio: 1, afterTurns: 30 }, tailGuardMs: 400, output: { maxTokens: null }, policies: { summarize: { timeoutMs: 1000, retries: 0, backoffMs: 0, maxBackoffMs: 0 } }, slim, push: { minIntervalMs: 1_000, noResponseAfterMs: 5_000 } };
     const memory: MemoryBudgetConfig = {
       instructions: { budgetRatio: 0.4, snapshotMaxChars: 100, summaryMaxChars: 200, minHistoryChars: 100 },
+      pinMaxPerCharacter: 0,
+      pinMaxChars: { zh: 40, ja: 50, en: 50 },
+      listMaxItems: 5,
       toolTurnTimeoutMs: 15_000,
       recallClipChars: 80,
       retentionDays: 90,
@@ -194,7 +197,7 @@ describe('pacing and budget config', () => {
     };
     expect(() => validateBudgets(pacing, memory, ledger, ['P'.repeat(600)])).toThrow('instruction_budget_too_small');
     expect(() => validateBudgets(pacing, memory, { ...ledger, keepRecentTurns: 40 }, ['P'])).toThrow('ledger_keep_exceeds_rebuild_turns');
-    expect(validateBudgets(pacing, memory, ledger, ['P']).budget).toEqual({ totalChars: 800, snapshotMaxChars: 100, summaryMaxChars: 200 });
+    expect(validateBudgets(pacing, memory, ledger, ['P']).budget).toEqual({ totalChars: 800, snapshotMaxChars: 100, summaryMaxChars: 200, pinnedMaxChars: 0 });
   });
 });
 
@@ -216,6 +219,9 @@ describe('affect budget', () => {
   };
   const memoryWith = (extra: Partial<MemoryBudgetConfig['instructions']> = {}): MemoryBudgetConfig => ({
     instructions: { budgetRatio: 0.4, snapshotMaxChars: 100, summaryMaxChars: 200, minHistoryChars: 100, ...extra },
+    pinMaxPerCharacter: 0,
+    pinMaxChars: { zh: 40, ja: 50, en: 50 },
+    listMaxItems: 5,
     toolTurnTimeoutMs: 15_000,
     recallClipChars: 80,
     retentionDays: 90,
@@ -261,5 +267,70 @@ describe('affect budget', () => {
     const memory = loadMemoryBudget(`${root}config/memory.json`);
     expect(memory.instructions.affectMaxChars).toBe(150);
     expect(memory.instructions.languageAffectMaxChars).toEqual({ ja: 210, en: 250 });
+  });
+});
+
+describe('pinned budget', () => {
+  const pacing = loadPacing(`${root}config/pacing.json`);
+  const memory = loadMemoryBudget(`${root}config/memory.json`);
+  const roles = loadRoleCatalog(`${root}roles`);
+  const personas = () => {
+    const byLanguage: Partial<Record<'zh' | 'ja' | 'en', string[]>> = {};
+    for (const pair of roles.languagePairs()) (byLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
+    return byLanguage;
+  };
+
+  it('ships the Q34 limits and derives the pinned room per language', () => {
+    expect(memory.pinMaxPerCharacter).toBe(10);
+    expect(memory.pinMaxChars).toEqual({ zh: 40, ja: 50, en: 50 });
+    expect(memory.listMaxItems).toBe(5);
+    expect(memory.instructions.languageBudgetRatio).toEqual({ zh: 0.49, ja: 0.58, en: 0.9 });
+    // 10 × (pin + label + separator + newline)
+    expect(pinnedMaxCharsFor(memory, 'zh')).toBe(10 * (40 + 6 + 1 + 1));
+    expect(pinnedMaxCharsFor(memory, 'ja')).toBe(10 * (50 + 14 + 1 + 1));
+    expect(pinnedMaxCharsFor(memory, 'en')).toBe(10 * (50 + 30 + 2 + 1));
+    expect([pinnedMaxCharsFor(memory, 'zh'), pinnedMaxCharsFor(memory, 'ja'), pinnedMaxCharsFor(memory, 'en')]).toEqual([480, 660, 830]);
+  });
+
+  it('starts with the shipped personas: every language keeps at least summary + min history after the full pinned block', () => {
+    const report = validateBudgets(pacing, memory, ledger, personas());
+    for (const language of ['zh', 'ja', 'en'] as const) {
+      expect(report.budgets[language]!.pinnedMaxChars).toBe(pinnedMaxCharsFor(memory, language));
+      expect(report.perLanguage[language]!.minHistoryChars).toBeGreaterThanOrEqual(memory.instructions.summaryMaxChars + memory.instructions.minHistoryChars);
+    }
+  });
+
+  it('refuses to start when the pinned block leaves too little history (en at 100 chars per pin)', () => {
+    expect(() => validateBudgets(pacing, { ...memory, pinMaxChars: { ...memory.pinMaxChars, en: 100 } }, ledger, personas()))
+      .toThrow('instruction_budget_too_small:en');
+  });
+
+  it('reserves exactly the pinned room plus one separator in the history budget', () => {
+    const none = validateBudgets(pacing, { ...memory, pinMaxPerCharacter: 0 }, ledger, { zh: ['P'] });
+    const full = validateBudgets(pacing, memory, ledger, { zh: ['P'] });
+    expect(none.budgets.zh!.pinnedMaxChars).toBe(0);
+    expect(none.perLanguage.zh!.minHistoryChars - full.perLanguage.zh!.minHistoryChars).toBe(480 + 2);
+  });
+
+  it('requires the pin keys and bounds them', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mem-pin-'));
+    const shipped = JSON.parse(readFileSync(join(root, 'config/memory.json'), 'utf8')) as Record<string, unknown>;
+    const write = (patch: Record<string, unknown>, drop?: string) => {
+      const next: Record<string, unknown> = { ...shipped, ...patch };
+      if (drop) delete next[drop];
+      writeFileSync(join(dir, 'memory.json'), JSON.stringify(next));
+    };
+    for (const key of ['pinMaxPerCharacter', 'pinMaxChars', 'listMaxItems']) {
+      write({}, key);
+      expect(() => loadMemoryBudget(join(dir, 'memory.json')), key).toThrow();
+    }
+    for (const bad of [
+      { pinMaxPerCharacter: 51 }, { pinMaxPerCharacter: -1 }, { pinMaxPerCharacter: 1.5 },
+      { pinMaxChars: { zh: 0, ja: 50, en: 50 } }, { pinMaxChars: { zh: 40, ja: 50 } }, { pinMaxChars: { zh: 40, ja: 50, en: 401 } },
+      { listMaxItems: 0 }, { listMaxItems: 21 },
+    ]) {
+      write(bad);
+      expect(() => loadMemoryBudget(join(dir, 'memory.json')), JSON.stringify(bad)).toThrow();
+    }
   });
 });

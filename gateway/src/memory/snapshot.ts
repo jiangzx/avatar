@@ -2,6 +2,7 @@
 import { DEFAULT_I18N } from '../i18n/load.ts';
 import { PROMPT_LABELS, type PromptLabels } from '../roles/labels.ts';
 import { EMPTY_EVIDENCE_RULES, isMemoryEvidence, type EvidenceRules } from './evidence.ts';
+import type { MemoryStore } from './store.ts';
 
 /** Language-specific inputs: labels come from PROMPT_LABELS, rules from the i18n bundle. */
 export interface SnapshotRules {
@@ -25,7 +26,7 @@ export function renderSnapshot(input: {
     .map((f) => addressingText(oneLine(f.text), labels, addressingPatterns));
   const other = input.facts
     .filter((f) => f.category !== 'addressing' && f.text)
-    .map((f) => `${labels.fact}${labels.separator}${oneLine(f.text)}`);
+    .map((f) => `${factLabel(f.category, labels)}${labels.separator}${oneLine(f.text)}`);
   const notes = input.notes
     .filter((n) => n.text)
     .map((n) => `${labels.relationship}${labels.separator}${oneLine(n.text)}`);
@@ -53,45 +54,87 @@ export function renderSnapshot(input: {
   return [...kept, ...tail.slice(start)].join('\n');
 }
 
-export interface MemoryViews {
-  /** Normal replies: addressing, non-sensitive facts, and verbatim user statements. */
-  full: string;
-  /** Greeting planner: addressing and non-sensitive facts only, no tail. */
-  greeting: string;
-  /** Silence planner: non-sensitive facts only, never the name. */
-  proactive: string;
-  /** True when the greeting view carries a real topic fact, not just the name. */
-  hasTopic: boolean;
+/** Store rows one view render needs. Scope keys come from the server-side SessionContext. */
+export interface MemoryViewSource {
+  /** Plain stored name (profile_facts addressing row), or null. */
+  addressing: string | null;
+  /** Shared basics (profile_facts profile rows). */
+  profile: readonly string[];
+  /** This character's facts. Sensitive ones never enter a view. */
+  facts: readonly { text: string; sensitive: boolean }[];
+  /** This character's pins, newest first. Sensitive ones only enter pinnedBlock. */
+  pinned: readonly { text: string; sensitive: boolean }[];
+  /** Chronological (oldest first). Rows without a role are recent-session user rows. */
+  tail: readonly { role?: 'user' | 'assistant'; text: string }[];
 }
 
-/**
- * Builds the three prompt views from user-grounded memory only.
- * Episodes, relationship notes, sensitive facts, and assistant lines never enter any view.
- * `tail` is chronological (oldest first), so the budget drops the oldest statements first.
- */
-export function renderMemoryViews(input: {
-  addressing: readonly string[];
-  facts: readonly string[];
-  tail: readonly { role?: 'user' | 'assistant'; text: string }[];
+export interface MemoryViewInput extends MemoryViewSource {
   maxChars: number;
   labels?: PromptLabels;
   rules?: SnapshotRules;
-}): MemoryViews {
+}
+
+export interface MemoryViews {
+  /** Normal replies: name, basics, open facts, verbatim user statements. Pins travel in pinnedBlock. */
+  full: string;
+  /** Greeting planner: name, basics, open pins, open facts. No tail. */
+  greeting: string;
+  /** Silence planner: basics, open pins, open facts. Never the name. */
+  proactive: string;
+  /** True when the greeting view carries a topic, not just the name. */
+  hasTopic: boolean;
+  /** Every pin of this character, sensitive ones included (Q33). Rendered beside the snapshot, never clipped. */
+  pinnedBlock: string;
+}
+
+/**
+ * Builds the prompt views from user-grounded memory only (roadmap memory pit 4, revised by Q33).
+ * Episodes, relationship notes, extracted sensitive facts, and assistant lines never enter any view.
+ * The only sensitive text that reaches a prompt is a pin the user asked for, and only through pinnedBlock.
+ */
+export function renderMemoryViews(input: MemoryViewInput): MemoryViews {
   const labels = input.labels ?? PROMPT_LABELS.zh;
   const patterns = input.rules?.addressingPatterns ?? [];
-  const nameFacts = input.addressing.filter(Boolean).map((text) => ({ category: 'addressing', text: labelledName(text, labels, patterns) }));
-  const factLines = input.facts.filter(Boolean).map((text) => ({ category: 'other', text }));
+  const nameFacts = input.addressing ? [{ category: 'addressing', text: labelledName(input.addressing, labels, patterns) }] : [];
+  const profile = input.profile.filter(Boolean).map((text) => ({ category: 'profile', text }));
+  const openPins = input.pinned.filter((pin) => pin.text && !pin.sensitive).map((pin) => ({ category: 'pinned', text: pin.text }));
+  const facts = input.facts.filter((fact) => fact.text && !fact.sensitive).map((fact) => ({ category: 'other', text: fact.text }));
   const evidence = input.rules?.evidence ?? EMPTY_EVIDENCE_RULES;
   // Recent-session rows have no role; assistant rows are never evidence.
   const userTail = input.tail
     .filter((entry) => entry.role !== 'assistant' && isMemoryEvidence(entry.text, evidence))
     .map((entry) => ({ role: 'user' as const, text: entry.text }));
+  const render = (rows: readonly { category: string; text: string }[], tail: readonly { role: 'user'; text: string }[]) =>
+    renderSnapshot({ facts: rows, notes: [], tail, maxChars: input.maxChars, labels, rules: input.rules });
   return {
-    full: renderSnapshot({ facts: [...nameFacts, ...factLines], notes: [], tail: userTail, maxChars: input.maxChars, labels: input.labels, rules: input.rules }),
-    greeting: renderSnapshot({ facts: [...nameFacts, ...factLines], notes: [], tail: [], maxChars: input.maxChars, labels: input.labels, rules: input.rules }),
-    proactive: renderSnapshot({ facts: factLines, notes: [], tail: [], maxChars: input.maxChars, labels: input.labels, rules: input.rules }),
-    hasTopic: factLines.length > 0,
+    full: render([...nameFacts, ...profile, ...facts], userTail),
+    greeting: render([...nameFacts, ...profile, ...openPins, ...facts], []),
+    proactive: render([...profile, ...openPins, ...facts], []),
+    hasTopic: profile.length + openPins.length + facts.length > 0,
+    pinnedBlock: input.pinned
+      .filter((pin) => pin.text)
+      .map((pin) => `${labels.pinned}${labels.separator}${oneLine(pin.text)}`)
+      .join('\n'),
   };
+}
+
+/** One read of everything the views need, shared by DeviceRegistry.resolve and Session.refreshMemorySnapshot. */
+export function memoryViewSource(store: MemoryStore, ownerId: string, agentId: string, tailLimit = 12): MemoryViewSource {
+  const shared = store.listProfileFacts(ownerId);
+  return {
+    addressing: shared.find((row) => row.category === 'addressing')?.text ?? null,
+    profile: shared.filter((row) => row.category === 'profile').map((row) => row.text),
+    facts: store.listAgentFacts(ownerId, agentId).map(({ text, sensitive }) => ({ text, sensitive })),
+    pinned: store.listPinned(ownerId, agentId).map(({ text, sensitive }) => ({ text, sensitive })),
+    tail: store.recentUserMessages(ownerId, agentId, tailLimit).slice().reverse(),
+  };
+}
+
+/** Shared basics and pins keep their own labels; every other category is a plain fact. */
+function factLabel(category: string, labels: PromptLabels): string {
+  if (category === 'profile') return labels.profile;
+  if (category === 'pinned') return labels.pinned;
+  return labels.fact;
 }
 
 /** A stored line must not be able to forge a second labelled snapshot line. */

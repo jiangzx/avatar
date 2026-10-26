@@ -196,6 +196,7 @@ function memoryStoreStub(input: { addressing?: string[]; facts?: string[]; tail?
   return {
     listProfileFacts: () => (input.addressing ?? []).map((text, i) => ({ id: `p${i}`, category: 'addressing', text })),
     listAgentFacts: () => (input.facts ?? []).map((text, i) => ({ id: `f${i}`, category: 'preference', text, sensitive: false })),
+    listPinned: () => [],
     recentUserMessages: () => (input.tail ?? []).map((text) => ({ text })),
   } as unknown as MemoryStore;
 }
@@ -272,6 +273,18 @@ describe('Session', () => {
     await s.session.start(s.transport);
     expect(plannerCalls).toBe(0);
     expect(creates).toHaveBeenCalledWith({ cue: 'greeting', instruction: '王叔，又见面了。', fallbackText: '王叔，又见面了。' });
+    s.session.end();
+  });
+
+  it('puts the pinned block into the instructions ahead of the snapshot', async () => {
+    const pinned = '用户让你记住：每天吃降压药\n用户让你记住：孙子三月三号生日';
+    const s = setup(
+      { budget: { totalChars: 4_000, snapshotMaxChars: 600, summaryMaxChars: 800, pinnedMaxChars: 200 } },
+      { ...ownedCtx, pinnedMemory: pinned, memorySnapshot: '称呼：王叔', greetingMemorySnapshot: '称呼：王叔' },
+      'pinned-instructions',
+    );
+    await s.session.start(s.transport);
+    expect(s.mocks[0]!.instructions).toContain(`${pinned}\n\n称呼：王叔`);
     s.session.end();
   });
 

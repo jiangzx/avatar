@@ -104,6 +104,7 @@ function memoryStoreStub(input: { addressing?: string[] } = {}): MemoryStore {
   return {
     listProfileFacts: () => (input.addressing ?? []).map((text, i) => ({ id: `p${i}`, category: 'addressing', text })),
     listAgentFacts: () => [],
+    listPinned: () => [],
     recentUserMessages: () => [],
   } as unknown as MemoryStore;
 }

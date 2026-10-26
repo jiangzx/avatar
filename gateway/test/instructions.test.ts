@@ -102,3 +102,43 @@ describe('affect section', () => {
     expect(historyBudget('P', { ...plain, affectMaxChars: 0 })).toBe(historyBudget('P', plain));
   });
 });
+
+describe('pinned block', () => {
+  const header = PROMPT_LABELS.zh.memoryHeader;
+
+  it('renders pins under the memory header, before the snapshot', () => {
+    const text = buildInstructions(
+      { persona: 'P', pinned: '用户让你记住：A', memorySnapshot: '称呼：王叔', summary: 'S', recent: [entry('user', 'U')] },
+      { totalChars: 1000, snapshotMaxChars: 100, summaryMaxChars: 100, pinnedMaxChars: 50 },
+    );
+    expect(text).toBe(`P\n\n${header}\n\n用户让你记住：A\n\n称呼：王叔\n\n## 对话摘要\n\nS\n\n## 最近对话\n\n用户：U`);
+  });
+
+  it('shows the memory header for pins alone and stays identical without pins', () => {
+    const parts = { persona: 'P', summary: 'S', recent: [entry('user', 'U')] };
+    expect(buildInstructions({ ...parts, pinned: '用户让你记住：A' })).toBe(`P\n\n${header}\n\n用户让你记住：A\n\n## 对话摘要\n\nS\n\n## 最近对话\n\n用户：U`);
+    expect(buildInstructions({ ...parts, pinned: '' })).toBe(buildInstructions(parts));
+    expect(buildInstructions(parts)).not.toContain(header);
+  });
+
+  it('never clips the pinned block: recent lines go first, then the summary, then the snapshot', () => {
+    const pinned = 'K'.repeat(40);
+    const text = buildInstructions(
+      { persona: 'P', pinned, memorySnapshot: 'M'.repeat(30), summary: 'x'.repeat(10) + 'y'.repeat(30), recent: [entry('user', 'z'.repeat(50))] },
+      { totalChars: 117, snapshotMaxChars: 20, summaryMaxChars: 40, pinnedMaxChars: 40 },
+    );
+    expect(text).toContain(`\n\n${pinned}\n\n${'M'.repeat(10)}…\n\n`);
+    expect(text).not.toMatch(/[xyz]/);
+    expect(text).toHaveLength(117);
+  });
+
+  it('reserves the full pinned room in the history budget', () => {
+    const plain = { totalChars: 400, snapshotMaxChars: 50, summaryMaxChars: 100 };
+    const fixed = buildInstructions({ persona: 'P', pinned: 'x'.repeat(30), memorySnapshot: 'x'.repeat(50), summary: '', recent: [] }).length;
+    expect(historyBudget('P', { ...plain, pinnedMaxChars: 30 })).toBe(400 - fixed);
+    expect(historyBudget('P', plain) - historyBudget('P', { ...plain, pinnedMaxChars: 30 })).toBe(30 + 2);
+    const noSnapshot = { ...plain, snapshotMaxChars: 0 };
+    expect(historyBudget('P', noSnapshot) - historyBudget('P', { ...noSnapshot, pinnedMaxChars: 30 })).toBe(30 + header.length + 4);
+    expect(historyBudget('P', { ...plain, pinnedMaxChars: 0 })).toBe(historyBudget('P', plain));
+  });
+});

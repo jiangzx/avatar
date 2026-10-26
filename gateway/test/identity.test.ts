@@ -239,4 +239,23 @@ describe('DeviceRegistry', () => {
     expect(out).toContain('device_registered');
     expect(out).toContain('device_unknown');
   });
+
+  it('puts every pin into pinnedMemory and only open pins into the greeting and proactive views', () => {
+    const { store, registry } = setup();
+    const token = register(registry);
+    const first = ctxOf(registry, token);
+    if (!first.ownerId || !first.agentId) throw new Error('unresolved');
+    store.insertPinned({ id: 'pin-open', ownerId: first.ownerId, agentId: first.agentId, text: '孙子三月三号生日', sensitive: false, sourceSessionId: 's0', sourceMessageId: null, now: BASE });
+    store.insertPinned({ id: 'pin-health', ownerId: first.ownerId, agentId: first.agentId, text: '每天吃降压药', sensitive: true, sourceSessionId: 's0', sourceMessageId: null, now: BASE + 1 });
+    store.writeExtraction(first.ownerId, first.agentId, {
+      now: BASE, messageIds: [], notes: [], episodes: [], followups: [],
+      facts: [{ op: 'add', category: 'addressing', text: '王叔' }, { op: 'add', category: 'profile', text: '老家山东' }, { op: 'add', category: 'health', text: '膝盖不好' }],
+    });
+    const ctx = ctxOf(registry, token);
+    expect(ctx.pinnedMemory).toBe('用户让你记住：每天吃降压药\n用户让你记住：孙子三月三号生日');
+    expect(ctx.memorySnapshot).toBe('称呼：王叔\n基本情况：老家山东');
+    expect(ctx.greetingMemorySnapshot).toBe('称呼：王叔\n基本情况：老家山东\n用户让你记住：孙子三月三号生日');
+    expect(ctx.proactiveMemorySnapshot).toBe('基本情况：老家山东\n用户让你记住：孙子三月三号生日');
+    expect(ctx.greetingHasTopic).toBe(true);
+  });
 });

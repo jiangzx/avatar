@@ -11,7 +11,7 @@ import {
 import { classifyAdapterError } from '../adapters/errorClass.ts';
 import type { AdapterFactory, ProactiveRequest, RealtimeAdapter, SessionConfig } from '../adapters/types.ts';
 import { log } from '../log.ts';
-import { renderMemoryViews } from '../memory/snapshot.ts';
+import { memoryViewSource, renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
 import type { TextModelClient } from '../memory/textClient.ts';
 import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
@@ -679,6 +679,7 @@ export class Session {
       {
         persona: this.personaFor(this.language),
         affect: this.affectSection(),
+        pinned: this.context.pinnedMemory,
         memorySnapshot: this.context.memorySnapshot,
         summary: this.ledger.summary,
         recent: this.ledger.recent,
@@ -1516,14 +1517,8 @@ export class Session {
     const agentId = this.context.agentId;
     const maxChars = this.budgetFor(this.language)?.snapshotMaxChars;
     if (!store || !ownerId || !agentId || maxChars === undefined) return;
-    const profile = store.listProfileFacts(ownerId);
     const views = renderMemoryViews({
-      addressing: profile.filter((fact) => fact.category === 'addressing').map((fact) => fact.text),
-      facts: [
-        ...profile.filter((fact) => fact.category === 'profile').map((fact) => fact.text),
-        ...store.listAgentFacts(ownerId, agentId).filter((fact) => !fact.sensitive).map((fact) => fact.text),
-      ],
-      tail: store.recentUserMessages(ownerId, agentId, 12).slice().reverse(),
+      ...memoryViewSource(store, ownerId, agentId),
       maxChars,
       labels: PROMPT_LABELS[this.language],
       rules: {
@@ -1542,6 +1537,8 @@ export class Session {
     }
     if (views.proactive) this.context.proactiveMemorySnapshot = views.proactive;
     else delete this.context.proactiveMemorySnapshot;
+    if (views.pinnedBlock) this.context.pinnedMemory = views.pinnedBlock;
+    else delete this.context.pinnedMemory;
   }
 
   /** Safe name-based opening; null lets the planner handle the no-memory case (ask for a name). */

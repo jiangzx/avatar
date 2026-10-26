@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import type { Language } from '@anyidea/protocol';
 import { z } from 'zod';
-import { PROMPT_LABELS } from '../roles/labels.ts';
+import { PROMPT_LABELS, type PromptLabels } from '../roles/labels.ts';
 import { historyBudget, type InstructionBudget } from './instructions.ts';
 import type { LedgerOptions } from './ledger.ts';
 
@@ -46,8 +46,8 @@ export const DEFAULT_TOOL_TURN_TIMEOUT_MS = 15_000;
 const MemoryBudgetSchema = z.object({
   instructions: z.object({
     budgetRatio: z.number().gt(0).max(0.4),
-    /** Per-language override; English needs more characters for the same instructions. */
-    languageBudgetRatio: z.partialRecord(z.enum(['zh', 'ja', 'en']), z.number().gt(0).max(0.8)).optional(),
+    /** Per-language override; English needs more characters for the same instructions. Capped at 0.9 so rebuilds still trigger. */
+    languageBudgetRatio: z.partialRecord(z.enum(['zh', 'ja', 'en']), z.number().gt(0).max(0.9)).optional(),
     snapshotMaxChars: z.number().int().min(0).max(5_000),
     summaryMaxChars: z.number().int().min(100).max(5_000),
     minHistoryChars: z.number().int().min(100).max(5_000),
@@ -56,6 +56,16 @@ const MemoryBudgetSchema = z.object({
     /** Per-language override; English needs more characters for the same lines. */
     languageAffectMaxChars: z.partialRecord(z.enum(['zh', 'ja', 'en']), z.number().int().min(0).max(1_500)).optional(),
   }).strict(),
+  /** Pins per character (Q34). 0 disables pinning and reserves no room. */
+  pinMaxPerCharacter: z.number().int().min(0).max(50),
+  /** Longest pin per language, in UTF-16 units like every other budget here (Q34). */
+  pinMaxChars: z.object({
+    zh: z.number().int().min(1).max(400),
+    ja: z.number().int().min(1).max(400),
+    en: z.number().int().min(1).max(400),
+  }).strict(),
+  /** Items list_memory reads aloud. */
+  listMaxItems: z.number().int().min(1).max(20),
   toolTurnTimeoutMs: z.number().int().min(3_000).max(30_000),
   recallClipChars: z.number().int().min(20).max(500),
   /** Natural recall phrasing deadline; failure falls back to the verbatim line. */
@@ -77,6 +87,16 @@ const MemoryBudgetSchema = z.object({
 
 export type PacingConfig = z.infer<typeof PacingSchema>;
 export type MemoryBudgetConfig = z.infer<typeof MemoryBudgetSchema>;
+
+/** Per pinned line: label + separator + newline (renderMemoryViews renders one labelled line per pin). */
+export function pinnedLineOverhead(labels: PromptLabels): number {
+  return labels.pinned.length + labels.separator.length + 1;
+}
+
+/** Full pinned block for one language: pins × (longest pin + line overhead). Derived, never configured. */
+export function pinnedMaxCharsFor(memory: MemoryBudgetConfig, language: Language): number {
+  return memory.pinMaxPerCharacter * (memory.pinMaxChars[language] + pinnedLineOverhead(PROMPT_LABELS[language]));
+}
 
 export function loadPacing(path: string): PacingConfig {
   return PacingSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
@@ -115,6 +135,8 @@ export function validateBudgets(
     summaryMaxChars: m.summaryMaxChars,
     // Undefined when unset; historyBudget then reserves nothing (old fixtures keep their numbers).
     affectMaxChars: m.languageAffectMaxChars?.[language] ?? m.affectMaxChars,
+    // Always reserved at full size: pins are never clipped at run time.
+    pinnedMaxChars: pinnedMaxCharsFor(memory, language),
   });
   const budgets: Partial<Record<Language, InstructionBudget>> = {};
   // Legacy array callers (docs/testing probes) only build zh personas.
