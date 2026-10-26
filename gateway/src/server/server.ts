@@ -389,7 +389,8 @@ function bindConnection(ws: WebSocket, sessionId: string, connId: number, opts: 
           msg.type === 'session.start' ? 'start' : 'resume',
           transport,
           msg.type === 'session.start' ? msg.clientInfo.language : undefined,
-          msg.type === 'session.start' ? msg.clientInfo.voiceProfile : undefined,
+          // Legacy field still parsed by schemas.ts; Task 7 removes voiceProfile end to end.
+          msg.type === 'session.start' ? (msg.clientInfo as { voiceProfile?: 'young-male' }).voiceProfile : undefined,
         )
         .then((ok) => {
           if (!ok) ws.close(4002, 'bad_state');

@@ -1,3 +1,8 @@
+import type { CharacterId } from './characters.ts';
+
+export { CHARACTER_IDS, DEFAULT_CHARACTER_ID, isCharacterId, type CharacterId } from './characters.ts';
+export type { MemoryClearScope, MemoryFactItem, MemoryItem, MemoryOverview, MemoryPinnedItem } from './memoryApi.ts';
+
 export const FRAME_MIC = 0x01;
 export const FRAME_AI = 0x02;
 export const MIC_SAMPLE_RATE = 16000;
@@ -10,7 +15,8 @@ export type Language = (typeof LANGUAGES)[number];
 
 export type ActionName = 'wave' | 'nod' | 'smile' | 'turn' | 'heart';
 export const ACTION_NAMES: readonly ActionName[] = ['wave', 'nod', 'smile', 'turn', 'heart'];
-export type ResponseKind = 'reply' | 'greeting' | 'followup';
+/** `reminder` = rest reminder (spec: AI 提示与休息提醒). Clients treat unknown kinds as `reply`. */
+export type ResponseKind = 'reply' | 'greeting' | 'followup' | 'reminder';
 export type AudioPath = 'A' | 'B';
 
 export interface SessionTokens {
@@ -19,8 +25,11 @@ export interface SessionTokens {
   resumeToken: string;
 }
 
+/** POST /session body. A missing character means DEFAULT_CHARACTER_ID (Mock and dev sessions). */
+export interface SessionCreateRequest { character?: CharacterId }
+
 export type ClientMessage =
-  | { type: 'session.start'; clientInfo: { platform: string; audioPath: AudioPath; language?: Language; voiceProfile?: 'young-male' } }
+  | { type: 'session.start'; clientInfo: { platform: string; audioPath: AudioPath; language?: Language } }
   | { type: 'session.resume'; sessionId: string }
   | { type: 'vad'; state: 'speaking' | 'silent'; t: number }
   | { type: 'playback.progress'; responseSeq: number; playedMs: number }
