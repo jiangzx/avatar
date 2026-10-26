@@ -4,6 +4,7 @@ import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
 import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
+import { loadCharacterRegistry } from './characters/registry.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
 import { DEFAULT_ROLE, missingRoleLanguages } from './roles/catalog.ts';
 import { log } from './log.ts';
@@ -27,6 +28,9 @@ import { loadI18n } from './i18n/load.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
+// Character cards (gateway/characters/): the id set must equal protocol CHARACTER_IDS, or startup fails.
+const characters = loadCharacterRegistry(`${root}characters`, LANGUAGES);
+log('characters_loaded', { count: characters.ids().length });
 // File-backed roles (M1): gateway/roles/<role>/<language>/ + gateway/roles/_shared/<language>/.
 const roles = loadRoleCatalog(`${root}roles`);
 const missingLanguages = missingRoleLanguages(roles, DEFAULT_ROLE, LANGUAGES);
