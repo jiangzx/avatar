@@ -359,6 +359,37 @@ describe('first meeting and continuous use', () => {
     store.recordSessionStart('s-open', a.agentId, 1_000);
     expect(store.continuousSince(a.ownerId, 5_000, 100)).toBe(1_000);
   });
+
+  it('cuts offline time out of the continuous window after a crash close', () => {
+    const store = new SqliteMemoryStore(open());
+    const a = seedOwner(store, 'ha');
+    store.recordSessionStart('s-crash', a.agentId, 1_000);
+    say(store, a, 'm1', '昨天去了公园', 1_200, { sessionId: 's-crash' });
+    say(store, a, 'm2', '又说了一句', 1_500, { sessionId: 's-crash' });
+    store.recordSessionStart('s-empty', a.agentId, 2_000);
+    expect(store.closeOpenSessions(10_000)).toBe(2);
+    expect(store.listSessions(a.ownerId)).toEqual([
+      { id: 's-crash', agentId: a.agentId, startedAt: 1_000, endedAt: 1_500 },
+      { id: 's-empty', agentId: a.agentId, startedAt: 2_000, endedAt: 2_000 },
+    ]);
+    // Restart is far from the last message, so the crashed session is not continuous with now.
+    expect(store.continuousSince(a.ownerId, 10_000, 1_000)).toBe(10_000);
+    store.recordSessionStart('s-back', a.agentId, 10_000);
+    expect(store.continuousSince(a.ownerId, 10_500, 1_000)).toBe(10_000);
+  });
+
+  it('does not let a later-starting shorter session hide one that ends later', () => {
+    const store = new SqliteMemoryStore(open());
+    const a = seedOwner(store, 'ha');
+    const gap = 10 * 60_000;
+    const now = 10 * 3_600_000;
+    // 09:00–09:55, and 09:40–09:45. The short one starts later and ends earlier.
+    store.recordSessionStart('s-long', a.agentId, now - 60 * 60_000);
+    store.recordSessionEnd('s-long', a.agentId, now - 5 * 60_000);
+    store.recordSessionStart('s-short', a.agentId, now - 20 * 60_000);
+    store.recordSessionEnd('s-short', a.agentId, now - 15 * 60_000);
+    expect(store.continuousSince(a.ownerId, now, gap)).toBe(now - 60 * 60_000);
+  });
 });
 
 describe('epochs', () => {

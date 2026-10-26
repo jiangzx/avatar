@@ -55,7 +55,7 @@ export interface MemoryStore {
   continuousSince(ownerId: string, now: number, gapMs: number): number;
   recordSessionStart(sessionId: string, agentId: string, now: number): void;
   recordSessionEnd(sessionId: string, agentId: string, now: number): void;
-  /** Closes sessions that a previous process left open (crash/SIGKILL). Returns the count. */
+  /** Closes sessions a previous process left open, at the last message time (or started_at). Returns the count. */
   closeOpenSessions(now: number): number;
   listSessions(ownerId: string): SessionRecord[];
   /** Cascades to devices, agents, sessions and every memory table. */
@@ -265,11 +265,14 @@ function prepareStatements(db: DatabaseSync) {
     listAgentIds: p('SELECT id FROM agents WHERE owner_id = ? ORDER BY created_at, id'),
     insertSession: p('INSERT INTO sessions (id, agent_id, started_at) VALUES (?, ?, ?)'),
     endSession: p('UPDATE sessions SET ended_at = ? WHERE id = ? AND agent_id = ? AND ended_at IS NULL'),
-    closeOpenSessions: p('UPDATE sessions SET ended_at = ? WHERE ended_at IS NULL'),
+    closeOpenSessions: p(`UPDATE sessions SET ended_at = COALESCE(
+      (SELECT MAX(created_at) FROM messages WHERE session_id = sessions.id),
+      started_at
+    ) WHERE ended_at IS NULL`),
     listSessions: p('SELECT s.id, s.agent_id, s.started_at, s.ended_at FROM sessions s JOIN agents a ON a.id = s.agent_id WHERE a.owner_id = ? ORDER BY s.started_at'),
     hasEndedSession: p('SELECT 1 AS ok FROM sessions WHERE agent_id = ? AND ended_at IS NOT NULL LIMIT 1'),
     ownerSessionsNewestFirst: p(`SELECT s.started_at, s.ended_at FROM sessions s JOIN agents a ON a.id = s.agent_id
-      WHERE a.owner_id = ? ORDER BY s.started_at DESC, s.rowid DESC`),
+      WHERE a.owner_id = ? ORDER BY COALESCE(s.ended_at, ?) DESC, s.rowid DESC`),
     deleteAgentSessions: p('DELETE FROM sessions WHERE agent_id = ?'),
     deleteOwner: p('DELETE FROM owners WHERE id = ?'),
     countOwners: p('SELECT count(*) AS n FROM owners'),
@@ -469,10 +472,11 @@ export class SqliteMemoryStore implements MemoryStore {
 
   continuousSince(ownerId: string, now: number, gapMs: number): number {
     let since = now;
-    for (const row of this.q.ownerSessionsNewestFirst.all(ownerId)) {
+    // Newest effective end first. A short session that started later must not hide one that ends later.
+    for (const row of this.q.ownerSessionsNewestFirst.all(ownerId, now)) {
       const startedAt = row.started_at as number;
       const endedAt = (row.ended_at as number | null) ?? now;
-      // A gap of gapMs or more ends the continuous window (spec: 间隔小于 gapMs 算连续).
+      // Gap is the newer edge minus this session's effective end. gapMs or more stops the walk.
       if (since - endedAt >= gapMs) break;
       since = Math.min(since, startedAt);
     }
@@ -487,8 +491,9 @@ export class SqliteMemoryStore implements MemoryStore {
     this.q.endSession.run(now, sessionId, agentId);
   }
 
-  closeOpenSessions(now: number): number {
-    return Number(this.q.closeOpenSessions.run(now).changes);
+  closeOpenSessions(_now: number): number {
+    // Stamp the last message, not the restart time, so offline time stays outside the continuous window.
+    return Number(this.q.closeOpenSessions.run().changes);
   }
 
   listSessions(ownerId: string): SessionRecord[] {
