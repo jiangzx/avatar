@@ -1,13 +1,13 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
-import { FRAME_AI, FRAME_MIC, MIC_FRAME_SAMPLES, decodeAudioFrame, encodeAudioFrame } from '@anyidea/protocol';
+import { DEFAULT_CHARACTER_ID, FRAME_AI, FRAME_MIC, MIC_FRAME_SAMPLES, decodeAudioFrame, encodeAudioFrame } from '@anyidea/protocol';
 import type { IdentityService } from '../identity/registry.ts';
 import { log } from '../log.ts';
 import type { ContextResolver } from '../session/context.ts';
 import type { SessionManager } from '../session/manager.ts';
 import type { Transport } from '../session/session.ts';
 import { safeEqual } from '../session/tokens.ts';
-import { OwnerIdSchema, RegisterRequestSchema, ResumeRequestSchema, StyleRequestSchema, parseClientMessage } from './schemas.ts';
+import { OwnerIdSchema, RegisterRequestSchema, ResumeRequestSchema, SessionCreateSchema, parseClientMessage } from './schemas.ts';
 
 export interface GatewayServerOptions {
   manager: SessionManager;
@@ -22,7 +22,7 @@ export interface GatewayServerOptions {
   heartbeatMs?: number;
   maxSessions?: number;
   sessionRateLimit?: { max: number; windowMs: number };
-  /** Device registration and agent settings. Absent = identity disabled: the identity routes answer 404. */
+  /** Device registration. Absent = identity disabled: the identity routes answer 404. */
   identity?: IdentityService;
   /** Separate bucket from sessionRateLimit. */
   registerRateLimit?: { max: number; windowMs: number };
@@ -97,7 +97,6 @@ type Route =
   | { kind: 'session' }
   | { kind: 'resume' }
   | { kind: 'register'; identity: IdentityService }
-  | { kind: 'style'; identity: IdentityService }
   | { kind: 'deleteOwner'; identity: IdentityService; devToken: string; ownerId: string };
 
 const DEV_OWNER_PATH = /^\/dev\/owner\/([^/]+)$/;
@@ -109,7 +108,6 @@ function matchRoute(method: string | undefined, path: string, opts: GatewayServe
   const identity = opts.identity;
   if (!identity) return null;
   if (method === 'POST' && path === '/device/register') return { kind: 'register', identity };
-  if (method === 'PATCH' && path === '/agent/style') return { kind: 'style', identity };
   const dev = DEV_OWNER_PATH.exec(path);
   if (method === 'DELETE' && dev && opts.devToken) return { kind: 'deleteOwner', identity, devToken: opts.devToken, ownerId: dev[1]! };
   return null;
@@ -145,7 +143,7 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
   }
   switch (route.kind) {
     case 'session':
-      createSession(req, res, opts, limiters.session);
+      await createSession(req, res, opts, limiters.session);
       return;
     case 'resume':
       if (limiters.resume && !limiters.resume.allow(clientAddress(req, opts.trustProxy))) {
@@ -157,16 +155,13 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
     case 'register':
       await registerDevice(req, res, route.identity, limiters.register, opts.trustProxy);
       return;
-    case 'style':
-      await changeStyle(req, res, route.identity);
-      return;
     case 'deleteOwner':
       deleteOwner(req, res, opts.manager, route);
       return;
   }
 }
 
-function createSession(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions, limiter: RateLimiter | null): void {
+async function createSession(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions, limiter: RateLimiter | null): Promise<void> {
   if (opts.maxSessions !== undefined && opts.manager.size >= opts.maxSessions) {
     json(res, 503, { error: 'session_capacity' });
     return;
@@ -175,9 +170,16 @@ function createSession(req: IncomingMessage, res: ServerResponse, opts: GatewayS
     json(res, 429, { error: 'rate_limited' });
     return;
   }
-  // Owner and agent come only from the bearer; any ids in the body are ignored.
+  // The body names the character only; owner and agent come only from the bearer. No body = default character.
+  const body = SessionCreateSchema.safeParse(await readJson(req, 1024, {}));
+  if (!body.success) {
+    log('session_rejected', { reason: 'unknown_character' });
+    json(res, 400, { error: 'unknown_character' });
+    return;
+  }
+  const characterId = body.data.character ?? DEFAULT_CHARACTER_ID;
   const bearer = bearerToken(req);
-  const resolved = bearer === null ? null : opts.contextResolver.resolve(bearer);
+  const resolved = bearer === null ? null : opts.contextResolver.resolve(bearer, characterId);
   if (!resolved?.ok) {
     json(res, 401, { error: 'unauthorized' });
     return;
@@ -188,7 +190,7 @@ function createSession(req: IncomingMessage, res: ServerResponse, opts: GatewayS
   let noticePending = resolved.noticePending;
   if (ctx.ownerId !== undefined && typeof bearer === 'string') {
     opts.manager.endOwner(ctx.ownerId, 'owner_replaced');
-    const again = opts.contextResolver.resolve(bearer);
+    const again = opts.contextResolver.resolve(bearer, characterId);
     if (!again.ok) {
       json(res, 401, { error: 'unauthorized' });
       return;
@@ -213,7 +215,7 @@ async function resumeSession(req: IncomingMessage, res: ServerResponse, opts: Ga
   json(res, 200, tokens);
 }
 
-const REGISTER_ERROR_STATUS = { unknown_style: 400, owner_capacity: 503, register_daily_cap: 429 } as const;
+const REGISTER_ERROR_STATUS = { owner_capacity: 503, register_daily_cap: 429 } as const;
 
 async function registerDevice(req: IncomingMessage, res: ServerResponse, identity: IdentityService, limiter: RateLimiter | null, trustProxy?: boolean): Promise<void> {
   if (limiter && !limiter.allow(clientAddress(req, trustProxy))) {
@@ -225,35 +227,12 @@ async function registerDevice(req: IncomingMessage, res: ServerResponse, identit
     json(res, 400, { error: 'bad_request' });
     return;
   }
-  const result = identity.register(parsed.data.style);
+  const result = identity.register();
   if (!result.ok) {
     json(res, REGISTER_ERROR_STATUS[result.error], { error: result.error });
     return;
   }
   json(res, 200, { deviceToken: result.deviceToken });
-}
-
-async function changeStyle(req: IncomingMessage, res: ServerResponse, identity: IdentityService): Promise<void> {
-  const bearer = bearerToken(req);
-  if (typeof bearer !== 'string') {
-    json(res, 401, { error: 'unauthorized' });
-    return;
-  }
-  const parsed = StyleRequestSchema.safeParse(await readJson(req, 1024));
-  if (!parsed.success) {
-    json(res, 400, { error: 'bad_request' });
-    return;
-  }
-  const result = identity.setStyle(bearer, parsed.data.style);
-  if (result === 'unauthorized') {
-    json(res, 401, { error: 'unauthorized' });
-    return;
-  }
-  if (result === 'unknown_style') {
-    json(res, 400, { error: 'unknown_style' });
-    return;
-  }
-  json(res, 200, { style: parsed.data.style }); // takes effect from the next session
 }
 
 function deleteOwner(req: IncomingMessage, res: ServerResponse, manager: SessionManager, route: Extract<Route, { kind: 'deleteOwner' }>): void {
@@ -389,8 +368,6 @@ function bindConnection(ws: WebSocket, sessionId: string, connId: number, opts: 
           msg.type === 'session.start' ? 'start' : 'resume',
           transport,
           msg.type === 'session.start' ? msg.clientInfo.language : undefined,
-          // Legacy field still parsed by schemas.ts; Task 7 removes voiceProfile end to end.
-          msg.type === 'session.start' ? (msg.clientInfo as { voiceProfile?: 'young-male' }).voiceProfile : undefined,
         )
         .then((ok) => {
           if (!ok) ws.close(4002, 'bad_state');
@@ -427,7 +404,8 @@ function json(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify(body));
 }
 
-function readJson(req: IncomingMessage, limit: number): Promise<unknown> {
+/** `emptyAs` is returned for an empty body; without it an empty body is invalid (null). */
+function readJson(req: IncomingMessage, limit: number, emptyAs?: unknown): Promise<unknown> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -441,6 +419,10 @@ function readJson(req: IncomingMessage, limit: number): Promise<unknown> {
       chunks.push(chunk);
     });
     req.on('end', () => {
+      if (size === 0 && emptyAs !== undefined) {
+        resolve(emptyAs);
+        return;
+      }
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
       } catch {

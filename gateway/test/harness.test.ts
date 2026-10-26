@@ -65,7 +65,7 @@ describe('eval harness', () => {
     expect(all).toMatchObject({ sentences: 5, questions: 2, questionRatio: 0.4, questionRatioScope: 'all', pass: { questionRatio: false, avgChars: true } });
     const scoped = summarize(records, { maxQuestionRatio: 1 / 3, maxAvgReplyChars: 45, excludeGreetingFromQuestionRatio: true });
     expect(scoped).toMatchObject({ replies: 3, sentences: 4, questions: 1, questionRatio: 0.25, questionRatioScope: 'excluding-greeting', pass: { questionRatio: true, avgChars: true } });
-    const report = renderReport(scoped, records, { adapter: 'mock', style: 'grandchild', date: '2026-10-24' });
+    const report = renderReport(scoped, records, { adapter: 'mock', character: 'xiaonuan', date: '2026-10-24' });
     expect(report).toContain('| 问句比例（不含开场） | 0.250 |');
   });
 
@@ -88,7 +88,7 @@ describe('eval harness', () => {
     expect(records.every((r) => r.firstAudioMs === null || r.firstAudioMs >= 0)).toBe(true);
     const summary = summarize(records, { maxQuestionRatio: 1 / 3, maxAvgReplyChars: 45 });
     expect(summary).toMatchObject({ replies: 3, sentences: 5, questions: 2, questionRatio: 0.4, mentions: 2, pass: { questionRatio: false, avgChars: true } });
-    const report = renderReport(summary, records, { adapter: 'mock', style: 'grandchild', date: '2026-10-17' });
+    const report = renderReport(summary, records, { adapter: 'mock', character: 'xiaonuan', date: '2026-10-17' });
     expect(report).toContain('| 问句比例 | 0.400 |');
     expect(report).toContain('我在听呢。今天还好吗？');
   }, 10_000);
@@ -132,7 +132,7 @@ describe('eval harness', () => {
 
   it('writes results with scores and keeps the avg-chars gate to the plan-a set', () => {
     const meta: EvalResultsMeta = {
-      commit: 'abc123', dirty: false, date: '2026-10-23', adapter: 'mock', style: 'grandchild',
+      commit: 'abc123', dirty: false, date: '2026-10-23', adapter: 'mock', character: 'xiaonuan',
       scenarioFile: 'docs/testing/plan4-empathy-eval/scenarios.json', rubricFile: 'docs/testing/plan4-empathy-eval/rubric.md', judgeModel: 'qwen-plus',
     };
     const a: EvalScenario = { id: 'a', title: 'A', turns: ['x'] };
@@ -205,7 +205,9 @@ describe('eval harness', () => {
     expect(parseEvalArgs(['--scenarios', 's.json', '--judge', 'r.md'])).toEqual({ scenarios: 's.json', judge: 'r.md' });
     expect(() => parseEvalArgs(['--judge'])).toThrow(/requires a value/);
     expect(() => parseEvalArgs(['--adapter'])).toThrow(/requires a value/);
-    expect(() => parseEvalArgs(['--adapter', '--style'])).toThrow(/requires a value/);
+    expect(() => parseEvalArgs(['--adapter', '--character'])).toThrow(/requires a value/);
+    expect(parseEvalArgs(['--character', 'xiaokai'])).toEqual({ character: 'xiaokai' });
+    expect(() => parseEvalArgs(['--style', 'grandchild'])).toThrow(/unknown flag/);
     expect(() => parseEvalArgs(['--bogus', 'x'])).toThrow(/unknown flag/);
     expect(() => parseEvalArgs(['stray'])).toThrow(/unexpected argument/);
   });

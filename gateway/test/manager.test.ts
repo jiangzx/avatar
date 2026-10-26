@@ -4,8 +4,8 @@ import { SessionManager, type SessionLifecycle } from '../src/session/manager.ts
 import type { Session, TranscriptWriter, Transport } from '../src/session/session.ts';
 
 const transport: Transport = { send: () => {}, sendAudio: () => {} };
-const owned = (ownerId: string): SessionContext => ({ ownerId, agentId: `agent-${ownerId}`, roleId: 'elder-companion', styleId: 'grandchild' });
-const dev: SessionContext = { roleId: 'elder-companion', styleId: 'grandchild' };
+const owned = (ownerId: string): SessionContext => ({ ownerId, agentId: `agent-${ownerId}`, characterId: 'xiaonuan', firstMeet: false });
+const dev: SessionContext = { characterId: 'xiaonuan', firstMeet: false };
 
 function fakeSession() {
   return {

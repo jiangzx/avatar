@@ -60,7 +60,7 @@ async function started() {
     i18n,
     languageRules: i18n.language,
     push: { minIntervalMs: 0, noResponseAfterMs: 5_000 },
-  }, { roleId: 'elder-companion', styleId: 'grandchild' }, 'no-response');
+  }, { characterId: 'xiaonuan', firstMeet: false }, 'no-response');
   await session.start(transport);
   adapter.done(); // greeting
   session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });

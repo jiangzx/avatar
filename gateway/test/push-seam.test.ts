@@ -21,7 +21,7 @@ const director: DirectorConfig = {
   memoryNoticeInstruction: 'M', memoryNoticeText: 'notice',
 };
 
-const ctx = (language: 'zh' | 'en'): SessionContext => ({ roleId: 'elder-companion', styleId: 'grandchild', language });
+const ctx = (language: 'zh' | 'en'): SessionContext => ({ characterId: 'xiaonuan', firstMeet: false, language });
 const bilingual = () => fixedRoleCatalog('P-zh', director, {
   languages: ['zh', 'en'],
   defaultLanguage: 'en',

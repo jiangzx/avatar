@@ -11,7 +11,7 @@ import { renderSnapshot } from '../src/memory/snapshot.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
 import { MemoryWorker, withExtraction } from '../src/memory/worker.ts';
 import { SqliteTranscriptWriter } from '../src/memory/writer.ts';
-import { shippedRoles } from './support/shipped.ts';
+import { shippedCharacters, shippedRoles } from './support/shipped.ts';
 import type { SessionContext } from '../src/session/context.ts';
 import { buildInstructions } from '../src/session/instructions.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
@@ -116,7 +116,7 @@ describe('Plan C memory acceptance', () => {
     };
     const queued = new MemoryWorker({ store, client, systemPrompt: '陈述。', maxTokens: 80, policy });
     worker = queued;
-    const registry = new DeviceRegistry({ store, roles, limits, now: () => now });
+    const registry = new DeviceRegistry({ store, roles, characters: shippedCharacters(), limits, now: () => now });
     const requests: ProactiveRequest[] = [];
     const instructions: string[] = [];
     let noticeSeq: number | null = null;
@@ -156,12 +156,12 @@ describe('Plan C memory acceptance', () => {
     );
     manager = managerRef = gate;
 
-    const registeredA = registry.register('grandchild');
-    const registeredB = registry.register('grandchild');
+    const registeredA = registry.register();
+    const registeredB = registry.register();
     expect(registeredA.ok && registeredB.ok).toBe(true);
     if (!registeredA.ok || !registeredB.ok) return;
     const opened = (token: string) => {
-      const resolved = registry.resolve(token);
+      const resolved = registry.resolve(token, 'xiaonuan');
       expect(resolved.ok).toBe(true);
       if (!resolved.ok) throw new Error('unresolved');
       return resolved;

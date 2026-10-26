@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_CHARACTER_ID, LANGUAGES, type Language } from '@anyidea/protocol';
+import { LANGUAGES, type CharacterId, type Language } from '@anyidea/protocol';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech, withCharacterName } from './adapters/mock.ts';
@@ -79,8 +79,6 @@ log('safety_rules', {
   invisibleCodePoints: i18n.safety.invisibleCodePoints.length,
 });
 const script = loadMockScript(`${root}mock/script.json`);
-// Until Task 7 passes the session character, the Mock speaks as the default character.
-const mockScript = withCharacterName(script, characters.name(DEFAULT_CHARACTER_ID, 'zh'));
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
 // Device identity (Plan B). MEMORY_DB_PATH unset = dev mode: no registration, no memory, bearers rejected.
@@ -99,6 +97,7 @@ const registry = store
   ? new DeviceRegistry({
       store,
       roles,
+      characters,
       limits: {
         maxOwners: identityConfig.maxOwners,
         dailyCap: identityConfig.registerDailyCap,
@@ -145,28 +144,19 @@ const manager = new SessionManager(
         ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
         : config.adapter === 'qwen'
           ? new QwenAdapter({ apiKey: config.qwenApiKey!, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice })
-          : new MockAdapter({ script: mockScript, speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor }),
+          : new MockAdapter({ script: withCharacterName(script, characters.name(ctx.characterId, 'zh')), speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor }),
       summarizer: config.summarizer === 'qwen'
         ? new QwenSummarizer({ apiKey: config.qwenApiKey!, endpoint: config.summarizerEndpoint, model: config.summarizerModel })
         : new MockSummarizer(),
       roles,
+      characters,
       ledger: config.ledger,
       ...(config.adapter !== 'mock' && textClient ? { textClient } : {}),
       confirmWindowMs: config.confirmWindowMs,
       rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,
       rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
       modelOwnsTurns: config.adapter === 'qwen',
-      youngMaleVoice: config.qwenYoungMaleVoice,
-      youngMaleVoices: {
-        zh: config.qwenYoungMaleVoiceZh,
-        ja: config.qwenYoungMaleVoice,
-        en: config.qwenYoungMaleVoice,
-      },
-      voiceFor: (language) => {
-        if (config.adapter === 'qwen') return config.qwenVoices[language];
-        if (config.adapter === 'seeduplex') return language === 'ja' ? undefined : config.seeduplexVoices[language];
-        return undefined;
-      },
+      voiceFor: (language) => adapterVoice(ctx.characterId, language),
       budget: budgetReport.budget,
       budgets: budgetReport.budgets,
       i18n,
@@ -203,8 +193,8 @@ const manager = new SessionManager(
 const server = createGatewayServer({
   manager,
   appSecret: config.appSecret,
-  // Identity on: DeviceRegistry resolves bearers; identity off: dev resolver (no bearer, default role/style).
-  contextResolver: registry ?? devContextResolver(roles),
+  // Identity on: DeviceRegistry resolves bearers; identity off: dev resolver (no bearer, any character, no memory).
+  contextResolver: registry ?? devContextResolver(roles, characters),
   identity: registry ?? undefined,
   registerRateLimit: { max: identityConfig.registerRateLimitMax, windowMs: identityConfig.registerRateLimitWindowMs },
   devToken: identityConfig.devToken,
@@ -252,6 +242,15 @@ const DAY_MS = 24 * 60 * 60_000;
 /** Build a complete per-language record from the same factory. */
 function byLanguage<T>(make: (language: Language) => T): Record<Language, T> {
   return Object.fromEntries(LANGUAGES.map((language) => [language, make(language)])) as Record<Language, T>;
+}
+
+/** Character card voice for the active adapter, then the env default. Seeduplex has no Japanese voice. */
+function adapterVoice(characterId: CharacterId, language: Language): string | undefined {
+  if (config.adapter === 'qwen') return characters.voiceFor(characterId, 'qwen', language) ?? config.qwenVoices[language];
+  if (config.adapter === 'seeduplex') {
+    return language === 'ja' ? undefined : characters.voiceFor(characterId, 'seeduplex', language) ?? config.seeduplexVoices[language];
+  }
+  return undefined;
 }
 
 /** Same daily timer as orphan cleanup. Age and batch come from memory.json. */

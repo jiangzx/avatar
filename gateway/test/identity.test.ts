@@ -1,10 +1,12 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { CharacterId } from '@anyidea/protocol';
 import { DeviceRegistry, type IdentityLimits } from '../src/identity/registry.ts';
 import { hashToken, newDeviceToken, shortHash } from '../src/identity/tokens.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
-import { DEFAULT_ROLE, fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
+import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
+import { shippedCharacters } from './support/shipped.ts';
 import type { SessionContext } from '../src/session/context.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 
@@ -23,20 +25,20 @@ function setup(limits: Partial<IdentityLimits> = {}, roles: RoleCatalog = fixedR
   if (!db) dbs.push(database);
   const store = new SqliteMemoryStore(database);
   const registry = new DeviceRegistry({
-    store, roles, now: () => now,
+    store, roles, characters: shippedCharacters(), now: () => now,
     limits: { maxOwners: 10, dailyCap: 10, orphanOwnerDays: 7, orphanCleanupBatch: 2, ...limits },
   });
   return { db: database, store, registry };
 }
 
-function register(registry: DeviceRegistry, style?: string): string {
-  const r = registry.register(style);
+function register(registry: DeviceRegistry): string {
+  const r = registry.register();
   if (!r.ok) throw new Error(r.error);
   return r.deviceToken;
 }
 
-function ctxOf(registry: DeviceRegistry, token: string): SessionContext {
-  const r = registry.resolve(token);
+function ctxOf(registry: DeviceRegistry, token: string, characterId: CharacterId = 'xiaonuan'): SessionContext {
+  const r = registry.resolve(token, characterId);
   if (!r.ok) throw new Error('unresolved');
   return r.ctx;
 }
@@ -67,16 +69,16 @@ describe('DeviceRegistry', () => {
 
   it('resolves dev, unknown and registered bearers', () => {
     const { store, registry } = setup();
-    expect(registry.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'zh' }, noticePending: false });
-    expect(registry.resolve(newDeviceToken())).toEqual({ ok: false });
-    const token = register(registry, 'old-friend');
+    expect(registry.resolve(undefined, 'xiaonuan')).toEqual({ ok: true, ctx: { characterId: 'xiaonuan', language: 'zh', firstMeet: true }, noticePending: false });
+    expect(registry.resolve(newDeviceToken(), 'xiaonuan')).toEqual({ ok: false });
+    const token = register(registry);
     const device = store.findDevice(hashToken(token))!;
-    const resolved = registry.resolve(token);
+    const resolved = registry.resolve(token, 'xiaonuan');
     expect(resolved.ok && resolved.noticePending).toBe(true);
     store.markNotified(device.ownerId, 2_000);
-    expect(registry.resolve(token)).toMatchObject({ ok: true, noticePending: false });
+    expect(registry.resolve(token, 'xiaonuan')).toMatchObject({ ok: true, noticePending: false });
     const ctx = ctxOf(registry, token);
-    expect(ctx).toEqual({ ownerId: device.ownerId, agentId: ctx.agentId, roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'zh' });
+    expect(ctx).toMatchObject({ ownerId: device.ownerId, agentId: ctx.agentId, characterId: 'xiaonuan', language: 'zh', firstMeet: true });
     expect(ctx.agentId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -85,7 +87,7 @@ describe('DeviceRegistry', () => {
     const token = register(registry);
     const ctx = ctxOf(registry, token);
     store.setConsent(ctx.ownerId!, 'declined', BASE);
-    expect(registry.resolve(token)).toMatchObject({ ok: true, noticePending: false });
+    expect(registry.resolve(token, 'xiaonuan')).toMatchObject({ ok: true, noticePending: false });
   });
 
   it('updates last-seen on resolve', () => {
@@ -104,44 +106,33 @@ describe('DeviceRegistry', () => {
     const cb = ctxOf(registry, b);
     expect(ca.ownerId).not.toBe(cb.ownerId);
     expect(ca.agentId).not.toBe(cb.agentId);
-    expect(registry.setStyle(a, 'old-friend')).toBe('ok');
-    expect(ctxOf(registry, a).styleId).toBe('grandchild');
-    expect(ctxOf(registry, b).styleId).toBe('grandchild');
     registry.lifecycle.started('s-a', ca);
     expect(store.listSessions(ca.ownerId!)).toHaveLength(1);
     expect(store.listSessions(cb.ownerId!)).toHaveLength(0);
     expect(registry.deleteOwner(ca.ownerId!)).toBe(true);
-    expect(registry.resolve(a)).toEqual({ ok: false });
-    expect(registry.resolve(b).ok).toBe(true);
-  });
-
-  it('rejects unknown styles and unknown bearers when changing style', () => {
-    const { registry } = setup();
-    expect(registry.register('pirate')).toEqual({ ok: false, error: 'unknown_style' });
-    const token = register(registry);
-    expect(registry.setStyle(token, 'pirate')).toBe('unknown_style');
-    expect(registry.setStyle(newDeviceToken(), 'old-friend')).toBe('unauthorized');
+    expect(registry.resolve(a, 'xiaonuan')).toEqual({ ok: false });
+    expect(registry.resolve(b, 'xiaonuan').ok).toBe(true);
   });
 
   it('enforces MAX_OWNERS', () => {
     const { registry } = setup({ maxOwners: 2 });
     register(registry);
     register(registry);
-    expect(registry.register(undefined)).toEqual({ ok: false, error: 'owner_capacity' });
+    expect(registry.register()).toEqual({ ok: false, error: 'owner_capacity' });
   });
 
   it('enforces a rolling 24 h registration cap', () => {
     const { registry } = setup({ dailyCap: 1 });
     register(registry);
-    expect(registry.register(undefined)).toEqual({ ok: false, error: 'register_daily_cap' });
+    expect(registry.register()).toEqual({ ok: false, error: 'register_daily_cap' });
     now = BASE + DAY;
-    expect(registry.register(undefined).ok).toBe(true);
+    expect(registry.register().ok).toBe(true);
   });
 
   it('records sessions only for owned contexts', () => {
     const { store, registry } = setup();
     const ctx = ctxOf(registry, register(registry));
-    registry.lifecycle.started('s-dev', { roleId: DEFAULT_ROLE, styleId: 'grandchild' });
+    registry.lifecycle.started('s-dev', { characterId: 'xiaonuan', firstMeet: true });
     registry.lifecycle.started('s1', ctx);
     now = BASE + 9_000;
     registry.lifecycle.ended('s1', ctx, 'client_end');
@@ -158,9 +149,9 @@ describe('DeviceRegistry', () => {
     now = BASE;
     const fresh = register(registry);
     expect(await registry.cleanupOrphans()).toBe(3);
-    for (const t of orphans) expect(registry.resolve(t)).toEqual({ ok: false });
-    expect(registry.resolve(connected).ok).toBe(true);
-    expect(registry.resolve(fresh).ok).toBe(true);
+    for (const t of orphans) expect(registry.resolve(t, 'xiaonuan')).toEqual({ ok: false });
+    expect(registry.resolve(connected, 'xiaonuan').ok).toBe(true);
+    expect(registry.resolve(fresh, 'xiaonuan').ok).toBe(true);
   });
 
   it('includes this owner’s fact and unextracted tail on the second resolve', () => {
@@ -174,7 +165,7 @@ describe('DeviceRegistry', () => {
     registry.lifecycle.started('s1', first);
     registry.lifecycle.ended('s1', first, 'client_end');
     expect(first.memorySnapshot).toBeUndefined();
-    expect(registry.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'zh' }, noticePending: false });
+    expect(registry.resolve(undefined, 'xiaonuan')).toEqual({ ok: true, ctx: { characterId: 'xiaonuan', language: 'zh', firstMeet: true }, noticePending: false });
 
     db.prepare(`INSERT INTO agent_facts (id, owner_id, agent_id, category, text, sensitive, confidence, updated_at) VALUES (?, ?, ?, 'preference', '喜欢喝茶', 0, 0.8, 1)`).run(`pref-${first.ownerId}`, first.ownerId, first.agentId);
     db.prepare(`INSERT INTO profile_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'addressing', '称呼：王叔', 0.9, 2)`).run(`addr-${first.ownerId}`, first.ownerId);
@@ -231,8 +222,7 @@ describe('DeviceRegistry', () => {
     const { registry } = setup();
     const token = register(registry);
     const ctx = ctxOf(registry, token);
-    registry.setStyle(token, 'old-friend');
-    registry.resolve(newDeviceToken());
+    registry.resolve(newDeviceToken(), 'xiaonuan');
     const out = write.mock.calls.map((c) => String(c[0])).join('');
     for (const secret of [token, hashToken(token), ctx.ownerId!, ctx.agentId!]) expect(out).not.toContain(secret);
     expect(out).toContain(shortHash(ctx.agentId!));
@@ -257,5 +247,29 @@ describe('DeviceRegistry', () => {
     expect(ctx.greetingMemorySnapshot).toBe('称呼：王叔\n基本情况：老家山东\n用户让你记住：孙子三月三号生日');
     expect(ctx.proactiveMemorySnapshot).toBe('基本情况：老家山东\n用户让你记住：孙子三月三号生日');
     expect(ctx.greetingHasTopic).toBe(true);
+  });
+
+  it('registers without a style and creates agents only per character on resolve', () => {
+    const { db, registry } = setup();
+    const token = register(registry);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM agents').get()).toEqual({ n: 0 });
+    ctxOf(registry, token, 'xiaokai');
+    ctxOf(registry, token, 'xiaokai');
+    expect(db.prepare('SELECT character_id FROM agents').all()).toEqual([{ character_id: 'xiaokai' }]);
+  });
+
+  it('marks the first meeting per character, not per owner', () => {
+    const { registry } = setup();
+    const token = register(registry);
+    const nuan = ctxOf(registry, token, 'xiaonuan');
+    expect(nuan).toMatchObject({ characterId: 'xiaonuan', language: 'zh', firstMeet: true });
+    registry.lifecycle.started('s1', nuan);
+    registry.lifecycle.ended('s1', nuan, 'client_end');
+    expect(ctxOf(registry, token, 'xiaonuan').firstMeet).toBe(false);
+    const kai = ctxOf(registry, token, 'xiaokai');
+    expect(kai.firstMeet).toBe(true);
+    expect(kai.ownerId).toBe(nuan.ownerId);
+    expect(kai.agentId).not.toBe(nuan.agentId);
+    expect('roleId' in kai || 'styleId' in kai || 'voice' in kai).toBe(false);
   });
 });

@@ -253,7 +253,7 @@ export interface EvalResultsMeta {
   dirty: boolean;
   date: string;
   adapter: string;
-  style: string;
+  character: string;
   scenarioFile: string;
   rubricFile: string | null;
   judgeModel: string | null;
@@ -315,10 +315,10 @@ export function buildEvalResults(meta: EvalResultsMeta, outcomes: readonly Scena
 
 const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
-export function renderReport(summary: EvalSummary, records: ReplyRecord[], meta: { adapter: string; style: string; date: string }): string {
+export function renderReport(summary: EvalSummary, records: ReplyRecord[], meta: { adapter: string; character: string; date: string }): string {
   const rows = records.map((r) => `| ${r.scenarioId} | ${r.turn} | ${r.kind} | ${r.chars} | ${r.questions}/${r.sentences} | ${r.outputTokens ?? '-'} | ${r.firstAudioMs ?? '-'} | ${cell(r.text)} |`);
   return [
-    `# Plan A eval — ${meta.adapter} / ${meta.style} — ${meta.date}`,
+    `# Plan A eval — ${meta.adapter} / ${meta.character} — ${meta.date}`,
     '',
     'Synthetic scenarios: `docs/testing/plan-a-eval/scenarios.json`. Text input differs from voice; real voice trials decide.',
     '',

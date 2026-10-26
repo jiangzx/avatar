@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import type { ClientMessage } from '@anyidea/protocol';
+import { CHARACTER_IDS, type ClientMessage } from '@anyidea/protocol';
 
 const seq = z.number().int().min(0).max(2 ** 32 - 1);
 const ms = z.number().min(0).max(3_600_000);
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('session.start'), clientInfo: z.object({ platform: z.string().max(32), audioPath: z.enum(['A', 'B']), language: z.enum(['zh', 'ja', 'en']).optional(), voiceProfile: z.enum(['young-male']).optional() }) }),
+  z.object({ type: z.literal('session.start'), clientInfo: z.object({ platform: z.string().max(32), audioPath: z.enum(['A', 'B']), language: z.enum(['zh', 'ja', 'en']).optional() }) }),
   z.object({ type: z.literal('session.resume'), sessionId: z.string().max(64) }),
   z.object({ type: z.literal('vad'), state: z.enum(['speaking', 'silent']), t: z.number() }),
   z.object({ type: z.literal('playback.progress'), responseSeq: seq, playedMs: ms }),
@@ -32,16 +32,13 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   return result.success ? (result.data as ClientMessage) : null;
 }
 
-const styleId = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
-
 /** POST /device/register. clientInfo is validated but not stored (data minimization). */
 export const RegisterRequestSchema = z.object({
   clientInfo: z.object({ platform: z.string().min(1).max(32) }),
-  style: styleId.optional(),
 });
 
-/** PATCH /agent/style. */
-export const StyleRequestSchema = z.object({ style: styleId });
+/** POST /session. Only the character; owner and agent come from the bearer. Missing = DEFAULT_CHARACTER_ID. */
+export const SessionCreateSchema = z.object({ character: z.enum(CHARACTER_IDS).optional() }).strict();
 
 /** DELETE /dev/owner/:id. */
 export const OwnerIdSchema = z.uuid();

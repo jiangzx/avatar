@@ -12,6 +12,7 @@ import { hashToken } from '../src/identity/tokens.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
 import { fixedRoleCatalog } from '../src/roles/catalog.ts';
+import { shippedCharacters } from './support/shipped.ts';
 import { devContextResolver, type SessionContext } from '../src/session/context.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
@@ -44,7 +45,7 @@ async function boot(opts: BootOptions = {}) {
   const roles = fixedRoleCatalog('P', director);
   db = openDatabase(':memory:', { busyTimeoutMs: 1000 });
   const store = new SqliteMemoryStore(db);
-  const registry = new DeviceRegistry({ store, roles, limits: { maxOwners: 100, dailyCap: 100, orphanOwnerDays: 7, orphanCleanupBatch: 100, ...opts.limits } });
+  const registry = new DeviceRegistry({ store, roles, characters: shippedCharacters(), limits: { maxOwners: 100, dailyCap: 100, orphanOwnerDays: 7, orphanCleanupBatch: 100, ...opts.limits } });
   const contexts: SessionContext[] = [];
   manager = new SessionManager((ctx) => {
     contexts.push(ctx);
@@ -92,8 +93,8 @@ async function call(base: string, method: string, path: string, opts: CallOption
   return { status: res.status, json: text ? (JSON.parse(text) as Record<string, unknown>) : null };
 }
 
-async function register(base: string, style?: string): Promise<string> {
-  const r = await call(base, 'POST', '/device/register', { body: { clientInfo: { platform: 'test' }, ...(style ? { style } : {}) } });
+async function register(base: string): Promise<string> {
+  const r = await call(base, 'POST', '/device/register', { body: { clientInfo: { platform: 'test' } } });
   expect(r.status).toBe(200);
   return r.json!.deviceToken as string;
 }
@@ -119,13 +120,11 @@ describe('device registration', () => {
     expect((await call(base, 'POST', '/device/register', { body: { clientInfo: { platform: 'test' } }, secret: 'wrong-secret-0123456' })).status).toBe(401);
   });
 
-  it('validates the body and the style', async () => {
+  it('validates the register body and drops a legacy style field', async () => {
     const { base } = await boot();
     expect((await call(base, 'POST', '/device/register', { body: {} })).status).toBe(400);
     expect((await call(base, 'POST', '/device/register', { body: { clientInfo: { platform: 'x'.repeat(33) } } })).status).toBe(400);
-    expect((await call(base, 'POST', '/device/register', { body: { clientInfo: { platform: 'test' }, style: 'Bad Style' } })).status).toBe(400);
-    const unknown = await call(base, 'POST', '/device/register', { body: { clientInfo: { platform: 'test' }, style: 'pirate' } });
-    expect(unknown).toEqual({ status: 400, json: { error: 'unknown_style' } });
+    expect((await call(base, 'POST', '/device/register', { body: { clientInfo: { platform: 'test' }, style: 'pirate' } })).status).toBe(200);
   });
 
   it('rate limits registration in its own bucket', async () => {
@@ -150,26 +149,29 @@ describe('device registration', () => {
 });
 
 describe('bearer sessions', () => {
-  it('binds each device token to its own owner and agent and ignores client-supplied ids', async () => {
+  it('binds each device token and character to its own agent and rejects client-supplied ids', async () => {
     const { base, store, contexts } = await boot();
-    const a = await register(base, 'old-friend');
+    const a = await register(base);
     const b = await register(base);
     const ownerA = store.findDevice(hashToken(a))!.ownerId;
     const ownerB = store.findDevice(hashToken(b))!.ownerId;
-    expect(ownerA).not.toBe(ownerB);
-    const sa = await call(base, 'POST', '/session', { bearer: a, body: { ownerId: ownerB, agentId: 'forged' } });
-    expect(sa.status).toBe(200);
-    expect((await call(base, 'POST', '/session', { bearer: b })).status).toBe(200);
-    expect(contexts.map((c) => [c.ownerId, c.styleId])).toEqual([[ownerA, 'grandchild'], [ownerB, 'grandchild']]);
-    expect(contexts[0]!.agentId).not.toBe(contexts[1]!.agentId);
-    await startSession(base, sa.json as unknown as SessionTokens);
-    expect(store.listSessions(ownerA)).toHaveLength(1);
-    expect(store.listSessions(ownerB)).toHaveLength(0);
-    expect(await call(base, 'PATCH', '/agent/style', { bearer: b, body: { style: 'old-friend' } })).toEqual({ status: 200, json: { style: 'old-friend' } });
-    expect((await call(base, 'PATCH', '/agent/style', { bearer: a, body: { style: 'grandchild' } })).status).toBe(200);
-    await call(base, 'POST', '/session', { bearer: a });
-    await call(base, 'POST', '/session', { bearer: b });
-    expect(contexts.slice(2).map((c) => [c.ownerId, c.styleId])).toEqual([[ownerA, 'grandchild'], [ownerB, 'grandchild']]);
+    expect(await call(base, 'POST', '/session', { bearer: a, body: { ownerId: ownerB, agentId: 'forged' } }))
+      .toEqual({ status: 400, json: { error: 'unknown_character' } });
+    expect(await call(base, 'POST', '/session', { bearer: a, body: { character: 'kai' } }))
+      .toEqual({ status: 400, json: { error: 'unknown_character' } });
+    expect((await call(base, 'POST', '/session', { bearer: a, body: { character: 'xiaokai' } })).status).toBe(200);
+    expect((await call(base, 'POST', '/session', { bearer: a })).status).toBe(200);
+    expect((await call(base, 'POST', '/session', { bearer: b, body: { character: 'xiaokai' } })).status).toBe(200);
+    expect(contexts.map((c) => [c.ownerId, c.characterId])).toEqual([[ownerA, 'xiaokai'], [ownerA, 'xiaonuan'], [ownerB, 'xiaokai']]);
+    expect(new Set(contexts.map((c) => c.agentId)).size).toBe(3);
+    expect(contexts.every((c) => c.firstMeet)).toBe(true);
+  });
+
+  it('no longer serves PATCH /agent/style', async () => {
+    const { base } = await boot();
+    const a = await register(base);
+    expect(await call(base, 'PATCH', '/agent/style', { bearer: a, body: { style: 'old-friend' } }))
+      .toEqual({ status: 404, json: { error: 'not_found' } });
   });
 
   it('ends the previous session when the same owner opens a new one', async () => {
@@ -190,21 +192,13 @@ describe('bearer sessions', () => {
     expect((await call(base, 'POST', '/session', { bearer: forged })).status).toBe(401);
     const malformed = await fetch(`${base}/session`, { method: 'POST', headers: { 'x-app-secret': SECRET, authorization: 'Bearer short' } });
     expect(malformed.status).toBe(401);
-    expect((await call(base, 'PATCH', '/agent/style', { bearer: forged, body: { style: 'old-friend' } })).status).toBe(401);
-    expect((await call(base, 'PATCH', '/agent/style', { body: { style: 'old-friend' } })).status).toBe(401);
-  });
-
-  it('validates the style change body', async () => {
-    const { base } = await boot();
-    const a = await register(base);
-    expect((await call(base, 'PATCH', '/agent/style', { bearer: a, body: {} })).status).toBe(400);
-    expect(await call(base, 'PATCH', '/agent/style', { bearer: a, body: { style: 'pirate' } })).toEqual({ status: 400, json: { error: 'unknown_style' } });
   });
 
   it('keeps the APP_SECRET-only dev mode working', async () => {
     const { base, contexts } = await boot();
     expect((await call(base, 'POST', '/session')).status).toBe(200);
     expect(contexts[0]!.ownerId).toBeUndefined();
+    expect(contexts[0]!.characterId).toBe('xiaonuan');
   });
 
   it('hides identity routes when identity is disabled', async () => {
@@ -218,7 +212,7 @@ describe('bearer sessions', () => {
 
   it('allows PATCH, DELETE and authorization in CORS preflight for loopback origins', async () => {
     const { base } = await boot();
-    const res = await fetch(`${base}/agent/style`, { method: 'OPTIONS', headers: { origin: 'http://127.0.0.1:39123' } });
+    const res = await fetch(`${base}/session`, { method: 'OPTIONS', headers: { origin: 'http://127.0.0.1:39123' } });
     expect(res.status).toBe(204);
     expect(res.headers.get('access-control-allow-methods')).toBe('POST, PATCH, DELETE, OPTIONS');
     expect(res.headers.get('access-control-allow-headers')).toBe('content-type, x-app-secret, authorization');

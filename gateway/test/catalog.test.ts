@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_ROLE, fixedRoleCatalog } from '../src/roles/catalog.ts';
 import { devContext, devContextResolver } from '../src/session/context.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
+import { shippedCharacters, shippedRoles } from './support/shipped.ts';
 
 const director = {
   followupAfterMs: 8000, idleNoticeAfterMs: 25000, maxConsecutive: 2, maxPerWindow: 3, windowMs: 300000,
@@ -40,13 +41,15 @@ describe('fixedRoleCatalog', () => {
     expect(roles.director('xiaonuan').greetingText).toBe('greeting');
   });
 
-  it('builds a dev context from the catalog defaults', () => {
-    expect(devContext(fixedRoleCatalog('P', director))).toEqual({ roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'zh' });
+  it('builds a dev context for the requested character in its role language', () => {
+    expect(devContext(fixedRoleCatalog('P', director), undefined, 'xiaokai')).toEqual({ characterId: 'xiaokai', language: 'zh', firstMeet: true });
+    const shipped = shippedRoles();
+    expect(devContext(shipped, shippedCharacters(), 'xiaoxin')).toEqual({ characterId: 'xiaoxin', language: 'zh', firstMeet: true });
   });
 
   it('builds a dev context in the role default language', () => {
     const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'en'], defaultLanguage: 'en' });
-    expect(devContext(roles)).toEqual({ roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'en' });
+    expect(devContext(roles, undefined, 'xiaonuan')).toEqual({ characterId: 'xiaonuan', language: 'en', firstMeet: true });
   });
 
   it('keeps the stub default language inside its supported languages', () => {
@@ -61,9 +64,9 @@ describe('fixedRoleCatalog', () => {
 });
 
 describe('devContextResolver', () => {
-  it('accepts requests without a bearer and rejects any bearer until identity exists', () => {
+  it('accepts requests without a bearer for any character and rejects any bearer', () => {
     const resolver = devContextResolver(fixedRoleCatalog('P', director));
-    expect(resolver.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'zh' }, noticePending: false });
-    expect(resolver.resolve('device-token-0123456789')).toEqual({ ok: false });
+    expect(resolver.resolve(undefined, 'xiaoxin')).toEqual({ ok: true, ctx: { characterId: 'xiaoxin', language: 'zh', firstMeet: true }, noticePending: false });
+    expect(resolver.resolve('device-token-0123456789', 'xiaonuan')).toEqual({ ok: false });
   });
 });

@@ -1,8 +1,8 @@
 import path from 'node:path';
 
-export interface EvalArgs { adapter?: string; style?: string; only?: string[]; out?: string; scenarios?: string; judge?: string }
+export interface EvalArgs { adapter?: string; character?: string; only?: string[]; out?: string; scenarios?: string; judge?: string }
 
-const FLAGS = new Set(['adapter', 'style', 'only', 'out', 'scenarios', 'judge']);
+const FLAGS = new Set(['adapter', 'character', 'only', 'out', 'scenarios', 'judge']);
 
 // Strict parser: every flag needs a value; unknown flags are errors.
 export function parseEvalArgs(argv: readonly string[]): EvalArgs {
@@ -19,7 +19,7 @@ export function parseEvalArgs(argv: readonly string[]): EvalArgs {
   }
   return {
     ...(values.adapter !== undefined ? { adapter: values.adapter } : {}),
-    ...(values.style !== undefined ? { style: values.style } : {}),
+    ...(values.character !== undefined ? { character: values.character } : {}),
     ...(values.only !== undefined ? { only: values.only.split(',') } : {}),
     ...(values.out !== undefined ? { out: values.out } : {}),
     ...(values.scenarios !== undefined ? { scenarios: values.scenarios } : {}),

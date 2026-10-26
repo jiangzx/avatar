@@ -49,7 +49,7 @@ function collector() {
 }
 
 describe('Session context', () => {
-  it('builds instructions and voice from the session context', async () => {
+  it('builds instructions for the context character and asks deps for the voice', async () => {
     const configs: SessionConfig[] = [];
     const roles: RoleCatalog = { ...fixedRoleCatalog('P', director), buildPersona: (characterId) => `persona:${characterId}` };
     const session = new Session(
@@ -62,56 +62,31 @@ describe('Session context', () => {
         },
         summarizer: new MockSummarizer(),
         roles,
+        voiceFor: () => 'voice-kai',
       },
-      { roleId: 'elder-companion', styleId: 'old-friend', voice: 'voice-old' },
+      { characterId: 'xiaokai', firstMeet: false },
     );
     await session.start(collector().transport);
-    expect(configs[0]?.voice).toBe('voice-old');
-    expect(configs[0]?.instructions).toContain('persona:xiaonuan');
-    expect(session.context.styleId).toBe('old-friend');
+    expect(configs[0]?.voice).toBe('voice-kai');
+    expect(configs[0]?.instructions).toContain('persona:xiaokai');
+    expect(session.context.characterId).toBe('xiaokai');
+    expect('useYoungMaleVoice' in session).toBe(false);
     session.end();
   });
 
-  it('uses the young male voice for every language', async () => {
-    const configs: SessionConfig[] = [];
-    const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'ja', 'en'], defaultLanguage: 'zh' });
-    const session = new Session(
-      {
-        adapterFactory: () => {
-          const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
-          const connect = m.connect.bind(m);
-          vi.spyOn(m, 'connect').mockImplementation((c) => { configs.push(c); return connect(c); });
-          return m;
-        },
-        summarizer: new MockSummarizer(),
-        roles,
-        voiceFor: (language) => language === 'zh' ? 'longanlingxin' : 'Tina',
-        youngMaleVoice: 'Evan',
-      },
-      { roleId: 'elder-companion', styleId: 'grandchild', language: 'ja' },
-    );
-    session.useYoungMaleVoice();
-    await session.start(collector().transport);
-    expect(configs[0]?.voice).toBe('Evan');
-    session.setInitialLanguage('zh');
-    expect(session.currentLanguage).toBe('zh');
-    session.end();
-  });
-
-  it('uses Ryan for Chinese so a wave dash is not spoken as a bar', async () => {
+  it('asks deps.voiceFor again when the language changes', async () => {
     vi.useFakeTimers();
     try {
+      const asked: Language[] = [];
       const s = setup({
         roles: fixedRoleCatalog('P', director, { languages: ['zh', 'ja', 'en'], defaultLanguage: 'zh' }),
-        voiceFor: (language) => language === 'zh' ? 'longanlingxin' : 'Tina',
-        youngMaleVoice: 'Evan',
-        youngMaleVoices: { zh: 'Ryan', ja: 'Evan', en: 'Evan' },
-      }, { roleId: 'elder-companion', styleId: 'grandchild', language: 'zh' });
-      s.session.useYoungMaleVoice();
+        voiceFor: (language) => { asked.push(language); return language === 'zh' ? 'Ryan' : 'Evan'; },
+      }, { characterId: 'xiaokai', firstMeet: false, language: 'zh' });
       await greetAndFinish(s);
       expect(s.mocks[0]!.voice).toBe('Ryan');
       s.session.setInitialLanguage('ja');
       expect(s.mocks[0]!.sessionUpdates.at(-1)?.voice?.value).toBe('Evan');
+      expect(asked).toContain('ja');
       s.session.end();
     } finally {
       vi.useRealTimers();
@@ -138,7 +113,7 @@ describe('Session context', () => {
         roles,
         voiceFor: (language) => language === 'en' ? 'voice-en' : undefined,
       },
-      { roleId: 'elder-companion', styleId: 'grandchild', language: 'en' },
+      { characterId: 'xiaonuan', firstMeet: false, language: 'en' },
     );
     await session.start(collector().transport);
     expect(configs[0]?.instructions).toContain('P-en');
@@ -165,7 +140,7 @@ describe('Session context', () => {
         roles,
         i18n,
       },
-      { roleId: 'elder-companion', styleId: 'grandchild', language: 'ja' },
+      { characterId: 'xiaonuan', firstMeet: false, language: 'ja' },
     );
     await session.start(collector().transport);
 
@@ -180,7 +155,7 @@ describe('Session context', () => {
     const roles = fixedRoleCatalog('P', director, { languages: ['zh'], defaultLanguage: 'zh' });
     const session = new Session(
       { adapterFactory: () => new MockAdapter({ script }), summarizer: new MockSummarizer(), roles },
-      { roleId: 'elder-companion', styleId: 'grandchild', language: 'ja' },
+      { characterId: 'xiaonuan', firstMeet: false, language: 'ja' },
     );
     expect(session.currentLanguage).toBe('zh');
     session.end();
@@ -188,7 +163,7 @@ describe('Session context', () => {
 });
 
 const ownedCtx: SessionContext = {
-  ownerId: 'owner-1', agentId: 'agent-1', roleId: 'elder-companion', styleId: 'grandchild',
+  ownerId: 'owner-1', agentId: 'agent-1', characterId: 'xiaonuan', firstMeet: false,
 };
 
 /** Only the rows refreshMemorySnapshot reads. */
@@ -1173,7 +1148,7 @@ describe('Session', () => {
       defaultLanguage: 'en',
       directors: { en: { ...director, toolContinueInstruction: 'Say Continue.', toolContinueText: 'Continue.' } },
     });
-    const s = setup({ roles }, { roleId: 'elder-companion', styleId: 'grandchild', language: 'en' }, 'tool-continue-en');
+    const s = setup({ roles }, { characterId: 'xiaonuan', firstMeet: false, language: 'en' }, 'tool-continue-en');
     await greetAndFinish(s);
     const creates = vi.spyOn(s.mocks[0]!, 'createResponse');
     s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
@@ -2064,7 +2039,7 @@ describe('Session affect render', () => {
         roles: fixedRoleCatalog('P', director, { languages: ['zh', 'en'], defaultLanguage: 'zh' }),
         textClient: { complete: async () => affectCardJson() },
       },
-      { roleId: 'elder-companion', styleId: 'grandchild', language: 'en' },
+      { characterId: 'xiaonuan', firstMeet: false, language: 'en' },
     );
     await greetAndFinish(s);
     s.session.handleClientMessage({ type: 'debug.userText', text: 'I went to the market this afternoon.' });

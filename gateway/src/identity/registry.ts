@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_CHARACTER_ID } from '@anyidea/protocol';
+import type { CharacterId } from '@anyidea/protocol';
+import type { CharacterRegistry } from '../characters/registry.ts';
 import { DEFAULT_I18N } from '../i18n/load.ts';
 import type { I18nBundle } from '../i18n/types.ts';
 import { log } from '../log.ts';
@@ -7,7 +8,7 @@ import { memoryViewSource, renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { PROMPT_LABELS } from '../roles/labels.ts';
-import { devContext, isLegacyStyle, LEGACY_DEFAULT_STYLE, type ContextResolver, type ResolveResult, type SessionContext } from '../session/context.ts';
+import { devContext, type ContextResolver, type ResolveResult, type SessionContext } from '../session/context.ts';
 import type { SessionLifecycle } from '../session/manager.ts';
 import { loadMemoryBudget } from '../session/pacing.ts';
 import { hashToken, newDeviceToken, shortHash } from './tokens.ts';
@@ -26,20 +27,20 @@ export interface IdentityLimits {
   orphanCleanupBatch: number;
 }
 
-export type RegisterError = 'unknown_style' | 'owner_capacity' | 'register_daily_cap';
+export type RegisterError = 'owner_capacity' | 'register_daily_cap';
 export type RegisterResult = { ok: true; deviceToken: string } | { ok: false; error: RegisterError };
-export type SetStyleResult = 'ok' | 'unauthorized' | 'unknown_style';
 
 /** What the HTTP layer needs from identity. */
 export interface IdentityService {
-  register(style: string | undefined): RegisterResult;
-  setStyle(bearer: string, style: string): SetStyleResult;
+  register(): RegisterResult;
   deleteOwner(ownerId: string): boolean;
 }
 
 export interface DeviceRegistryDeps {
   store: MemoryStore;
   roles: RoleCatalog;
+  /** Character cards: role pack and default language per character. */
+  characters: CharacterRegistry;
   limits: IdentityLimits;
   now?: () => number;
   /** Defaults to instructions.snapshotMaxChars in gateway/config/memory.json. */
@@ -71,40 +72,42 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     };
   }
 
-  register(style: string | undefined): RegisterResult {
-    const { store, roles, limits } = this.deps;
-    const roleId = roles.defaultRole();
-    const styleId = style ?? LEGACY_DEFAULT_STYLE;
-    if (!isLegacyStyle(styleId)) return this.reject('unknown_style');
+  register(): RegisterResult {
+    const { store, limits } = this.deps;
     if (store.countOwners() >= limits.maxOwners) return this.reject('owner_capacity');
     const now = this.now();
     // Store bound is inclusive; +1 excludes owners created exactly 24 h ago.
     if (store.countOwnersCreatedSince(now - DAY_MS + 1) >= limits.dailyCap) return this.reject('register_daily_cap');
     const deviceToken = newDeviceToken();
-    // Agents are created per character on resolve. Styles are no longer stored; Task 7 removes them.
     const created = store.createOwner({ tokenHash: hashToken(deviceToken), now });
-    log('device_registered', { device: shortHash(created.deviceId), style: styleId });
+    // Agents are created per character on POST /session. Log only a short device hash.
+    log('device_registered', { device: shortHash(created.deviceId) });
     return { ok: true, deviceToken };
   }
 
-  resolve(bearer: string | undefined): ResolveResult {
-    const { store, roles } = this.deps;
-    if (bearer === undefined) return { ok: true, ctx: devContext(roles), noticePending: false }; // dev / Mock: no owner, no memory
+  resolve(bearer: string | undefined, characterId: CharacterId): ResolveResult {
+    const { store, roles, characters } = this.deps;
+    // dev / Mock: no owner, no memory.
+    if (bearer === undefined) return { ok: true, ctx: devContext(roles, characters, characterId), noticePending: false };
     const device = store.findDevice(hashToken(bearer));
     if (!device) {
       log('device_unknown', {});
       return { ok: false };
     }
     const now = this.now();
-    const roleId = roles.defaultRole();
-    // Task 7 resolves the requested character; until then every session uses the default one.
-    const agent = store.ensureAgent(device.ownerId, DEFAULT_CHARACTER_ID, now);
-    const styleId = LEGACY_DEFAULT_STYLE;
+    // One agent per owner × character, created at the first meeting. The character only selects among this owner's agents.
+    const agent = store.ensureAgent(device.ownerId, characterId, now);
     store.touchDevice(device.ownerId, device.deviceId, now);
-    log('device_resolved', { agent: shortHash(agent.id), style: styleId });
+    log('device_resolved', { agent: shortHash(agent.id), character: characterId });
     const owner = store.getOwner(device.ownerId);
-    const language = roles.defaultLanguage(roleId);
-    const ctx: SessionContext = { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: undefined, language };
+    const language = roles.defaultLanguage(characters.roleOf(characterId));
+    const ctx: SessionContext = {
+      ownerId: device.ownerId,
+      agentId: agent.id,
+      characterId,
+      language,
+      firstMeet: !store.hasEndedSession(agent.id),
+    };
     // Read the store, not the live Session. The server flushes the previous owner before this resolve is used.
     // User-grounded only. Episodes, notes, extracted sensitive facts, and assistant lines stay out.
     // A pin the user asked to keep may be sensitive; it travels in pinnedMemory, not the three views.
@@ -127,16 +130,6 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
       // Declining memory also ends the notice obligation: asking again would contradict the choice.
       noticePending: owner !== undefined && owner.notifiedAt === null && owner.memoryConsent !== 'declined',
     };
-  }
-
-  setStyle(bearer: string, style: string): SetStyleResult {
-    const { store } = this.deps;
-    const device = store.findDevice(hashToken(bearer));
-    if (!device) return 'unauthorized';
-    if (!isLegacyStyle(style)) return 'unknown_style';
-    // The baseline has no style column; Task 7 deletes PATCH /agent/style.
-    log('agent_style_ignored', { style });
-    return 'ok';
   }
 
   deleteOwner(ownerId: string): boolean {

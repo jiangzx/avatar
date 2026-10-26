@@ -98,7 +98,7 @@ function setup(store: MemoryStore, client: TextModelClient) {
     budget: { totalChars: 8_000, snapshotMaxChars: 600, summaryMaxChars: 800 },
     i18n,
     affect,
-  }, { ownerId: 'owner-1', agentId: 'agent-1', roleId: 'elder-companion', styleId: 'grandchild', language: 'zh' }, 'care-session');
+  }, { ownerId: 'owner-1', agentId: 'agent-1', characterId: 'xiaonuan', firstMeet: false, language: 'zh' }, 'care-session');
   const sent: ServerMessage[] = [];
   const transport: Transport = { send: (m) => sent.push(m), sendAudio: () => {} };
   const greetings = () => requests.filter((request) => request.cue === 'greeting');

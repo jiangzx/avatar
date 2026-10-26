@@ -11,6 +11,7 @@ import {
 } from '@anyidea/protocol';
 import { classifyAdapterError } from '../adapters/errorClass.ts';
 import type { AdapterFactory, ProactiveRequest, RealtimeAdapter, SessionConfig } from '../adapters/types.ts';
+import type { CharacterRegistry } from '../characters/registry.ts';
 import { log } from '../log.ts';
 import { memoryViewSource, renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
@@ -75,6 +76,8 @@ export interface SessionDeps {
   adapterFactory: AdapterFactory;
   summarizer: Summarizer;
   roles: RoleCatalog;
+  /** Character cards. Optional for tests; production always passes it. Without it the role is roles.defaultRole(). */
+  characters?: CharacterRegistry;
   textClient?: TextModelClient;
   ledger?: LedgerOptions;
   confirmWindowMs?: number;
@@ -130,15 +133,8 @@ export interface SessionDeps {
   extractEveryUserTurns?: number;
   /** Rest delay used when a worker is injected. Matches extractSilenceMs. */
   extractSilenceMs?: number;
-  /** Default voice for the current language when the role/style does not override. */
+  /** Voice for this session's character in a language; undefined = adapter default. index.ts resolves the card, then the env default. */
   voiceFor?: (language: Language) => string | undefined;
-  /** Fallback young male voice when `youngMaleVoices` has no entry for the language. */
-  youngMaleVoice?: string;
-  /**
-   * Young male voice per language. Chinese must not use Evan: it reads ～ as 横杠
-   * (probe 2026-10-25). Ryan does not.
-   */
-  youngMaleVoices?: Partial<Record<Language, string>>;
   /** Loaded language rules (gateway/config/i18n). Undefined = script heuristic only (tests). */
   languageRules?: LanguageRules;
 }
@@ -177,10 +173,10 @@ export class Session {
   private readonly writer: TranscriptWriter | undefined;
   private readonly i18n: I18nBundle;
   private language: Language;
+  /** Role pack of this session's character; fixed for the session. */
+  private readonly roleId: string;
   /** Held after an explicit language request so later speech does not flip the reply language. */
   private languageLock: Language | null = null;
-  /** Kai: young male voice, chosen per language. */
-  private youngMale = false;
   private readonly personas = new Map<Language, string>();
   private readonly silencePlanners = new Map<Language, ReturnType<typeof createSilencePlanner>>();
   /** Every live session.update goes through here (blockers #48). */
@@ -292,12 +288,13 @@ export class Session {
 
   constructor(
     private readonly deps: SessionDeps,
-    ctx: SessionContext = devContext(deps.roles),
+    ctx: SessionContext = devContext(deps.roles, deps.characters, DEFAULT_CHARACTER_ID),
     readonly sessionId: string = randomUUID(),
     private readonly noticePending = false,
   ) {
     this.writer = deps.writer;
     this.context = ctx;
+    this.roleId = deps.characters?.roleOf(ctx.characterId) ?? deps.roles.defaultRole();
     this.i18n = deps.i18n ?? DEFAULT_I18N;
     this.push = deps.push ?? DEFAULT_PUSH;
     this.gate = new PushGate({
@@ -306,7 +303,7 @@ export class Session {
       now: () => this.now(),
       minIntervalMs: this.push.minIntervalMs,
     });
-    this.language = this.resolveLanguage(ctx.language ?? deps.roles.defaultLanguage(ctx.roleId));
+    this.language = this.resolveLanguage(ctx.language ?? deps.roles.defaultLanguage(this.roleId));
     // The resolver rendered with the role's default language; render again in the session language.
     this.refreshMemorySnapshot();
     const initialPersona = this.personaFor(this.language);
@@ -321,11 +318,11 @@ export class Session {
     const extractor = deps.worker;
     const ownerId = ctx.ownerId;
     const agentId = ctx.agentId;
-    const hasSilencePlanner = deps.roles.supportedLanguages(ctx.roleId)
-      .some((language) => deps.roles.director(DEFAULT_CHARACTER_ID, language).silenceDecision !== undefined);
+    const hasSilencePlanner = deps.roles.supportedLanguages(this.roleId)
+      .some((language) => deps.roles.director(ctx.characterId, language).silenceDecision !== undefined);
     this.safeGreetingWired = Boolean(deps.textClient) && hasSilencePlanner;
     this.director = new Director(
-      (language) => deps.roles.director(DEFAULT_CHARACTER_ID, language),
+      (language) => deps.roles.director(ctx.characterId, language),
       {
         requestResponse: (kind, request) => this.requestResponse(kind, request),
         ...(deps.textClient && hasSilencePlanner ? {
@@ -348,7 +345,7 @@ export class Session {
       ? new AffectTracker({
           client: deps.textClient,
           config: affectConfig,
-          prompt: (language) => deps.roles.affectPrompt(DEFAULT_CHARACTER_ID, language),
+          prompt: (language) => deps.roles.affectPrompt(ctx.characterId, language),
           history: () => this.ledger.recent,
           evidence: this.i18n.evidence,
           safety: this.i18n.safety,
@@ -616,11 +613,6 @@ export class Session {
     this.applyLanguage(language);
   }
 
-  /** Call before start. Later language changes pick that language's young male voice. */
-  useYoungMaleVoice(): void {
-    this.youngMale = true;
-  }
-
   private applyLanguage(language: Language): void {
     const next = this.resolveLanguage(language);
     // Session-end extraction reads this context, so it must track the latest language.
@@ -640,16 +632,16 @@ export class Session {
   }
 
   private resolveLanguage(language: Language): Language {
-    const supported = this.deps.roles.supportedLanguages(this.context.roleId);
+    const supported = this.deps.roles.supportedLanguages(this.roleId);
     if (supported.includes(language)) return language;
-    log('language_unsupported', { roleId: this.context.roleId, language });
-    return this.deps.roles.defaultLanguage(this.context.roleId);
+    log('language_unsupported', { roleId: this.roleId, language });
+    return this.deps.roles.defaultLanguage(this.roleId);
   }
 
   private personaFor(language: Language): string {
     const cached = this.personas.get(language);
     if (cached !== undefined) return cached;
-    const persona = this.deps.roles.buildPersona(DEFAULT_CHARACTER_ID, language);
+    const persona = this.deps.roles.buildPersona(this.context.characterId, language);
     this.personas.set(language, persona);
     return persona;
   }
@@ -659,7 +651,7 @@ export class Session {
   }
 
   private planProactiveLine(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null> {
-    const config = this.deps.roles.director(DEFAULT_CHARACTER_ID, this.language).silenceDecision;
+    const config = this.deps.roles.director(this.context.characterId, this.language).silenceDecision;
     const client = this.deps.textClient;
     if (!config || !client) return null;
     let planner = this.silencePlanners.get(this.language);
@@ -760,14 +752,9 @@ export class Session {
     return { instructions, tools: this.toolsFor(this.language).specs(), voice: this.voiceFor(this.language), ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
   }
 
-  /** Young male voice (until Task 7), then the language default, then the context voice for the role's default language. */
+  /** The character's voice for this language, resolved by index.ts; undefined = adapter default. */
   private voiceFor(language: Language): string | undefined {
-    if (this.youngMale) {
-      const young = this.deps.youngMaleVoices?.[language] ?? this.deps.youngMaleVoice;
-      if (young) return young;
-    }
-    return this.deps.voiceFor?.(language)
-      ?? (language === this.deps.roles.defaultLanguage(this.context.roleId) ? this.context.voice : undefined);
+    return this.deps.voiceFor?.(language);
   }
 
   private toolsFor(language: Language): ToolRegistry {
@@ -779,7 +766,7 @@ export class Session {
         memory: i18n.memory[language],
         evidence: i18n.evidence,
         recentQueries: i18n.recentQueries,
-        recallPrompt: this.deps.roles.recallPrompt(DEFAULT_CHARACTER_ID, language),
+        recallPrompt: this.deps.roles.recallPrompt(this.context.characterId, language),
         safety: i18n.safety,
         clipChars: this.deps.recallClipChars ?? 80,
         phraseTimeoutMs: this.deps.recallPhraseTimeoutMs ?? 1_500,
@@ -1271,7 +1258,7 @@ export class Session {
       });
       return;
     }
-    const cfg = this.deps.roles.director(DEFAULT_CHARACTER_ID, this.language);
+    const cfg = this.deps.roles.director(this.context.characterId, this.language);
     this.adapter.createResponse({
       cue: 'toolContinue',
       instruction: cfg.toolContinueInstruction,
@@ -1552,7 +1539,7 @@ export class Session {
       this.careOpening = null;
       log('care_opening', { outcome: 'language_mismatch' });
     }
-    const config = this.deps.roles.director(DEFAULT_CHARACTER_ID, this.language);
+    const config = this.deps.roles.director(this.context.characterId, this.language);
     const templates = config.greetingNameTexts;
     if (!templates || templates.length === 0) return config.greetingMemoryText ?? null;
     return templates[Math.floor(Math.random() * templates.length)]!.replaceAll('{name}', name);
@@ -1580,7 +1567,7 @@ export class Session {
     const agentId = this.context.agentId;
     if (!care || !store || !client || !ownerId || !agentId || !this.safeGreetingWired) return null;
     const language = this.language;
-    const templates = this.deps.roles.director(DEFAULT_CHARACTER_ID, language).greetingCareTexts ?? [];
+    const templates = this.deps.roles.director(this.context.characterId, language).greetingCareTexts ?? [];
     const name = this.greetingName();
     // Without a name there is no safe greeting to attach to; skip care rather than guess.
     if (templates.length === 0 || !name) return null;
@@ -1597,7 +1584,7 @@ export class Session {
     const daysAgo = Math.max(0, Math.floor((startedAt - createdAt) / DAY_MS));
     return generateCareLine(
       client,
-      this.deps.roles.carePrompt(DEFAULT_CHARACTER_ID, language),
+      this.deps.roles.carePrompt(this.context.characterId, language),
       { userLine: quote, daysAgo },
       { timeoutMs: care.timeoutMs, maxChars: care.maxChars[language], maxTokens: care.maxTokens, temperature: care.temperature },
       this.i18n.safety,

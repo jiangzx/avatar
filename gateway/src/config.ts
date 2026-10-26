@@ -20,10 +20,6 @@ export interface GatewayConfig {
   qwenModel: string;
   qwenVoice: string;
   qwenVoices: Record<Language, string>;
-  /** Qwen3.8 young male voice for Japanese and English. Official id: Evan. */
-  qwenYoungMaleVoice: string;
-  /** Qwen3.8 young male voice for Chinese. Ryan: Evan reads ～ as 横杠 (probe 2026-10-25). */
-  qwenYoungMaleVoiceZh: string;
   summarizer: 'mock' | 'qwen';
   summarizerEndpoint: string;
   summarizerModel: string;
@@ -132,8 +128,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     qwenModel: env.QWEN_MODEL ?? 'qwen3.8-omni-flash-realtime',
     qwenVoice: qwenVoices.zh,
     qwenVoices,
-    qwenYoungMaleVoice: env.QWEN_VOICE_YOUNG_MALE ?? 'Evan',
-    qwenYoungMaleVoiceZh: env.QWEN_VOICE_YOUNG_MALE_ZH ?? 'Ryan',
     summarizer,
     summarizerEndpoint,
     summarizerModel: env.QWEN_SUMMARIZER_MODEL ?? 'qwen-flash',

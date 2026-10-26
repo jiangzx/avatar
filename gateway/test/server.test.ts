@@ -143,7 +143,7 @@ describe('gateway server', () => {
   it('flushes the previous owner before the snapshot used for the next session', async () => {
     const events: string[] = [];
     const seen: Array<string | undefined> = [];
-    const ctx: SessionContext = { ownerId: 'o1', agentId: 'a1', roleId: 'elder-companion', styleId: 'grandchild' };
+    const ctx: SessionContext = { ownerId: 'o1', agentId: 'a1', characterId: 'xiaonuan', firstMeet: false };
     const spy = vi.spyOn(Session.prototype, 'flush').mockImplementation(() => {
       events.push('flush');
     });
@@ -171,7 +171,7 @@ describe('gateway server', () => {
 
   it('hands the resolved context to the session factory', async () => {
     const seen: SessionContext[] = [];
-    const ctx: SessionContext = { ownerId: 'o1', agentId: 'a1', roleId: 'elder-companion', styleId: 'old-friend', voice: 'voice-old' };
+    const ctx: SessionContext = { ownerId: 'o1', agentId: 'a1', characterId: 'xiaokai', firstMeet: true };
     const base = await boot({
       contextResolver: { resolve: (b) => (b === 'device-token-0123456789' ? { ok: true, ctx, noticePending: false } : { ok: false }) },
       onContext: (c) => seen.push(c),
@@ -179,6 +179,32 @@ describe('gateway server', () => {
     const res = await fetch(base + '/session', { method: 'POST', headers: { 'content-type': 'application/json', 'x-app-secret': SECRET, authorization: 'Bearer device-token-0123456789' }, body: '{}' });
     expect(res.status).toBe(200);
     expect(seen).toEqual([ctx]);
+  });
+
+  it('passes the body character to the resolver and rejects anything else with 400', async () => {
+    const asked: string[] = [];
+    const base = await boot({
+      contextResolver: {
+        resolve: (_bearer, characterId) => {
+          asked.push(characterId);
+          return { ok: true, ctx: { characterId, firstMeet: true }, noticePending: false };
+        },
+      },
+    });
+    const post = (body?: string) => fetch(base + '/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-app-secret': SECRET },
+      ...(body === undefined ? {} : { body }),
+    });
+    expect((await post('{"character":"xiaokai"}')).status).toBe(200);
+    expect((await post()).status).toBe(200);
+    expect((await post('{}')).status).toBe(200);
+    for (const bad of ['{"character":"kai"}', '{"character":"xiaokai","ownerId":"o2"}', '{"character":1}', 'not json', '[]']) {
+      const res = await post(bad);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: 'unknown_character' });
+    }
+    expect(asked).toEqual(['xiaokai', 'xiaonuan', 'xiaonuan']);
   });
 
   it('allows the authorization header in CORS preflight for loopback origins', async () => {
@@ -469,14 +495,11 @@ describe('client message schema', () => {
       type: 'session.start',
       clientInfo: { platform: 'android', audioPath: 'B', language: 'fr' },
     }))).toBeNull();
+    // voiceProfile is gone (C1): unknown clientInfo keys are stripped, not rejected.
     expect(parseClientMessage(JSON.stringify({
       type: 'session.start',
       clientInfo: { platform: 'android', audioPath: 'B', voiceProfile: 'young-male' },
-    }))).toEqual({ type: 'session.start', clientInfo: { platform: 'android', audioPath: 'B', voiceProfile: 'young-male' } });
-    expect(parseClientMessage(JSON.stringify({
-      type: 'session.start',
-      clientInfo: { platform: 'android', audioPath: 'B', voiceProfile: 'other' },
-    }))).toBeNull();
+    }))).toEqual({ type: 'session.start', clientInfo: { platform: 'android', audioPath: 'B' } });
   });
 });
 

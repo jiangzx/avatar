@@ -114,7 +114,7 @@ function toolStore(rows: readonly { text: string }[]): MemoryStore {
   return { searchMessages: () => [...rows], recentUserMessages: () => [] } as unknown as MemoryStore;
 }
 
-const ownedCtx: SessionContext = { ownerId: 'owner-1', agentId: 'agent-1', roleId: 'elder-companion', styleId: 'grandchild' };
+const ownedCtx: SessionContext = { ownerId: 'owner-1', agentId: 'agent-1', characterId: 'xiaonuan', firstMeet: false };
 const ctxFor = (language: Language): SessionContext => ({ ...ownedCtx, language });
 
 const trilingualPersonas = { zh: 'P-zh', ja: 'P-ja', en: 'P-en' } as const;

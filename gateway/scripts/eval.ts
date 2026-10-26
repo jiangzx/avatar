@@ -1,11 +1,11 @@
-// Usage (from gateway/): node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter mock|qwen [--style grandchild|old-friend] [--only id1,id2]
+// Usage (from gateway/): node --env-file-if-exists=.env --import tsx scripts/eval.ts --adapter mock|qwen [--character xiaonuan|xiaokai|xiaoxin] [--only id1,id2]
 //   [--scenarios ../docs/testing/<set>/scenarios.json] [--judge ../docs/testing/<set>/rubric.md] [--out ../docs/testing/<set>/<file>.md|.json]
 // Default scenarios: docs/testing/plan-a-eval (the only gated set). Scenarios are zh-only; multilingual behavior is covered by gateway/test/multilingual.test.ts.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_CHARACTER_ID, LANGUAGES } from '@anyidea/protocol';
+import { DEFAULT_CHARACTER_ID, LANGUAGES, isCharacterId, type CharacterId } from '@anyidea/protocol';
 import { MockAdapter, loadMockScript, withCharacterName } from '../src/adapters/mock.ts';
 import { QwenAdapter } from '../src/adapters/qwen.ts';
 import { loadConfig } from '../src/config.ts';
@@ -16,7 +16,6 @@ import { loadI18n } from '../src/i18n/load.ts';
 import { QwenTextClient } from '../src/memory/textClient.ts';
 import { loadCharacterRegistry } from '../src/characters/registry.ts';
 import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
-import { isLegacyStyle, LEGACY_DEFAULT_STYLE } from '../src/session/context.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { loadAffectConfig } from '../src/session/affect.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from '../src/session/pacing.ts';
@@ -26,7 +25,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const repoRoot = path.resolve(root, '..');
 const testingDir = path.resolve(root, '../docs/testing');
 const planAScenarios = path.join(testingDir, 'plan-a-eval/scenarios.json');
-const usage = 'usage: eval.ts --adapter mock|qwen [--style id] [--only id1,id2] [--scenarios ../docs/testing/<set>/scenarios.json] [--judge ../docs/testing/<set>/rubric.md] [--out ../docs/testing/<file>.md|.json]';
+const usage = 'usage: eval.ts --adapter mock|qwen [--character id] [--only id1,id2] [--scenarios ../docs/testing/<set>/scenarios.json] [--judge ../docs/testing/<set>/rubric.md] [--out ../docs/testing/<file>.md|.json]';
 const fail = (msg: string): never => { process.stderr.write(`error: ${msg}\n${usage}\n`); return process.exit(2); };
 let args: ReturnType<typeof parseEvalArgs> = {};
 let outPath: string | undefined;
@@ -47,9 +46,9 @@ if (adapter !== 'mock' && adapter !== 'qwen') fail('--adapter must be mock or qw
 const config = loadConfig({ ...process.env, ADAPTER: adapter });
 const characters = loadCharacterRegistry(`${root}characters`, LANGUAGES);
 const roles = loadRoleCatalog(`${root}roles`, characters);
-const roleId = roles.defaultRole();
-const styleId = args.style ?? LEGACY_DEFAULT_STYLE;
-if (!isLegacyStyle(styleId)) throw new Error(`unknown style ${styleId}`);
+const characterArg = args.character ?? DEFAULT_CHARACTER_ID;
+if (!isCharacterId(characterArg)) throw new Error(`unknown character ${characterArg}`);
+const characterId: CharacterId = characterArg;
 const pacing = loadPacing(`${root}config/pacing.json`);
 const memoryConfig = loadMemoryBudget(`${root}config/memory.json`);
 const i18n = loadI18n(`${root}config`);
@@ -60,7 +59,7 @@ for (const pair of roles.characterLanguagePairs()) {
 }
 const report = validateBudgets(pacing, memoryConfig, config.ledger, personasByLanguage);
 const evalCfg = loadEvalConfig(`${root}config/eval.json`);
-const script = withCharacterName(loadMockScript(`${root}mock/script.json`), characters.name(DEFAULT_CHARACTER_ID, 'zh'));
+const script = withCharacterName(loadMockScript(`${root}mock/script.json`), characters.name(characterId, 'zh'));
 const only = args.only;
 const scenarios = loadScenarios(scenariosPath).filter((s) => !only || only.includes(s.id));
 
@@ -91,6 +90,8 @@ const make: SessionMaker = (onReplyMetrics) => new Session({
     : new MockAdapter({ script, paceFactor: config.mockPaceFactor }),
   summarizer: new MockSummarizer(),
   roles,
+  characters,
+  voiceFor: (language) => (adapter === 'qwen' ? characters.voiceFor(characterId, 'qwen', language) ?? config.qwenVoices[language] : undefined),
   ledger: config.ledger,
   ...(adapter !== 'mock' && textClient ? { textClient } : {}),
   modelOwnsTurns: adapter === 'qwen',
@@ -114,7 +115,7 @@ const make: SessionMaker = (onReplyMetrics) => new Session({
   // Same as production: the analyzer runs only when a text client is injected (Qwen with a text endpoint).
   affect,
   onReplyMetrics,
-}, { roleId, styleId });
+}, { characterId, firstMeet: true });
 
 const outcomes: ScenarioOutcome[] = [];
 for (const s of scenarios) {
@@ -140,12 +141,12 @@ const results = buildEvalResults({
   dirty,
   date,
   adapter,
-  style: styleId,
+  character: characterId,
   scenarioFile: path.relative(repoRoot, scenariosPath),
   rubricFile: rubricPath !== undefined ? path.relative(repoRoot, rubricPath) : null,
   judgeModel: rubric !== null ? textModel : null,
 }, outcomes, summary, gated);
-if (outPath && outFormat === 'md') writeFileSync(outPath, renderReport(summary, records, { adapter, style: styleId, date }));
+if (outPath && outFormat === 'md') writeFileSync(outPath, renderReport(summary, records, { adapter, character: characterId, date }));
 if (outPath && outFormat === 'json') writeFileSync(outPath, `${JSON.stringify(results, null, 2)}\n`);
 const line = gated ? { ...summary } : { ...results.summary };
 process.stdout.write(`${JSON.stringify(results.judge ? { ...line, judge: results.judge } : line)}\n`);

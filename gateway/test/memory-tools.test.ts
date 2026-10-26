@@ -782,7 +782,7 @@ describe('session memory tools', () => {
       writer: new SqliteTranscriptWriter(store),
       worker: worker(store),
       store,
-    }, { ownerId: a.ownerId, agentId: a.agentId, roleId: 'elder-companion', styleId: 'grandchild' } satisfies SessionContext, 'live-1');
+    }, { ownerId: a.ownerId, agentId: a.agentId, characterId: 'xiaonuan', firstMeet: false } satisfies SessionContext, 'live-1');
     const { sent, transport } = collector();
 
     await session.start(transport);
@@ -834,7 +834,7 @@ describe('session memory tools', () => {
       writer: new SqliteTranscriptWriter(store),
       worker: worker(store),
       store,
-    }, { ownerId: a.ownerId, agentId: a.agentId, roleId: 'elder-companion', styleId: 'grandchild' } satisfies SessionContext, 'live-recall');
+    }, { ownerId: a.ownerId, agentId: a.agentId, characterId: 'xiaonuan', firstMeet: false } satisfies SessionContext, 'live-recall');
     const { transport } = collector();
 
     await session.start(transport);
@@ -884,7 +884,7 @@ describe('session memory tools', () => {
       writer: new SqliteTranscriptWriter(store),
       worker: worker(store),
       store,
-    }, { ownerId: a.ownerId, agentId: a.agentId, roleId: 'elder-companion', styleId: 'grandchild' } satisfies SessionContext, 'live-2');
+    }, { ownerId: a.ownerId, agentId: a.agentId, characterId: 'xiaonuan', firstMeet: false } satisfies SessionContext, 'live-2');
     const box = collector();
 
     await session.start(box.transport);
@@ -937,7 +937,7 @@ describe('session memory tools', () => {
       writer: new SqliteTranscriptWriter(store),
       worker: worker(store),
       store,
-    }, { ownerId: a.ownerId, agentId: a.agentId, roleId: 'elder-companion', styleId: 'grandchild' } satisfies SessionContext, 'live-decline-notice', true);
+    }, { ownerId: a.ownerId, agentId: a.agentId, characterId: 'xiaonuan', firstMeet: false } satisfies SessionContext, 'live-decline-notice', true);
     const box = collector();
 
     await session.start(box.transport);
@@ -1007,7 +1007,7 @@ describe('session memory tools', () => {
       writer: new SqliteTranscriptWriter(store),
       worker: queued,
       store,
-    }, { ownerId: a.ownerId, agentId: a.agentId, roleId: 'elder-companion', styleId: 'grandchild' } satisfies SessionContext, 'live-wait');
+    }, { ownerId: a.ownerId, agentId: a.agentId, characterId: 'xiaonuan', firstMeet: false } satisfies SessionContext, 'live-wait');
     const { transport } = collector();
 
     await session.start(transport);
@@ -1089,7 +1089,7 @@ describe('session memory tools', () => {
       writer: new SqliteTranscriptWriter(store),
       worker: worker(store),
       store,
-    }, { ownerId: a.ownerId, agentId: a.agentId, roleId: 'elder-companion', styleId: 'grandchild' } satisfies SessionContext, 'live-throw');
+    }, { ownerId: a.ownerId, agentId: a.agentId, characterId: 'xiaonuan', firstMeet: false } satisfies SessionContext, 'live-throw');
     const { transport } = collector();
 
     await session.start(transport);
@@ -1258,8 +1258,8 @@ function sessionWithSnapshot(input: {
   }, {
     ownerId: input.who.ownerId,
     agentId: input.who.agentId,
-    roleId: 'elder-companion',
-    styleId: 'grandchild',
+    characterId: 'xiaonuan',
+    firstMeet: false,
     memorySnapshot: input.memorySnapshot,
   } satisfies SessionContext, input.sessionId);
   return { session, configs, mocks };
