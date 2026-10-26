@@ -1,27 +1,24 @@
-import type { Language } from '@anyidea/protocol';
+import type { CharacterId, Language } from '@anyidea/protocol';
 import type { DirectorConfig } from './types.ts';
 
-/** Role and style lookup. Production: FileRoleCatalog (gateway/roles/); fixedRoleCatalog is the test stub. */
+/** Role pack lookup rendered per character. Production: FileRoleCatalog (gateway/roles/); fixedRoleCatalog is the test stub. */
 export interface RoleCatalog {
   defaultRole(): string;
   defaultLanguage(roleId: string): Language;
   supportedLanguages(roleId: string): readonly Language[];
-  defaultStyle(roleId: string): string;
-  hasStyle(roleId: string, styleId: string): boolean;
-  /** undefined = the adapter's configured default voice for this language. */
-  voiceFor(roleId: string, styleId: string, language?: Language): string | undefined;
-  buildPersona(roleId: string, styleId: string, language?: Language): string;
+  /** safety + persona + actions + activity directory, placeholders replaced for this character. */
+  buildPersona(characterId: CharacterId, language?: Language): string;
   activityText(roleId: string, activityId: string, language?: Language): string | undefined;
-  director(roleId: string, language?: Language): DirectorConfig;
-  /** Shared extractor system prompt for this language. */
+  /** Director config with placeholders replaced for this character. */
+  director(characterId: CharacterId, language?: Language): DirectorConfig;
+  /** Shared extractor system prompt; it never names a character. */
   extractPrompt(language?: Language): string;
-  /** Shared recall-phrasing system prompt for this language. */
-  recallPrompt(language?: Language): string;
-  /** Shared care-opening system prompt for this language. */
-  carePrompt(language?: Language): string;
-  /** Shared affect-analyzer system prompt for this language. */
-  affectPrompt(language?: Language): string;
-  pairs(): Array<{ roleId: string; styleId: string }>;
+  /** Recall-phrasing system prompt for this character. */
+  recallPrompt(characterId: CharacterId, language?: Language): string;
+  /** Care-opening system prompt for this character. */
+  carePrompt(characterId: CharacterId, language?: Language): string;
+  /** Affect-analyzer system prompt for this character. */
+  affectPrompt(characterId: CharacterId, language?: Language): string;
 }
 
 export const DEFAULT_ROLE = 'elder-companion';
@@ -35,7 +32,6 @@ export function missingRoleLanguages(
   const supported = roles.supportedLanguages(roleId);
   return required.filter((language) => !supported.includes(language));
 }
-const STUB_STYLES: readonly string[] = ['grandchild', 'old-friend'];
 
 export interface FixedRoleCatalogOptions {
   languages?: readonly Language[];
@@ -44,7 +40,7 @@ export interface FixedRoleCatalogOptions {
   directors?: Partial<Record<Language, DirectorConfig>>;
 }
 
-/** Stub: every style of the default role shares one persona and Director config per language. */
+/** Stub: every character shares one persona and Director config per language. */
 export function fixedRoleCatalog(
   persona: string,
   director: DirectorConfig,
@@ -61,16 +57,12 @@ export function fixedRoleCatalog(
     defaultRole: () => DEFAULT_ROLE,
     defaultLanguage: () => defaultLanguage,
     supportedLanguages: () => languages,
-    defaultStyle: () => 'grandchild',
-    hasStyle: (roleId, styleId) => roleId === DEFAULT_ROLE && STUB_STYLES.includes(styleId),
-    voiceFor: () => undefined,
-    buildPersona: (_roleId, _styleId, language = defaultLanguage) => personas[language] ?? persona,
+    buildPersona: (_characterId, language = defaultLanguage) => personas[language] ?? persona,
     activityText: () => undefined,
-    director: (_roleId, language = defaultLanguage) => directors[language] ?? director,
+    director: (_characterId, language = defaultLanguage) => directors[language] ?? director,
     extractPrompt: () => 'FIXTURE EXTRACT',
     recallPrompt: () => 'FIXTURE RECALL',
     carePrompt: () => 'FIXTURE CARE',
     affectPrompt: () => 'FIXTURE AFFECT',
-    pairs: () => STUB_STYLES.map((styleId) => ({ roleId: DEFAULT_ROLE, styleId })),
   };
 }

@@ -1,0 +1,9 @@
+{
+  "id": "xiaonuan", "role": "test-role", "gender": "female",
+  "names": { "zh": "阿甲", "ja": "阿甲" }, "readings": { "ja": "アコウ" },
+  "identity": { "zh": "FIXTURE IDENTITY A ZH", "ja": "FIXTURE IDENTITY A JA" },
+  "greetingNoName": { "zh": "NO NAME A ZH", "ja": "NO NAME A JA" },
+  "greetingsFirstMeet": { "zh": ["{name}，A ZH"], "ja": ["{name}、A JA"] },
+  "voices": { "qwen": { "zh": null, "ja": null, "en": null }, "seeduplex": { "zh": null, "en": null } },
+  "extensions": {}
+}

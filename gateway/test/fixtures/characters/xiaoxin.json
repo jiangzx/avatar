@@ -1,0 +1,9 @@
+{
+  "id": "xiaoxin", "role": "test-role", "gender": "female",
+  "names": { "zh": "阿丙", "ja": "阿丙" }, "readings": { "ja": "アヘイ" },
+  "identity": { "zh": "FIXTURE IDENTITY C ZH", "ja": "FIXTURE IDENTITY C JA" },
+  "greetingNoName": { "zh": "NO NAME C ZH", "ja": "NO NAME C JA" },
+  "greetingsFirstMeet": { "zh": ["{name}，C ZH"], "ja": ["{name}、C JA"] },
+  "voices": { "qwen": { "zh": null, "ja": null, "en": null }, "seeduplex": { "zh": null, "en": null } },
+  "extensions": {}
+}

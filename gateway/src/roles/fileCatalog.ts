@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { LANGUAGES, type Language } from '@anyidea/protocol';
+import { DEFAULT_CHARACTER_ID, LANGUAGES, type CharacterId, type Language } from '@anyidea/protocol';
+import type { CharacterRegistry } from '../characters/registry.ts';
 import { DirectorSchema } from '../config.ts';
-import { DEFAULT_ROLE, type RoleCatalog } from './catalog.ts';
+import type { RoleCatalog } from './catalog.ts';
 import { PROMPT_LABELS } from './labels.ts';
 import type { DirectorConfig } from './types.ts';
 
@@ -12,16 +13,9 @@ const LanguageSchema = z.enum(['zh', 'ja', 'en']);
 
 const RoleSchema = z.object({
   id: Id,
-  defaultStyle: Id,
   defaultLanguage: LanguageSchema,
   supportedLanguages: z.array(LanguageSchema).min(1),
-  styles: z.array(Id).min(1),
   activities: z.array(Id).max(12),
-  voices: z.object({
-    zh: z.record(Id, z.string().min(1).max(64).nullable()).optional(),
-    ja: z.record(Id, z.string().min(1).max(64).nullable()).optional(),
-    en: z.record(Id, z.string().min(1).max(64).nullable()).optional(),
-  }).strict().optional(),
 }).strict();
 
 const ActivitiesSchema = z.object({
@@ -41,20 +35,21 @@ const TopicsSchema = z.array(z.object({
 }).strict()).min(1).max(50);
 
 export interface SharedText { safety: string; actions: string; extract: string; recall: string; affect: string; care: string }
-interface LoadedStyle { text: string; voice: string | undefined }
 interface LoadedActivity { title: string; summary: string; text: string }
 interface LoadedLanguage {
-  styles: Map<string, LoadedStyle>;
+  /** persona.md with its placeholders still in place. */
+  persona: string;
   activities: Map<string, LoadedActivity>;
   activityDirectory: string;
   director: DirectorConfig;
 }
 interface LoadedRole {
-  defaultStyle: string;
   defaultLanguage: Language;
   supportedLanguages: readonly Language[];
   languages: Map<Language, LoadedLanguage>;
 }
+/** One character in one language, placeholders replaced. Built at startup, immutable afterwards. */
+interface RenderedPack { persona: string; director: DirectorConfig; recall: string; care: string; affect: string }
 
 const TIMING_FIELDS = [
   'followupAfterMs', 'idleNoticeAfterMs', 'maxConsecutive', 'maxPerWindow', 'windowMs',
@@ -62,33 +57,21 @@ const TIMING_FIELDS = [
   'restAfterMs', 'greetingRetryMs',
 ] as const;
 
-/** Roles from gateway/roles/<role>/<language>/; gateway/roles/_shared/<language>/ safety always comes first. */
+/** The only placeholders a role pack may use; any other {{...}} left after rendering fails startup. */
+const PLACEHOLDER = /\{\{(char|charSpoken|charIdentity)\}\}/g;
+
+/** Role packs from gateway/roles/<role>/<language>/, rendered per character. Shared safety always comes first. */
 export class FileRoleCatalog implements RoleCatalog {
   private constructor(
-    private readonly shared: ReadonlyMap<Language, SharedText>,
     private readonly roles: ReadonlyMap<string, LoadedRole>,
+    private readonly shared: ReadonlyMap<Language, SharedText>,
+    private readonly characterRoles: ReadonlyMap<CharacterId, string>,
+    private readonly rendered: ReadonlyMap<CharacterId, ReadonlyMap<Language, RenderedPack>>,
     private readonly fallbackRole: string,
   ) {}
 
-  static load(rootDir: string, defaultRoleId: string = DEFAULT_ROLE): FileRoleCatalog {
-    const shared = new Map<Language, SharedText>();
-    for (const language of LANGUAGES) {
-      const dir = join(rootDir, '_shared', language);
-      if (!existsSync(dir)) continue;
-      const readShared = (name: keyof SharedText): string => {
-        const file = join(dir, `${name}.md`);
-        if (!existsSync(file)) throw new Error(`shared_missing:${language}:${name}`);
-        return readText(file);
-      };
-      shared.set(language, {
-        safety: readShared('safety'),
-        actions: readShared('actions'),
-        extract: readShared('extract'),
-        recall: readShared('recall'),
-        care: readShared('care'),
-        affect: readShared('affect'),
-      });
-    }
+  static load(rootDir: string, characters: CharacterRegistry): FileRoleCatalog {
+    const shared = loadShared(rootDir);
     const roles = new Map<string, LoadedRole>();
     for (const entry of readdirSync(rootDir, { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.name.startsWith('_')) continue;
@@ -98,70 +81,75 @@ export class FileRoleCatalog implements RoleCatalog {
       }
       roles.set(entry.name, role);
     }
-    if (!roles.has(defaultRoleId)) throw new Error(`role_missing:${defaultRoleId}`);
-    return new FileRoleCatalog(shared, roles, defaultRoleId);
+    const characterRoles = new Map<CharacterId, string>();
+    const rendered = new Map<CharacterId, Map<Language, RenderedPack>>();
+    for (const characterId of characters.ids()) {
+      const roleId = characters.roleOf(characterId);
+      const role = roles.get(roleId);
+      if (!role) throw new Error(`character_role_missing:${characterId}:${roleId}`);
+      characterRoles.set(characterId, roleId);
+      const packs = new Map<Language, RenderedPack>();
+      for (const language of role.supportedLanguages) {
+        packs.set(language, renderPack(characterId, language, role.languages.get(language)!, shared.get(language)!, characters));
+      }
+      rendered.set(characterId, packs);
+    }
+    return new FileRoleCatalog(roles, shared, characterRoles, rendered, characters.roleOf(DEFAULT_CHARACTER_ID));
   }
 
   defaultRole(): string { return this.fallbackRole; }
   defaultLanguage(roleId: string): Language { return this.role(roleId).defaultLanguage; }
   supportedLanguages(roleId: string): readonly Language[] { return this.role(roleId).supportedLanguages; }
-  defaultStyle(roleId: string): string { return this.role(roleId).defaultStyle; }
 
-  hasStyle(roleId: string, styleId: string): boolean {
-    const role = this.roles.get(roleId);
-    if (!role) return false;
-    return role.supportedLanguages.every((language) => role.languages.get(language)!.styles.has(styleId));
-  }
-
-  voiceFor(roleId: string, styleId: string, language = this.defaultLanguage(roleId)): string | undefined {
-    return this.languagePack(roleId, language).styles.get(styleId)?.voice;
-  }
-
-  buildPersona(roleId: string, styleId: string, language = this.defaultLanguage(roleId)): string {
-    const pack = this.languagePack(roleId, language);
-    const shared = this.sharedFor(language);
-    const style = pack.styles.get(styleId);
-    if (!style) throw new Error(`unknown_style:${roleId}/${styleId}`);
-    return [shared.safety, style.text, shared.actions, pack.activityDirectory].join('\n\n');
+  buildPersona(characterId: CharacterId, language = this.characterLanguage(characterId)): string {
+    return this.pack(characterId, language).persona;
   }
 
   activityText(roleId: string, activityId: string, language = this.defaultLanguage(roleId)): string | undefined {
     return this.languagePack(roleId, language).activities.get(activityId)?.text;
   }
 
-  director(roleId: string, language = this.defaultLanguage(roleId)): DirectorConfig {
-    return this.languagePack(roleId, language).director;
+  director(characterId: CharacterId, language = this.characterLanguage(characterId)): DirectorConfig {
+    return this.pack(characterId, language).director;
   }
 
   extractPrompt(language = this.defaultLanguage(this.fallbackRole)): string {
     return this.sharedFor(language).extract;
   }
 
-  recallPrompt(language = this.defaultLanguage(this.fallbackRole)): string {
-    return this.sharedFor(language).recall;
+  recallPrompt(characterId: CharacterId, language = this.characterLanguage(characterId)): string {
+    return this.pack(characterId, language).recall;
   }
 
-  carePrompt(language = this.defaultLanguage(this.fallbackRole)): string {
-    return this.sharedFor(language).care;
+  carePrompt(characterId: CharacterId, language = this.characterLanguage(characterId)): string {
+    return this.pack(characterId, language).care;
   }
 
-  affectPrompt(language = this.defaultLanguage(this.fallbackRole)): string {
-    return this.sharedFor(language).affect;
+  affectPrompt(characterId: CharacterId, language = this.characterLanguage(characterId)): string {
+    return this.pack(characterId, language).affect;
   }
 
-  pairs(): Array<{ roleId: string; styleId: string }> {
-    return [...this.roles.entries()].flatMap(([roleId, role]) => {
-      const styleIds = [...role.languages.get(role.defaultLanguage)!.styles.keys()];
-      return styleIds.map((styleId) => ({ roleId, styleId }));
-    });
-  }
-
-  languagePairs(): Array<{ roleId: string; styleId: string; language: Language }> {
-    return [...this.roles.entries()].flatMap(([roleId, role]) =>
-      role.supportedLanguages.flatMap((language) =>
-        [...role.languages.get(language)!.styles.keys()].map((styleId) => ({ roleId, styleId, language })),
-      ),
+  /** Every rendered character × language, for startup budget and notice checks. */
+  characterLanguagePairs(): Array<{ characterId: CharacterId; language: Language }> {
+    return [...this.rendered.entries()].flatMap(([characterId, packs]) =>
+      [...packs.keys()].map((language) => ({ characterId, language })),
     );
+  }
+
+  private characterLanguage(characterId: CharacterId): Language {
+    return this.defaultLanguage(this.roleOfCharacter(characterId));
+  }
+
+  private roleOfCharacter(characterId: CharacterId): string {
+    const roleId = this.characterRoles.get(characterId);
+    if (!roleId) throw new Error(`unknown_character:${characterId}`);
+    return roleId;
+  }
+
+  private pack(characterId: CharacterId, language: Language): RenderedPack {
+    const pack = this.rendered.get(characterId)?.get(language);
+    if (!pack) throw new Error(`language_unsupported:${this.roleOfCharacter(characterId)}:${language}`);
+    return pack;
   }
 
   private role(roleId: string): LoadedRole {
@@ -183,21 +171,76 @@ export class FileRoleCatalog implements RoleCatalog {
   }
 }
 
-export function loadRoleCatalog(rootDir: string, defaultRoleId?: string): FileRoleCatalog {
-  return FileRoleCatalog.load(rootDir, defaultRoleId);
+export function loadRoleCatalog(rootDir: string, characters: CharacterRegistry): FileRoleCatalog {
+  return FileRoleCatalog.load(rootDir, characters);
+}
+
+function loadShared(rootDir: string): Map<Language, SharedText> {
+  const shared = new Map<Language, SharedText>();
+  for (const language of LANGUAGES) {
+    const dir = join(rootDir, '_shared', language);
+    if (!existsSync(dir)) continue;
+    const read = (name: keyof SharedText): string => {
+      const file = join(dir, `${name}.md`);
+      if (!existsSync(file)) throw new Error(`shared_missing:${language}:${name}`);
+      return readText(file);
+    };
+    const text: SharedText = {
+      safety: read('safety'),
+      actions: read('actions'),
+      extract: read('extract'),
+      recall: read('recall'),
+      care: read('care'),
+      affect: read('affect'),
+    };
+    // The extractor prompt is not rendered per character, so it must not carry placeholders.
+    if (text.extract.includes('{{')) throw new Error(`placeholder_unresolved:shared:${language}:extract`);
+    shared.set(language, text);
+  }
+  return shared;
+}
+
+function renderPack(
+  characterId: CharacterId,
+  language: Language,
+  pack: LoadedLanguage,
+  text: SharedText,
+  characters: CharacterRegistry,
+): RenderedPack {
+  const values: Record<string, string> = {
+    char: characters.name(characterId, language),
+    charSpoken: characters.spokenName(characterId, language),
+    charIdentity: characters.identity(characterId, language),
+  };
+  const render = (source: string, where: string): string => {
+    // One pass: inserted values are never scanned again.
+    const out = source.replace(PLACEHOLDER, (_match, key: string) => values[key]!);
+    if (out.includes('{{')) throw new Error(`placeholder_unresolved:${characterId}:${language}:${where}`);
+    return out;
+  };
+  return {
+    persona: render([text.safety, pack.persona, text.actions, pack.activityDirectory].join('\n\n'), 'persona'),
+    director: renderStrings(pack.director, (source) => render(source, 'director')),
+    recall: render(text.recall, 'recall'),
+    care: render(text.care, 'care'),
+    affect: render(text.affect, 'affect'),
+  };
+}
+
+/** Copies a JSON-like value and passes every string through `render`. */
+function renderStrings<T>(value: T, render: (text: string) => string): T {
+  if (typeof value === 'string') return render(value) as T;
+  if (Array.isArray(value)) return value.map((item: unknown) => renderStrings(item, render)) as T;
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, renderStrings(item, render)])) as T;
+  }
+  return value;
 }
 
 function loadRole(dir: string, dirName: string): LoadedRole {
   const role = RoleSchema.parse(readJson(join(dir, 'role.json')));
   if (role.id !== dirName) throw new Error(`role_id_mismatch:${dirName}`);
-  if (!role.styles.includes(role.defaultStyle)) throw new Error(`default_style_missing:${role.id}`);
   if (!role.supportedLanguages.includes(role.defaultLanguage)) throw new Error(`default_language_missing:${role.id}`);
-  for (const [language, voices] of Object.entries(role.voices ?? {})) {
-    if (!role.supportedLanguages.includes(language as Language)) throw new Error(`voice_language_mismatch:${role.id}:${language}`);
-    for (const styleId of Object.keys(voices)) {
-      if (!role.styles.includes(styleId)) throw new Error(`voice_style_mismatch:${role.id}:${styleId}`);
-    }
-  }
 
   const languages = new Map<Language, LoadedLanguage>();
   for (const language of role.supportedLanguages) {
@@ -209,24 +252,25 @@ function loadRole(dir: string, dirName: string): LoadedRole {
       throw new Error(`activity_set_mismatch:${role.id}:${language}`);
     }
 
-    const styles = new Map<string, LoadedStyle>();
-    for (const styleId of role.styles) {
-      const file = join(langDir, 'styles', `${styleId}.md`);
-      if (!existsSync(file)) throw new Error(`style_missing:${role.id}:${language}:${styleId}`);
-      styles.set(styleId, { text: readText(file), voice: role.voices?.[language]?.[styleId] ?? undefined });
-    }
+    const personaFile = join(langDir, 'persona.md');
+    if (!existsSync(personaFile)) throw new Error(`persona_missing:${role.id}:${language}`);
+    const persona = readText(personaFile);
+    if (!persona.includes('{{charIdentity}}')) throw new Error(`persona_identity_missing:${role.id}:${language}`);
 
     const activities = new Map<string, LoadedActivity>();
     for (const activity of meta.activities) {
       const file = join(langDir, 'activities', `${activity.id}.md`);
       if (!existsSync(file)) throw new Error(`activity_missing:${role.id}:${language}:${activity.id}`);
-      activities.set(activity.id, { title: activity.title, summary: activity.summary, text: readText(file) });
+      const text = readText(file);
+      // Activity texts are served as-is, so they must not carry placeholders.
+      if (text.includes('{{')) throw new Error(`placeholder_unresolved:${role.id}:${language}:activity:${activity.id}`);
+      activities.set(activity.id, { title: activity.title, summary: activity.summary, text });
     }
 
     const director = RoleDirectorSchema.parse(readJson(join(langDir, 'director.json')));
     const topics = TopicsSchema.parse(readJson(join(langDir, 'topics.json')));
     languages.set(language, {
-      styles,
+      persona,
       activities,
       activityDirectory: [
         meta.intro,
@@ -239,7 +283,6 @@ function loadRole(dir: string, dirName: string): LoadedRole {
   validateTimings(role.id, languages);
   validateCareTexts(role.id, languages);
   return {
-    defaultStyle: role.defaultStyle,
     defaultLanguage: role.defaultLanguage,
     supportedLanguages: role.supportedLanguages,
     languages,

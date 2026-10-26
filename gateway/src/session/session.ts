@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   AI_SAMPLE_RATE,
+  DEFAULT_CHARACTER_ID,
   MIC_FRAME_SAMPLES,
   truncateByPlayback,
   type ClientMessage,
@@ -321,10 +322,10 @@ export class Session {
     const ownerId = ctx.ownerId;
     const agentId = ctx.agentId;
     const hasSilencePlanner = deps.roles.supportedLanguages(ctx.roleId)
-      .some((language) => deps.roles.director(ctx.roleId, language).silenceDecision !== undefined);
+      .some((language) => deps.roles.director(DEFAULT_CHARACTER_ID, language).silenceDecision !== undefined);
     this.safeGreetingWired = Boolean(deps.textClient) && hasSilencePlanner;
     this.director = new Director(
-      (language) => deps.roles.director(ctx.roleId, language),
+      (language) => deps.roles.director(DEFAULT_CHARACTER_ID, language),
       {
         requestResponse: (kind, request) => this.requestResponse(kind, request),
         ...(deps.textClient && hasSilencePlanner ? {
@@ -347,7 +348,7 @@ export class Session {
       ? new AffectTracker({
           client: deps.textClient,
           config: affectConfig,
-          prompt: (language) => deps.roles.affectPrompt(language),
+          prompt: (language) => deps.roles.affectPrompt(DEFAULT_CHARACTER_ID, language),
           history: () => this.ledger.recent,
           evidence: this.i18n.evidence,
           safety: this.i18n.safety,
@@ -648,7 +649,7 @@ export class Session {
   private personaFor(language: Language): string {
     const cached = this.personas.get(language);
     if (cached !== undefined) return cached;
-    const persona = this.deps.roles.buildPersona(this.context.roleId, this.context.styleId, language);
+    const persona = this.deps.roles.buildPersona(DEFAULT_CHARACTER_ID, language);
     this.personas.set(language, persona);
     return persona;
   }
@@ -658,7 +659,7 @@ export class Session {
   }
 
   private planProactiveLine(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null> {
-    const config = this.deps.roles.director(this.context.roleId, this.language).silenceDecision;
+    const config = this.deps.roles.director(DEFAULT_CHARACTER_ID, this.language).silenceDecision;
     const client = this.deps.textClient;
     if (!config || !client) return null;
     let planner = this.silencePlanners.get(this.language);
@@ -759,14 +760,13 @@ export class Session {
     return { instructions, tools: this.toolsFor(this.language).specs(), voice: this.voiceFor(this.language), ...(this.deps.maxOutputTokens !== undefined ? { maxOutputTokens: this.deps.maxOutputTokens } : {}) };
   }
 
-  /** Style voice, then the language default, then the context voice only for the role's default language. */
+  /** Young male voice (until Task 7), then the language default, then the context voice for the role's default language. */
   private voiceFor(language: Language): string | undefined {
     if (this.youngMale) {
       const young = this.deps.youngMaleVoices?.[language] ?? this.deps.youngMaleVoice;
       if (young) return young;
     }
-    return this.deps.roles.voiceFor(this.context.roleId, this.context.styleId, language)
-      ?? this.deps.voiceFor?.(language)
+    return this.deps.voiceFor?.(language)
       ?? (language === this.deps.roles.defaultLanguage(this.context.roleId) ? this.context.voice : undefined);
   }
 
@@ -779,7 +779,7 @@ export class Session {
         memory: i18n.memory[language],
         evidence: i18n.evidence,
         recentQueries: i18n.recentQueries,
-        recallPrompt: this.deps.roles.recallPrompt(language),
+        recallPrompt: this.deps.roles.recallPrompt(DEFAULT_CHARACTER_ID, language),
         safety: i18n.safety,
         clipChars: this.deps.recallClipChars ?? 80,
         phraseTimeoutMs: this.deps.recallPhraseTimeoutMs ?? 1_500,
@@ -1271,7 +1271,7 @@ export class Session {
       });
       return;
     }
-    const cfg = this.deps.roles.director(this.context.roleId, this.language);
+    const cfg = this.deps.roles.director(DEFAULT_CHARACTER_ID, this.language);
     this.adapter.createResponse({
       cue: 'toolContinue',
       instruction: cfg.toolContinueInstruction,
@@ -1552,7 +1552,7 @@ export class Session {
       this.careOpening = null;
       log('care_opening', { outcome: 'language_mismatch' });
     }
-    const config = this.deps.roles.director(this.context.roleId, this.language);
+    const config = this.deps.roles.director(DEFAULT_CHARACTER_ID, this.language);
     const templates = config.greetingNameTexts;
     if (!templates || templates.length === 0) return config.greetingMemoryText ?? null;
     return templates[Math.floor(Math.random() * templates.length)]!.replaceAll('{name}', name);
@@ -1580,7 +1580,7 @@ export class Session {
     const agentId = this.context.agentId;
     if (!care || !store || !client || !ownerId || !agentId || !this.safeGreetingWired) return null;
     const language = this.language;
-    const templates = this.deps.roles.director(this.context.roleId, language).greetingCareTexts ?? [];
+    const templates = this.deps.roles.director(DEFAULT_CHARACTER_ID, language).greetingCareTexts ?? [];
     const name = this.greetingName();
     // Without a name there is no safe greeting to attach to; skip care rather than guess.
     if (templates.length === 0 || !name) return null;
@@ -1597,7 +1597,7 @@ export class Session {
     const daysAgo = Math.max(0, Math.floor((startedAt - createdAt) / DAY_MS));
     return generateCareLine(
       client,
-      this.deps.roles.carePrompt(language),
+      this.deps.roles.carePrompt(DEFAULT_CHARACTER_ID, language),
       { userLine: quote, daysAgo },
       { timeoutMs: care.timeoutMs, maxChars: care.maxChars[language], maxTokens: care.maxTokens, temperature: care.temperature },
       this.i18n.safety,

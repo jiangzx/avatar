@@ -1,0 +1,9 @@
+{
+  "id": "xiaokai", "role": "test-role", "gender": "male",
+  "names": { "zh": "阿乙", "ja": "阿乙" }, "readings": { "ja": "アオツ" },
+  "identity": { "zh": "FIXTURE IDENTITY B ZH", "ja": "FIXTURE IDENTITY B JA" },
+  "greetingNoName": { "zh": "NO NAME B ZH", "ja": "NO NAME B JA" },
+  "greetingsFirstMeet": { "zh": ["{name}，B ZH"], "ja": ["{name}、B JA"] },
+  "voices": { "qwen": { "zh": null, "ja": null, "en": null }, "seeduplex": { "zh": null, "en": null } },
+  "extensions": {}
+}

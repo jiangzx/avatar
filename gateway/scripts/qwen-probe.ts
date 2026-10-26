@@ -1,5 +1,8 @@
 // Manual probe for Plan A assumptions 1, 2, 3, 4a, 5. Prompts are synthetic; prints event types, flags, usage.
-// Run from gateway/: node --env-file-if-exists=.env --import tsx scripts/qwen-probe.ts <mode> [--wav f] [--voices a,b]
+// Run from gateway/: node --env-file-if-exists=.env --import tsx scripts/qwen-probe.ts <mode> [--wav f] [--voices a,b] [--character id]
+import { fileURLToPath } from 'node:url';
+import { DEFAULT_CHARACTER_ID, LANGUAGES, isCharacterId } from '@anyidea/protocol';
+import { loadCharacterRegistry } from '../src/characters/registry.ts';
 import { baseSession, endsWithMeow, instructionVerdict, probeEnv, QwenRaw, readWavPcm16, sleep, userText, writeWav, type InstructionRun, type Json } from './lib/qwen-raw.ts';
 
 const env = probeEnv();
@@ -8,11 +11,14 @@ const flag = (name: string): string | undefined => {
   const i = rest.indexOf(`--${name}`);
   return i >= 0 ? rest[i + 1] : undefined;
 };
+const characterId = flag('character') ?? DEFAULT_CHARACTER_ID;
+if (!isCharacterId(characterId)) throw new Error('--character must be a character id');
+const NAME = loadCharacterRegistry(fileURLToPath(new URL('../characters', import.meta.url)), LANGUAGES).name(characterId, 'zh');
 const open = (session: Json) => QwenRaw.open({ apiKey: env.apiKey, endpoint: env.endpoint, model: env.model, session });
 const out = (o: Json) => process.stdout.write(`${JSON.stringify(o)}\n`);
 
 async function probeInstructions(): Promise<void> {
-  const rule = '你叫小暖。无论说什么，每一句话的最后都必须加一个字"喵"。';
+  const rule = `你叫${NAME}。无论说什么，每一句话的最后都必须加一个字"喵"。`;
   const task = '请用一句话向用户问好。';
   const runs: InstructionRun[] = [];
   for (let i = 1; i <= 3; i++) {
@@ -31,7 +37,7 @@ async function probeInstructions(): Promise<void> {
 async function probeCap(): Promise<void> {
   const story = '请讲一个三百字左右的故事。';
   const ask = (c: QwenRaw, text: string, response?: Json) => c.collect(() => { c.send(userText(text)); c.send(response ? { type: 'response.create', response } : { type: 'response.create' }); });
-  const plain = await open(baseSession('你是小暖，回答简短。', env.voice));
+  const plain = await open(baseSession(`你是${NAME}，回答简短。`, env.voice));
   const short = await ask(plain, '用一两句话说说今天天气。');
   out({ mode: 'cap', case: 'typical_short_reply', status: short.status, usage: short.usage, chars: short.transcript.length, audioMs: Math.round(short.audio.length / 24) });
   const perResponse = await ask(plain, story, { max_output_tokens: 20 });
@@ -59,7 +65,7 @@ async function probeAudio(): Promise<void> {
   if (!wav) throw new Error('--wav <16 kHz mono PCM16 WAV> is required');
   const speech = readWavPcm16(wav);
   const zeros = (ms: number) => new Int16Array((16000 * ms) / 1000);
-  const c = await open(baseSession('你是小暖，回答简短。', env.voice));
+  const c = await open(baseSession(`你是${NAME}，回答简短。`, env.voice));
   const t0 = c.events.length;
   await streamPcm(c, speech);
   await streamPcm(c, zeros(2000)); // like client zero frames during a filler
@@ -93,7 +99,7 @@ async function probeVoices(): Promise<void> {
   const voices = (flag('voices') ?? env.voice).split(',').map((v) => v.trim()).filter(Boolean);
   for (const voice of voices) {
     try {
-      const c = await open(baseSession('你是小暖，说话亲切温和。', voice));
+      const c = await open(baseSession(`你是${NAME}，说话亲切温和。`, voice));
       const r = await c.collect(() => { c.send(userText('请用亲切的语气说：嗯，我想想，您慢慢说。')); c.send({ type: 'response.create' }); });
       c.close();
       const file = `/tmp/qwen-voice-${voice}.wav`;
@@ -108,7 +114,7 @@ async function probeVoices(): Promise<void> {
 const modes: Record<string, () => Promise<void>> = { instructions: probeInstructions, cap: probeCap, audio: probeAudio, voices: probeVoices };
 const run = modes[mode];
 if (!run) {
-  process.stderr.write('usage: qwen-probe.ts instructions | cap | audio --wav <file> | voices --voices a,b,c\n');
+  process.stderr.write('usage: qwen-probe.ts instructions | cap | audio --wav <file> | voices --voices a,b,c [--character id]\n');
   process.exit(2);
 }
 await run();

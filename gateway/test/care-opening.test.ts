@@ -7,7 +7,7 @@ import { loadI18n } from '../src/i18n/load.ts';
 import type { MemoryStore } from '../src/memory/store.ts';
 import type { TextModelClient } from '../src/memory/textClient.ts';
 import { fixedRoleCatalog } from '../src/roles/catalog.ts';
-import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
+import { shippedRoles as shippedRolesLoader } from './support/shipped.ts';
 import { loadAffectConfig } from '../src/session/affect.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
@@ -266,9 +266,9 @@ describe('care opening', () => {
 
 describe('shipped care opening config', () => {
   it('has three greetingCareTexts with {name} and no question in every language', () => {
-    const shippedRoles = loadRoleCatalog(`${root}roles`);
+    const shippedRoles = shippedRolesLoader();
     for (const language of ['zh', 'ja', 'en'] as const) {
-      const texts = shippedRoles.director('elder-companion', language).greetingCareTexts ?? [];
+      const texts = shippedRoles.director('xiaonuan', language).greetingCareTexts ?? [];
       expect(texts).toHaveLength(3);
       for (const text of texts) {
         expect(text).toContain('{name}');

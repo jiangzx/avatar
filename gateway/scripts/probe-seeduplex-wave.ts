@@ -1,9 +1,11 @@
 // Manual synthetic probe: content-free analysis of Seeduplex reply audio.
 // Distinguishes transport gaps (delta arrival) from silence inside the synthesized waveform.
 // Run from gateway/: node --env-file-if-exists=.env --import tsx scripts/probe-seeduplex-wave.ts <16k mono wav> [runs]
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
+import { DEFAULT_CHARACTER_ID, LANGUAGES, isCharacterId } from '@anyidea/protocol';
+import { loadCharacterRegistry } from '../src/characters/registry.ts';
+import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
 import { readWavPcm16, sleep, type Json } from './lib/qwen-raw.ts';
 
 const apiKey = process.env.SEEDUPLEX_API_KEY ?? '';
@@ -17,11 +19,9 @@ const endpoint = process.env.SEEDUPLEX_ENDPOINT ?? 'wss://openspeech.bytedance.c
 const model = process.env.SEEDUPLEX_MODEL ?? '1.2.6.1';
 const voice = process.env.SEEDUPLEX_VOICE ?? 'zh_male_xiaotian_jupiter_bigtts';
 const root = fileURLToPath(new URL('..', import.meta.url));
-const style = process.env.PROBE_STYLE ?? 'grandchild';
-const persona = [
-  readFileSync(`${root}roles/_shared/zh/safety.md`, 'utf8'),
-  readFileSync(`${root}roles/elder-companion/zh/styles/${style}.md`, 'utf8'),
-].join('\n\n');
+const character = process.env.PROBE_CHARACTER ?? DEFAULT_CHARACTER_ID;
+if (!isCharacterId(character)) throw new Error('PROBE_CHARACTER must be a character id');
+const persona = loadRoleCatalog(`${root}roles`, loadCharacterRegistry(`${root}characters`, LANGUAGES)).buildPersona(character, 'zh');
 const out = (o: Record<string, unknown>) => process.stdout.write(`${JSON.stringify(o)}\n`);
 
 /** Concatenates 24 kHz mono PCM and reports silence runs below an energy gate. */

@@ -7,7 +7,7 @@ import { memoryViewSource, renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { PROMPT_LABELS } from '../roles/labels.ts';
-import { devContext, type ContextResolver, type ResolveResult, type SessionContext } from '../session/context.ts';
+import { devContext, isLegacyStyle, LEGACY_DEFAULT_STYLE, type ContextResolver, type ResolveResult, type SessionContext } from '../session/context.ts';
 import type { SessionLifecycle } from '../session/manager.ts';
 import { loadMemoryBudget } from '../session/pacing.ts';
 import { hashToken, newDeviceToken, shortHash } from './tokens.ts';
@@ -74,8 +74,8 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
   register(style: string | undefined): RegisterResult {
     const { store, roles, limits } = this.deps;
     const roleId = roles.defaultRole();
-    const styleId = style ?? roles.defaultStyle(roleId);
-    if (!roles.hasStyle(roleId, styleId)) return this.reject('unknown_style');
+    const styleId = style ?? LEGACY_DEFAULT_STYLE;
+    if (!isLegacyStyle(styleId)) return this.reject('unknown_style');
     if (store.countOwners() >= limits.maxOwners) return this.reject('owner_capacity');
     const now = this.now();
     // Store bound is inclusive; +1 excludes owners created exactly 24 h ago.
@@ -99,12 +99,12 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     const roleId = roles.defaultRole();
     // Task 7 resolves the requested character; until then every session uses the default one.
     const agent = store.ensureAgent(device.ownerId, DEFAULT_CHARACTER_ID, now);
-    const styleId = roles.defaultStyle(roleId);
+    const styleId = LEGACY_DEFAULT_STYLE;
     store.touchDevice(device.ownerId, device.deviceId, now);
     log('device_resolved', { agent: shortHash(agent.id), style: styleId });
     const owner = store.getOwner(device.ownerId);
     const language = roles.defaultLanguage(roleId);
-    const ctx: SessionContext = { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: roles.voiceFor(roleId, styleId, language), language };
+    const ctx: SessionContext = { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: undefined, language };
     // Read the store, not the live Session. The server flushes the previous owner before this resolve is used.
     // User-grounded only. Episodes, notes, extracted sensitive facts, and assistant lines stay out.
     // A pin the user asked to keep may be sensitive; it travels in pinnedMemory, not the three views.
@@ -130,10 +130,10 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
   }
 
   setStyle(bearer: string, style: string): SetStyleResult {
-    const { store, roles } = this.deps;
+    const { store } = this.deps;
     const device = store.findDevice(hashToken(bearer));
     if (!device) return 'unauthorized';
-    if (!roles.hasStyle(roles.defaultRole(), style)) return 'unknown_style';
+    if (!isLegacyStyle(style)) return 'unknown_style';
     // The baseline has no style column; Task 7 deletes PATCH /agent/style.
     log('agent_style_ignored', { style });
     return 'ok';

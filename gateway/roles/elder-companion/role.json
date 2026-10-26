@@ -1,13 +1,6 @@
 {
   "id": "elder-companion",
-  "defaultStyle": "grandchild",
   "defaultLanguage": "zh",
   "supportedLanguages": ["zh", "ja", "en"],
-  "styles": ["grandchild", "old-friend"],
-  "activities": ["reminisce", "story", "riddle", "old-songs"],
-  "voices": {
-    "zh": { "grandchild": null, "old-friend": null },
-    "ja": { "grandchild": null, "old-friend": null },
-    "en": { "grandchild": null, "old-friend": null }
-  }
+  "activities": ["reminisce", "story", "riddle", "old-songs"]
 }

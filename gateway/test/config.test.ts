@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DirectorSchema, loadConfig, loadDirectorConfig, loadIdentityConfig, makeOriginCheck } from '../src/config.ts';
-import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
+import { shippedRoles } from './support/shipped.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -148,7 +148,7 @@ describe('config', () => {
     expect(d.leaveInstruction).not.toContain('你想说话我就在');
     expect(d.restInstruction).not.toContain('你想说话我就在');
     expect(d.lightPhrases).toEqual(['嗯', '哦', '好', '行', '好的', '嗯嗯', '我知道了', '知道了', '知道啦', '明白了', '明白啦']);
-    expect(d.greetingText).toContain('小暖');
+    expect(d.greetingText).toContain('{{char}}');
     expect(d.greetingMemoryInstruction).toContain('记忆');
     // A new session greets first and then asks.
     expect(d.greetingMemoryText?.startsWith('您好')).toBe(true);
@@ -203,7 +203,7 @@ describe('config', () => {
     expect(ja.lightPhrases).toEqual(['うん', 'はい', 'ええ', 'そうですね', 'わかりました', 'なるほど']);
     expect(en.lightPhrases).toEqual(['okay', 'ok', 'yes', 'yeah', 'I see', 'got it', 'alright']);
 
-    expect(ja.greetingText).toBe('こんにちは、小暖です。お話ししに来ました。どうお呼びすればいいですか？');
+    expect(ja.greetingText).toBe('こんにちは、{{charSpoken}}です。お話ししに来ました。どうお呼びすればいいですか？');
     expect(ja.greetingMemoryText).toBe('こんにちは、またお会いできましたね。今日は何をお話ししましょうか？');
     expect(ja.followupText).toBe('ゆっくりで大丈夫ですよ。ここにいますから。');
     expect(ja.contextText).toBe('続きがあれば、聞いていますよ。');
@@ -222,7 +222,7 @@ describe('config', () => {
     expect(ja.checkinText).toBe('まだ聞こえていますか？急がなくて大丈夫です。いつでもお話しできますよ。');
     expect(ja.restText).toBe('しばらくご自分でゆっくりしてください。急いで返事をしなくて大丈夫です。');
 
-    expect(en.greetingText).toBe("Hello, I'm Xiaonuan. I came to keep you company. What should I call you?");
+    expect(en.greetingText).toBe("Hello, I'm {{char}}. I came to keep you company. What should I call you?");
     expect(en.greetingMemoryText).toBe("Hello, it's good to see you again. What would you like to talk about today?");
     expect(en.followupText).toBe("Take your time. I'm right here.");
     expect(en.contextText).toBe("If you'd like to keep talking, I'm listening.");
@@ -368,8 +368,8 @@ describe('identity config', () => {
   });
 
   it('gives the en silence hint label a trailing space', () => {
-    const roles = loadRoleCatalog(`${root}roles`);
-    const label = roles.director('elder-companion', 'en').silenceDecision?.variationHintLabel;
+    const roles = shippedRoles();
+    const label = roles.director('xiaonuan', 'en').silenceDecision?.variationHintLabel;
     expect(label?.endsWith(': ')).toBe(true);
   });
 

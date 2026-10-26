@@ -1,12 +1,6 @@
 {
   "id": "test-role",
-  "defaultStyle": "plain",
   "defaultLanguage": "zh",
   "supportedLanguages": ["zh", "ja"],
-  "styles": ["plain", "second"],
-  "activities": ["one"],
-  "voices": {
-    "zh": { "plain": null, "second": "fixture-voice" },
-    "ja": { "plain": null, "second": "fixture-voice-ja" }
-  }
+  "activities": ["one"]
 }

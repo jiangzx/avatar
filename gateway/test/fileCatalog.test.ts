@@ -3,9 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { CHARACTER_IDS, LANGUAGES } from '@anyidea/protocol';
 import { missingRoleLanguages, type RoleCatalog } from '../src/roles/catalog.ts';
 import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
 import { AFFECT_EMOTIONS, AFFECT_NEEDS, AFFECT_STRATEGIES, AFFECT_TRENDS } from '../src/session/affect.ts';
+import { fixtureCharacters, shippedCharacters, shippedRoles } from './support/shipped.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const fixtures = `${root}test/fixtures/roles`;
@@ -19,85 +21,71 @@ function copyFixtures(): string {
 }
 
 function patchRole(dir: string, patch: Record<string, unknown>): void {
-  const base = {
-    id: 'test-role',
-    defaultStyle: 'plain',
-    defaultLanguage: 'zh',
-    supportedLanguages: ['zh', 'ja'],
-    styles: ['plain', 'second'],
-    activities: ['one'],
-    voices: { zh: { plain: null, second: 'fixture-voice' }, ja: { plain: null, second: 'fixture-voice-ja' } },
-  };
+  const base = { id: 'test-role', defaultLanguage: 'zh', supportedLanguages: ['zh', 'ja'], activities: ['one'] };
   writeFileSync(join(dir, 'test-role', 'role.json'), JSON.stringify({ ...base, ...patch }));
 }
 
 describe('FileRoleCatalog', () => {
   afterEach(() => { for (const d of temps.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
-  it('loads zh and ja packs with the same style and activity ids', () => {
-    const roles = loadRoleCatalog(fixtures, 'test-role');
+  it('renders the fixture persona, director and prompts per character and language', () => {
+    const roles = loadRoleCatalog(fixtures, fixtureCharacters());
     expect(roles.defaultRole()).toBe('test-role');
     expect(roles.defaultLanguage('test-role')).toBe('zh');
     expect(roles.supportedLanguages('test-role')).toEqual(['zh', 'ja']);
-    expect(roles.defaultStyle('test-role')).toBe('plain');
-    expect(roles.hasStyle('test-role', 'second')).toBe(true);
-    expect(roles.hasStyle('test-role', 'pirate')).toBe(false);
-    expect(roles.hasStyle('other', 'plain')).toBe(false);
-    expect(roles.voiceFor('test-role', 'plain', 'zh')).toBeUndefined();
-    expect(roles.voiceFor('test-role', 'second')).toBe('fixture-voice');
-    expect(roles.voiceFor('test-role', 'second', 'zh')).toBe('fixture-voice');
-    expect(roles.voiceFor('test-role', 'second', 'ja')).toBe('fixture-voice-ja');
-    expect(roles.buildPersona('test-role', 'second', 'zh')).toBe('FIXTURE SAFETY RULES\n\nFIXTURE SECOND STYLE\n\nFIXTURE ACTIONS\n\n## FIXTURE ACTIVITIES\n- 活动一：第一个活动');
-    expect(roles.buildPersona('test-role', 'second', 'ja')).toBe('FIXTURE SAFETY RULES JA\n\nFIXTURE SECOND STYLE JA\n\nFIXTURE ACTIONS JA\n\n## FIXTURE ACTIVITIES JA\n- 活動一：最初の活動');
+    expect(roles.buildPersona('xiaonuan', 'zh')).toBe('FIXTURE SAFETY RULES\n\nFIXTURE PERSONA 阿甲\nFIXTURE IDENTITY A ZH\n\nFIXTURE ACTIONS\n\n## FIXTURE ACTIVITIES\n- 活动一：第一个活动');
+    expect(roles.buildPersona('xiaokai', 'ja')).toBe('FIXTURE SAFETY RULES JA\n\nFIXTURE PERSONA JA 阿乙（アオツ）\nFIXTURE IDENTITY B JA\n\nFIXTURE ACTIONS JA\n\n## FIXTURE ACTIVITIES JA\n- 活動一：最初の活動');
+    expect(roles.buildPersona('xiaoxin')).toContain('FIXTURE IDENTITY C ZH');
     expect(roles.activityText('test-role', 'one', 'zh')).toBe('FIXTURE ACTIVITY ONE');
     expect(roles.activityText('test-role', 'one', 'ja')).toBe('FIXTURE ACTIVITY ONE JA');
-    expect(roles.director('test-role', 'ja').greetingText).toBe('greeting-ja');
-    expect(roles.pairs()).toEqual([
-      { roleId: 'test-role', styleId: 'plain' },
-      { roleId: 'test-role', styleId: 'second' },
-    ]);
-    expect(roles.languagePairs()).toHaveLength(4);
+    expect(roles.director('xiaonuan', 'ja').greetingText).toBe('greeting-ja');
+    expect(roles.director('xiaonuan', 'zh').greetingInstruction).toBe('G 阿甲');
+    expect(roles.director('xiaokai', 'zh').greetingInstruction).toBe('G 阿乙');
+    expect(roles.recallPrompt('xiaokai', 'zh')).toBe('FIXTURE RECALL ZH 阿乙');
+    expect(roles.carePrompt('xiaonuan', 'zh')).toBe('FIXTURE CARE ZH');
+    expect(roles.characterLanguagePairs()).toHaveLength(6);
     expect(() => roles.defaultLanguage('other')).toThrow('unknown_role:other');
     expect(() => roles.supportedLanguages('other')).toThrow('unknown_role:other');
-    expect(() => roles.buildPersona('test-role', 'second', 'en')).toThrow('language_unsupported:test-role:en');
-    const d = roles.director('test-role');
+    expect(() => roles.buildPersona('xiaonuan', 'en')).toThrow('language_unsupported:test-role:en');
+    const d = roles.director('xiaonuan');
     expect(d.topicInstruction).toBe('T {topic}');
     expect(d.topics).toEqual([{ id: 't1', prompt: '天气', fallbackText: '今天天气不错。' }]);
   });
 
-  it('ships a zh/ja/en elder-companion with matching ids and shared prompts', () => {
-    const roles = loadRoleCatalog(`${root}roles`);
+  it('ships a zh/ja/en elder-companion rendered for all three characters', () => {
+    const roles = shippedRoles();
     expect(roles.defaultRole()).toBe('elder-companion');
-    expect(roles.defaultStyle('elder-companion')).toBe('grandchild');
     expect(roles.defaultLanguage('elder-companion')).toBe('zh');
     expect(roles.supportedLanguages('elder-companion')).toEqual(['zh', 'ja', 'en']);
-    for (const language of ['zh', 'ja', 'en'] as const) {
+    expect(roles.characterLanguagePairs()).toHaveLength(9);
+    for (const language of LANGUAGES) {
       expect(roles.extractPrompt(language)).not.toHaveLength(0);
-      expect(roles.recallPrompt(language)).not.toHaveLength(0);
-      expect(roles.director('elder-companion', language).topics?.map((t) => t.id)).toEqual(
-        roles.director('elder-companion', 'zh').topics?.map((t) => t.id),
+      expect(roles.recallPrompt('xiaonuan', language)).not.toHaveLength(0);
+      expect(roles.director('xiaonuan', language).topics?.map((t) => t.id)).toEqual(
+        roles.director('xiaonuan', 'zh').topics?.map((t) => t.id),
       );
     }
-    expect(roles.buildPersona('elder-companion', 'grandchild', 'ja')).toContain('安全');
-    expect(roles.buildPersona('elder-companion', 'grandchild', 'en')).toContain('Safety');
-    expect(roles.buildPersona('elder-companion', 'grandchild', 'en')).toContain('- Reminisce: ');
+    expect(roles.buildPersona('xiaonuan', 'ja')).toContain('安全');
+    expect(roles.buildPersona('xiaonuan', 'en')).toContain('Safety');
+    expect(roles.buildPersona('xiaonuan', 'en')).toContain('- Reminisce: ');
 
-    // Chinese content and ordering stay exactly as M1.
-    const grandchild = roles.buildPersona('elder-companion', 'grandchild', 'zh');
-    expect(grandchild).toContain('孙辈');
-    expect(grandchild.indexOf('安全底线')).toBe(grandchild.indexOf('##') + 3);
-    expect(grandchild.indexOf('安全底线')).toBeLessThan(grandchild.indexOf('孙辈'));
-    expect(grandchild).toContain('perform_action');
-    const oldFriend = roles.buildPersona('elder-companion', 'old-friend', 'zh');
-    expect(oldFriend).toContain('老朋友');
-    for (const persona of [grandchild, oldFriend]) {
+    // Safety still comes first; the relationship now lives in the card identity.
+    const zh = (id: (typeof CHARACTER_IDS)[number]) => roles.buildPersona(id, 'zh');
+    expect(zh('xiaonuan').indexOf('安全底线')).toBe(zh('xiaonuan').indexOf('##') + 3);
+    expect(zh('xiaonuan').indexOf('安全底线')).toBeLessThan(zh('xiaonuan').indexOf('孙女'));
+    expect(zh('xiaonuan')).toContain('撒个小娇');
+    expect(zh('xiaokai')).toContain('孙子');
+    expect(zh('xiaokai')).not.toContain('撒个小娇');
+    expect(zh('xiaoxin')).toContain('老朋友');
+    expect(zh('xiaoxin')).not.toContain('撒娇');
+    for (const id of CHARACTER_IDS) {
+      const persona = zh(id);
+      expect(persona).toContain('perform_action');
       expect(persona).toContain('没有身体');
       expect(persona).toContain('除了开场，回复不要用名字开头');
       expect(persona).toContain('不要编造用户说过的话');
-      // Plan 4: emotional openers allowed, bare acknowledgements still banned.
       expect(persona).toContain('不用应答词起头');
       expect(persona).not.toContain('不先加应答词');
-      // Roadmap pitfall: words quoted inside a "don't" rule get read aloud, so negations carry no examples.
       expect(persona).not.toContain('"好的"');
       expect(persona).not.toContain('我感觉到您很难过');
       expect(persona).toContain('不逐字复述对方的话');
@@ -106,57 +94,117 @@ describe('FileRoleCatalog', () => {
       expect(persona).toContain('三句话里最多一句是问句');
       expect(persona).toContain('标成"用户："的是对方原话');
       expect(persona).toContain('不声称上次聊过什么');
-    }
-    for (const style of ['grandchild', 'old-friend'] as const) {
-      const ja = roles.buildPersona('elder-companion', style, 'ja');
+      expect(persona).toContain('标成"基本情况："的是对方的基本资料');
+      expect(persona).toContain('用户提到你不认识的名字时，当作用户认识的人来接话');
+      const ja = roles.buildPersona(id, 'ja');
       expect(ja).toContain('相づちから始めません');
       expect(ja).toContain('自分の言葉で相手の気持ちに触れます');
       expect(ja).not.toContain('先に相づちを入れず');
       expect(ja).not.toContain('「はい」');
-      const en = roles.buildPersona('elder-companion', style, 'en');
+      expect(ja).toContain('「基本情報：」');
+      expect(ja).toContain('ユーザーが知らない名前を口にしたら');
+      const en = roles.buildPersona(id, 'en');
       expect(en).toContain('never a bare acknowledgement');
       expect(en).toContain('Name their feeling in your own words');
       expect(en).not.toContain('no filler acknowledgement');
       expect(en).not.toContain('"OK,"');
+      expect(en).toContain('"Basic facts:"');
+      expect(en).toContain("If the user mentions a name you don't know");
     }
-    expect(roles.director('elder-companion', 'zh').topics?.length).toBeGreaterThanOrEqual(5);
+    expect(roles.director('xiaonuan', 'zh').topics?.length).toBeGreaterThanOrEqual(5);
     expect(roles.activityText('elder-companion', 'reminisce', 'zh')).toContain('回忆往事');
     expect(roles.activityText('elder-companion', 'reminisce', 'ja')).not.toHaveLength(0);
     expect(roles.activityText('elder-companion', 'reminisce', 'en')).not.toHaveLength(0);
-    expect(roles.languagePairs()).toEqual([
-      { roleId: 'elder-companion', styleId: 'grandchild', language: 'zh' },
-      { roleId: 'elder-companion', styleId: 'old-friend', language: 'zh' },
-      { roleId: 'elder-companion', styleId: 'grandchild', language: 'ja' },
-      { roleId: 'elder-companion', styleId: 'old-friend', language: 'ja' },
-      { roleId: 'elder-companion', styleId: 'grandchild', language: 'en' },
-      { roleId: 'elder-companion', styleId: 'old-friend', language: 'en' },
-    ]);
+  });
+
+  it('replaces every placeholder with the character name, reading and identity', () => {
+    const roles = shippedRoles();
+    const characters = shippedCharacters();
+    for (const id of CHARACTER_IDS) {
+      for (const language of LANGUAGES) {
+        const texts = [
+          roles.buildPersona(id, language),
+          JSON.stringify(roles.director(id, language)),
+          roles.recallPrompt(id, language),
+          roles.carePrompt(id, language),
+          roles.affectPrompt(id, language),
+        ];
+        for (const text of texts) expect(text, `${id}:${language}`).not.toContain('{{');
+        expect(roles.buildPersona(id, language)).toContain(characters.name(id, language));
+        expect(roles.buildPersona(id, language)).toContain(characters.identity(id, language));
+        for (const other of CHARACTER_IDS.filter((x) => x !== id)) {
+          for (const text of texts) {
+            expect(text, `${id}:${language}:${other}`).not.toContain(characters.name(other, language));
+            expect(text, `${id}:${language}:${other}`).not.toContain(characters.spokenName(other, language));
+          }
+        }
+      }
+    }
+    expect(roles.director('xiaokai', 'zh').greetingText).toBe('您好，我是小凯，来陪您说说话。您怎么称呼？');
+    expect(roles.director('xiaonuan', 'ja').greetingText).toBe('こんにちは、シャオヌアンです。お話ししに来ました。どうお呼びすればいいですか？');
+    expect(roles.director('xiaoxin', 'en').greetingText).toBe("Hello, I'm Xiaoxin. I came to keep you company. What should I call you?");
+    expect(roles.director('xiaonuan', 'zh').silenceDecision?.instruction).toContain('你是小暖，正在陪一位长辈聊天。');
+    expect(roles.director('xiaonuan', 'zh').silenceDecision?.instruction).toContain('标成「基本情况」的记忆是已知的基本资料');
+    expect(roles.recallPrompt('xiaoxin', 'en').startsWith('You are Xiaoxin,')).toBe(true);
+    expect(roles.carePrompt('xiaokai', 'ja').startsWith('あなたは小凯（シャオカイ）です。')).toBe(true);
+    expect(roles.affectPrompt('xiaonuan', 'zh').startsWith('你是小暖的情绪分析器')).toBe(true);
+    expect(roles.buildPersona('xiaokai', 'ja')).toContain('自分の名前を口にするときは「シャオカイ」と言います。');
+    expect(roles.buildPersona('xiaoxin', 'en')).toContain('Xiaoxin is your name; never use it to address the user.');
+    expect(roles.buildPersona('xiaokai', 'zh')).toContain('小凯是你的名字，不要用来称呼对方。');
+  });
+
+  it('fails on an unresolved or unknown placeholder', () => {
+    const persona = copyFixtures();
+    writeFileSync(join(persona, 'test-role', 'ja', 'persona.md'), 'FIXTURE {{charIdentity}} {{nickname}}');
+    expect(() => loadRoleCatalog(persona, fixtureCharacters())).toThrow('placeholder_unresolved:xiaonuan:ja:persona');
+
+    const extract = copyFixtures();
+    writeFileSync(join(extract, '_shared', 'zh', 'extract.md'), 'EXTRACT {{char}}');
+    expect(() => loadRoleCatalog(extract, fixtureCharacters())).toThrow('placeholder_unresolved:shared:zh:extract');
+
+    const activity = copyFixtures();
+    writeFileSync(join(activity, 'test-role', 'zh', 'activities', 'one.md'), 'ACTIVITY {{char}}');
+    expect(() => loadRoleCatalog(activity, fixtureCharacters())).toThrow('placeholder_unresolved:test-role:zh:activity:one');
+  });
+
+  it('requires persona.md with the identity placeholder', () => {
+    const missing = copyFixtures();
+    rmSync(join(missing, 'test-role', 'ja', 'persona.md'));
+    expect(() => loadRoleCatalog(missing, fixtureCharacters())).toThrow('persona_missing:test-role:ja');
+
+    const noIdentity = copyFixtures();
+    writeFileSync(join(noIdentity, 'test-role', 'zh', 'persona.md'), 'NO IDENTITY {{char}}');
+    expect(() => loadRoleCatalog(noIdentity, fixtureCharacters())).toThrow('persona_identity_missing:test-role:zh');
+  });
+
+  it('rejects a character whose role pack does not exist', () => {
+    expect(() => loadRoleCatalog(fixtures, shippedCharacters())).toThrow('character_role_missing:xiaonuan:elder-companion');
   });
 
   it('rejects a missing shared extract prompt', () => {
     const dir = copyFixtures();
     rmSync(join(dir, '_shared', 'ja', 'extract.md'));
-    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:extract/);
+    expect(() => loadRoleCatalog(dir, fixtureCharacters())).toThrow(/shared_missing:ja:extract/);
   });
 
   it('rejects a missing shared care prompt', () => {
     const dir = copyFixtures();
     rmSync(join(dir, '_shared', 'ja', 'care.md'));
-    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:care/);
+    expect(() => loadRoleCatalog(dir, fixtureCharacters())).toThrow(/shared_missing:ja:care/);
   });
 
   it('reads the care prompt per language', () => {
-    const fixture = loadRoleCatalog(fixtures, 'test-role');
-    expect(fixture.carePrompt('zh')).toBe('FIXTURE CARE ZH');
-    expect(fixture.carePrompt('ja')).toBe('FIXTURE CARE JA');
-    const shipped = loadRoleCatalog(`${root}roles`);
-    for (const language of ['zh', 'ja', 'en'] as const) expect(shipped.carePrompt(language)).toContain('userLine');
+    const fixture = loadRoleCatalog(fixtures, fixtureCharacters());
+    expect(fixture.carePrompt('xiaonuan', 'zh')).toBe('FIXTURE CARE ZH');
+    expect(fixture.carePrompt('xiaonuan', 'ja')).toBe('FIXTURE CARE JA');
+    const shipped = shippedRoles();
+    for (const language of LANGUAGES) expect(shipped.carePrompt('xiaonuan', language)).toContain('userLine');
   });
 
   it('reports a missing shared directory with the language', () => {
     const dir = copyFixtures();
     rmSync(join(dir, '_shared', 'ja'), { recursive: true, force: true });
-    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:directory/);
+    expect(() => loadRoleCatalog(dir, fixtureCharacters())).toThrow(/shared_missing:ja:directory/);
   });
 
   it('reports which required role languages are missing', () => {
@@ -167,7 +215,7 @@ describe('FileRoleCatalog', () => {
   it('rejects a topic id set mismatch', () => {
     const dir = copyFixtures();
     writeFileSync(join(dir, 'test-role', 'ja', 'topics.json'), JSON.stringify([{ id: 'other', prompt: 'x', fallbackText: 'y' }]));
-    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/topic_set_mismatch:test-role/);
+    expect(() => loadRoleCatalog(dir, fixtureCharacters())).toThrow(/topic_set_mismatch:test-role/);
   });
 
   it('accepts topic ids in a different order', () => {
@@ -175,54 +223,52 @@ describe('FileRoleCatalog', () => {
     const topics = (ids: readonly string[]) => JSON.stringify(ids.map((id) => ({ id, prompt: `p-${id}`, fallbackText: `f-${id}` })));
     writeFileSync(join(dir, 'test-role', 'zh', 'topics.json'), topics(['t1', 't2']));
     writeFileSync(join(dir, 'test-role', 'ja', 'topics.json'), topics(['t2', 't1']));
-    const roles = loadRoleCatalog(dir, 'test-role');
-    expect(roles.director('test-role', 'ja').topics?.map((topic) => topic.id)).toEqual(['t2', 't1']);
+    const roles = loadRoleCatalog(dir, fixtureCharacters());
+    expect(roles.director('xiaonuan', 'ja').topics?.map((topic) => topic.id)).toEqual(['t2', 't1']);
   });
 
-  it('rejects a role whose default style or default language is not declared', () => {
-    const dir = copyFixtures();
-    patchRole(dir, { defaultStyle: 'missing' });
-    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow('default_style_missing:test-role');
+  it('rejects an undeclared default language and the removed style fields', () => {
+    const language = copyFixtures();
+    patchRole(language, { defaultLanguage: 'en' });
+    expect(() => loadRoleCatalog(language, fixtureCharacters())).toThrow('default_language_missing:test-role');
 
-    const b = copyFixtures();
-    patchRole(b, { defaultLanguage: 'en' });
-    expect(() => loadRoleCatalog(b, 'test-role')).toThrow('default_language_missing:test-role');
+    for (const removed of [{ styles: ['plain'] }, { defaultStyle: 'plain' }, { voices: {} }]) {
+      const dir = copyFixtures();
+      patchRole(dir, removed);
+      expect(() => loadRoleCatalog(dir, fixtureCharacters())).toThrow();
+    }
   });
 
-  it('rejects missing language, style, activity, shared text, and timing mismatches', () => {
+  it('rejects missing language, activity, shared text, and timing mismatches', () => {
     const missingLanguage = copyFixtures();
     rmSync(join(missingLanguage, 'test-role', 'ja'), { recursive: true, force: true });
-    expect(() => loadRoleCatalog(missingLanguage, 'test-role')).toThrow('language_missing:test-role:ja');
-
-    const missingStyle = copyFixtures();
-    rmSync(join(missingStyle, 'test-role', 'ja', 'styles', 'second.md'));
-    expect(() => loadRoleCatalog(missingStyle, 'test-role')).toThrow('style_missing:test-role:ja:second');
+    expect(() => loadRoleCatalog(missingLanguage, fixtureCharacters())).toThrow('language_missing:test-role:ja');
 
     const missingActivity = copyFixtures();
     rmSync(join(missingActivity, 'test-role', 'ja', 'activities', 'one.md'));
-    expect(() => loadRoleCatalog(missingActivity, 'test-role')).toThrow('activity_missing:test-role:ja:one');
+    expect(() => loadRoleCatalog(missingActivity, fixtureCharacters())).toThrow('activity_missing:test-role:ja:one');
 
     const missingShared = copyFixtures();
     rmSync(join(missingShared, '_shared', 'zh', 'safety.md'));
-    expect(() => loadRoleCatalog(missingShared, 'test-role')).toThrow();
+    expect(() => loadRoleCatalog(missingShared, fixtureCharacters())).toThrow();
 
     const timing = copyFixtures();
     const jaDirector = JSON.parse(readFileSync(join(timing, 'test-role', 'ja', 'director.json'), 'utf8')) as Record<string, unknown>;
     writeFileSync(join(timing, 'test-role', 'ja', 'director.json'), JSON.stringify({ ...jaDirector, followupAfterMs: 9000 }));
-    expect(() => loadRoleCatalog(timing, 'test-role')).toThrow('language_timing_mismatch:test-role:ja:followupAfterMs');
+    expect(() => loadRoleCatalog(timing, fixtureCharacters())).toThrow('language_timing_mismatch:test-role:ja:followupAfterMs');
 
     const careParity = copyFixtures();
     const zhDirectorPath = join(careParity, 'test-role', 'zh', 'director.json');
     const zhDirector = JSON.parse(readFileSync(zhDirectorPath, 'utf8')) as Record<string, unknown>;
     writeFileSync(zhDirectorPath, JSON.stringify({ ...zhDirector, greetingCareTexts: ['{name}，又见面啦。'] }));
-    expect(() => loadRoleCatalog(careParity, 'test-role')).toThrow('greeting_care_texts_mismatch:test-role:ja');
+    expect(() => loadRoleCatalog(careParity, fixtureCharacters())).toThrow('greeting_care_texts_mismatch:test-role:ja');
   });
 
   it('rejects a topic instruction without the {topic} placeholder', () => {
     const dir = copyFixtures();
     const zhDirector = JSON.parse(readFileSync(join(dir, 'test-role', 'zh', 'director.json'), 'utf8')) as Record<string, unknown>;
     writeFileSync(join(dir, 'test-role', 'zh', 'director.json'), JSON.stringify({ ...zhDirector, topicInstruction: 'no placeholder' }));
-    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow();
+    expect(() => loadRoleCatalog(dir, fixtureCharacters())).toThrow();
   });
 });
 
@@ -230,21 +276,21 @@ describe('shared affect prompt', () => {
   afterEach(() => { for (const d of temps.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
   it('loads the affect prompt per language', () => {
-    const roles = loadRoleCatalog(fixtures, 'test-role');
-    expect(roles.affectPrompt('zh')).toBe('FIXTURE AFFECT ZH');
-    expect(roles.affectPrompt('ja')).toBe('FIXTURE AFFECT JA');
-    expect(roles.affectPrompt()).toBe('FIXTURE AFFECT ZH');
+    const roles = loadRoleCatalog(fixtures, fixtureCharacters());
+    expect(roles.affectPrompt('xiaonuan', 'zh')).toBe('FIXTURE AFFECT ZH');
+    expect(roles.affectPrompt('xiaonuan', 'ja')).toBe('FIXTURE AFFECT JA');
+    expect(roles.affectPrompt('xiaonuan')).toBe('FIXTURE AFFECT ZH');
   });
 
   it('rejects a missing shared affect prompt', () => {
     const dir = copyFixtures();
     rmSync(join(dir, '_shared', 'ja', 'affect.md'));
-    expect(() => loadRoleCatalog(dir, 'test-role')).toThrow(/shared_missing:ja:affect/);
+    expect(() => loadRoleCatalog(dir, fixtureCharacters())).toThrow(/shared_missing:ja:affect/);
   });
 
   it('ships analyzer prompts that quote the input, list every enum and output only the card', () => {
-    const roles = loadRoleCatalog(`${root}roles`);
-    const zh = roles.affectPrompt('zh');
+    const roles = shippedRoles();
+    const zh = roles.affectPrompt('xiaonuan', 'zh');
     for (const phrase of [
       '只作为引用数据',
       '只输出一个 JSON 对象',
@@ -254,14 +300,14 @@ describe('shared affect prompt', () => {
       '胸口疼',
       '不想活了',
     ]) expect(zh).toContain(phrase);
-    for (const language of ['zh', 'ja', 'en'] as const) {
-      const prompt = roles.affectPrompt(language);
+    for (const language of LANGUAGES) {
+      const prompt = roles.affectPrompt('xiaonuan', language);
       for (const value of [
         ...AFFECT_EMOTIONS, ...AFFECT_NEEDS, ...AFFECT_STRATEGIES, ...AFFECT_TRENDS,
         'intensity', 'mismatch', 'crisis', 'openLoop', '60',
       ]) expect(prompt, `${language}:${value}`).toContain(value);
     }
-    expect(roles.affectPrompt('en')).toContain('quoted data');
-    expect(roles.affectPrompt('ja')).toContain('引用データ');
+    expect(roles.affectPrompt('xiaonuan', 'en')).toContain('quoted data');
+    expect(roles.affectPrompt('xiaonuan', 'ja')).toContain('引用データ');
   });
 });

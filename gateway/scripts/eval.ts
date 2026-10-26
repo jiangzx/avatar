@@ -5,7 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MockAdapter, loadMockScript } from '../src/adapters/mock.ts';
+import { DEFAULT_CHARACTER_ID, LANGUAGES } from '@anyidea/protocol';
+import { MockAdapter, loadMockScript, withCharacterName } from '../src/adapters/mock.ts';
 import { QwenAdapter } from '../src/adapters/qwen.ts';
 import { loadConfig } from '../src/config.ts';
 import { evalExitCode, isGatedSet, parseEvalArgs, planOutput, resolveEvalOut, resolveTestingPath } from '../src/eval/cli.ts';
@@ -13,7 +14,9 @@ import { buildEvalResults, loadEvalConfig, loadScenarios, renderReport, runScena
 import { judgeScenario, type JudgeScores } from '../src/eval/judge.ts';
 import { loadI18n } from '../src/i18n/load.ts';
 import { QwenTextClient } from '../src/memory/textClient.ts';
+import { loadCharacterRegistry } from '../src/characters/registry.ts';
 import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
+import { isLegacyStyle, LEGACY_DEFAULT_STYLE } from '../src/session/context.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { loadAffectConfig } from '../src/session/affect.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from '../src/session/pacing.ts';
@@ -42,21 +45,22 @@ const adapter = args.adapter ?? 'mock';
 if (adapter !== 'mock' && adapter !== 'qwen') fail('--adapter must be mock or qwen');
 
 const config = loadConfig({ ...process.env, ADAPTER: adapter });
-const roles = loadRoleCatalog(`${root}roles`);
+const characters = loadCharacterRegistry(`${root}characters`, LANGUAGES);
+const roles = loadRoleCatalog(`${root}roles`, characters);
 const roleId = roles.defaultRole();
-const styleId = args.style ?? roles.defaultStyle(roleId);
-if (!roles.hasStyle(roleId, styleId)) throw new Error(`unknown style ${styleId}`);
+const styleId = args.style ?? LEGACY_DEFAULT_STYLE;
+if (!isLegacyStyle(styleId)) throw new Error(`unknown style ${styleId}`);
 const pacing = loadPacing(`${root}config/pacing.json`);
 const memoryConfig = loadMemoryBudget(`${root}config/memory.json`);
 const i18n = loadI18n(`${root}config`);
 const affect = loadAffectConfig(`${root}config/affect.json`);
 const personasByLanguage: Partial<Record<'zh' | 'ja' | 'en', string[]>> = {};
-for (const pair of roles.languagePairs()) {
-  (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
+for (const pair of roles.characterLanguagePairs()) {
+  (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.characterId, pair.language));
 }
 const report = validateBudgets(pacing, memoryConfig, config.ledger, personasByLanguage);
 const evalCfg = loadEvalConfig(`${root}config/eval.json`);
-const script = loadMockScript(`${root}mock/script.json`);
+const script = withCharacterName(loadMockScript(`${root}mock/script.json`), characters.name(DEFAULT_CHARACTER_ID, 'zh'));
 const only = args.only;
 const scenarios = loadScenarios(scenariosPath).filter((s) => !only || only.includes(s.id));
 
@@ -110,7 +114,7 @@ const make: SessionMaker = (onReplyMetrics) => new Session({
   // Same as production: the analyzer runs only when a text client is injected (Qwen with a text endpoint).
   affect,
   onReplyMetrics,
-}, { roleId, styleId, voice: roles.voiceFor(roleId, styleId) });
+}, { roleId, styleId });
 
 const outcomes: ScenarioOutcome[] = [];
 for (const s of scenarios) {

@@ -130,7 +130,7 @@ describe('memory tool registry', () => {
   it('returns unknown_tool without throwing and keeps perform_action', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const registry = createToolRegistry();
+    const registry = registryFor('zh');
     const ctx = ctxFor(store, worker(store), owner(store, 'h-tool'));
 
     await expect(registry.handle('not_a_tool', { query: '王叔' }, ctx)).resolves.toEqual({ ok: false, error: 'unknown_tool' });
@@ -138,8 +138,8 @@ describe('memory tool registry', () => {
     await expect(registry.handle('perform_action', { action: 'dance' }, ctx)).resolves.toMatchObject({ ok: false, error: 'unsupported_action' });
   });
 
-  it('keeps the zh default copy for a no-argument registry', () => {
-    const specs = createToolRegistry().specs();
+  it('uses the zh copy for a zh registry', () => {
+    const specs = registryFor('zh').specs();
     expect(specs.find((spec) => spec.name === 'recall_memory')?.description).toBe(i18n.memory.zh.recall.toolDescription);
     expect(specs.find((spec) => spec.name === 'perform_action')?.description).toBe(i18n.memory.zh.performAction.toolDescription);
     expect(specs.find((spec) => spec.name === 'forget_memory')?.description).toBe(i18n.memory.zh.recall.forgetToolDescription);
@@ -380,7 +380,7 @@ describe('memory tool registry', () => {
     const b = owner(store, 'or-b');
     say(store, a.ownerId, 'a-weather', '青岛今天的天气很凉快', 10);
     say(store, b.ownerId, 'b-weather', '青岛天气属于另一位用户', 11);
-    const result = await createToolRegistry().handle('recall_memory', { query: '青岛天气' }, ctxFor(store, worker(store), a));
+    const result = await registryFor('zh').handle('recall_memory', { query: '青岛天气' }, ctxFor(store, worker(store), a));
     expect(result.ok).toBe(true);
     expect(result.text).toContain('青岛今天的天气很凉快');
     expect(result.text).not.toContain('另一位用户');
@@ -391,7 +391,7 @@ describe('memory tool registry', () => {
     const a = owner(store, 'recall-one-char');
     say(store, a.ownerId, 'tea', '我喜欢喝茶', 10);
     say(store, a.ownerId, 'walk', '我喜欢散步', 11);
-    const result = await createToolRegistry().handle('recall_memory', { query: '茶' }, ctxFor(store, worker(store), a));
+    const result = await registryFor('zh').handle('recall_memory', { query: '茶' }, ctxFor(store, worker(store), a));
     expect(result.ok).toBe(true);
     expect(result.text).toContain('我喜欢喝茶');
     expect(result.text).not.toContain('我喜欢散步');
@@ -402,7 +402,7 @@ describe('memory tool registry', () => {
     const a = owner(store, 'forget-all');
     say(store, a.ownerId, 'tea', '我喜欢喝茶', 10);
     say(store, a.ownerId, 'walk', '我喜欢散步', 11);
-    await createToolRegistry().handle('forget_memory', { query: '喜欢喝茶' }, ctxFor(store, worker(store), a));
+    await registryFor('zh').handle('forget_memory', { query: '喜欢喝茶' }, ctxFor(store, worker(store), a));
     expect(pendingUserRows(store, a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我喜欢散步' }]);
   });
 
@@ -410,7 +410,7 @@ describe('memory tool registry', () => {
     const store = new SqliteMemoryStore(open());
     const a = owner(store, 'forget-none');
     say(store, a.ownerId, 'tea', '我喜欢喝茶', 10);
-    const result = await createToolRegistry().handle(
+    const result = await registryFor('zh').handle(
       'forget_memory',
       { query: '上次说我喜欢喝茶的事' },
       ctxFor(store, worker(store), a),
@@ -424,7 +424,7 @@ describe('memory tool registry', () => {
     const store = new SqliteMemoryStore(db);
     const a = owner(store, 'forget-short');
     plant(db, a.ownerId, a.agentId, 'a');
-    const result = await createToolRegistry().handle('forget_memory', { query: '茶' }, ctxFor(store, worker(store), a));
+    const result = await registryFor('zh').handle('forget_memory', { query: '茶' }, ctxFor(store, worker(store), a));
     expect(result).toEqual({ ok: false, error: 'invalid_args' });
     expect(factRows(store, a.ownerId, a.agentId)).toHaveLength(1);
   });
@@ -443,7 +443,7 @@ describe('memory tool registry', () => {
     }));
     expect(store.careFollowup(a.ownerId, a.agentId, 's1', 30, 7 * day)).toMatchObject({ quote: '我下周二去医院复查膝盖' });
 
-    const result = await createToolRegistry().handle('forget_memory', { query: '膝盖' }, ctxFor(store, worker(store), a));
+    const result = await registryFor('zh').handle('forget_memory', { query: '膝盖' }, ctxFor(store, worker(store), a));
 
     expect(result).toMatchObject({ ok: true, rebuild: 'forget' });
     expect(counts(db, a.ownerId).followups).toBe(0);
@@ -460,7 +460,7 @@ describe('memory tool registry', () => {
     say(store, a.ownerId, 'a2', '我叫王叔', 11);
     say(store, a.ownerId, 'a3', '叔叔明天来', 12);
     say(store, b.ownerId, 'b1', '王叔是邻居', 13);
-    const registry = createToolRegistry();
+    const registry = registryFor('zh');
 
     const result = await registry.handle('recall_memory', { query: '王叔' }, ctxFor(store, worker(store), a));
 
@@ -479,7 +479,7 @@ describe('memory tool registry', () => {
     const a = owner(store, 'recall-role');
     say(store, a.ownerId, 'u1', '我说过喜欢喝茶', 10);
     store.insertMessage({ id: 'a1', sessionId: 's1', ownerId: a.ownerId, agentId: a.agentId, role: 'assistant', text: '助手说过喜欢喝茶', bigrams: bigrams('助手说过喜欢喝茶'), now: 11 });
-    const result = await createToolRegistry().handle('recall_memory', { query: '喝茶' }, ctxFor(store, worker(store), a));
+    const result = await registryFor('zh').handle('recall_memory', { query: '喝茶' }, ctxFor(store, worker(store), a));
     expect(result.ok).toBe(true);
     expect(result.text).toContain('我说过喜欢喝茶');
     expect(result.text).not.toContain('助手说过喜欢喝茶');
@@ -491,12 +491,12 @@ describe('memory tool registry', () => {
     const current = '我说过喜欢喝茶吗？';
     say(store, a.ownerId, 'current', current, 10);
     const ctx = { ...ctxFor(store, worker(store), a), triggerText: current };
-    const only = await createToolRegistry().handle('recall_memory', { query: '喝茶' }, ctx);
+    const only = await registryFor('zh').handle('recall_memory', { query: '喝茶' }, ctx);
     expect(only.spokenFound).toBe(false);
     expect(only.spokenText).toBe('我这边暂时找不到上次的记录，您想接着说点什么？');
 
     say(store, a.ownerId, 'real', '我平时喜欢喝茶', 11);
-    const mixed = await createToolRegistry().handle('recall_memory', { query: '喝茶' }, ctx);
+    const mixed = await registryFor('zh').handle('recall_memory', { query: '喝茶' }, ctx);
     expect(mixed.spokenFound).toBe(true);
     expect(mixed.spokenText).toBe('我这边记着，您之前说过：我平时喜欢喝茶');
     expect(mixed.text).not.toContain(current);
@@ -508,7 +508,7 @@ describe('memory tool registry', () => {
     store.recordSessionStart('s-old', a.agentId, 1);
     say(store, a.ownerId, 'm1', '我记得我之前看过一部电影叫咒怨。', 2, 's-old');
     store.recordSessionEnd('s-old', a.agentId, 3);
-    const result = await createToolRegistry().handle('recall_memory', { query: '上次咱们聊过什么' }, ctxFor(store, worker(store), a));
+    const result = await registryFor('zh').handle('recall_memory', { query: '上次咱们聊过什么' }, ctxFor(store, worker(store), a));
     expect(result.spokenFound).toBe(true);
     expect(result.spokenText).toBe('我这边记着，您之前说过：我记得我之前看过一部电影叫咒怨。');
   });
@@ -518,7 +518,7 @@ describe('memory tool registry', () => {
     const a = owner(store, 'recall-question');
     say(store, a.ownerId, 'q1', '我不记得了，上次我们聊过电影吗？', 10);
     say(store, a.ownerId, 'q2', '最近我有没有跟你聊过什么电影之类的？', 11);
-    const result = await createToolRegistry().handle('recall_memory', { query: '电影' }, ctxFor(store, worker(store), a));
+    const result = await registryFor('zh').handle('recall_memory', { query: '电影' }, ctxFor(store, worker(store), a));
     expect(result.spokenFound).toBe(false);
     expect(result.spokenText).toBe('我这边暂时找不到上次的记录，您想接着说点什么？');
   });
@@ -531,12 +531,12 @@ describe('memory tool registry', () => {
     const good: TextModelClient = {
       complete: async (input) => { seen.push(input.user); return JSON.stringify({ text: '您之前提过看过《咒怨》，那部片子确实挺吓人的。' }); },
     };
-    const natural = await createToolRegistry().handle('recall_memory', { query: '电影' }, { ...ctxFor(store, worker(store), a), textClient: good });
+    const natural = await registryFor('zh').handle('recall_memory', { query: '电影' }, { ...ctxFor(store, worker(store), a), textClient: good });
     expect(natural.spokenText).toBe('您之前提过看过《咒怨》，那部片子确实挺吓人的。');
     expect(seen[0]).toContain('咒怨');
 
     const bad: TextModelClient = { complete: async () => JSON.stringify({ text: '您之前提过最爱《庐山恋》。' }) };
-    const fallback = await createToolRegistry().handle('recall_memory', { query: '电影' }, { ...ctxFor(store, worker(store), a), textClient: bad });
+    const fallback = await registryFor('zh').handle('recall_memory', { query: '电影' }, { ...ctxFor(store, worker(store), a), textClient: bad });
     expect(fallback.spokenText).toBe('我这边记着，您之前说过：我记得我之前看过一部电影叫咒怨。');
   });
 
@@ -545,7 +545,7 @@ describe('memory tool registry', () => {
     const a = owner(store, 'recall-challenge');
     say(store, a.ownerId, 'denial', '我什么时候说心里空落落了？你是不是记错了？', 10);
     say(store, a.ownerId, 'real', '我最近心里空落落的', 11);
-    const result = await createToolRegistry().handle('recall_memory', { query: '空落落' }, ctxFor(store, worker(store), a));
+    const result = await registryFor('zh').handle('recall_memory', { query: '空落落' }, ctxFor(store, worker(store), a));
     expect(result.spokenFound).toBe(true);
     expect(result.spokenText).toBe('我这边记着，您之前说过：我最近心里空落落的');
     expect(result.text).not.toContain('我什么时候说');
@@ -555,10 +555,10 @@ describe('memory tool registry', () => {
     const store = new SqliteMemoryStore(open());
     const a = owner(store, 'recall-speak');
     say(store, a.ownerId, 'u1', '我一直想看恐怖片', 10);
-    const hit = await createToolRegistry().handle('recall_memory', { query: '恐怖片' }, ctxFor(store, worker(store), a));
+    const hit = await registryFor('zh').handle('recall_memory', { query: '恐怖片' }, ctxFor(store, worker(store), a));
     expect(hit.spokenFound).toBe(true);
     expect(hit.spokenText).toBe('我这边记着，您之前说过：我一直想看恐怖片');
-    const miss = await createToolRegistry().handle('recall_memory', { query: '不存在的词', }, ctxFor(store, worker(store), a));
+    const miss = await registryFor('zh').handle('recall_memory', { query: '不存在的词', }, ctxFor(store, worker(store), a));
     expect(miss.spokenFound).toBe(false);
     expect(miss.spokenText).toBe('我这边暂时找不到上次的记录，您想接着说点什么？');
   });
@@ -573,7 +573,7 @@ describe('memory tool registry', () => {
     say(store, a.ownerId, 'e1', '王叔喝茶', 13);
     say(store, a.ownerId, 'e2', '王叔散步', 14);
     say(store, a.ownerId, 'e3', '王叔下棋', 15);
-    const registry = createToolRegistry();
+    const registry = registryFor('zh');
 
     const result = await registry.handle('recall_memory', { query: '王叔' }, ctxFor(store, worker(store), a));
     const lines = (result.text ?? '').split('\n').slice(1);
@@ -613,7 +613,7 @@ describe('memory tool registry', () => {
     ledger.addUser('忘掉王叔', 4);
     let release!: (value: string) => void;
     const pending = ledger.summarize({ summarize: () => new Promise<string>((resolve) => { release = resolve; }) });
-    const registry = createToolRegistry();
+    const registry = registryFor('zh');
     const beforeB = counts(db, b.ownerId);
 
     const result = await registry.handle('forget_memory', { query: '王叔' }, ctxFor(store, queued, a, ledger));
@@ -654,7 +654,7 @@ describe('memory tool registry', () => {
     const queued = worker(store, client);
     const extract = queued.enqueue(a.ownerId, a.agentId, 'turns');
     await entered;
-    const forget = createToolRegistry().handle('forget_memory', { query: '王叔' }, ctxFor(store, queued, a));
+    const forget = registryFor('zh').handle('forget_memory', { query: '王叔' }, ctxFor(store, queued, a));
     release();
     await forget;
     await extract;
@@ -678,7 +678,7 @@ describe('memory tool registry', () => {
     const queued = worker(store);
     const ledger = new ConversationLedger();
     ledger.addUser('别记了', 1);
-    const registry = createToolRegistry();
+    const registry = registryFor('zh');
     const beforeA = counts(db, a.ownerId);
     const beforeB = counts(db, b.ownerId);
 
@@ -724,7 +724,7 @@ describe('memory tool registry', () => {
     say(store, a.ownerId, 'name', '我叫王叔', 11);
     say(store, a.ownerId, 'old', '今天天气不错', 30);
     say(store, b.ownerId, 'b-old', '今天天气不错', 31);
-    const registry = createToolRegistry();
+    const registry = registryFor('zh');
 
     await registry.handle('forget_memory', { query: '王叔' }, ctxFor(store, worker(store), a));
 

@@ -248,6 +248,23 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
   }
 }
 
+/** The Mock script is zh only: fill {{char}} with the session character's zh name. Returns a copy. */
+export function withCharacterName(script: MockScript, name: string): MockScript {
+  const fill = (text: string): string => text.replaceAll('{{char}}', name);
+  const filled: MockScript = {
+    ...script,
+    greeting: fill(script.greeting),
+    followup: fill(script.followup),
+    fallbackReply: fill(script.fallbackReply),
+    turns: script.turns.map((turn) => ({ ...turn, reply: fill(turn.reply) })),
+  };
+  if (script.idleNotice !== undefined) filled.idleNotice = fill(script.idleNotice);
+  if (script.resume !== undefined) filled.resume = fill(script.resume);
+  if (script.toolContinue !== undefined) filled.toolContinue = fill(script.toolContinue);
+  if (script.memoryNotice !== undefined) filled.memoryNotice = fill(script.memoryNotice);
+  return filled;
+}
+
 export function loadMockScript(path: string): MockScript {
   let value: unknown;
   try {

@@ -51,7 +51,7 @@ function collector() {
 describe('Session context', () => {
   it('builds instructions and voice from the session context', async () => {
     const configs: SessionConfig[] = [];
-    const roles: RoleCatalog = { ...fixedRoleCatalog('P', director), buildPersona: (_r, s) => `persona:${s}` };
+    const roles: RoleCatalog = { ...fixedRoleCatalog('P', director), buildPersona: (characterId) => `persona:${characterId}` };
     const session = new Session(
       {
         adapterFactory: () => {
@@ -67,7 +67,7 @@ describe('Session context', () => {
     );
     await session.start(collector().transport);
     expect(configs[0]?.voice).toBe('voice-old');
-    expect(configs[0]?.instructions).toContain('persona:old-friend');
+    expect(configs[0]?.instructions).toContain('persona:xiaonuan');
     expect(session.context.styleId).toBe('old-friend');
     session.end();
   });

@@ -3,7 +3,7 @@ import { LANGUAGES, type Language } from '@anyidea/protocol';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_I18N } from '../src/i18n/load.ts';
 import type { AffectCopy } from '../src/i18n/types.ts';
-import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
+import { shippedRoles } from './support/shipped.ts';
 import type { AffectCard } from '../src/session/affect.ts';
 import { checkAffectBudgets, maxAffectRender, renderAffect } from '../src/session/affectRender.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from '../src/session/pacing.ts';
@@ -89,10 +89,10 @@ describe('checkAffectBudgets', () => {
   it('fits the shipped copy of every language into the shipped affect room (startup source of truth)', () => {
     const pacing = loadPacing(`${root}config/pacing.json`);
     const memory = loadMemoryBudget(`${root}config/memory.json`);
-    const roles = loadRoleCatalog(`${root}roles`);
+    const roles = shippedRoles();
     const byLanguage: Partial<Record<Language, string[]>> = {};
-    for (const pair of roles.languagePairs()) {
-      (byLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
+    for (const pair of roles.characterLanguagePairs()) {
+      (byLanguage[pair.language] ??= []).push(roles.buildPersona(pair.characterId, pair.language));
     }
     const report = validateBudgets(pacing, memory, ledger, byLanguage);
     expect(() => checkAffectBudgets(report.budgets, DEFAULT_I18N.affect)).not.toThrow();

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { PROMPT_LABELS } from '../src/roles/labels.ts';
-import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
+import { shippedRoles } from './support/shipped.ts';
 import { historyBudget } from '../src/session/instructions.ts';
 import { loadMemoryBudget, loadPacing, pinnedMaxCharsFor, validateBudgets, type MemoryBudgetConfig, type PacingConfig } from '../src/session/pacing.ts';
 
@@ -15,8 +15,8 @@ describe('pacing and budget config', () => {
   it('accepts the shipped configs with the shipped roles', () => {
     const pacing = loadPacing(`${root}config/pacing.json`);
     const memory = loadMemoryBudget(`${root}config/memory.json`);
-    const roles = loadRoleCatalog(`${root}roles`);
-    const report = validateBudgets(pacing, memory, ledger, roles.pairs().map((p) => roles.buildPersona(p.roleId, p.styleId)));
+    const roles = shippedRoles();
+    const report = validateBudgets(pacing, memory, ledger, roles.characterLanguagePairs().filter((p) => p.language === 'zh').map((p) => roles.buildPersona(p.characterId, 'zh')));
     const zhRatio = memory.instructions.languageBudgetRatio?.zh ?? memory.instructions.budgetRatio;
     expect(report.budget.totalChars).toBe(Math.floor(pacing.rebuild.contextChars * pacing.rebuild.triggerRatio * zhRatio));
     expect(report.budget.totalChars).toBeLessThanOrEqual(Math.floor(pacing.rebuild.contextChars * pacing.rebuild.triggerRatio * 0.5));
@@ -45,10 +45,10 @@ describe('pacing and budget config', () => {
   it('validates personas for every language and reports the smallest history room', () => {
     const pacing = loadPacing(`${root}config/pacing.json`);
     const memory = loadMemoryBudget(`${root}config/memory.json`);
-    const roles = loadRoleCatalog(`${root}roles`);
+    const roles = shippedRoles();
     const byLanguage: Partial<Record<'zh' | 'ja' | 'en', string[]>> = {};
-    for (const pair of roles.languagePairs()) {
-      (byLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
+    for (const pair of roles.characterLanguagePairs()) {
+      (byLanguage[pair.language] ??= []).push(roles.buildPersona(pair.characterId, pair.language));
     }
     const report = validateBudgets(pacing, memory, ledger, byLanguage);
     expect(report.minHistoryChars).toBe(Math.min(...Object.values(report.perLanguage).map((entry) => entry!.minHistoryChars)));
@@ -63,7 +63,7 @@ describe('pacing and budget config', () => {
       zh: ['中'.repeat(1800)], ja: ['日'.repeat(1900)], en: ['E'.repeat(3200)],
     });
     expect(report.budgets.zh!.totalChars).toBe(4704);
-    expect(report.budgets.ja!.totalChars).toBe(5568);
+    expect(report.budgets.ja!.totalChars).toBe(5664);
     expect(report.budgets.en!.totalChars).toBe(8640);
     expect(report.budgets.en!.totalChars).toBeGreaterThan(report.budgets.zh!.totalChars);
     expect(report.perLanguage.en!.minHistoryChars).toBeGreaterThanOrEqual(1200);
@@ -273,10 +273,10 @@ describe('affect budget', () => {
 describe('pinned budget', () => {
   const pacing = loadPacing(`${root}config/pacing.json`);
   const memory = loadMemoryBudget(`${root}config/memory.json`);
-  const roles = loadRoleCatalog(`${root}roles`);
+  const roles = shippedRoles();
   const personas = () => {
     const byLanguage: Partial<Record<'zh' | 'ja' | 'en', string[]>> = {};
-    for (const pair of roles.languagePairs()) (byLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
+    for (const pair of roles.characterLanguagePairs()) (byLanguage[pair.language] ??= []).push(roles.buildPersona(pair.characterId, pair.language));
     return byLanguage;
   };
 
@@ -284,7 +284,7 @@ describe('pinned budget', () => {
     expect(memory.pinMaxPerCharacter).toBe(10);
     expect(memory.pinMaxChars).toEqual({ zh: 40, ja: 50, en: 50 });
     expect(memory.listMaxItems).toBe(5);
-    expect(memory.instructions.languageBudgetRatio).toEqual({ zh: 0.49, ja: 0.58, en: 0.9 });
+    expect(memory.instructions.languageBudgetRatio).toEqual({ zh: 0.49, ja: 0.59, en: 0.9 });
     // 10 × (pin + label + separator + newline)
     expect(pinnedMaxCharsFor(memory, 'zh')).toBe(10 * (40 + 6 + 1 + 1));
     expect(pinnedMaxCharsFor(memory, 'ja')).toBe(10 * (50 + 14 + 1 + 1));

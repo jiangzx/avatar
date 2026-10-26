@@ -1,8 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import type { ActionName, Language } from '@anyidea/protocol';
 import type { SafetyRules } from '../../config.ts';
-import { DEFAULT_I18N } from '../../i18n/load.ts';
 import type { EvidenceRules, MemoryCopy } from '../../i18n/types.ts';
 import type { MemoryStore } from '../../memory/store.ts';
 import type { TextModelClient } from '../../memory/textClient.ts';
@@ -65,25 +62,6 @@ export interface ToolRegistryOptions {
   weatherFetch?: WeatherFetch;
 }
 
-const ZH_RECALL_PROMPT = readFileSync(
-  fileURLToPath(new URL('../../../roles/_shared/zh/recall.md', import.meta.url)),
-  'utf8',
-).trim();
-
-/** zh defaults keep a no-argument registry byte-identical to the pre-i18n behavior. */
-function defaultToolOptions(): ToolRegistryOptions {
-  return {
-    language: 'zh',
-    memory: DEFAULT_I18N.memory.zh,
-    evidence: DEFAULT_I18N.evidence,
-    recentQueries: DEFAULT_I18N.recentQueries,
-    recallPrompt: ZH_RECALL_PROMPT,
-    safety: DEFAULT_I18N.safety,
-    clipChars: 80,
-    phraseTimeoutMs: 1_500,
-  };
-}
-
 function performActionTool(options: ToolRegistryOptions): ToolHandler {
   return {
     spec: performActionSpec(options.memory.performAction),
@@ -113,7 +91,8 @@ export class ToolRegistry {
   }
 }
 
-export function createToolRegistry(options: ToolRegistryOptions = defaultToolOptions()): ToolRegistry {
+/** The caller passes the rendered recall prompt; raw role files carry {{char}} placeholders. */
+export function createToolRegistry(options: ToolRegistryOptions): ToolRegistry {
   return new ToolRegistry([
     performActionTool(options),
     recallTool(options.safety, options.clipChars, {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MockAdapter, loadMockScript, type MockScript } from '../src/adapters/mock.ts';
+import { MockAdapter, loadMockScript, withCharacterName, type MockScript } from '../src/adapters/mock.ts';
 
 const script: MockScript = {
   greeting: '你好',
@@ -164,5 +164,19 @@ describe('MockAdapter', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('withCharacterName', () => {
+  it('fills {{char}} in every scripted line and leaves the input untouched', () => {
+    const script: MockScript = {
+      greeting: '我是{{char}}', followup: '{{char}}在', fallbackReply: '嗯', memoryNotice: '{{char}}记着',
+      turns: [{ user: 'u', reply: '{{char}}说' }],
+    };
+    expect(withCharacterName(script, '小凯')).toEqual({
+      greeting: '我是小凯', followup: '小凯在', fallbackReply: '嗯', memoryNotice: '小凯记着',
+      turns: [{ user: 'u', reply: '小凯说' }],
+    });
+    expect(script.greeting).toBe('我是{{char}}');
   });
 });

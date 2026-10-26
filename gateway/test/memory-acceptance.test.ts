@@ -11,7 +11,7 @@ import { renderSnapshot } from '../src/memory/snapshot.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
 import { MemoryWorker, withExtraction } from '../src/memory/worker.ts';
 import { SqliteTranscriptWriter } from '../src/memory/writer.ts';
-import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
+import { shippedRoles } from './support/shipped.ts';
 import type { SessionContext } from '../src/session/context.ts';
 import { buildInstructions } from '../src/session/instructions.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
@@ -22,8 +22,8 @@ import { factRows, pendingUserRows, seedOwner } from './helpers/memory.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const i18n = loadI18n(`${root}config`);
-const roles = loadRoleCatalog(`${root}roles`);
-const director = roles.director('elder-companion');
+const roles = shippedRoles();
+const director = roles.director('xiaonuan');
 const policy = { timeoutMs: 1_000, retries: 0, backoffMs: 0, maxBackoffMs: 0 };
 const limits = { maxOwners: 10, dailyCap: 10, orphanOwnerDays: 7, orphanCleanupBatch: 2 };
 
@@ -210,7 +210,7 @@ describe('Plan C memory acceptance', () => {
     // Episode summaries stay in the store but never enter the prompt.
     expect(again.ctx.memorySnapshot).not.toContain('泡茶的杯子');
     const built = buildInstructions({
-      persona: roles.buildPersona(again.ctx.roleId, again.ctx.styleId),
+      persona: roles.buildPersona('xiaonuan'),
       memorySnapshot: again.ctx.memorySnapshot,
       summary: '',
       recent: [],

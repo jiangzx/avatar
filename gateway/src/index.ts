@@ -1,12 +1,12 @@
 import { fileURLToPath } from 'node:url';
-import { LANGUAGES, type Language } from '@anyidea/protocol';
+import { DEFAULT_CHARACTER_ID, LANGUAGES, type Language } from '@anyidea/protocol';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
-import { MockAdapter, loadMockScript, loadMockSpeech } from './adapters/mock.ts';
+import { MockAdapter, loadMockScript, loadMockSpeech, withCharacterName } from './adapters/mock.ts';
 import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
 import { loadCharacterRegistry } from './characters/registry.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
-import { DEFAULT_ROLE, missingRoleLanguages } from './roles/catalog.ts';
+import { missingRoleLanguages } from './roles/catalog.ts';
 import { log } from './log.ts';
 import { loadAffectConfig } from './session/affect.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from './session/pacing.ts';
@@ -32,16 +32,19 @@ const config = loadConfig();
 const characters = loadCharacterRegistry(`${root}characters`, LANGUAGES);
 log('characters_loaded', { count: characters.ids().length });
 // File-backed roles (M1): gateway/roles/<role>/<language>/ + gateway/roles/_shared/<language>/.
-const roles = loadRoleCatalog(`${root}roles`);
-const missingLanguages = missingRoleLanguages(roles, DEFAULT_ROLE, LANGUAGES);
-if (missingLanguages.length > 0) throw new Error(`role_languages_incomplete:${DEFAULT_ROLE}:${missingLanguages.join(',')}`);
+const roles = loadRoleCatalog(`${root}roles`, characters);
+for (const characterId of characters.ids()) {
+  const roleId = characters.roleOf(characterId);
+  const missingLanguages = missingRoleLanguages(roles, roleId, LANGUAGES);
+  if (missingLanguages.length > 0) throw new Error(`role_languages_incomplete:${roleId}:${missingLanguages.join(',')}`);
+}
 const pacing = loadPacing(`${root}config/pacing.json`);
 const memory = loadMemoryBudget(`${root}config/memory.json`);
 const i18n = loadI18n(`${root}config`);
 const affect = loadAffectConfig(`${root}config/affect.json`);
 const personasByLanguage: Partial<Record<Language, string[]>> = {};
-for (const pair of roles.languagePairs()) {
-  (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.roleId, pair.styleId, pair.language));
+for (const pair of roles.characterLanguagePairs()) {
+  (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.characterId, pair.language));
 }
 const budgetReport = validateBudgets(pacing, memory, config.ledger, personasByLanguage);
 // Every language's longest affect render must fit its reserved room; otherwise refuse to start.
@@ -62,11 +65,11 @@ log('instruction_budget', {
   ledgerCapped: budgetReport.ledgerCapped,
   ...languageBudgetFields,
 });
-for (const pair of roles.languagePairs()) {
+for (const pair of roles.characterLanguagePairs()) {
   const keywords = i18n.memory[pair.language].noticeKeywords;
-  const text = roles.director(pair.roleId, pair.language).memoryNoticeText;
+  const text = roles.director(pair.characterId, pair.language).memoryNoticeText;
   if (!keywords.some((keyword) => text.includes(keyword))) {
-    throw new Error(`memory_notice_keyword_missing:${pair.roleId}:${pair.language}`);
+    throw new Error(`memory_notice_keyword_missing:${pair.characterId}:${pair.language}`);
   }
 }
 log('safety_rules', {
@@ -76,6 +79,8 @@ log('safety_rules', {
   invisibleCodePoints: i18n.safety.invisibleCodePoints.length,
 });
 const script = loadMockScript(`${root}mock/script.json`);
+// Until Task 7 passes the session character, the Mock speaks as the default character.
+const mockScript = withCharacterName(script, characters.name(DEFAULT_CHARACTER_ID, 'zh'));
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
 // Device identity (Plan B). MEMORY_DB_PATH unset = dev mode: no registration, no memory, bearers rejected.
@@ -140,7 +145,7 @@ const manager = new SessionManager(
         ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
         : config.adapter === 'qwen'
           ? new QwenAdapter({ apiKey: config.qwenApiKey!, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice })
-          : new MockAdapter({ script, speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor }),
+          : new MockAdapter({ script: mockScript, speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor }),
       summarizer: config.summarizer === 'qwen'
         ? new QwenSummarizer({ apiKey: config.qwenApiKey!, endpoint: config.summarizerEndpoint, model: config.summarizerModel })
         : new MockSummarizer(),

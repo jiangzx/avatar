@@ -9,24 +9,21 @@ const director = {
 } satisfies DirectorConfig;
 
 describe('fixedRoleCatalog', () => {
-  it('stubs the care prompt', () => {
-    expect(fixedRoleCatalog('P', director).carePrompt()).toBe('FIXTURE CARE');
+  it('stubs the shared prompts for any character', () => {
+    const roles = fixedRoleCatalog('P', director);
+    expect(roles.carePrompt('xiaokai')).toBe('FIXTURE CARE');
+    expect(roles.recallPrompt('xiaonuan')).toBe('FIXTURE RECALL');
+    expect(roles.affectPrompt('xiaoxin')).toBe('FIXTURE AFFECT');
+    expect(roles.extractPrompt()).toBe('FIXTURE EXTRACT');
   });
 
-  it('exposes the default role with both stub styles sharing one persona', () => {
+  it('shares one persona and director across characters', () => {
     const roles = fixedRoleCatalog('P', director);
     expect(roles.defaultRole()).toBe(DEFAULT_ROLE);
-    expect(roles.defaultStyle(DEFAULT_ROLE)).toBe('grandchild');
-    expect(roles.hasStyle(DEFAULT_ROLE, 'grandchild')).toBe(true);
-    expect(roles.hasStyle(DEFAULT_ROLE, 'old-friend')).toBe(true);
-    expect(roles.hasStyle(DEFAULT_ROLE, 'pirate')).toBe(false);
-    expect(roles.hasStyle('other-role', 'grandchild')).toBe(false);
-    expect(roles.buildPersona(DEFAULT_ROLE, 'old-friend')).toBe('P');
-    expect(roles.voiceFor(DEFAULT_ROLE, 'grandchild')).toBeUndefined();
-    expect(roles.director(DEFAULT_ROLE)).toBe(director);
-    expect(roles.extractPrompt()).toBe('FIXTURE EXTRACT');
-    expect(roles.recallPrompt()).toBe('FIXTURE RECALL');
-    expect(roles.affectPrompt()).toBe('FIXTURE AFFECT');
+    expect(roles.buildPersona('xiaonuan')).toBe('P');
+    expect(roles.buildPersona('xiaokai')).toBe('P');
+    expect(roles.director('xiaoxin')).toBe(director);
+    expect('defaultStyle' in roles || 'hasStyle' in roles || 'voiceFor' in roles || 'pairs' in roles).toBe(false);
   });
 
   it('exposes language-specific personas and directors', () => {
@@ -38,9 +35,9 @@ describe('fixedRoleCatalog', () => {
     });
     expect(roles.supportedLanguages(DEFAULT_ROLE)).toEqual(['zh', 'en']);
     expect(roles.defaultLanguage(DEFAULT_ROLE)).toBe('zh');
-    expect(roles.buildPersona(DEFAULT_ROLE, 'grandchild', 'en')).toBe('P-en');
-    expect(roles.director(DEFAULT_ROLE, 'en').greetingText).toBe('hello');
-    expect(roles.director(DEFAULT_ROLE).greetingText).toBe('greeting');
+    expect(roles.buildPersona('xiaonuan', 'en')).toBe('P-en');
+    expect(roles.director('xiaonuan', 'en').greetingText).toBe('hello');
+    expect(roles.director('xiaonuan').greetingText).toBe('greeting');
   });
 
   it('builds a dev context from the catalog defaults', () => {

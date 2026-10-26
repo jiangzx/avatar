@@ -22,12 +22,19 @@ export interface SessionContext {
   pinnedMemory?: string;
 }
 
+/** Temporary until Task 7 removes styles: the default of the two former style ids. */
+export const LEGACY_DEFAULT_STYLE = 'grandchild';
+
+/** Temporary until Task 7 removes styles. */
+export function isLegacyStyle(styleId: string): boolean {
+  return styleId === 'grandchild' || styleId === 'old-friend';
+}
+
 /** Context for sessions without a device token (dev / Mock mode): no owner, no memory. */
 export function devContext(roles: RoleCatalog): SessionContext {
   const roleId = roles.defaultRole();
-  const styleId = roles.defaultStyle(roleId);
   const language = roles.defaultLanguage(roleId);
-  return { roleId, styleId, voice: roles.voiceFor(roleId, styleId, language), language };
+  return { roleId, styleId: LEGACY_DEFAULT_STYLE, voice: undefined, language };
 }
 
 export type ResolveResult = { ok: true; ctx: SessionContext; noticePending: boolean } | { ok: false };

@@ -1,0 +1,2 @@
+FIXTURE PERSONA {{char}}
+{{charIdentity}}
