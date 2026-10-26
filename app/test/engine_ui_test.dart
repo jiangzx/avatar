@@ -70,7 +70,7 @@ void main() {
     )));
     await tester.tap(find.text('go'));
     await tester.pumpAndSettle();
-    expect(find.text('需要下载约 174MB，建议连上 Wi-Fi 再下载。'), findsOneWidget);
+    expect(find.text('需要下载约 207MB，建议连上 Wi-Fi 再下载。'), findsOneWidget);
     await tester.tap(find.text('开始下载'));
     await tester.pumpAndSettle();
     expect(find.text('真人形象准备好了'), findsOneWidget);

@@ -45,11 +45,12 @@ void main() {
     final cfg = loadTestDuixConfig();
     final bridge = MethodChannelDuixBridge();
     reply((call) => call.method == 'installStatus' ? {'gj_dh_res': true, 'lily': false} : null);
-    expect(await bridge.installStatus(cfg.assets), {'gj_dh_res': true, 'lily': false});
+    expect(await bridge.installStatus(cfg.assets), {'gj_dh_res': true, 'lily': false, 'kai': false});
     expect(calls.single.arguments, {
       'assets': [
         {'id': 'gj_dh_res', 'dir': 'gj_dh_res', 'sha256': cfg.base.sha256},
         {'id': 'lily', 'dir': 'Lily', 'sha256': cfg.model.sha256},
+        {'id': 'kai', 'dir': 'Kai', 'sha256': cfg.modelFor('kai').sha256},
       ],
     });
     await bridge.install(cfg.model);

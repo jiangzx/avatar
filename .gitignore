@@ -20,7 +20,7 @@ coverage/
 app/dev.json
 app/android/app/libs/
 
-# Duix model zips are large. Reproduce Lily.zip with scripts/duix/strip-lily-watermark.py
+# Duix model zips are large. Reproduce Lily.zip and kai.zip with scripts/duix/strip-lily-watermark.py
 # and download gj_dh_res.zip from the Duix-Mobile v1.0.0 release into this directory.
 app/android/app/src/main/assets/duix/*.zip
 

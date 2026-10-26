@@ -54,8 +54,17 @@ class DuixConfig {
 
   DuixAsset get model => models.firstWhere((m) => m.id == defaultModel);
 
-  /// Install order: shared base resources first, then the model.
-  List<DuixAsset> get assets => [base, model];
+  /// The named model, or the default when [id] is missing or unknown.
+  DuixAsset modelFor(String? id) {
+    if (id == null) return model;
+    for (final candidate in models) {
+      if (candidate.id == id) return candidate;
+    }
+    return model;
+  }
+
+  /// Install order: shared base resources first, then every model.
+  List<DuixAsset> get assets => [base, ...models];
 
   int get totalBytes => assets.fold(0, (sum, a) => sum + a.bytes);
 

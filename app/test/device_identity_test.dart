@@ -136,6 +136,9 @@ void main() {
     expect(await identity.saveEngine(AvatarEngineKind.duix), isTrue);
     expect(store.values[DeviceIdentity.avatarKey], 'lily');
     expect(await identity.savedEngine(), AvatarEngineKind.duix);
+    await identity.changeAvatar('kai');
+    expect(await identity.saveEngine(AvatarEngineKind.duix), isTrue);
+    expect(store.values[DeviceIdentity.avatarKey], 'kai');
     expect(await identity.saveEngine(AvatarEngineKind.webview), isTrue);
     expect(store.values[DeviceIdentity.avatarKey], 'default');
     expect(await identity.savedEngine(), AvatarEngineKind.webview);

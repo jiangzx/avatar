@@ -24,6 +24,7 @@ void main() {
     ));
 
     expect(find.text('Lily'), findsOneWidget);
+    expect(find.text('Kai'), findsOneWidget);
     expect(find.text('小柔'), findsOneWidget);
     expect(find.text('看着亲切，陪您慢慢聊天'), findsOneWidget);
     expect(find.descendant(of: find.byKey(const Key('avatar-default')), matching: find.byIcon(Icons.check_circle)), findsOneWidget);

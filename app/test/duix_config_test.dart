@@ -20,8 +20,10 @@ void main() {
     expect(cfg.enabled, isTrue);
     expect(cfg.debugOnly, isFalse);
     expect(cfg.model.dir, 'Lily');
-    expect(cfg.assets.map((a) => a.id), ['gj_dh_res', 'lily']);
-    expect(cfg.totalBytes, 139403482 + 35062448);
+    expect(cfg.assets.map((a) => a.id), ['gj_dh_res', 'lily', 'kai']);
+    expect(cfg.modelFor('kai').dir, 'Kai');
+    expect(cfg.modelFor('nobody').dir, 'Lily');
+    expect(cfg.totalBytes, 139403482 + 35062448 + 32080731);
     expect(cfg.base.sha256, 'c3ffeca1cb250f111f70e9e221d9115c9a825a625eff9b93d260ef7da70a5457');
     expect(cfg.model.sha256, '9ec390b42b02594470dad69d87841ebbbdfbc0b22803c60092aba8cd9c5a556b');
     expect(cfg.minSegmentMs, 1000);

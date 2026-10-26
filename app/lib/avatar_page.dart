@@ -74,6 +74,8 @@ class AvatarPage extends StatefulWidget {
     this.identity,
     this.savedStyle,
     this.onEngineFailure,
+    this.characterId,
+    this.displayName,
     this.handoff,
     this.platform = const AvatarPagePlatform(),
   });
@@ -87,6 +89,12 @@ class AvatarPage extends StatefulWidget {
 
   /// Set when another engine can take over; otherwise a failure shows the retry error.
   final void Function(AvatarEngineFailure failure)? onEngineFailure;
+
+  /// Saved character. Kai asks the gateway for the young male voice.
+  final String? characterId;
+
+  /// Corner label. Null follows the engine (Lily or 小柔).
+  final String? displayName;
 
   /// When set, this page waits for the previous page to stop its session and release its engine.
   final EngineHandoff? handoff;
@@ -241,6 +249,7 @@ class _AvatarPageState extends State<AvatarPage> {
         events: _UnwiredGatewayEvents(),
         audioPath: AppConfig.audioPath,
         language: _deviceLanguage(),
+        voiceProfile: characterUsesYoungMaleVoice(widget.characterId) ? youngMaleVoiceProfile : null,
         identity: widget.identity,
       ),
       emit: _onNativeEvent,
@@ -463,7 +472,7 @@ class _AvatarPageState extends State<AvatarPage> {
             status: _status,
             error: _error,
             muted: _muted,
-            name: characterNameForEngine(_engine.kind),
+            name: widget.displayName ?? characterNameForEngine(_engine.kind),
             onMute: _toggleMute,
             onEnd: _end,
             onRetry: _retry,

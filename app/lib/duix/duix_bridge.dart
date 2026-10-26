@@ -48,7 +48,7 @@ abstract interface class DuixBridge {
   Future<void> install(DuixAsset asset);
   Future<void> ensureBundled();
   Future<void> cancelInstall(String id);
-  Future<DuixPrepared> prepare(DuixConfig config);
+  Future<DuixPrepared> prepare(DuixConfig config, {String? modelId});
   Future<void> startResponse(int seq);
   Future<void> push(int seq, Uint8List pcm16, Uint8List pcm24);
   Future<void> endResponse(int seq);
@@ -118,9 +118,9 @@ class MethodChannelDuixBridge implements DuixBridge {
   Future<void> cancelInstall(String id) => _call<void>('cancelInstall', {'id': id});
 
   @override
-  Future<DuixPrepared> prepare(DuixConfig config) async {
+  Future<DuixPrepared> prepare(DuixConfig config, {String? modelId}) async {
     final r = await _call<Map<Object?, Object?>>('prepare', {
-      'modelDir': config.model.dir,
+      'modelDir': config.modelFor(modelId).dir,
       'minSegmentMs': config.minSegmentMs,
       'lipReadyTimeoutMs': config.lipReadyTimeoutMs,
       'statsIntervalMs': config.statsIntervalMs,

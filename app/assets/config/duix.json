@@ -17,6 +17,13 @@
       "url": "https://github.com/duixcom/Duix-Mobile/releases/download/v2.0.1/Lily.zip",
       "sha256": "9ec390b42b02594470dad69d87841ebbbdfbc0b22803c60092aba8cd9c5a556b",
       "bytes": 35062448
+    },
+    {
+      "id": "kai",
+      "dir": "Kai",
+      "url": "https://github.com/duixcom/Duix-Mobile/releases/download/v2.0.1/Kai.zip",
+      "sha256": "94bd8e726acc566b7c4db88a4e7cfcb00573b3a633634d77ddda685764ed59ea",
+      "bytes": 32080731
     }
   ],
   "defaultModel": "lily",

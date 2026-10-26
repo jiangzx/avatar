@@ -72,6 +72,52 @@ describe('Session context', () => {
     session.end();
   });
 
+  it('uses the young male voice for every language', async () => {
+    const configs: SessionConfig[] = [];
+    const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'ja', 'en'], defaultLanguage: 'zh' });
+    const session = new Session(
+      {
+        adapterFactory: () => {
+          const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+          const connect = m.connect.bind(m);
+          vi.spyOn(m, 'connect').mockImplementation((c) => { configs.push(c); return connect(c); });
+          return m;
+        },
+        summarizer: new MockSummarizer(),
+        roles,
+        voiceFor: (language) => language === 'zh' ? 'longanlingxin' : 'Tina',
+        youngMaleVoice: 'Evan',
+      },
+      { roleId: 'elder-companion', styleId: 'grandchild', language: 'ja' },
+    );
+    session.useYoungMaleVoice();
+    await session.start(collector().transport);
+    expect(configs[0]?.voice).toBe('Evan');
+    session.setInitialLanguage('zh');
+    expect(session.currentLanguage).toBe('zh');
+    session.end();
+  });
+
+  it('uses Ryan for Chinese so a wave dash is not spoken as a bar', async () => {
+    vi.useFakeTimers();
+    try {
+      const s = setup({
+        roles: fixedRoleCatalog('P', director, { languages: ['zh', 'ja', 'en'], defaultLanguage: 'zh' }),
+        voiceFor: (language) => language === 'zh' ? 'longanlingxin' : 'Tina',
+        youngMaleVoice: 'Evan',
+        youngMaleVoices: { zh: 'Ryan', ja: 'Evan', en: 'Evan' },
+      }, { roleId: 'elder-companion', styleId: 'grandchild', language: 'zh' });
+      s.session.useYoungMaleVoice();
+      await greetAndFinish(s);
+      expect(s.mocks[0]!.voice).toBe('Ryan');
+      s.session.setInitialLanguage('ja');
+      expect(s.mocks[0]!.sessionUpdates.at(-1)?.voice?.value).toBe('Evan');
+      s.session.end();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('uses the session language for persona and voice', async () => {
     const configs: SessionConfig[] = [];
     const roles = fixedRoleCatalog('P-zh', director, {

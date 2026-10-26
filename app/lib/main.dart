@@ -12,6 +12,7 @@ import 'duix/duix_config.dart';
 import 'duix/duix_crash_guard.dart';
 import 'duix/duix_engine.dart';
 import 'identity/app_shell.dart';
+import 'identity/characters.dart';
 import 'identity/device_identity.dart';
 import 'identity/identity_api.dart';
 import 'identity/secure_credential_store.dart';
@@ -97,7 +98,12 @@ class _HomeState extends State<_Home> {
   AvatarEngine _engineFor(AvatarPageRequest request) {
     final config = _engines.config;
     if (request.engine == AvatarEngineKind.duix && config != null) {
-      return DuixAvatarEngine(bridge: _bridge, config: config, guard: DuixCrashGuard(_store));
+      return DuixAvatarEngine(
+        bridge: _bridge,
+        config: config,
+        guard: DuixCrashGuard(_store),
+        modelId: request.avatarId,
+      );
     }
     return WebViewAvatarEngine(avatarId: request.avatarId);
   }
@@ -111,6 +117,8 @@ class _HomeState extends State<_Home> {
       engineFactory: () => _engineFor(request),
       identity: request.identity,
       savedStyle: _identity.savedStyle,
+      characterId: request.avatarId,
+      displayName: characterTitle(request.avatarId),
       onEngineFailure: request.onEngineFailure,
       handoff: _handoff,
     ),

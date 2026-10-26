@@ -17,10 +17,19 @@ import 'duix_events.dart';
 
 /// The Duix 2D avatar (Lily): a native view driven by reply audio. No gaze, head or emotion cues.
 class DuixAvatarEngine with WidgetsBindingObserver implements AvatarEngine {
-  DuixAvatarEngine({required this.bridge, required this.config, required this.guard, this.diag = logcatDiagSink});
+  DuixAvatarEngine({
+    required this.bridge,
+    required this.config,
+    required this.guard,
+    this.modelId,
+    this.diag = logcatDiagSink,
+  });
 
   final DuixBridge bridge;
   final DuixConfig config;
+
+  /// Which bundled model to load. Null uses the config default (Lily).
+  final String? modelId;
   final DuixCrashGuard guard;
   final DiagSink diag;
   StreamSubscription<DuixEvent>? _events;
@@ -44,7 +53,7 @@ class DuixAvatarEngine with WidgetsBindingObserver implements AvatarEngine {
     await guard.markActive();
     _events = bridge.events.listen(_onEvent);
     try {
-      final prepared = await bridge.prepare(config);
+      final prepared = await bridge.prepare(config, modelId: modelId);
       if (_disposed) return;
       _motions = prepared.motions.toSet();
       diag(formatDiag('duix_ready', {'width': prepared.width, 'height': prepared.height, 'motions': prepared.motions.length}));

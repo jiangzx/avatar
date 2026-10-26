@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadI18n } from '../src/i18n/load.ts';
-import { detectLanguage, dominantLanguage, isLanguage, resolveLanguage } from '../src/session/language.ts';
+import { detectLanguage, dominantLanguage, explicitLanguage, isLanguage, resolveLanguage } from '../src/session/language.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const rules = loadI18n(`${root}config`).language;
@@ -45,6 +45,13 @@ describe('detectLanguage', () => {
     expect(detectLanguage('OK!', 'zh', rules)).toBe('zh');
     expect(detectLanguage(' 好的。', 'en', rules)).toBe('en');
     expect(detectLanguage('はい。', 'en', rules)).toBe('en');
+  });
+
+  it('reports an explicit request separately from the script heuristic', () => {
+    expect(explicitLanguage('用日语', rules)).toBe('ja');
+    expect(explicitLanguage('请用英语说', rules)).toBe('en');
+    expect(explicitLanguage('今天天气不错', rules)).toBeNull();
+    expect(explicitLanguage('你会说日语吗', rules)).toBeNull();
   });
 
   it('honours explicit language requests', () => {

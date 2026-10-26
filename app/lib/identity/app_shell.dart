@@ -141,7 +141,8 @@ class _AppShellState extends State<AppShell> {
           onSaveStyle: widget.identity.changeStyle,
           onSaveAvatar: (next) async {
             final engines = widget.engines;
-            if (next == characterLily && (engines == null || engines.availability == DuixAvailability.unsupported)) {
+            if (engineForCharacter(next) == AvatarEngineKind.duix &&
+                (engines == null || engines.availability == DuixAvailability.unsupported)) {
               return IdentityFailed(engines?.unsupportedReason ?? 'duix_unsupported');
             }
             return widget.identity.changeAvatar(next);
@@ -198,7 +199,10 @@ class _AppShellState extends State<AppShell> {
   }
 
   Widget _home(AvatarEngineKind engine, int epoch, EngineSwitchController? engines) {
-    final shown = engine == AvatarEngineKind.duix ? characterLily : characterXiaorou;
+    final saved = activeCharacter(_avatar);
+    final shown = engine == AvatarEngineKind.duix && engineForCharacter(saved) == AvatarEngineKind.duix
+        ? saved
+        : characterXiaorou;
     return Stack(
       children: [
         Positioned.fill(

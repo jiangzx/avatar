@@ -20,7 +20,7 @@ export interface SessionTokens {
 }
 
 export type ClientMessage =
-  | { type: 'session.start'; clientInfo: { platform: string; audioPath: AudioPath; language?: Language } }
+  | { type: 'session.start'; clientInfo: { platform: string; audioPath: AudioPath; language?: Language; voiceProfile?: 'young-male' } }
   | { type: 'session.resume'; sessionId: string }
   | { type: 'vad'; state: 'speaking' | 'silent'; t: number }
   | { type: 'playback.progress'; responseSeq: number; playedMs: number }

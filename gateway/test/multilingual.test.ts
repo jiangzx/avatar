@@ -206,6 +206,20 @@ describe('multilingual session', () => {
     session.end();
   });
 
+  it('keeps an explicit Japanese request when the next utterance is Chinese', async () => {
+    const { adapter, session } = await startEnAndSwitchToJa();
+    expect(session.currentLanguage).toBe('ja');
+    adapter.emit('userTranscript', '今天天气不错', true);
+    expect(session.currentLanguage).toBe('ja');
+    adapter.beginResponse();
+    adapter.done();
+    session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    expect(adapter.pushes.at(-1)).toContain('P-ja');
+    adapter.emit('userTranscript', '请说中文', true);
+    expect(session.currentLanguage).toBe('zh');
+    session.end();
+  });
+
   it('returns to zh and moves the voice at the next seam when a ja session hears a longer Han sentence', async () => {
     const adapter = new FakeAdapter();
     const roles = fixedRoleCatalog('P-zh', director, {

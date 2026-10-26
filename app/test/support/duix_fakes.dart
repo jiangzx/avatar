@@ -73,8 +73,8 @@ class FakeDuixBridge implements DuixBridge {
   Future<void> cancelInstall(String id) async => calls.add('cancel:$id');
 
   @override
-  Future<DuixPrepared> prepare(DuixConfig config) async {
-    calls.add('prepare:${config.model.dir}');
+  Future<DuixPrepared> prepare(DuixConfig config, {String? modelId}) async {
+    calls.add('prepare:${config.modelFor(modelId).dir}');
     final error = prepareError;
     if (error != null) throw error;
     return prepared;

@@ -32,11 +32,14 @@ sealed class ClientMessage {
 }
 
 class SessionStart extends ClientMessage {
-  const SessionStart({this.platform = 'android', this.audioPath = 'B', this.language});
+  const SessionStart({this.platform = 'android', this.audioPath = 'B', this.language, this.voiceProfile});
 
   final String platform;
   final String audioPath;
   final String? language;
+
+  /// `young-male` when the chosen character is Kai. Omitted otherwise.
+  final String? voiceProfile;
 
   @override
   Map<String, Object> toJson() => {
@@ -45,6 +48,7 @@ class SessionStart extends ClientMessage {
           'platform': platform,
           'audioPath': audioPath,
           'language': ?language,
+          'voiceProfile': ?voiceProfile,
         },
       };
 }

@@ -42,6 +42,18 @@ void main() {
 
   tearDown(() async => engine.dispose());
 
+  test('prepares Kai when that character is selected', () async {
+    engine = DuixAvatarEngine(
+      bridge: bridge,
+      config: loadTestDuixConfig(),
+      guard: DuixCrashGuard(store),
+      modelId: 'kai',
+      diag: diag.add,
+    );
+    await engine.start(callbacks());
+    expect(bridge.calls, contains('prepare:Kai'));
+  });
+
   test('prepares the configured model, then reports ready', () async {
     await engine.start(callbacks());
     expect(bridge.calls, contains('prepare:Lily'));

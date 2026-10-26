@@ -179,6 +179,25 @@ void main() {
     expect(store.values[avatarKey], 'lily');
   });
 
+  testWidgets('choosing Kai keeps the realistic engine and restarts on Kai', (tester) async {
+    final store = MemoryCredentialStore({
+      tokenKey: 'device-token-0123456789',
+      styleKey: 'grandchild',
+      avatarKey: 'lily',
+    });
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    await tester.pumpWidget(app(identity, engines: engines(store, FakeDuixBridge())));
+    await tester.pumpAndSettle();
+    expect(find.text('DUIX-lily'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settings')));
+    await tester.pumpAndSettle();
+    await tapCard(tester, const Key('avatar-kai'));
+    await tester.tap(find.byKey(const Key('companion-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.text('DUIX-kai'), findsOneWidget);
+    expect(store.values[avatarKey], 'kai');
+  });
+
   testWidgets(
     'settings keeps the page when the gateway rejects a style change',
     (tester) async {

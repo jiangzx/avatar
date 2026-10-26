@@ -2,7 +2,11 @@ import '../avatar_engine/avatar_engine.dart';
 import 'companion_picker.dart';
 
 const characterLily = 'lily';
+const characterKai = 'kai';
 const characterXiaorou = 'default';
+
+/// Sent on session.start when the chosen character is Kai.
+const youngMaleVoiceProfile = 'young-male';
 
 class CharacterOption implements PickerOption {
   const CharacterOption({
@@ -21,12 +25,18 @@ class CharacterOption implements PickerOption {
   final AvatarEngineKind engine;
 }
 
-/// Settings order: Lily, then 小柔.
+/// Settings order: Lily, Kai, then 小柔.
 const characterOptions = <CharacterOption>[
   CharacterOption(
     id: characterLily,
     title: 'Lily',
     subtitle: '看着亲切，陪您慢慢聊天',
+    engine: AvatarEngineKind.duix,
+  ),
+  CharacterOption(
+    id: characterKai,
+    title: 'Kai',
+    subtitle: '看着精神，陪您慢慢聊天',
     engine: AvatarEngineKind.duix,
   ),
   CharacterOption(
@@ -39,8 +49,13 @@ const characterOptions = <CharacterOption>[
 
 bool isCharacterId(String id) => characterOptions.any((option) => option.id == id);
 
-/// A missing or retired appearance opens Lily. The kept 3D id stays 小柔.
-String activeCharacter(String? saved) => saved == characterXiaorou ? characterXiaorou : characterLily;
+bool characterUsesYoungMaleVoice(String? id) => id == characterKai;
+
+/// A missing or retired appearance opens Lily. A known id stays itself.
+String activeCharacter(String? saved) => saved != null && isCharacterId(saved) ? saved : characterLily;
+
+String characterTitle(String id) =>
+    characterOptions.firstWhere((option) => option.id == id, orElse: () => characterOptions.first).title;
 
 AvatarEngineKind engineForCharacter(String id) =>
     characterOptions.firstWhere((option) => option.id == id, orElse: () => characterOptions.first).engine;

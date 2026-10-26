@@ -146,6 +146,12 @@ const manager = new SessionManager(
       rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,
       rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
       modelOwnsTurns: config.adapter === 'qwen',
+      youngMaleVoice: config.qwenYoungMaleVoice,
+      youngMaleVoices: {
+        zh: config.qwenYoungMaleVoiceZh,
+        ja: config.qwenYoungMaleVoice,
+        en: config.qwenYoungMaleVoice,
+      },
       voiceFor: (language) => {
         if (config.adapter === 'qwen') return config.qwenVoices[language];
         if (config.adapter === 'seeduplex') return language === 'ja' ? undefined : config.seeduplexVoices[language];

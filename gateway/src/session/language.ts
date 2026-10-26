@@ -31,6 +31,12 @@ function explicitRequest(text: string, rules: LanguageRules): Language | null {
   return null;
 }
 
+/** A whole-utterance request to change language. Questions do not count. Null means no request. */
+export function explicitLanguage(text: string, rules: LanguageRules = EMPTY_LANGUAGE_RULES): Language | null {
+  if (isQuestion(text, rules)) return null;
+  return explicitRequest(text, rules);
+}
+
 function ackKey(text: string): string {
   return text.replace(EDGE_PUNCTUATION, '').toLowerCase();
 }

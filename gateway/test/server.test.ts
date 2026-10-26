@@ -469,6 +469,14 @@ describe('client message schema', () => {
       type: 'session.start',
       clientInfo: { platform: 'android', audioPath: 'B', language: 'fr' },
     }))).toBeNull();
+    expect(parseClientMessage(JSON.stringify({
+      type: 'session.start',
+      clientInfo: { platform: 'android', audioPath: 'B', voiceProfile: 'young-male' },
+    }))).toEqual({ type: 'session.start', clientInfo: { platform: 'android', audioPath: 'B', voiceProfile: 'young-male' } });
+    expect(parseClientMessage(JSON.stringify({
+      type: 'session.start',
+      clientInfo: { platform: 'android', audioPath: 'B', voiceProfile: 'other' },
+    }))).toBeNull();
   });
 });
 

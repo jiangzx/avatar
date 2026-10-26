@@ -31,7 +31,7 @@ import { Director, type SilenceContext, type SilencePlan } from './director.ts';
 import { EmotionTagger, type EmotionConfig } from './emotion.ts';
 import { InterruptCoordinator } from './interrupt.ts';
 import { buildInstructions, historyBudget, type InstructionBudget } from './instructions.ts';
-import { detectLanguage } from './language.ts';
+import { detectLanguage, explicitLanguage } from './language.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
 import { DEFAULT_TOOL_TURN_TIMEOUT_MS, type PacingConfig } from './pacing.ts';
@@ -131,6 +131,13 @@ export interface SessionDeps {
   extractSilenceMs?: number;
   /** Default voice for the current language when the role/style does not override. */
   voiceFor?: (language: Language) => string | undefined;
+  /** Fallback young male voice when `youngMaleVoices` has no entry for the language. */
+  youngMaleVoice?: string;
+  /**
+   * Young male voice per language. Chinese must not use Evan: it reads ～ as 横杠
+   * (probe 2026-10-25). Ryan does not.
+   */
+  youngMaleVoices?: Partial<Record<Language, string>>;
   /** Loaded language rules (gateway/config/i18n). Undefined = script heuristic only (tests). */
   languageRules?: LanguageRules;
 }
@@ -169,6 +176,10 @@ export class Session {
   private readonly writer: TranscriptWriter | undefined;
   private readonly i18n: I18nBundle;
   private language: Language;
+  /** Held after an explicit language request so later speech does not flip the reply language. */
+  private languageLock: Language | null = null;
+  /** Kai: young male voice, chosen per language. */
+  private youngMale = false;
   private readonly personas = new Map<Language, string>();
   private readonly silencePlanners = new Map<Language, ReturnType<typeof createSilencePlanner>>();
   /** Every live session.update goes through here (blockers #48). */
@@ -601,6 +612,11 @@ export class Session {
     this.applyLanguage(language);
   }
 
+  /** Call before start. Later language changes pick that language's young male voice. */
+  useYoungMaleVoice(): void {
+    this.youngMale = true;
+  }
+
   private applyLanguage(language: Language): void {
     const next = this.resolveLanguage(language);
     // Session-end extraction reads this context, so it must track the latest language.
@@ -741,6 +757,10 @@ export class Session {
 
   /** Style voice, then the language default, then the context voice only for the role's default language. */
   private voiceFor(language: Language): string | undefined {
+    if (this.youngMale) {
+      const young = this.deps.youngMaleVoices?.[language] ?? this.deps.youngMaleVoice;
+      if (young) return young;
+    }
     return this.deps.roles.voiceFor(this.context.roleId, this.context.styleId, language)
       ?? this.deps.voiceFor?.(language)
       ?? (language === this.deps.roles.defaultLanguage(this.context.roleId) ? this.context.voice : undefined);
@@ -1063,8 +1083,15 @@ export class Session {
   private onUserFinal(text: string, echo: boolean): void {
     // Before the language check: its push must find the seam already shut.
     if (!this.dropUserFinals) this.onTurnFinal(text);
-    const nextLanguage = detectLanguage(text, this.language, this.deps.languageRules);
-    if (nextLanguage !== this.language) this.applyLanguage(nextLanguage);
+    const rules = this.deps.languageRules;
+    const requested = rules ? explicitLanguage(text, rules) : null;
+    if (requested) this.languageLock = requested;
+    // An explicit request stays in force. Otherwise the script heuristic can still move the session.
+    const nextLanguage = requested ?? (this.languageLock ?? detectLanguage(text, this.language, rules));
+    if (nextLanguage !== this.language) {
+      log('language_set', { language: nextLanguage, locked: this.languageLock !== null });
+      this.applyLanguage(nextLanguage);
+    }
     if (echo) this.send({ type: 'transcript.user', text, final: true });
     if (this.dropUserFinals) return;
     this.turnUserText = text;

@@ -123,11 +123,13 @@ export class SessionManager {
     kind: 'start' | 'resume',
     transport: Transport,
     language?: Language,
+    voiceProfile?: 'young-male',
   ): Promise<boolean> {
     const entry = this.sessions.get(sessionId);
     if (!entry || entry.connId !== connId) return false;
     if (kind === 'start') {
       if (entry.started || entry.starting) return false;
+      if (voiceProfile === 'young-male') entry.session.useYoungMaleVoice();
       if (language !== undefined) entry.session.setInitialLanguage(language);
       this.clearGrace(entry);
       entry.starting = true;

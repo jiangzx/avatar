@@ -93,7 +93,7 @@ class DeviceIdentity implements DeviceTokenProvider, EnginePrefs {
     return const IdentityOk();
   });
 
-  /// Character id is local-only. Lily and 小柔 are the only choices.
+  /// Character id is local-only. Lily, Kai, and 小柔 are the choices.
   Future<IdentityResult> changeAvatar(String avatarId) => _guard(() async {
     if (!isCharacterId(avatarId)) return const IdentityFailed('invalid_avatar');
     await store.write(avatarKey, avatarId);
@@ -113,7 +113,13 @@ class DeviceIdentity implements DeviceTokenProvider, EnginePrefs {
   @override
   Future<bool> saveEngine(AvatarEngineKind engine) async {
     try {
-      await store.write(avatarKey, engine == AvatarEngineKind.duix ? characterLily : characterXiaorou);
+      final saved = await store.read(avatarKey);
+      final keepDuix = saved != null && isCharacterId(saved) && engineForCharacter(saved) == AvatarEngineKind.duix;
+      if (engine == AvatarEngineKind.webview) {
+        await store.write(avatarKey, characterXiaorou);
+      } else if (!keepDuix) {
+        await store.write(avatarKey, characterLily);
+      }
       return true;
     } on Exception {
       return false;

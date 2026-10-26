@@ -5,12 +5,14 @@
 状态：**实现完成，验收未全部通过**。从 `master` `b3818ea` 拉出。Task 1–12 已提交。Task 13 的记录见 [验收](../testing/2026-10-25-duix-acceptance.md)。已合并到本地 `master`，未推送。
 
 - 交付：引擎接口（3D 走 `WebViewAvatarEngine`）、Duix 引擎（24 kHz 播放、口型时钟、渲染）、崩溃保护。形象决定用哪条渲染：Lily 走 Duix，小柔走 WebView。两个模型包打进 APK，安装和升级时拷出，不再在运行时下载。
-- 2026-10-25 产品调整（工作区，未提交）：应用名和窗口标题是「智伴」。Android `applicationId` 与 Kotlin 包是 `com.aihero.avatar.bontime`，和旧的 `com.anyidea.avatar_app` 不是同一个应用，不迁移旧数据。聊天伙伴只保留 Lily（默认，真人）和 小柔（原来的 3D `default`）。主页不再切换引擎。风格或形象变了就立刻重开；这台手机跑不了 Lily 时留在小柔并说明原因。打包进 APK 的 Lily 帧已涂掉 `duix.com`，渲染前再盖同一块背景。桌面核对：改写后的第 1、50、200、400 帧，原水印框里近白像素为 0（未改的包约 373–382），人脸还在。真机上的水印和包名还没复验。
+- 2026-10-25 产品调整（`c2d8e0c`，未推送）：应用名和窗口标题是「智伴」。Android `applicationId` 与 Kotlin 包是 `com.aihero.avatar.bontime`，和旧的 `com.anyidea.avatar_app` 不是同一个应用，不迁移旧数据。聊天伙伴只保留 Lily（默认，真人）和 小柔（原来的 3D `default`）。主页不再切换引擎。风格或形象变了就立刻重开；这台手机跑不了 Lily 时留在小柔并说明原因。打包进 APK 的 Lily 帧已涂掉 `duix.com`，渲染前再盖同一块背景。做法见 [duix-watermark.md](../architecture/duix-watermark.md)。桌面核对：改写后的第 1、50、200、400 帧，原水印框里近白像素为 0（未改的包约 373–382），人脸还在。真机上的水印和包名还没复验。
 - 必须通过：M1 通过（约 4 分 30 秒无崩溃，结束画面 Lily 可见）；M2 通过（用户确认嘴跟着声音动）；M3 通过（至少 5 次 `outcome=interrupted`）；M4 通过（3 次短回复 `outcome=ended`）。M5 已从验收删除。M6、M7 未执行。M8 未通过：没有 `guiji` / `duix` / `vshow`，但有 `content-autofill.googleapis.com`；`debugOnly` 仍为 false。
 - 实测摘要：R4 平均 fps 23.85（参考 ≥ 24）；R7 页大小 4096；R8 `lips=false` 3 次。R1、R2、R3、R5 为 NOT RUN。R6 随 M5 删除。
 - 回归（2026-10-25，智伴这次）：`cd app && flutter test` 268 项通过；改动的 Dart 库 `flutter analyze` 无问题；`./gradlew :app:testDebugUnitTest --offline` BUILD SUCCESSFUL，JUnit 45 项、0 失败；`npm test -w avatar-core` 121 项通过，`npm run typecheck -w avatar-core` 通过。此前合并时的 protocol 6 / gateway 839 这次没再跑。M6、M7 仍未执行，M8 仍未通过。
 - 上线前门槛（spec §11，这次不做）：商用模特、月活超过 1000 的许可、"Powered by Duix.com" 与 Notice、16 KB 页对齐、iOS。
 - 下一步：未推送。未关闭项是 blockers #55–#58。#54 已删除。M6、M7 未执行，M8 未通过。
+- 2026-10-25 Kai（工作区，未提交）：公开包 Kai.zip 已按 [duix-watermark.md](../architecture/duix-watermark.md) 去掉 `duix.com` 并打进 APK。设置里排在 Lily 和 小柔 之间。选中 Kai 时会话带 `voiceProfile=young-male`。中文音色是 `Ryan`，日语和英语是 `Evan`。`Evan` 会把 `～` 读成「横杠」（与 Tina 同一类），`Ryan` 不会；语言切回中文时必须换成 `Ryan`。
+- 2026-10-25 语言与称呼（工作区，未提交）：明确说「用日语 / 用英语 / 用中文」之后，后面的话不再把回复语言切回去，直到下一次明确要求。安全规则写明小暖是助手自己的名字，不能用来叫对方；日语会话只说日语。`npm test -w gateway` 57 文件 846 项通过，`npm run typecheck -w gateway` 通过。网关已重启，应用已重新打开。
 
 ## Plan 4 情感共鸣与主动性（2026-10-23）
 
@@ -58,6 +60,7 @@ Plan 4 写 spec 前完成 4 个最小探针，只新增 `gateway/scripts/probe-e
 - 修复 2：纯汉字规则改为“上一轮 `ja` 且本句汉字 < 4 才保留 `ja`，否则 `zh`”。短纯汉字（`東京`/`大丈夫`）仍保留 `ja`；日语正常语音带假名，长串纯汉字按中文处理。
 - 验证：`test/language.test.ts`、`test/multilingual.test.ts`（新增 `ja` 会话收到长串纯汉字后切回 `zh` 并更新音色）、`test/session.test.ts` 通过；用记忆库最近真实消息回放，13:29:44 起 `ja → zh`；真实 Qwen 探针确认 Tina → `longanlingxin` 后 `～` 的“横杠”消失；`npm test -w gateway` 45 文件 651 项通过；`npm run typecheck -w gateway` 通过；`git diff --check` 通过。
 - 8787 网关已于 13:36 重启（`healthz=200`、`adapter=qwen`，手机已自动重连），修复已加载；用户已真机确认问题解决（日语→中文整句后不再念“横杠”）。切换后第一句若上游已开始生成，可能仍用旧音色；第二句起应为中文音色。
+- 2026-10-25 Kai 复现：没有切语言也会念「横杠」，因为年轻男声对所有语言都用 `Evan`。同一句带 `～` 的探针：字幕仍是波浪号；`Evan`、`Wil`、`Zane`、`Andre`、`Aiden`、`Raymond`、`Li Cassian`、`Lenn` 的转写含「横杠」；`longanlingxin` 和 `Ryan` 不含。Kai 的中文改为 `Ryan`，日语和英语仍是 `Evan`。
 
 ## 打断与沉默：已踩过的坑
 

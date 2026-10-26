@@ -139,7 +139,7 @@ class DuixHost(
         val version = bundleVersion()
         installs.execute {
             val outcome = try {
-                for ((id, dir) in listOf("gj_dh_res" to "gj_dh_res", "lily" to "Lily")) {
+                for ((id, dir) in listOf("gj_dh_res" to "gj_dh_res", "lily" to "Lily", "kai" to "Kai")) {
                     if (inst.isBundleCurrent(dir, version)) continue
                     val tmp = File(lay.root, "downloads/$id.zip")
                     tmp.parentFile?.mkdirs()
