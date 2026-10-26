@@ -102,8 +102,8 @@ class FakeAdapter extends EventEmitter<AdapterEvents> implements RealtimeAdapter
 
 function memoryStoreStub(input: { addressing?: string[] } = {}): MemoryStore {
   return {
-    listFacts: () => (input.addressing ?? []).map((text) => ({ category: 'addressing', text })),
-    listProactiveFacts: () => [],
+    listProfileFacts: () => (input.addressing ?? []).map((text, i) => ({ id: `p${i}`, category: 'addressing', text })),
+    listAgentFacts: () => [],
     recentUserMessages: () => [],
   } as unknown as MemoryStore;
 }
@@ -393,9 +393,9 @@ describe('multilingual session', () => {
     expect(config.tools.find((tool) => tool.name === 'set_memory_consent')?.description).toBe(i18n.memory.zh.recall.consentToolDescription);
     session.end();
 
-    const toolCtx = (store: MemoryStore): ToolContext => ({
-      ownerId: 'owner-1', sessionId: 's1', store, ledger: new ConversationLedger(), actions: new ActionRouter(), now: 1,
-    });
+  const toolCtx = (store: MemoryStore): ToolContext => ({
+    ownerId: 'owner-1', agentId: 'agent-1', sessionId: 's1', store, ledger: new ConversationLedger(), actions: new ActionRouter(), now: 1,
+  });
     const zh = createToolRegistry({
       language: 'zh',
       memory: i18n.memory.zh,

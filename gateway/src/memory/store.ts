@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import type { CharacterId } from '@anyidea/protocol';
 
 export type MemoryConsent = 'unknown' | 'granted' | 'declined';
 
@@ -10,117 +11,132 @@ export interface OwnerRecord {
   /** unknown = not asked yet; after the memory notice, unknown counts as granted (Plan C). */
   memoryConsent: MemoryConsent;
   notifiedAt: number | null;
-  onboardingStage: number;
+  /** Owner-level epoch: shared-layer and whole-device changes bump it. */
   memoryEpoch: number;
 }
 
 export interface DeviceRecord { deviceId: string; ownerId: string }
-export interface AgentRecord { id: string; ownerId: string; roleId: string; styleId: string }
+export interface AgentRecord { id: string; ownerId: string; characterId: CharacterId; memoryEpoch: number }
 export interface SessionRecord { id: string; agentId: string; startedAt: number; endedAt: number | null }
-export interface NewOwnerInput { tokenHash: string; roleId: string; styleId: string; now: number }
-export interface NewOwner { ownerId: string; deviceId: string; agentId: string }
+export interface NewOwnerInput { tokenHash: string; now: number }
+export interface NewOwner { ownerId: string; deviceId: string }
+/** One user final as the pin tool reads it. messageId is null when the line was not stored. */
+export interface UserFinal { text: string; messageId: string | null }
+export type ProfileCategory = 'addressing' | 'profile';
+export type AgentFactCategory = 'preference' | 'person' | 'health' | 'other' | 'safety';
+export interface ProfileFactRow { id: string; category: ProfileCategory; text: string }
+export interface AgentFactRow { id: string; category: AgentFactCategory; text: string; sensitive: boolean }
+export interface PinnedRow { id: string; text: string; sensitive: boolean; createdAt: number }
+export interface DeletedItem { kind: 'profile' | 'agent_fact' | 'pinned'; agentId: string | null; text: string; sourceMessageIds: string[] }
+
+export const PROFILE_CATEGORIES: readonly ProfileCategory[] = ['addressing', 'profile'];
+export const AGENT_FACT_CATEGORIES: readonly AgentFactCategory[] = ['preference', 'person', 'health', 'other', 'safety'];
 
 /**
- * Persistent identity and (from Plan C) memory. Owner data is only read or written through
- * owner/agent-scoped methods. Unscoped exceptions: the credential lookup by token hash,
- * aggregate counts for registration caps, the batched orphan-cleanup delete,
- * the startup list of owners that still have unextracted messages,
- * the startup kana-bigram backfill, and the owner-id list for the daily retention pass.
+ * Persistent identity and memory (spec 技术设计 §4–§5). Private memory is keyed by agent (owner × character);
+ * profile_facts is the only shared layer. Scope keys come from the server-side SessionContext or the bearer's
+ * owner, never from tool args, model output, or request bodies.
+ * Unscoped exceptions: credential lookup by token hash, registration-cap counts, the batched orphan delete,
+ * the startup list of agents with unextracted messages, closeOpenSessions at startup, the kana backfill,
+ * the retention owner list, and hasEndedSession (keyed by a server-issued agent id).
+ * Write methods join an open immediate() transaction, so callers can bump an epoch and delete atomically.
  */
 export interface MemoryStore {
-  /** Owner + device + agent in one transaction. */
+  /** Owner + device in one transaction. Agents are created per character by ensureAgent. */
   createOwner(input: NewOwnerInput): NewOwner;
   findDevice(tokenHash: string): DeviceRecord | undefined;
   touchDevice(ownerId: string, deviceId: string, now: number): void;
   getOwner(ownerId: string): OwnerRecord | undefined;
-  /** The owner's agent for a role, created with defaultStyleId if missing. */
-  ensureAgent(ownerId: string, roleId: string, defaultStyleId: string, now: number): AgentRecord;
-  setAgentStyle(ownerId: string, agentId: string, styleId: string): boolean;
+  /** The owner's agent for a character, created on first use. */
+  ensureAgent(ownerId: string, characterId: CharacterId, now: number): AgentRecord;
+  /** True when this agent has at least one ended session (not a first meeting). */
+  hasEndedSession(agentId: string): boolean;
+  /** Start of the continuous-use window over all agents of the owner; `now` when nothing is continuous. */
+  continuousSince(ownerId: string, now: number, gapMs: number): number;
   recordSessionStart(sessionId: string, agentId: string, now: number): void;
   recordSessionEnd(sessionId: string, agentId: string, now: number): void;
   /** Closes sessions that a previous process left open (crash/SIGKILL). Returns the count. */
   closeOpenSessions(now: number): number;
   listSessions(ownerId: string): SessionRecord[];
-  /** Cascades to devices, agents, sessions (and Plan C memory tables). */
+  /** Cascades to devices, agents, sessions and every memory table. */
   deleteOwner(ownerId: string): boolean;
   countOwners(): number;
   countOwnersCreatedSince(since: number): number;
-  /** Deletes up to `limit` owners created before the cutoff that never started a session. */
+  /** Deletes up to `limit` owners created before the cutoff that have no agent row at all. */
   deleteOrphanOwners(createdBefore: number, limit: number): number;
   /** Records that the memory notice finished. */
   markNotified(ownerId: string, now: number): void;
   setConsent(ownerId: string, consent: 'granted' | 'declined', now: number): void;
-  /** Increments memory_epoch and returns the new value. */
-  bumpEpoch(ownerId: string): number;
-  /** Inserts one message when that owner row exists. */
-  insertMessage(row: { id: string; sessionId: string; ownerId: string; role: 'user' | 'assistant'; text: string; bigrams: string; now: number }): void;
-  /** Owner facts, addressing and otherwise. Caller reorders addressing to the front. */
-  listFacts(ownerId: string): { category: string; text: string }[];
-  /** Non-sensitive facts except addressing, for proactive lines. Sensitive memory stays out of idle talk. */
-  listProactiveFacts(ownerId: string): { category: string; text: string }[];
-  /** Notes for one agent. A different agent's notes are not returned. */
-  listNotes(ownerId: string, agentId: string): { text: string }[];
-  /** Newest user messages from ended sessions only; the active session never becomes memory here. */
-  recentUserMessages(ownerId: string, limit: number): { text: string }[];
-  /** Latest discussion from an ended session of this owner's agent. */
-  latestEpisode(ownerId: string, agentId: string): { summary: string } | undefined;
-  /**
-   * Unextracted user tail for the owner. Assistant lines are never memory evidence.
-   * No cap: the previous session already flushed, and extraction later marks these rows extracted.
-   * `agentId` is unused; messages are owner-scoped.
-   */
-  snapshotRows(ownerId: string, agentId: string): { role: 'user' | 'assistant'; text: string }[];
+  /** Both epochs, or undefined when the agent does not belong to the owner. Safe inside immediate(). */
+  memoryEpochs(ownerId: string, agentId: string): { owner: number; agent: number } | undefined;
+  bumpOwnerEpoch(ownerId: string): number;
+  bumpAgentEpoch(ownerId: string, agentId: string): number;
+  /** Inserts one message when the agent belongs to the owner; otherwise nothing. */
+  insertMessage(row: { id: string; sessionId: string; ownerId: string; agentId: string; role: 'user' | 'assistant'; text: string; bigrams: string; now: number }): void;
+  /** Shared layer: the addressing row first, then profile rows. */
+  listProfileFacts(ownerId: string): ProfileFactRow[];
+  /** This agent's facts, sensitive ones included; callers filter. */
+  listAgentFacts(ownerId: string, agentId: string): AgentFactRow[];
+  /** This agent's pins, newest first. */
+  listPinned(ownerId: string, agentId: string): PinnedRow[];
+  insertPinned(row: { id: string; ownerId: string; agentId: string; text: string; sensitive: boolean; sourceSessionId: string; sourceMessageId: string | null; now: number }): void;
+  /** Newest user messages of this agent from ended sessions only; the active session never becomes memory here. */
+  recentUserMessages(ownerId: string, agentId: string, limit: number): { text: string }[];
   /** Runs `body` inside one immediate write transaction. */
   immediate<T>(body: () => T): T;
-  /** Current memory_epoch, or undefined when the owner is gone. Safe to call inside immediate(). */
-  memoryEpoch(ownerId: string): number | undefined;
-  /** Unextracted, non-excluded messages in watermark order. */
-  listPendingMessages(ownerId: string): PendingMessage[];
-  /** Current memory the extractor may update. Ids are included so ops can name rows. */
-  memoryForExtract(ownerId: string): ExtractMemory;
-  /** Owners with at least one unextracted message. Startup catch-up only. */
-  ownersPendingExtraction(): string[];
+  /** Unextracted, non-excluded messages of this agent in watermark order. */
+  listPendingMessages(ownerId: string, agentId: string): PendingMessage[];
+  /** Agents with at least one unextracted message. Startup catch-up only. */
+  agentsPendingExtraction(): Array<{ ownerId: string; agentId: string }>;
+  /** Shared facts plus this agent's facts, notes, episodes and open followups. Ids let ops name rows. */
+  memoryForExtract(ownerId: string, agentId: string): ExtractMemory;
   /**
-   * Applies one extraction inside the caller's transaction.
-   * Does not check memory_epoch; applyExtractOps does that in the same transaction.
+   * Applies one extraction: addressing/profile to profile_facts, the rest to this agent.
+   * Does not check epochs; applyExtractOps does that in the same transaction.
    */
-  writeExtraction(ownerId: string, change: ExtractionChange): void;
-  /** Owner-scoped FTS over user messages only. `match` is an FTS5 expression; empty when invalid. */
-  searchMessages(ownerId: string, match: string, limit: number): { text: string }[];
-  /** Owner-scoped LIKE fallback for a single-character query (bigrams are empty). */
-  searchMessagesLike(ownerId: string, pattern: string, limit: number): { text: string }[];
+  writeExtraction(ownerId: string, agentId: string, change: ExtractionChange): void;
+  /** Agent-scoped FTS over user messages. `match` is an FTS5 expression; empty when invalid. */
+  searchMessages(ownerId: string, agentId: string, match: string, limit: number): { text: string }[];
+  /** Agent-scoped LIKE fallback. `needle` is a LIKE pattern the caller already escaped and wrapped in %…%. */
+  searchMessagesLike(ownerId: string, agentId: string, needle: string, limit: number): { text: string }[];
   /** Startup-only, unscoped: rows after the durable cursor, oldest first. */
   listMessagesForKanaBackfill(limit: number, afterRowid?: number): { rowid: number; text: string; bigrams: string }[];
   /** Startup-only backfill of a row's stored FTS text; the update trigger refreshes the index. */
   updateMessageBigrams(rowid: number, bigrams: string): void;
-  /** Last rowid scanned by the kana backfill; 0 when no pass has completed or the scan wrapped. */
   kanaBackfillCursor(): number;
-  /** Persists the kana backfill cursor so the next startup resumes instead of rescanning page one. */
   setKanaBackfillCursor(rowid: number): void;
   /**
-   * Deletes facts, notes, episodes, and followups whose text (or followup quote) contains `query`.
-   * Blanks FTS hits, the triggering user line when its text is given, and related diffs.
-   * Returns how many user-visible rows were removed or blanked so the caller can
-   * avoid confirming a delete that matched nothing.
+   * Voice forget: this agent's facts, pins, notes, episodes and followups, plus the shared layer,
+   * whose text contains `query`. Blanks this agent's FTS hits and the triggering user line.
+   * Never touches another character's private rows.
    */
-  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): ForgetResult;
-  /** Deletes this owner's messages, memory rows, and audit diffs, then marks consent declined. */
+  forgetMatches(ownerId: string, agentId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): ForgetResult;
+  /** Settings name: the single addressing row, stored as a plain name. */
+  setAddressing(ownerId: string, name: string, now: number): void;
+  /** Deletes one profile, agent fact or pinned row of this owner. Undefined when absent or foreign. */
+  deleteMemoryItem(ownerId: string, itemId: string): DeletedItem | undefined;
+  /** Hard-deletes messages by id; agentId null = any agent of the owner. Dangling ids are ignored. */
+  deleteMessagesByIds(ownerId: string, agentId: string | null, ids: readonly string[]): number;
+  /** One character: private tables, pins, messages, sessions and its audit rows. Keeps the agent row. No epoch bump. */
+  clearAgentMemory(ownerId: string, agentId: string): void;
+  /** The shared layer and its audit rows. No epoch bump. */
+  clearProfile(ownerId: string): void;
+  /** Every character plus the shared layer. Keeps owners, devices, agents, consent and notified_at. No epoch bump. */
+  clearAllMemory(ownerId: string): void;
+  /** Decline path: clearAllMemory, drop all audit rows, then consent = declined. */
   wipeOwnerMemory(ownerId: string): void;
-  /**
-   * Deletes up to `limit` messages for this owner where `created_at < olderThan` or `excluded = 1`.
-   * Facts and notes stay.
-   */
+  /** Deletes up to `limit` messages for this owner where `created_at < olderThan` or `excluded = 1`. */
   deleteExpiredMessages(ownerId: string, olderThan: number, limit: number): number;
   /** Owner ids for the daily retention pass. */
   ownerIds(): string[];
   /**
-   * Newest open followup with a verbatim quote, created within maxAgeMs, whose source session
+   * Newest open followup of this agent with a verbatim quote, created within maxAgeMs, whose source session
    * has ended and is not the current one. The only path that reads followup quotes.
    */
-  careFollowup(ownerId: string, currentSessionId: string, now: number, maxAgeMs: number): { id: string; quote: string; createdAt: number } | undefined;
+  careFollowup(ownerId: string, agentId: string, currentSessionId: string, now: number, maxAgeMs: number): { id: string; quote: string; createdAt: number } | undefined;
   /** Marks the followup done and clears its quote; the audit diff never carries the quote. */
   closeCareFollowup(ownerId: string, id: string, now: number): void;
-  /** Daily retention: clears quotes created before `olderThan` (they can never be used for care). Returns rows changed. */
+  /** Daily retention: clears quotes created before `olderThan`. Returns rows changed. */
   clearStaleCareQuotes(ownerId: string, olderThan: number): number;
 }
 
@@ -133,10 +149,15 @@ export interface PendingMessage {
 
 export interface ForgetResult {
   messages: number;
+  /** This agent's agent_facts rows. */
   facts: number;
   notes: number;
   episodes: number;
   followups: number;
+  /** This agent's pinned rows. */
+  pinned: number;
+  /** Shared profile rows: every character forgets these. */
+  profile: number;
 }
 
 export interface ExtractMemory {
@@ -148,8 +169,8 @@ export interface ExtractMemory {
 }
 
 export type FactChange =
-  | { op: 'add'; category: string; text: string; sensitive?: boolean; confidence?: number }
-  | { op: 'update'; id: string; category?: string; text?: string; sensitive?: boolean; confidence?: number }
+  | { op: 'add'; category: string; text: string; sensitive?: boolean; confidence?: number; sourceMessageIds?: readonly string[] }
+  | { op: 'update'; id: string; category?: string; text?: string; sensitive?: boolean; confidence?: number; sourceMessageIds?: readonly string[] }
   | { op: 'remove'; id: string };
 export type NoteChange =
   | { op: 'add'; text: string; kind?: string; agentId?: string }
@@ -183,6 +204,32 @@ export interface ExtractionChange {
 
 type Row = Record<string, unknown>;
 
+const isProfileCategory = (category: string): category is ProfileCategory => (PROFILE_CATEGORIES as readonly string[]).includes(category);
+const isAgentFactCategory = (category: string): category is AgentFactCategory => (AGENT_FACT_CATEGORIES as readonly string[]).includes(category);
+
+type FactLayer =
+  | { layer: 'profile'; category: ProfileCategory }
+  | { layer: 'agent'; category: AgentFactCategory; sensitive: boolean };
+
+/** Routes a category to its layer. Sensitive content never enters the shared layer (spec 记忆分层). */
+function layerFor(category: string, sensitive: boolean): FactLayer | null {
+  if (isProfileCategory(category)) return sensitive ? { layer: 'agent', category: 'other', sensitive: true } : { layer: 'profile', category };
+  if (isAgentFactCategory(category)) return { layer: 'agent', category, sensitive: sensitive || category === 'health' };
+  return null;
+}
+
+function parseIds(raw: unknown): string[] {
+  if (typeof raw !== 'string') return [];
+  try {
+    const value: unknown = JSON.parse(raw);
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+const unionIds = (...lists: ReadonlyArray<readonly string[]>): string[] => [...new Set(lists.flat())];
+
 /** `DELETE ... LIMIT` needs a sqlite compile flag this runtime often lacks. */
 const EXPIRED_BY_IDS = `DELETE FROM messages WHERE owner_id = ? AND rowid IN (
   SELECT rowid FROM messages
@@ -205,128 +252,155 @@ function prepareStatements(db: DatabaseSync) {
   const p = (sql: string) => db.prepare(sql);
   const expired = prepareExpiredDelete(db);
   return {
+    // Identity
     insertOwner: p('INSERT INTO owners (id, created_at, last_seen_at) VALUES (?, ?, ?)'),
     insertDevice: p('INSERT INTO devices (id, owner_id, token_hash, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)'),
-    insertAgent: p('INSERT INTO agents (id, owner_id, role_id, style_id, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (owner_id, role_id) DO NOTHING'),
     findDevice: p('SELECT id, owner_id FROM devices WHERE token_hash = ?'),
     touchDevice: p('UPDATE devices SET last_seen_at = ? WHERE id = ? AND owner_id = ?'),
     touchOwner: p('UPDATE owners SET last_seen_at = ? WHERE id = ?'),
     getOwner: p('SELECT * FROM owners WHERE id = ?'),
-    getAgent: p('SELECT id, owner_id, role_id, style_id FROM agents WHERE owner_id = ? AND role_id = ?'),
-    setAgentStyle: p('UPDATE agents SET style_id = ? WHERE id = ? AND owner_id = ?'),
+    insertAgent: p('INSERT INTO agents (id, owner_id, character_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (owner_id, character_id) DO NOTHING'),
+    getAgent: p('SELECT id, owner_id, character_id, memory_epoch FROM agents WHERE owner_id = ? AND character_id = ?'),
+    agentOwned: p('SELECT 1 AS ok FROM agents WHERE owner_id = ? AND id = ?'),
+    listAgentIds: p('SELECT id FROM agents WHERE owner_id = ? ORDER BY created_at, id'),
     insertSession: p('INSERT INTO sessions (id, agent_id, started_at) VALUES (?, ?, ?)'),
     endSession: p('UPDATE sessions SET ended_at = ? WHERE id = ? AND agent_id = ? AND ended_at IS NULL'),
     closeOpenSessions: p('UPDATE sessions SET ended_at = ? WHERE ended_at IS NULL'),
     listSessions: p('SELECT s.id, s.agent_id, s.started_at, s.ended_at FROM sessions s JOIN agents a ON a.id = s.agent_id WHERE a.owner_id = ? ORDER BY s.started_at'),
+    hasEndedSession: p('SELECT 1 AS ok FROM sessions WHERE agent_id = ? AND ended_at IS NOT NULL LIMIT 1'),
+    ownerSessionsNewestFirst: p(`SELECT s.started_at, s.ended_at FROM sessions s JOIN agents a ON a.id = s.agent_id
+      WHERE a.owner_id = ? ORDER BY s.started_at DESC, s.rowid DESC`),
+    deleteAgentSessions: p('DELETE FROM sessions WHERE agent_id = ?'),
     deleteOwner: p('DELETE FROM owners WHERE id = ?'),
     countOwners: p('SELECT count(*) AS n FROM owners'),
     countOwnersSince: p('SELECT count(*) AS n FROM owners WHERE created_at >= ?'),
     orphanOwners: p(`SELECT o.id FROM owners o
-      WHERE o.created_at < ?
-        AND NOT EXISTS (SELECT 1 FROM agents a JOIN sessions s ON s.agent_id = a.id WHERE a.owner_id = o.id)
+      WHERE o.created_at < ? AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.owner_id = o.id)
       LIMIT ?`),
     markNotified: p('UPDATE owners SET notified_at = ? WHERE id = ?'),
     setConsent: p('UPDATE owners SET memory_consent = ? WHERE id = ?'),
-    bumpEpoch: p('UPDATE owners SET memory_epoch = memory_epoch + 1 WHERE id = ? RETURNING memory_epoch'),
-    insertMessage: p(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, created_at)
-      SELECT ?, ?, ?, ?, ?, ?, ?
-      WHERE EXISTS (SELECT 1 FROM owners WHERE id = ?)`),
-    listFacts: p('SELECT category, text FROM user_facts WHERE owner_id = ? ORDER BY updated_at, id'),
-    listProactiveFacts: p("SELECT category, text FROM user_facts WHERE owner_id = ? AND sensitive = 0 AND category != 'addressing' ORDER BY updated_at, id"),
-    listNotes: p('SELECT text FROM relationship_notes WHERE owner_id = ? AND agent_id = ? ORDER BY updated_at, id'),
+    bumpOwnerEpoch: p('UPDATE owners SET memory_epoch = memory_epoch + 1 WHERE id = ? RETURNING memory_epoch'),
+    bumpAgentEpoch: p('UPDATE agents SET memory_epoch = memory_epoch + 1 WHERE id = ? AND owner_id = ? RETURNING memory_epoch'),
+    memoryEpochs: p(`SELECT o.memory_epoch AS owner_epoch, a.memory_epoch AS agent_epoch
+      FROM agents a JOIN owners o ON o.id = a.owner_id WHERE a.id = ? AND a.owner_id = ?`),
+    ownerIds: p('SELECT id FROM owners'),
+
+    // Messages
+    insertMessage: p(`INSERT INTO messages (id, session_id, owner_id, agent_id, role, text, bigrams, created_at)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM agents WHERE id = ? AND owner_id = ?)`),
     recentUserMessages: p(`SELECT m.text AS text FROM messages m
-      JOIN sessions s ON s.id = m.session_id
-      WHERE m.owner_id = ? AND m.role = 'user' AND m.excluded = 0 AND s.ended_at IS NOT NULL
+      JOIN sessions s ON s.id = m.session_id AND s.agent_id = m.agent_id
+      WHERE m.owner_id = ? AND m.agent_id = ? AND m.role = 'user' AND m.excluded = 0 AND s.ended_at IS NOT NULL
       ORDER BY m.created_at DESC, m.rowid DESC
       LIMIT ?`),
-    latestEpisode: p(`SELECT e.summary FROM episodes e
-      JOIN sessions s ON s.id = e.session_id
-      JOIN agents a ON a.id = s.agent_id AND a.owner_id = e.owner_id
-      WHERE e.owner_id = ? AND a.id = ? AND s.ended_at IS NOT NULL
-      ORDER BY s.started_at DESC, e.created_at DESC, e.rowid DESC LIMIT 1`),
-    snapshotRows: p(`SELECT role, text FROM messages
-      WHERE owner_id = ? AND role = 'user' AND extracted = 0 AND excluded = 0
-      ORDER BY created_at, rowid`),
-    memoryEpoch: p('SELECT memory_epoch FROM owners WHERE id = ?'),
     listPending: p(`SELECT id, role, text, session_id FROM messages
-      WHERE owner_id = ? AND extracted = 0 AND excluded = 0
+      WHERE owner_id = ? AND agent_id = ? AND extracted = 0 AND excluded = 0
       ORDER BY created_at, rowid`),
-    listFactRows: p('SELECT id, category, text, sensitive FROM user_facts WHERE owner_id = ? ORDER BY updated_at, id'),
-    listNoteRows: p('SELECT id, agent_id, kind, text FROM relationship_notes WHERE owner_id = ? ORDER BY updated_at, id'),
-    listEpisodeRows: p('SELECT id, summary, mood FROM episodes WHERE owner_id = ? ORDER BY created_at, id'),
-    listFollowups: p('SELECT id, text, due_at FROM followups WHERE owner_id = ? AND done_at IS NULL ORDER BY due_at, id'),
-    listAgentIds: p('SELECT id FROM agents WHERE owner_id = ?'),
-    ownersPending: p('SELECT DISTINCT owner_id AS id FROM messages WHERE extracted = 0 AND excluded = 0'),
-    agentOwned: p('SELECT 1 AS ok FROM agents WHERE owner_id = ? AND id = ?'),
-    messageSession: p('SELECT session_id FROM messages WHERE owner_id = ? AND id = ?'),
-    insertFact: p(`INSERT INTO user_facts (id, owner_id, category, text, sensitive, confidence, source_session_id, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
-    updateFact: p(`UPDATE user_facts SET category = COALESCE(?, category), text = COALESCE(?, text),
-      sensitive = COALESCE(?, sensitive), confidence = COALESCE(?, confidence), updated_at = ?
-      WHERE id = ? AND owner_id = ?`),
-    deleteFact: p('DELETE FROM user_facts WHERE id = ? AND owner_id = ?'),
-    insertNote: p(`INSERT INTO relationship_notes (id, agent_id, owner_id, kind, text, source_session_id, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`),
-    updateNote: p(`UPDATE relationship_notes SET kind = COALESCE(?, kind), text = COALESCE(?, text), updated_at = ?
-      WHERE id = ? AND owner_id = ?`),
-    deleteNote: p('DELETE FROM relationship_notes WHERE id = ? AND owner_id = ?'),
-    insertEpisode: p('INSERT INTO episodes (id, session_id, owner_id, summary, mood, created_at) VALUES (?, ?, ?, ?, ?, ?)'),
-    updateEpisode: p(`UPDATE episodes SET summary = COALESCE(?, summary), mood = COALESCE(?, mood)
-      WHERE id = ? AND owner_id = ?`),
-    deleteEpisode: p('DELETE FROM episodes WHERE id = ? AND owner_id = ?'),
-    insertFollowup: p(`INSERT INTO followups (id, owner_id, text, due_at, done_at, source_session_id, quote, sensitive, created_at)
-      VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)`),
-    careFollowup: p(`SELECT f.id, f.quote, f.created_at FROM followups f
-      JOIN sessions s ON s.id = f.source_session_id
-      JOIN agents a ON a.id = s.agent_id AND a.owner_id = f.owner_id
-      WHERE f.owner_id = ? AND f.done_at IS NULL AND f.quote IS NOT NULL
-        AND f.created_at IS NOT NULL AND f.created_at >= ?
-        AND s.ended_at IS NOT NULL AND s.id != ?
-      ORDER BY f.created_at DESC, f.rowid DESC
-      LIMIT 1`),
-    closeCareFollowup: p('UPDATE followups SET done_at = ?, quote = NULL WHERE id = ? AND owner_id = ? AND done_at IS NULL'),
-    insertCareChange: p(`INSERT INTO memory_changes (id, owner_id, table_name, row_id, op, diff, actor, created_at)
-      VALUES (?, ?, 'followups', ?, 'close', '', 'care', ?)`),
-    clearStaleCareQuotes: p('UPDATE followups SET quote = NULL WHERE owner_id = ? AND quote IS NOT NULL AND created_at < ?'),
-    updateFollowup: p(`UPDATE followups SET text = COALESCE(?, text), due_at = COALESCE(?, due_at)
-      WHERE id = ? AND owner_id = ?`),
-    deleteFollowup: p('DELETE FROM followups WHERE id = ? AND owner_id = ?'),
-    markExtracted: p('UPDATE messages SET extracted = 1 WHERE owner_id = ? AND id = ?'),
-    insertChange: p(`INSERT INTO memory_changes (id, owner_id, table_name, row_id, op, diff, actor, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'extract', ?)`),
+    agentsPending: p('SELECT DISTINCT owner_id, agent_id FROM messages WHERE extracted = 0 AND excluded = 0'),
+    messageSession: p('SELECT session_id FROM messages WHERE owner_id = ? AND agent_id = ? AND id = ?'),
+    markExtracted: p('UPDATE messages SET extracted = 1 WHERE owner_id = ? AND agent_id = ? AND id = ?'),
     searchMessages: p(`SELECT m.text AS text FROM messages_fts
       JOIN messages m ON m.rowid = messages_fts.rowid
-      WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.role = 'user' AND m.excluded = 0
+      WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.agent_id = ? AND m.role = 'user' AND m.excluded = 0
       ORDER BY bm25(messages_fts)
       LIMIT ?`),
     searchMessagesLike: p(`SELECT text FROM messages
-      WHERE owner_id = ? AND role = 'user' AND excluded = 0 AND text LIKE ? ESCAPE '\\'
+      WHERE owner_id = ? AND agent_id = ? AND role = 'user' AND excluded = 0 AND text LIKE ? ESCAPE '\\'
       ORDER BY created_at DESC, rowid DESC
       LIMIT ?`),
+    matchRowids: p(`SELECT m.rowid AS rowid FROM messages_fts
+      JOIN messages m ON m.rowid = messages_fts.rowid
+      WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.agent_id = ? AND m.excluded = 0`),
+    blankMessage: p(`UPDATE messages SET text = '', bigrams = '', excluded = 1 WHERE owner_id = ? AND agent_id = ? AND rowid = ?`),
+    blankTrigger: p(`UPDATE messages SET text = '', bigrams = '', excluded = 1
+      WHERE owner_id = ? AND agent_id = ? AND session_id = ? AND role = 'user' AND excluded = 0 AND text = ?`),
+    deleteMessageById: p('DELETE FROM messages WHERE owner_id = ? AND id = ?'),
+    deleteAgentMessageById: p('DELETE FROM messages WHERE owner_id = ? AND agent_id = ? AND id = ?'),
+    deleteAgentMessages: p('DELETE FROM messages WHERE owner_id = ? AND agent_id = ?'),
+    deleteOwnerMessages: p('DELETE FROM messages WHERE owner_id = ?'),
     messagesForKanaBackfill: p('SELECT rowid, text, bigrams FROM messages WHERE rowid > ? ORDER BY rowid LIMIT ?'),
     updateMessageBigrams: p('UPDATE messages SET bigrams = ? WHERE rowid = ?'),
     kanaBackfillCursor: p("SELECT value FROM meta WHERE key = 'kana_backfill_cursor'"),
     setKanaBackfillCursor: p("INSERT INTO meta (key, value) VALUES ('kana_backfill_cursor', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value"),
-    matchRowids: p(`SELECT m.rowid AS rowid FROM messages_fts
-      JOIN messages m ON m.rowid = messages_fts.rowid
-      WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.excluded = 0`),
-    blankMessage: p(`UPDATE messages SET text = '', bigrams = '', excluded = 1 WHERE owner_id = ? AND rowid = ?`),
-    blankTrigger: p(`UPDATE messages SET text = '', bigrams = '', excluded = 1
-      WHERE owner_id = ? AND session_id = ? AND role = 'user' AND excluded = 0 AND text = ?`),
-    deleteFactsInstr: p('DELETE FROM user_facts WHERE owner_id = ? AND instr(text, ?) > 0'),
-    deleteNotesInstr: p('DELETE FROM relationship_notes WHERE owner_id = ? AND instr(text, ?) > 0'),
-    deleteEpisodesInstr: p('DELETE FROM episodes WHERE owner_id = ? AND instr(summary, ?) > 0'),
-    deleteFollowupsInstr: p("DELETE FROM followups WHERE owner_id = ? AND (instr(text, ?) > 0 OR instr(COALESCE(quote, ''), ?) > 0)"),
-    blankDiffs: p(`UPDATE memory_changes SET diff = '' WHERE owner_id = ? AND instr(diff, ?) > 0`),
-    deleteMessages: p('DELETE FROM messages WHERE owner_id = ?'),
-    deleteAllFacts: p('DELETE FROM user_facts WHERE owner_id = ?'),
-    deleteAllNotes: p('DELETE FROM relationship_notes WHERE owner_id = ?'),
-    deleteAllEpisodes: p('DELETE FROM episodes WHERE owner_id = ?'),
-    deleteAllFollowups: p('DELETE FROM followups WHERE owner_id = ?'),
-    deleteAllChanges: p('DELETE FROM memory_changes WHERE owner_id = ?'),
     deleteExpired: expired.deleteExpired,
     expiredByIds: expired.expiredByIds,
-    ownerIds: p('SELECT id FROM owners'),
+
+    // Shared layer
+    listProfile: p(`SELECT id, category, text FROM profile_facts WHERE owner_id = ?
+      ORDER BY CASE category WHEN 'addressing' THEN 0 ELSE 1 END, updated_at, rowid`),
+    getProfile: p('SELECT id, category, text, source_message_ids FROM profile_facts WHERE id = ? AND owner_id = ?'),
+    getAddressing: p(`SELECT id, text, source_message_ids FROM profile_facts WHERE owner_id = ? AND category = 'addressing'
+      ORDER BY updated_at DESC, id LIMIT 1`),
+    insertProfile: p(`INSERT INTO profile_facts (id, owner_id, category, text, confidence, source_session_id, source_message_ids, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
+    updateProfile: p(`UPDATE profile_facts SET category = ?, text = ?, confidence = COALESCE(?, confidence), source_message_ids = ?, updated_at = ?
+      WHERE id = ? AND owner_id = ?`),
+    deleteOtherAddressing: p(`DELETE FROM profile_facts WHERE owner_id = ? AND category = 'addressing' AND id != ?`),
+    deleteProfile: p('DELETE FROM profile_facts WHERE id = ? AND owner_id = ?'),
+    deleteProfileInstr: p('DELETE FROM profile_facts WHERE owner_id = ? AND instr(text, ?) > 0'),
+    deleteAllProfile: p('DELETE FROM profile_facts WHERE owner_id = ?'),
+
+    // Private layer
+    listAgentFacts: p('SELECT id, category, text, sensitive FROM agent_facts WHERE owner_id = ? AND agent_id = ? ORDER BY updated_at, rowid'),
+    getAgentFact: p('SELECT id, category, text, sensitive, source_message_ids FROM agent_facts WHERE id = ? AND owner_id = ? AND agent_id = ?'),
+    getAgentFactAnyAgent: p('SELECT id, agent_id, text, source_message_ids FROM agent_facts WHERE id = ? AND owner_id = ?'),
+    insertAgentFact: p(`INSERT INTO agent_facts (id, owner_id, agent_id, category, text, sensitive, confidence, source_session_id, source_message_ids, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+    updateAgentFact: p(`UPDATE agent_facts SET category = ?, text = ?, sensitive = ?, confidence = COALESCE(?, confidence), source_message_ids = ?, updated_at = ?
+      WHERE id = ? AND owner_id = ? AND agent_id = ?`),
+    deleteAgentFact: p('DELETE FROM agent_facts WHERE id = ? AND owner_id = ? AND agent_id = ?'),
+    deleteAgentFactById: p('DELETE FROM agent_facts WHERE id = ? AND owner_id = ?'),
+    deleteAgentFactsInstr: p('DELETE FROM agent_facts WHERE owner_id = ? AND agent_id = ? AND instr(text, ?) > 0'),
+    deleteAllAgentFacts: p('DELETE FROM agent_facts WHERE owner_id = ? AND agent_id = ?'),
+    insertPinned: p(`INSERT INTO pinned_memories (id, owner_id, agent_id, text, sensitive, source_session_id, source_message_id, created_at)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM agents WHERE id = ? AND owner_id = ?)`),
+    listPinned: p('SELECT id, text, sensitive, created_at FROM pinned_memories WHERE owner_id = ? AND agent_id = ? ORDER BY created_at DESC, rowid DESC'),
+    getPinned: p('SELECT id, agent_id, text, source_message_id FROM pinned_memories WHERE id = ? AND owner_id = ?'),
+    deletePinnedById: p('DELETE FROM pinned_memories WHERE id = ? AND owner_id = ?'),
+    deletePinnedInstr: p('DELETE FROM pinned_memories WHERE owner_id = ? AND agent_id = ? AND instr(text, ?) > 0'),
+    deleteAllPinned: p('DELETE FROM pinned_memories WHERE owner_id = ? AND agent_id = ?'),
+    listNoteRows: p('SELECT id, kind, text FROM relationship_notes WHERE owner_id = ? AND agent_id = ? ORDER BY updated_at, rowid'),
+    insertNote: p(`INSERT INTO relationship_notes (id, agent_id, owner_id, kind, text, source_session_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`),
+    updateNote: p(`UPDATE relationship_notes SET kind = COALESCE(?, kind), text = COALESCE(?, text), updated_at = ?
+      WHERE id = ? AND owner_id = ? AND agent_id = ?`),
+    deleteNote: p('DELETE FROM relationship_notes WHERE id = ? AND owner_id = ? AND agent_id = ?'),
+    deleteNotesInstr: p('DELETE FROM relationship_notes WHERE owner_id = ? AND agent_id = ? AND instr(text, ?) > 0'),
+    deleteAllNotes: p('DELETE FROM relationship_notes WHERE owner_id = ? AND agent_id = ?'),
+    listEpisodeRows: p('SELECT id, summary, mood FROM episodes WHERE owner_id = ? AND agent_id = ? ORDER BY created_at, rowid'),
+    insertEpisode: p('INSERT INTO episodes (id, session_id, owner_id, agent_id, summary, mood, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+    updateEpisode: p(`UPDATE episodes SET summary = COALESCE(?, summary), mood = COALESCE(?, mood)
+      WHERE id = ? AND owner_id = ? AND agent_id = ?`),
+    deleteEpisode: p('DELETE FROM episodes WHERE id = ? AND owner_id = ? AND agent_id = ?'),
+    deleteEpisodesInstr: p('DELETE FROM episodes WHERE owner_id = ? AND agent_id = ? AND instr(summary, ?) > 0'),
+    deleteAllEpisodes: p('DELETE FROM episodes WHERE owner_id = ? AND agent_id = ?'),
+    listFollowups: p('SELECT id, text, due_at FROM followups WHERE owner_id = ? AND agent_id = ? AND done_at IS NULL ORDER BY due_at, id'),
+    insertFollowup: p(`INSERT INTO followups (id, owner_id, agent_id, text, due_at, done_at, source_session_id, quote, sensitive, created_at)
+      VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`),
+    updateFollowup: p(`UPDATE followups SET text = COALESCE(?, text), due_at = COALESCE(?, due_at)
+      WHERE id = ? AND owner_id = ? AND agent_id = ?`),
+    deleteFollowup: p('DELETE FROM followups WHERE id = ? AND owner_id = ? AND agent_id = ?'),
+    deleteFollowupsInstr: p("DELETE FROM followups WHERE owner_id = ? AND agent_id = ? AND (instr(text, ?) > 0 OR instr(COALESCE(quote, ''), ?) > 0)"),
+    deleteAllFollowups: p('DELETE FROM followups WHERE owner_id = ? AND agent_id = ?'),
+    followupAgent: p('SELECT agent_id FROM followups WHERE id = ? AND owner_id = ?'),
+    careFollowup: p(`SELECT f.id, f.quote, f.created_at FROM followups f
+      JOIN sessions s ON s.id = f.source_session_id AND s.agent_id = f.agent_id
+      WHERE f.owner_id = ? AND f.agent_id = ? AND f.done_at IS NULL AND f.quote IS NOT NULL
+        AND f.created_at >= ? AND s.ended_at IS NOT NULL AND s.id != ?
+      ORDER BY f.created_at DESC, f.rowid DESC
+      LIMIT 1`),
+    closeCareFollowup: p('UPDATE followups SET done_at = ?, quote = NULL WHERE id = ? AND owner_id = ? AND done_at IS NULL'),
+    clearStaleCareQuotes: p('UPDATE followups SET quote = NULL WHERE owner_id = ? AND quote IS NOT NULL AND created_at < ?'),
+
+    // Audit
+    insertChange: p(`INSERT INTO memory_changes (id, owner_id, agent_id, table_name, row_id, op, diff, actor, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+    blankDiffsScoped: p(`UPDATE memory_changes SET diff = '' WHERE owner_id = ? AND (agent_id = ? OR agent_id IS NULL) AND instr(diff, ?) > 0`),
+    blankRowDiffs: p(`UPDATE memory_changes SET diff = '' WHERE owner_id = ? AND row_id = ?`),
+    deleteAgentChanges: p('DELETE FROM memory_changes WHERE owner_id = ? AND agent_id = ?'),
+    deleteProfileChanges: p(`DELETE FROM memory_changes WHERE owner_id = ? AND table_name = 'profile_facts'`),
+    deleteAllChanges: p('DELETE FROM memory_changes WHERE owner_id = ?'),
   };
 }
 
@@ -336,11 +410,15 @@ const toOwner = (r: Row): OwnerRecord => ({
   lastSeenAt: r.last_seen_at as number,
   memoryConsent: r.memory_consent as MemoryConsent,
   notifiedAt: r.notified_at as number | null,
-  onboardingStage: r.onboarding_stage as number,
   memoryEpoch: r.memory_epoch as number,
 });
 
-const toAgent = (r: Row): AgentRecord => ({ id: r.id as string, ownerId: r.owner_id as string, roleId: r.role_id as string, styleId: r.style_id as string });
+const toAgent = (r: Row): AgentRecord => ({
+  id: r.id as string,
+  ownerId: r.owner_id as string,
+  characterId: r.character_id as CharacterId,
+  memoryEpoch: r.memory_epoch as number,
+});
 
 const toSession = (r: Row): SessionRecord => ({ id: r.id as string, agentId: r.agent_id as string, startedAt: r.started_at as number, endedAt: r.ended_at as number | null });
 
@@ -353,11 +431,10 @@ export class SqliteMemoryStore implements MemoryStore {
   }
 
   createOwner(input: NewOwnerInput): NewOwner {
-    const ids: NewOwner = { ownerId: randomUUID(), deviceId: randomUUID(), agentId: randomUUID() };
+    const ids: NewOwner = { ownerId: randomUUID(), deviceId: randomUUID() };
     this.tx(() => {
       this.q.insertOwner.run(ids.ownerId, input.now, input.now);
       this.q.insertDevice.run(ids.deviceId, ids.ownerId, input.tokenHash, input.now, input.now);
-      this.q.insertAgent.run(ids.agentId, ids.ownerId, input.roleId, input.styleId, input.now);
     });
     return ids;
   }
@@ -379,15 +456,27 @@ export class SqliteMemoryStore implements MemoryStore {
     return r ? toOwner(r) : undefined;
   }
 
-  ensureAgent(ownerId: string, roleId: string, defaultStyleId: string, now: number): AgentRecord {
-    const found = this.q.getAgent.get(ownerId, roleId);
+  ensureAgent(ownerId: string, characterId: CharacterId, now: number): AgentRecord {
+    const found = this.q.getAgent.get(ownerId, characterId);
     if (found) return toAgent(found);
-    this.q.insertAgent.run(randomUUID(), ownerId, roleId, defaultStyleId, now);
-    return toAgent(this.q.getAgent.get(ownerId, roleId)!);
+    this.q.insertAgent.run(randomUUID(), ownerId, characterId, now);
+    return toAgent(this.q.getAgent.get(ownerId, characterId)!);
   }
 
-  setAgentStyle(ownerId: string, agentId: string, styleId: string): boolean {
-    return this.q.setAgentStyle.run(styleId, agentId, ownerId).changes === 1;
+  hasEndedSession(agentId: string): boolean {
+    return this.q.hasEndedSession.get(agentId) !== undefined;
+  }
+
+  continuousSince(ownerId: string, now: number, gapMs: number): number {
+    let since = now;
+    for (const row of this.q.ownerSessionsNewestFirst.all(ownerId)) {
+      const startedAt = row.started_at as number;
+      const endedAt = (row.ended_at as number | null) ?? now;
+      // A gap of gapMs or more ends the continuous window (spec: 间隔小于 gapMs 算连续).
+      if (since - endedAt >= gapMs) break;
+      since = Math.min(since, startedAt);
+    }
+    return since;
   }
 
   recordSessionStart(sessionId: string, agentId: string, now: number): void {
@@ -434,52 +523,63 @@ export class SqliteMemoryStore implements MemoryStore {
     this.q.setConsent.run(consent, ownerId);
   }
 
-  bumpEpoch(ownerId: string): number {
-    const row = this.q.bumpEpoch.get(ownerId) as { memory_epoch: number } | undefined;
+  memoryEpochs(ownerId: string, agentId: string): { owner: number; agent: number } | undefined {
+    const row = this.q.memoryEpochs.get(agentId, ownerId);
+    return row ? { owner: row.owner_epoch as number, agent: row.agent_epoch as number } : undefined;
+  }
+
+  bumpOwnerEpoch(ownerId: string): number {
+    const row = this.q.bumpOwnerEpoch.get(ownerId) as { memory_epoch: number } | undefined;
     if (!row) throw new Error('owner not found');
     return row.memory_epoch;
   }
 
-  insertMessage(row: { id: string; sessionId: string; ownerId: string; role: 'user' | 'assistant'; text: string; bigrams: string; now: number }): void {
-    this.q.insertMessage.run(row.id, row.sessionId, row.ownerId, row.role, row.text, row.bigrams, row.now, row.ownerId);
+  bumpAgentEpoch(ownerId: string, agentId: string): number {
+    const row = this.q.bumpAgentEpoch.get(agentId, ownerId) as { memory_epoch: number } | undefined;
+    if (!row) throw new Error('agent not found');
+    return row.memory_epoch;
   }
 
-  listFacts(ownerId: string): { category: string; text: string }[] {
-    return this.q.listFacts.all(ownerId).map((r) => ({ category: r.category as string, text: r.text as string }));
+  insertMessage(row: { id: string; sessionId: string; ownerId: string; agentId: string; role: 'user' | 'assistant'; text: string; bigrams: string; now: number }): void {
+    this.q.insertMessage.run(row.id, row.sessionId, row.ownerId, row.agentId, row.role, row.text, row.bigrams, row.now, row.agentId, row.ownerId);
   }
 
-  listProactiveFacts(ownerId: string): { category: string; text: string }[] {
-    return this.q.listProactiveFacts.all(ownerId).map((r) => ({ category: r.category as string, text: r.text as string }));
+  listProfileFacts(ownerId: string): ProfileFactRow[] {
+    return this.q.listProfile.all(ownerId).map((r) => ({ id: r.id as string, category: r.category as ProfileCategory, text: r.text as string }));
   }
 
-  listNotes(ownerId: string, agentId: string): { text: string }[] {
-    return this.q.listNotes.all(ownerId, agentId).map((r) => ({ text: r.text as string }));
+  listAgentFacts(ownerId: string, agentId: string): AgentFactRow[] {
+    return this.q.listAgentFacts.all(ownerId, agentId).map((r) => ({
+      id: r.id as string, category: r.category as AgentFactCategory, text: r.text as string, sensitive: r.sensitive === 1,
+    }));
   }
 
-  recentUserMessages(ownerId: string, limit: number): { text: string }[] {
-    return this.q.recentUserMessages.all(ownerId, limit).map((r) => ({ text: r.text as string }));
+  listPinned(ownerId: string, agentId: string): PinnedRow[] {
+    return this.q.listPinned.all(ownerId, agentId).map((r) => ({
+      id: r.id as string, text: r.text as string, sensitive: r.sensitive === 1, createdAt: r.created_at as number,
+    }));
   }
 
-  latestEpisode(ownerId: string, agentId: string): { summary: string } | undefined {
-    const row = this.q.latestEpisode.get(ownerId, agentId);
-    return row ? { summary: row.summary as string } : undefined;
+  insertPinned(row: { id: string; ownerId: string; agentId: string; text: string; sensitive: boolean; sourceSessionId: string; sourceMessageId: string | null; now: number }): void {
+    this.tx(() => {
+      const inserted = this.q.insertPinned.run(
+        row.id, row.ownerId, row.agentId, row.text, row.sensitive ? 1 : 0, row.sourceSessionId, row.sourceMessageId, row.now, row.agentId, row.ownerId,
+      ).changes === 1;
+      // The audit row never carries the pinned text.
+      if (inserted) this.audit(row.ownerId, row.agentId, 'pinned_memories', row.id, 'add', '', 'user', row.now);
+    });
   }
 
-  snapshotRows(ownerId: string, _agentId: string): { role: 'user' | 'assistant'; text: string }[] {
-    return this.q.snapshotRows.all(ownerId).map((r) => ({ role: r.role as 'user' | 'assistant', text: r.text as string }));
+  recentUserMessages(ownerId: string, agentId: string, limit: number): { text: string }[] {
+    return this.q.recentUserMessages.all(ownerId, agentId, limit).map((r) => ({ text: r.text as string }));
   }
 
   immediate<T>(body: () => T): T {
     return this.tx(body);
   }
 
-  memoryEpoch(ownerId: string): number | undefined {
-    const row = this.q.memoryEpoch.get(ownerId) as { memory_epoch: number } | undefined;
-    return row?.memory_epoch;
-  }
-
-  listPendingMessages(ownerId: string): PendingMessage[] {
-    return this.q.listPending.all(ownerId).map((r) => ({
+  listPendingMessages(ownerId: string, agentId: string): PendingMessage[] {
+    return this.q.listPending.all(ownerId, agentId).map((r) => ({
       id: r.id as string,
       role: r.role as 'user' | 'assistant',
       text: r.text as string,
@@ -487,38 +587,35 @@ export class SqliteMemoryStore implements MemoryStore {
     }));
   }
 
-  memoryForExtract(ownerId: string): ExtractMemory {
+  agentsPendingExtraction(): Array<{ ownerId: string; agentId: string }> {
+    return this.q.agentsPending.all().map((r) => ({ ownerId: r.owner_id as string, agentId: r.agent_id as string }));
+  }
+
+  memoryForExtract(ownerId: string, agentId: string): ExtractMemory {
     return {
-      agents: this.q.listAgentIds.all(ownerId).map((r) => ({ id: r.id as string })),
-      facts: this.q.listFactRows.all(ownerId).map((r) => ({
-        id: r.id as string, category: r.category as string, text: r.text as string, sensitive: r.sensitive as number,
-      })),
-      notes: this.q.listNoteRows.all(ownerId).map((r) => ({
-        id: r.id as string, agentId: r.agent_id as string, kind: r.kind as string, text: r.text as string,
-      })),
-      episodes: this.q.listEpisodeRows.all(ownerId).map((r) => ({
+      agents: [{ id: agentId }],
+      facts: [
+        ...this.listProfileFacts(ownerId).map((r) => ({ id: r.id, category: r.category as string, text: r.text, sensitive: 0 })),
+        ...this.listAgentFacts(ownerId, agentId).map((r) => ({ id: r.id, category: r.category as string, text: r.text, sensitive: r.sensitive ? 1 : 0 })),
+      ],
+      notes: this.q.listNoteRows.all(ownerId, agentId).map((r) => ({ id: r.id as string, agentId, kind: r.kind as string, text: r.text as string })),
+      episodes: this.q.listEpisodeRows.all(ownerId, agentId).map((r) => ({
         id: r.id as string, summary: r.summary as string, mood: (r.mood as string | null) ?? null,
       })),
-      followups: this.q.listFollowups.all(ownerId).map((r) => ({
-        id: r.id as string, text: r.text as string, dueAt: r.due_at as number,
-      })),
+      followups: this.q.listFollowups.all(ownerId, agentId).map((r) => ({ id: r.id as string, text: r.text as string, dueAt: r.due_at as number })),
     };
   }
 
-  ownersPendingExtraction(): string[] {
-    return this.q.ownersPending.all().map((r) => r.id as string);
-  }
-
-  searchMessages(ownerId: string, match: string, limit: number): { text: string }[] {
+  searchMessages(ownerId: string, agentId: string, match: string, limit: number): { text: string }[] {
     try {
-      return this.q.searchMessages.all(match, ownerId, limit).map((row) => ({ text: row.text as string }));
+      return this.q.searchMessages.all(match, ownerId, agentId, limit).map((row) => ({ text: row.text as string }));
     } catch {
       return [];
     }
   }
 
-  searchMessagesLike(ownerId: string, pattern: string, limit: number): { text: string }[] {
-    return this.q.searchMessagesLike.all(ownerId, pattern, limit).map((row) => ({ text: row.text as string }));
+  searchMessagesLike(ownerId: string, agentId: string, needle: string, limit: number): { text: string }[] {
+    return this.q.searchMessagesLike.all(ownerId, agentId, needle, limit).map((row) => ({ text: row.text as string }));
   }
 
   listMessagesForKanaBackfill(limit: number, afterRowid = 0): { rowid: number; text: string; bigrams: string }[] {
@@ -541,28 +638,114 @@ export class SqliteMemoryStore implements MemoryStore {
     this.q.setKanaBackfillCursor.run(String(rowid));
   }
 
-  forgetMatches(ownerId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): ForgetResult {
-    const rowids = match ? this.matchRowids(ownerId, match) : [];
-    return this.tx(() => {
+  forgetMatches(ownerId: string, agentId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): ForgetResult {
+    const rowids = match ? this.matchRowids(ownerId, agentId, match) : [];
+    return this.tx<ForgetResult>(() => {
       let messages = 0;
-      for (const rowid of rowids) messages += Number(this.q.blankMessage.run(ownerId, rowid).changes);
-      if (triggerText) messages += Number(this.q.blankTrigger.run(ownerId, sessionId, triggerText).changes);
-      const facts = Number(this.q.deleteFactsInstr.run(ownerId, query).changes);
-      const notes = Number(this.q.deleteNotesInstr.run(ownerId, query).changes);
-      const episodes = Number(this.q.deleteEpisodesInstr.run(ownerId, query).changes);
-      const followups = Number(this.q.deleteFollowupsInstr.run(ownerId, query, query).changes);
-      this.q.blankDiffs.run(ownerId, query);
-      return { messages, facts, notes, episodes, followups };
+      for (const rowid of rowids) messages += Number(this.q.blankMessage.run(ownerId, agentId, rowid).changes);
+      if (triggerText) messages += Number(this.q.blankTrigger.run(ownerId, agentId, sessionId, triggerText).changes);
+      const facts = Number(this.q.deleteAgentFactsInstr.run(ownerId, agentId, query).changes);
+      const pinned = Number(this.q.deletePinnedInstr.run(ownerId, agentId, query).changes);
+      const profile = Number(this.q.deleteProfileInstr.run(ownerId, query).changes);
+      const notes = Number(this.q.deleteNotesInstr.run(ownerId, agentId, query).changes);
+      const episodes = Number(this.q.deleteEpisodesInstr.run(ownerId, agentId, query).changes);
+      const followups = Number(this.q.deleteFollowupsInstr.run(ownerId, agentId, query, query).changes);
+      this.q.blankDiffsScoped.run(ownerId, agentId, query);
+      return { messages, facts, notes, episodes, followups, pinned, profile };
+    });
+  }
+
+  setAddressing(ownerId: string, name: string, now: number): void {
+    this.tx(() => {
+      const existing = this.q.getAddressing.get(ownerId);
+      if (existing) {
+        const id = existing.id as string;
+        this.q.updateProfile.run('addressing', name, null, '[]', now, id, ownerId);
+        this.q.deleteOtherAddressing.run(ownerId, id);
+        this.q.blankRowDiffs.run(ownerId, id);
+        this.audit(ownerId, null, 'profile_facts', id, 'set', '', 'user', now);
+        return;
+      }
+      const id = randomUUID();
+      this.q.insertProfile.run(id, ownerId, 'addressing', name, 1, null, '[]', now);
+      this.audit(ownerId, null, 'profile_facts', id, 'set', '', 'user', now);
+    });
+  }
+
+  deleteMemoryItem(ownerId: string, itemId: string): DeletedItem | undefined {
+    return this.tx<DeletedItem | undefined>(() => {
+      const now = Date.now();
+      const shared = this.q.getProfile.get(itemId, ownerId);
+      if (shared) {
+        this.q.deleteProfile.run(itemId, ownerId);
+        this.forgetRow(ownerId, null, 'profile_facts', itemId, now);
+        return { kind: 'profile', agentId: null, text: shared.text as string, sourceMessageIds: parseIds(shared.source_message_ids) };
+      }
+      const fact = this.q.getAgentFactAnyAgent.get(itemId, ownerId);
+      if (fact) {
+        this.q.deleteAgentFactById.run(itemId, ownerId);
+        this.forgetRow(ownerId, fact.agent_id as string, 'agent_facts', itemId, now);
+        return { kind: 'agent_fact', agentId: fact.agent_id as string, text: fact.text as string, sourceMessageIds: parseIds(fact.source_message_ids) };
+      }
+      const pin = this.q.getPinned.get(itemId, ownerId);
+      if (pin) {
+        this.q.deletePinnedById.run(itemId, ownerId);
+        this.forgetRow(ownerId, pin.agent_id as string, 'pinned_memories', itemId, now);
+        const source = pin.source_message_id as string | null;
+        return { kind: 'pinned', agentId: pin.agent_id as string, text: pin.text as string, sourceMessageIds: source ? [source] : [] };
+      }
+      return undefined;
+    });
+  }
+
+  deleteMessagesByIds(ownerId: string, agentId: string | null, ids: readonly string[]): number {
+    return this.tx(() => {
+      let deleted = 0;
+      for (const id of new Set(ids)) {
+        deleted += Number((agentId === null
+          ? this.q.deleteMessageById.run(ownerId, id)
+          : this.q.deleteAgentMessageById.run(ownerId, agentId, id)).changes);
+      }
+      return deleted;
+    });
+  }
+
+  clearAgentMemory(ownerId: string, agentId: string): void {
+    this.tx(() => {
+      if (!this.q.agentOwned.get(ownerId, agentId)) return;
+      this.q.deleteAgentMessages.run(ownerId, agentId);
+      this.q.deleteAllAgentFacts.run(ownerId, agentId);
+      this.q.deleteAllPinned.run(ownerId, agentId);
+      this.q.deleteAllNotes.run(ownerId, agentId);
+      this.q.deleteAllEpisodes.run(ownerId, agentId);
+      this.q.deleteAllFollowups.run(ownerId, agentId);
+      this.q.deleteAgentSessions.run(agentId);
+      this.q.deleteAgentChanges.run(ownerId, agentId);
+      this.audit(ownerId, agentId, 'agents', agentId, 'clear', '', 'user', Date.now());
+    });
+  }
+
+  clearProfile(ownerId: string): void {
+    this.tx(() => {
+      this.q.deleteAllProfile.run(ownerId);
+      this.q.deleteProfileChanges.run(ownerId);
+      this.audit(ownerId, null, 'profile_facts', ownerId, 'clear', '', 'user', Date.now());
+    });
+  }
+
+  clearAllMemory(ownerId: string): void {
+    this.tx(() => {
+      for (const row of this.q.listAgentIds.all(ownerId)) this.clearAgentMemory(ownerId, row.id as string);
+      this.q.deleteOwnerMessages.run(ownerId);
+      this.clearProfile(ownerId);
+      this.q.deleteAllChanges.run(ownerId);
+      this.audit(ownerId, null, 'owners', ownerId, 'clear_all', '', 'user', Date.now());
     });
   }
 
   wipeOwnerMemory(ownerId: string): void {
     this.tx(() => {
-      this.q.deleteMessages.run(ownerId);
-      this.q.deleteAllFacts.run(ownerId);
-      this.q.deleteAllNotes.run(ownerId);
-      this.q.deleteAllEpisodes.run(ownerId);
-      this.q.deleteAllFollowups.run(ownerId);
+      this.clearAllMemory(ownerId);
       this.q.deleteAllChanges.run(ownerId);
       this.q.setConsent.run('declined', ownerId);
     });
@@ -584,19 +767,198 @@ export class SqliteMemoryStore implements MemoryStore {
     return this.q.ownerIds.all().map((r) => r.id as string);
   }
 
-  careFollowup(ownerId: string, currentSessionId: string, now: number, maxAgeMs: number): { id: string; quote: string; createdAt: number } | undefined {
-    const row = this.q.careFollowup.get(ownerId, now - maxAgeMs, currentSessionId);
+  careFollowup(ownerId: string, agentId: string, currentSessionId: string, now: number, maxAgeMs: number): { id: string; quote: string; createdAt: number } | undefined {
+    const row = this.q.careFollowup.get(ownerId, agentId, now - maxAgeMs, currentSessionId);
     return row ? { id: row.id as string, quote: row.quote as string, createdAt: row.created_at as number } : undefined;
   }
 
   closeCareFollowup(ownerId: string, id: string, now: number): void {
     this.tx(() => {
-      if (this.q.closeCareFollowup.run(now, id, ownerId).changes === 1) this.q.insertCareChange.run(randomUUID(), ownerId, id, now);
+      const owner = this.q.followupAgent.get(id, ownerId);
+      if (this.q.closeCareFollowup.run(now, id, ownerId).changes === 1) {
+        this.audit(ownerId, (owner?.agent_id as string | undefined) ?? null, 'followups', id, 'close', '', 'care', now);
+      }
     });
   }
 
   clearStaleCareQuotes(ownerId: string, olderThan: number): number {
     return Number(this.q.clearStaleCareQuotes.run(ownerId, olderThan).changes);
+  }
+
+  writeExtraction(ownerId: string, agentId: string, change: ExtractionChange): void {
+    this.tx(() => {
+      // Same-transaction ownership check (spec §4): a forged agent id writes nothing.
+      if (!this.q.agentOwned.get(ownerId, agentId)) throw new ExtractIncompleteError();
+      const sessionId = this.sessionIdFor(ownerId, agentId, change.messageIds);
+      for (const op of change.facts) this.writeFact(ownerId, agentId, op, sessionId, change.now);
+      for (const op of change.notes) {
+        if (!this.writeNote(ownerId, agentId, op, sessionId, change.now)) throw new ExtractIncompleteError();
+      }
+      for (const op of change.episodes) {
+        if (!this.writeEpisode(ownerId, agentId, op, sessionId, change.now)) throw new ExtractIncompleteError();
+      }
+      for (const op of change.followups) this.writeFollowup(ownerId, agentId, op, sessionId, change.now);
+      for (const id of change.messageIds) this.q.markExtracted.run(ownerId, agentId, id);
+    });
+  }
+
+  private writeFact(ownerId: string, agentId: string, op: FactChange, sessionId: string | null, now: number): void {
+    if (op.op === 'add') {
+      const target = layerFor(op.category, op.sensitive === true);
+      if (!target) return; // unknown category: extraction filters these before they get here
+      const sources = unionIds(op.sourceMessageIds ?? []);
+      if (target.layer === 'profile') {
+        this.addProfileFact(ownerId, target.category, op.text, op.confidence ?? 1, sessionId, sources, now);
+        return;
+      }
+      const id = randomUUID();
+      this.q.insertAgentFact.run(id, ownerId, agentId, target.category, op.text, target.sensitive ? 1 : 0, op.confidence ?? 1, sessionId, JSON.stringify(sources), now);
+      this.audit(ownerId, agentId, 'agent_facts', id, 'add', op.text, 'extract', now);
+      return;
+    }
+    if (op.op === 'remove') {
+      if (this.q.deleteAgentFact.run(op.id, ownerId, agentId).changes === 1) {
+        this.audit(ownerId, agentId, 'agent_facts', op.id, 'remove', '', 'extract', now);
+        return;
+      }
+      if (this.q.deleteProfile.run(op.id, ownerId).changes === 1) this.audit(ownerId, null, 'profile_facts', op.id, 'remove', '', 'extract', now);
+      return;
+    }
+    this.updateFact(ownerId, agentId, op, now);
+  }
+
+  /** The addressing row is unique per owner: a new name updates it instead of adding a second row. */
+  private addProfileFact(ownerId: string, category: ProfileCategory, text: string, confidence: number, sessionId: string | null, sources: readonly string[], now: number): void {
+    if (category === 'addressing') {
+      const existing = this.q.getAddressing.get(ownerId);
+      if (existing) {
+        const id = existing.id as string;
+        this.q.updateProfile.run('addressing', text, confidence, JSON.stringify(unionIds(parseIds(existing.source_message_ids), sources)), now, id, ownerId);
+        this.q.deleteOtherAddressing.run(ownerId, id);
+        this.audit(ownerId, null, 'profile_facts', id, 'update', text, 'extract', now);
+        return;
+      }
+    }
+    const id = randomUUID();
+    this.q.insertProfile.run(id, ownerId, category, text, confidence, sessionId, JSON.stringify(sources), now);
+    this.audit(ownerId, null, 'profile_facts', id, 'add', text, 'extract', now);
+  }
+
+  private updateFact(ownerId: string, agentId: string, op: Extract<FactChange, { op: 'update' }>, now: number): void {
+    const own = this.q.getAgentFact.get(op.id, ownerId, agentId);
+    if (own) {
+      const text = op.text ?? (own.text as string);
+      const target = layerFor(op.category ?? (own.category as string), op.sensitive ?? own.sensitive === 1);
+      if (!target) return;
+      const sources = unionIds(parseIds(own.source_message_ids), op.sourceMessageIds ?? []);
+      if (target.layer === 'profile') {
+        this.q.deleteAgentFact.run(op.id, ownerId, agentId);
+        this.audit(ownerId, agentId, 'agent_facts', op.id, 'remove', '', 'extract', now);
+        this.addProfileFact(ownerId, target.category, text, op.confidence ?? 1, null, sources, now);
+        return;
+      }
+      this.q.updateAgentFact.run(target.category, text, target.sensitive ? 1 : 0, op.confidence ?? null, JSON.stringify(sources), now, op.id, ownerId, agentId);
+      this.audit(ownerId, agentId, 'agent_facts', op.id, 'update', op.text ?? '', 'extract', now);
+      return;
+    }
+    const shared = this.q.getProfile.get(op.id, ownerId);
+    if (!shared) return; // another agent's row, another owner's row, or gone
+    const text = op.text ?? (shared.text as string);
+    const target = layerFor(op.category ?? (shared.category as string), op.sensitive === true);
+    if (!target) return;
+    const sources = unionIds(parseIds(shared.source_message_ids), op.sourceMessageIds ?? []);
+    if (target.layer === 'agent') {
+      // Health or sensitive content leaves the shared layer and stays with this character only.
+      this.q.deleteProfile.run(op.id, ownerId);
+      this.audit(ownerId, null, 'profile_facts', op.id, 'remove', '', 'extract', now);
+      const id = randomUUID();
+      this.q.insertAgentFact.run(id, ownerId, agentId, target.category, text, target.sensitive ? 1 : 0, op.confidence ?? 1, null, JSON.stringify(sources), now);
+      this.audit(ownerId, agentId, 'agent_facts', id, 'add', text, 'extract', now);
+      return;
+    }
+    if (target.category === 'addressing' && shared.category !== 'addressing') {
+      this.q.deleteProfile.run(op.id, ownerId);
+      this.addProfileFact(ownerId, 'addressing', text, op.confidence ?? 1, null, sources, now);
+      return;
+    }
+    this.q.updateProfile.run(target.category, text, op.confidence ?? null, JSON.stringify(sources), now, op.id, ownerId);
+    this.audit(ownerId, null, 'profile_facts', op.id, 'update', op.text ?? '', 'extract', now);
+  }
+
+  /** False when the note cannot be stored. The caller rolls the batch back. */
+  private writeNote(ownerId: string, agentId: string, op: NoteChange, sessionId: string | null, now: number): boolean {
+    if (op.op === 'add') {
+      // Notes always belong to the extracting agent; naming any other agent fails the batch.
+      if (op.agentId !== undefined && op.agentId !== agentId) return false;
+      const id = randomUUID();
+      this.q.insertNote.run(id, agentId, ownerId, op.kind ?? 'tone', op.text, sessionId, now);
+      this.audit(ownerId, agentId, 'relationship_notes', id, 'add', op.text, 'extract', now);
+      return true;
+    }
+    if (op.op === 'remove') {
+      if (this.q.deleteNote.run(op.id, ownerId, agentId).changes === 1) this.audit(ownerId, agentId, 'relationship_notes', op.id, 'remove', '', 'extract', now);
+      return true;
+    }
+    if (this.q.updateNote.run(op.kind ?? null, op.text ?? null, now, op.id, ownerId, agentId).changes === 1) {
+      this.audit(ownerId, agentId, 'relationship_notes', op.id, 'update', op.text ?? '', 'extract', now);
+    }
+    return true;
+  }
+
+  /** False when an episode has no session to attach to. */
+  private writeEpisode(ownerId: string, agentId: string, op: EpisodeChange, sessionId: string | null, now: number): boolean {
+    if (op.op === 'add') {
+      if (!sessionId) return false;
+      const id = randomUUID();
+      this.q.insertEpisode.run(id, sessionId, ownerId, agentId, op.summary, op.mood ?? null, now);
+      this.audit(ownerId, agentId, 'episodes', id, 'add', op.summary, 'extract', now);
+      return true;
+    }
+    if (op.op === 'remove') {
+      if (this.q.deleteEpisode.run(op.id, ownerId, agentId).changes === 1) this.audit(ownerId, agentId, 'episodes', op.id, 'remove', '', 'extract', now);
+      return true;
+    }
+    if (this.q.updateEpisode.run(op.summary ?? null, op.mood ?? null, op.id, ownerId, agentId).changes === 1) {
+      this.audit(ownerId, agentId, 'episodes', op.id, 'update', op.summary ?? '', 'extract', now);
+    }
+    return true;
+  }
+
+  private writeFollowup(ownerId: string, agentId: string, op: FollowupChange, sessionId: string | null, now: number): void {
+    if (op.op === 'add') {
+      const id = randomUUID();
+      // Quoted user words are always sensitive; health followups also set it explicitly.
+      const sensitive = op.sensitive === true || op.quote !== undefined ? 1 : 0;
+      this.q.insertFollowup.run(id, ownerId, agentId, op.text, op.dueAt, sessionId, op.quote ?? null, sensitive, now);
+      // The audit diff carries the model's summary only, never the quote.
+      this.audit(ownerId, agentId, 'followups', id, 'add', op.text, 'extract', now);
+      return;
+    }
+    if (op.op === 'remove') {
+      if (this.q.deleteFollowup.run(op.id, ownerId, agentId).changes === 1) this.audit(ownerId, agentId, 'followups', op.id, 'remove', '', 'extract', now);
+      return;
+    }
+    if (this.q.updateFollowup.run(op.text ?? null, op.dueAt ?? null, op.id, ownerId, agentId).changes === 1) {
+      this.audit(ownerId, agentId, 'followups', op.id, 'update', op.text ?? '', 'extract', now);
+    }
+  }
+
+  /** Deleted by the user: earlier diffs lose their text, then one content-free audit row. */
+  private forgetRow(ownerId: string, agentId: string | null, table: string, rowId: string, now: number): void {
+    this.q.blankRowDiffs.run(ownerId, rowId);
+    this.audit(ownerId, agentId, table, rowId, 'delete', '', 'user', now);
+  }
+
+  private audit(ownerId: string, agentId: string | null, table: string, rowId: string, op: string, diff: string, actor: string, now: number): void {
+    this.q.insertChange.run(randomUUID(), ownerId, agentId, table, rowId, op, diff, actor, now);
+  }
+
+  private sessionIdFor(ownerId: string, agentId: string, messageIds: readonly string[]): string | null {
+    for (let i = messageIds.length - 1; i >= 0; i--) {
+      const row = this.q.messageSession.get(ownerId, agentId, messageIds[i]) as { session_id: string } | undefined;
+      if (row) return row.session_id;
+    }
+    return null;
   }
 
   private runExpired(ownerId: string, olderThan: number, limit: number) {
@@ -605,123 +967,17 @@ export class SqliteMemoryStore implements MemoryStore {
       : this.q.deleteExpired.run(ownerId, olderThan, limit);
   }
 
-  private matchRowids(ownerId: string, match: string): number[] {
+  private matchRowids(ownerId: string, agentId: string, match: string): number[] {
     try {
-      return this.q.matchRowids.all(match, ownerId).map((row) => row.rowid as number);
+      return this.q.matchRowids.all(match, ownerId, agentId).map((row) => row.rowid as number);
     } catch {
       return [];
     }
   }
 
-  writeExtraction(ownerId: string, change: ExtractionChange): void {
-    const sessionId = this.sessionIdFor(ownerId, change.messageIds);
-    for (const op of change.facts) this.writeFact(ownerId, op, sessionId, change.now);
-    for (const op of change.notes) {
-      if (!this.writeNote(ownerId, op, sessionId, change.now)) throw new ExtractIncompleteError();
-    }
-    for (const op of change.episodes) {
-      if (!this.writeEpisode(ownerId, op, sessionId, change.now)) throw new ExtractIncompleteError();
-    }
-    for (const op of change.followups) this.writeFollowup(ownerId, op, sessionId, change.now);
-    for (const id of change.messageIds) this.q.markExtracted.run(ownerId, id);
-  }
-
-  private writeFact(ownerId: string, op: FactChange, sessionId: string | null, now: number): void {
-    if (op.op === 'add') {
-      const id = randomUUID();
-      const sensitive = op.category === 'health' || op.sensitive ? 1 : 0;
-      this.q.insertFact.run(id, ownerId, op.category, op.text, sensitive, op.confidence ?? 1, sessionId, now);
-      this.audit(ownerId, 'user_facts', id, 'add', op.text, now);
-      return;
-    }
-    if (op.op === 'remove') {
-      if (this.q.deleteFact.run(op.id, ownerId).changes === 1) this.audit(ownerId, 'user_facts', op.id, 'remove', '', now);
-      return;
-    }
-    const sensitive = op.category === 'health' ? 1 : op.sensitive === undefined ? null : (op.sensitive ? 1 : 0);
-    if (this.q.updateFact.run(op.category ?? null, op.text ?? null, sensitive, op.confidence ?? null, now, op.id, ownerId).changes === 1) {
-      this.audit(ownerId, 'user_facts', op.id, 'update', op.text ?? '', now);
-    }
-  }
-
-  /** False when the note cannot be stored. The caller rolls the batch back. */
-  private writeNote(ownerId: string, op: NoteChange, sessionId: string | null, now: number): boolean {
-    if (op.op === 'add') {
-      const agentId = this.resolveAgent(ownerId, op.agentId);
-      if (!agentId) return false;
-      const id = randomUUID();
-      const kind = op.kind ?? 'tone';
-      this.q.insertNote.run(id, agentId, ownerId, kind, op.text, sessionId, now);
-      this.audit(ownerId, 'relationship_notes', id, 'add', op.text, now);
-      return true;
-    }
-    if (op.op === 'remove') {
-      if (this.q.deleteNote.run(op.id, ownerId).changes === 1) this.audit(ownerId, 'relationship_notes', op.id, 'remove', '', now);
-      return true;
-    }
-    if (this.q.updateNote.run(op.kind ?? null, op.text ?? null, now, op.id, ownerId).changes === 1) {
-      this.audit(ownerId, 'relationship_notes', op.id, 'update', op.text ?? '', now);
-    }
-    return true;
-  }
-
-  /** False when an episode has no session to attach to. */
-  private writeEpisode(ownerId: string, op: EpisodeChange, sessionId: string | null, now: number): boolean {
-    if (op.op === 'add') {
-      if (!sessionId) return false;
-      const id = randomUUID();
-      this.q.insertEpisode.run(id, sessionId, ownerId, op.summary, op.mood ?? null, now);
-      this.audit(ownerId, 'episodes', id, 'add', op.summary, now);
-      return true;
-    }
-    if (op.op === 'remove') {
-      if (this.q.deleteEpisode.run(op.id, ownerId).changes === 1) this.audit(ownerId, 'episodes', op.id, 'remove', '', now);
-      return true;
-    }
-    if (this.q.updateEpisode.run(op.summary ?? null, op.mood ?? null, op.id, ownerId).changes === 1) {
-      this.audit(ownerId, 'episodes', op.id, 'update', op.summary ?? '', now);
-    }
-    return true;
-  }
-
-  private writeFollowup(ownerId: string, op: FollowupChange, sessionId: string | null, now: number): void {
-    if (op.op === 'add') {
-      const id = randomUUID();
-      // Quoted user words are always sensitive (spec §8); health followups also set it explicitly.
-      const sensitive = op.sensitive === true || op.quote !== undefined ? 1 : 0;
-      this.q.insertFollowup.run(id, ownerId, op.text, op.dueAt, sessionId, op.quote ?? null, sensitive, now);
-      // The audit diff carries the model's summary only, never the quote.
-      this.audit(ownerId, 'followups', id, 'add', op.text, now);
-      return;
-    }
-    if (op.op === 'remove') {
-      if (this.q.deleteFollowup.run(op.id, ownerId).changes === 1) this.audit(ownerId, 'followups', op.id, 'remove', '', now);
-      return;
-    }
-    if (this.q.updateFollowup.run(op.text ?? null, op.dueAt ?? null, op.id, ownerId).changes === 1) {
-      this.audit(ownerId, 'followups', op.id, 'update', op.text ?? '', now);
-    }
-  }
-
-  private audit(ownerId: string, table: string, rowId: string, op: string, diff: string, now: number): void {
-    this.q.insertChange.run(randomUUID(), ownerId, table, rowId, op, diff, now);
-  }
-
-  private resolveAgent(ownerId: string, agentId: string | undefined): string | null {
-    if (agentId) return this.q.agentOwned.get(ownerId, agentId) ? agentId : null;
-    const agents = this.q.listAgentIds.all(ownerId);
-    return agents.length === 1 ? agents[0]!.id as string : null;
-  }
-
-  private sessionIdFor(ownerId: string, messageIds: readonly string[]): string | null {
-    for (let i = messageIds.length - 1; i >= 0; i--) {
-      const row = this.q.messageSession.get(ownerId, messageIds[i]) as { session_id: string } | undefined;
-      if (row) return row.session_id;
-    }
-    return null;
-  }
-
+  /** Immediate write transaction. Joins the caller's transaction when one is already open. */
   private tx<T>(body: () => T): T {
+    if (this.db.isTransaction) return body();
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const result = body();

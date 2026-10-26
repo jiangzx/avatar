@@ -194,8 +194,8 @@ const ownedCtx: SessionContext = {
 /** Only the rows refreshMemorySnapshot reads. */
 function memoryStoreStub(input: { addressing?: string[]; facts?: string[]; tail?: string[] }): MemoryStore {
   return {
-    listFacts: () => (input.addressing ?? []).map((text) => ({ category: 'addressing', text })),
-    listProactiveFacts: () => (input.facts ?? []).map((text) => ({ category: 'preference', text })),
+    listProfileFacts: () => (input.addressing ?? []).map((text, i) => ({ id: `p${i}`, category: 'addressing', text })),
+    listAgentFacts: () => (input.facts ?? []).map((text, i) => ({ id: `f${i}`, category: 'preference', text, sensitive: false })),
     recentUserMessages: () => (input.tail ?? []).map((text) => ({ text })),
   } as unknown as MemoryStore;
 }
@@ -1232,8 +1232,8 @@ describe('Session', () => {
     s.session.flush();
     s.session.handleClientMessage({ type: 'debug.userText', text: '我叫老王' });
     expect(append.mock.calls.map((c) => c[0])).toEqual([
-      { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'assistant', text: '你好呀', now: expect.any(Number) },
-      { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'user', text: '我叫老王', now: expect.any(Number) },
+      { ownerId: 'owner-1', agentId: 'agent-1', sessionId: 'session-fixed', role: 'assistant', text: '你好呀', now: expect.any(Number) },
+      { ownerId: 'owner-1', agentId: 'agent-1', sessionId: 'session-fixed', role: 'user', text: '我叫老王', now: expect.any(Number) },
     ]);
     await vi.advanceTimersByTimeAsync(1000);
     expect(assistantText(s.sent, 2)).toBe('我在听');
@@ -1242,9 +1242,9 @@ describe('Session', () => {
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 400, reason: 'ended' });
     s.session.flush();
     expect(append.mock.calls.map((c) => c[0])).toEqual([
-      { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'assistant', text: '你好呀', now: expect.any(Number) },
-      { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'user', text: '我叫老王', now: expect.any(Number) },
-      { ownerId: 'owner-1', sessionId: 'session-fixed', role: 'assistant', text: '我在听', now: expect.any(Number) },
+      { ownerId: 'owner-1', agentId: 'agent-1', sessionId: 'session-fixed', role: 'assistant', text: '你好呀', now: expect.any(Number) },
+      { ownerId: 'owner-1', agentId: 'agent-1', sessionId: 'session-fixed', role: 'user', text: '我叫老王', now: expect.any(Number) },
+      { ownerId: 'owner-1', agentId: 'agent-1', sessionId: 'session-fixed', role: 'assistant', text: '我在听', now: expect.any(Number) },
     ]);
     s.session.flush();
     expect(append).toHaveBeenCalledTimes(3);

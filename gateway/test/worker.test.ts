@@ -7,6 +7,7 @@ import { openDatabase } from '../src/memory/db.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
 import { MemoryWorker, withExtraction } from '../src/memory/worker.ts';
 import type { SessionContext } from '../src/session/context.ts';
+import { factRows, seedOwner } from './helpers/memory.ts';
 
 const dbs: DatabaseSync[] = [];
 const i18n = loadI18n(fileURLToPath(new URL('../config', import.meta.url)));
@@ -57,24 +58,24 @@ describe('MemoryWorker queue', () => {
   it('drops a result when the epoch changes during the model call', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
+    const created = seedOwner(store, 'h1', 1);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
     const client: TextModelClient = {
       complete: async () => {
-        store.bumpEpoch(created.ownerId);
+        store.bumpOwnerEpoch(created.ownerId);
         return JSON.stringify({ ops: [{ op: 'add', table: 'user_facts', category: 'preference', text: '喜欢喝茶', sensitive: false }] });
       },
     };
     await worker(store, client).extractOwner(created.ownerId, 'session_end');
-    expect(store.listFacts(created.ownerId)).toEqual([]);
+    expect(factRows(store, created.ownerId, created.agentId)).toEqual([]);
     expect((db.prepare('SELECT extracted FROM messages WHERE id = ?').get('m1') as { extracted: number }).extracted).toBe(0);
   });
 
   it('retries a rate-limited extraction but not a bad request', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
+    const created = seedOwner(store, 'h1', 1);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
     const calls = async (code: string) => {
       let count = 0;
       const client: TextModelClient = {
@@ -93,8 +94,8 @@ describe('MemoryWorker queue', () => {
   it('tells the model the trigger and the clock', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
+    const created = seedOwner(store, 'h1', 1);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
     const now = 1_700_000_000_000;
     let seen = '';
     const client: TextModelClient = {
@@ -119,8 +120,8 @@ describe('MemoryWorker queue', () => {
   it('applies a fake client result and marks the consumed row', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
+    const created = seedOwner(store, 'h1', 1);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
     let seen = '';
     const client: TextModelClient = {
       complete: async (input) => {
@@ -130,16 +131,16 @@ describe('MemoryWorker queue', () => {
     };
     await worker(store, client).extractOwner(created.ownerId, 'startup');
     expect(seen).toContain('今天想喝茶');
-    expect(store.listFacts(created.ownerId)).toEqual([{ category: 'preference', text: '喜欢喝茶' }]);
+    expect(factRows(store, created.ownerId, created.agentId)).toEqual([{ category: 'preference', text: '喜欢喝茶' }]);
     expect((db.prepare('SELECT extracted FROM messages WHERE id = ?').get('m1') as { extracted: number }).extracted).toBe(1);
   });
 
   it('extracts only user lines but advances the assistant watermark', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '我喜欢喝茶', bigrams: '', now: 2 });
-    store.insertMessage({ id: 'm2', sessionId: 's1', ownerId: created.ownerId, role: 'assistant', text: '好呀，我记住了', bigrams: '', now: 3 });
+    const created = seedOwner(store, 'h1', 1);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '我喜欢喝茶', bigrams: '', now: 2 });
+    store.insertMessage({ id: 'm2', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'assistant', text: '好呀，我记住了', bigrams: '', now: 3 });
     let seen = '';
     const client: TextModelClient = {
       complete: async (input) => {
@@ -158,8 +159,8 @@ describe('MemoryWorker queue', () => {
   it('advances an assistant-only tail without calling the model', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'assistant', text: '我自己说的', bigrams: '', now: 2 });
+    const created = seedOwner(store, 'h1', 1);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'assistant', text: '我自己说的', bigrams: '', now: 2 });
     let calls = 0;
     await worker(store, { complete: async () => { calls += 1; return '{"ops":[]}'; } }).extractOwner(created.ownerId, 'startup');
     expect(calls).toBe(0);
@@ -168,7 +169,7 @@ describe('MemoryWorker queue', () => {
 
   it('does not call the model when nothing is pending', async () => {
     const store = new SqliteMemoryStore(open());
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    const created = seedOwner(store, 'h1', 1);
     let calls = 0;
     await worker(store, { complete: async () => { calls += 1; return '{"ops":[]}'; } }).extractOwner(created.ownerId, 'turns');
     expect(calls).toBe(0);
@@ -177,8 +178,8 @@ describe('MemoryWorker queue', () => {
   it('retries a retryable client error through the shared policy', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
+    const created = seedOwner(store, 'h1', 1);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
     let calls = 0;
     const client: TextModelClient = {
       complete: async () => {
@@ -189,13 +190,13 @@ describe('MemoryWorker queue', () => {
     };
     await worker(store, client, 1).extractOwner(created.ownerId, 'silence');
     expect(calls).toBe(2);
-    expect(store.listFacts(created.ownerId)).toEqual([{ category: 'preference', text: '喜欢喝茶' }]);
+    expect(factRows(store, created.ownerId, created.agentId)).toEqual([{ category: 'preference', text: '喜欢喝茶' }]);
   });
 
   it('selects the ja prompt and labels for a ja batch', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    const created = seedOwner(store, 'h1', 1);
     const seen: string[] = [];
     const w = new MemoryWorker({
       store,
@@ -205,7 +206,7 @@ describe('MemoryWorker queue', () => {
       maxTokens: 80,
       policy,
     });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '私はお茶が好きです。', bigrams: '', now: 2 });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '私はお茶が好きです。', bigrams: '', now: 2 });
 
     await w.extractOwner(created.ownerId, 'session_end', 'ja');
 
@@ -218,7 +219,7 @@ describe('MemoryWorker queue', () => {
   it('chooses the dominant pending language when none is given', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    const created = seedOwner(store, 'h1', 1);
     const seen: string[] = [];
     const w = new MemoryWorker({
       store,
@@ -227,7 +228,7 @@ describe('MemoryWorker queue', () => {
       maxTokens: 80,
       policy,
     });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '私はお茶が好きです。', bigrams: '', now: 2 });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '私はお茶が好きです。', bigrams: '', now: 2 });
 
     await w.extractOwner(created.ownerId, 'startup');
 
@@ -237,7 +238,7 @@ describe('MemoryWorker queue', () => {
   it('fails fast when the batch language has no system prompt', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    const created = seedOwner(store, 'h1', 1);
     let calls = 0;
     const w = new MemoryWorker({
       store,
@@ -246,7 +247,7 @@ describe('MemoryWorker queue', () => {
       maxTokens: 80,
       policy,
     });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '私はお茶が好きです。', bigrams: '', now: 2 });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '私はお茶が好きです。', bigrams: '', now: 2 });
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
     await w.extractOwner(created.ownerId, 'session_end', 'ja');
@@ -298,9 +299,9 @@ describe('followup quotes in the worker', () => {
   it('keeps a quote copied from a user line and drops one copied from the assistant', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '我明天要去医院复查腰，有点担心。', bigrams: '', now: 2 });
-    store.insertMessage({ id: 'm2', sessionId: 's1', ownerId: created.ownerId, role: 'assistant', text: '别担心，复查完就踏实了。', bigrams: '', now: 3 });
+    const created = seedOwner(store, 'h1', 1);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '我明天要去医院复查腰，有点担心。', bigrams: '', now: 2 });
+    store.insertMessage({ id: 'm2', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'assistant', text: '别担心，复查完就踏实了。', bigrams: '', now: 3 });
     const client: TextModelClient = {
       complete: async () => JSON.stringify({ ops: [
         { op: 'add', table: 'followups', text: '问问腰部复查', dueAt: 9_000, quote: '我明天要去医院复查腰', sensitive: true },
@@ -317,8 +318,8 @@ describe('followup quotes in the worker', () => {
   it('drops every quote when no quote rules are configured', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '我明天要去医院复查腰。', bigrams: '', now: 2 });
+    const created = seedOwner(store, 'h1', 1);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '我明天要去医院复查腰。', bigrams: '', now: 2 });
     const client: TextModelClient = {
       complete: async () => JSON.stringify({ ops: [{ op: 'add', table: 'followups', text: '问问腰部复查', dueAt: 9_000, quote: '我明天要去医院复查腰' }] }),
     };
@@ -329,12 +330,12 @@ describe('followup quotes in the worker', () => {
   it('never shows a stored quote to the extractor', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
-    const created = store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
-    store.immediate(() => store.writeExtraction(created.ownerId, {
+    const created = seedOwner(store, 'h1', 1);
+    store.immediate(() => store.writeExtraction(created.ownerId, created.agentId, {
       now: 5, messageIds: [], facts: [], notes: [], episodes: [],
       followups: [{ op: 'add', text: '问问复查结果', dueAt: 99, quote: '我下周二去医院复查膝盖' }],
     }));
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天天气不错', bigrams: '', now: 6 });
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '今天天气不错', bigrams: '', now: 6 });
     let seen = '';
     await quoted(store, { complete: async (input) => { seen = input.user; return '{"ops":[]}'; } }).extractOwner(created.ownerId, 'turns');
     expect(seen).toContain('问问复查结果');

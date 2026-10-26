@@ -76,7 +76,7 @@ describe('DeviceRegistry', () => {
     store.markNotified(device.ownerId, 2_000);
     expect(registry.resolve(token)).toMatchObject({ ok: true, noticePending: false });
     const ctx = ctxOf(registry, token);
-    expect(ctx).toEqual({ ownerId: device.ownerId, agentId: ctx.agentId, roleId: DEFAULT_ROLE, styleId: 'old-friend', voice: undefined, language: 'zh' });
+    expect(ctx).toEqual({ ownerId: device.ownerId, agentId: ctx.agentId, roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'zh' });
     expect(ctx.agentId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -105,7 +105,7 @@ describe('DeviceRegistry', () => {
     expect(ca.ownerId).not.toBe(cb.ownerId);
     expect(ca.agentId).not.toBe(cb.agentId);
     expect(registry.setStyle(a, 'old-friend')).toBe('ok');
-    expect(ctxOf(registry, a).styleId).toBe('old-friend');
+    expect(ctxOf(registry, a).styleId).toBe('grandchild');
     expect(ctxOf(registry, b).styleId).toBe('grandchild');
     registry.lifecycle.started('s-a', ca);
     expect(store.listSessions(ca.ownerId!)).toHaveLength(1);
@@ -136,14 +136,6 @@ describe('DeviceRegistry', () => {
     expect(registry.register(undefined)).toEqual({ ok: false, error: 'register_daily_cap' });
     now = BASE + DAY;
     expect(registry.register(undefined).ok).toBe(true);
-  });
-
-  it('falls back to the default style when the stored one left the catalog', () => {
-    const { db, registry } = setup();
-    const token = register(registry, 'old-friend');
-    const narrowed: RoleCatalog = { ...fixedRoleCatalog('P', director), hasStyle: (_r, s) => s === 'grandchild' };
-    const { registry: later } = setup({}, narrowed, db);
-    expect(ctxOf(later, token).styleId).toBe('grandchild');
   });
 
   it('records sessions only for owned contexts', () => {
@@ -184,14 +176,14 @@ describe('DeviceRegistry', () => {
     expect(first.memorySnapshot).toBeUndefined();
     expect(registry.resolve(undefined)).toEqual({ ok: true, ctx: { roleId: DEFAULT_ROLE, styleId: 'grandchild', voice: undefined, language: 'zh' }, noticePending: false });
 
-    db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'preference', '喜欢喝茶', 0.8, 1)`).run(`pref-${first.ownerId}`, first.ownerId);
-    db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'addressing', '称呼：王叔', 0.9, 2)`).run(`addr-${first.ownerId}`, first.ownerId);
-    db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'addressing', '称呼：李姨', 0.9, 1)`).run(`addr-${other.ownerId}`, other.ownerId);
-    db.prepare(`INSERT INTO user_facts (id, owner_id, category, text, sensitive, confidence, updated_at) VALUES (?, ?, 'health', '膝盖不太好', 1, 0.9, 4)`).run(`health-${first.ownerId}`, first.ownerId);
-    db.prepare(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, created_at) VALUES ('m-tail', 's1', ?, 'user', '昨天去了公园', '', 10)`).run(first.ownerId);
-    db.prepare(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, created_at) VALUES ('m-assistant-tail', 's1', ?, 'assistant', '助手不该进尾部', '', 13)`).run(first.ownerId);
-    db.prepare(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, extracted, created_at) VALUES ('m-done', 's1', ?, 'assistant', '已经抽过', '', 1, 11)`).run(first.ownerId);
-    db.prepare(`INSERT INTO messages (id, session_id, owner_id, role, text, bigrams, excluded, created_at) VALUES ('m-drop', 's1', ?, 'user', '不要这条', '', 1, 12)`).run(first.ownerId);
+    db.prepare(`INSERT INTO agent_facts (id, owner_id, agent_id, category, text, sensitive, confidence, updated_at) VALUES (?, ?, ?, 'preference', '喜欢喝茶', 0, 0.8, 1)`).run(`pref-${first.ownerId}`, first.ownerId, first.agentId);
+    db.prepare(`INSERT INTO profile_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'addressing', '称呼：王叔', 0.9, 2)`).run(`addr-${first.ownerId}`, first.ownerId);
+    db.prepare(`INSERT INTO profile_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, 'addressing', '称呼：李姨', 0.9, 1)`).run(`addr-${other.ownerId}`, other.ownerId);
+    db.prepare(`INSERT INTO agent_facts (id, owner_id, agent_id, category, text, sensitive, confidence, updated_at) VALUES (?, ?, ?, 'health', '膝盖不太好', 1, 0.9, 4)`).run(`health-${first.ownerId}`, first.ownerId, first.agentId);
+    db.prepare(`INSERT INTO messages (id, session_id, owner_id, agent_id, role, text, bigrams, created_at) VALUES ('m-tail', 's1', ?, ?, 'user', '昨天去了公园', '', 10)`).run(first.ownerId, first.agentId);
+    db.prepare(`INSERT INTO messages (id, session_id, owner_id, agent_id, role, text, bigrams, created_at) VALUES ('m-assistant-tail', 's1', ?, ?, 'assistant', '助手不该进尾部', '', 13)`).run(first.ownerId, first.agentId);
+    db.prepare(`INSERT INTO messages (id, session_id, owner_id, agent_id, role, text, bigrams, extracted, created_at) VALUES ('m-done', 's1', ?, ?, 'assistant', '已经抽过', '', 1, 11)`).run(first.ownerId, first.agentId);
+    db.prepare(`INSERT INTO messages (id, session_id, owner_id, agent_id, role, text, bigrams, excluded, created_at) VALUES ('m-drop', 's1', ?, ?, 'user', '不要这条', '', 1, 12)`).run(first.ownerId, first.agentId);
     db.prepare(`INSERT INTO relationship_notes (id, agent_id, owner_id, kind, text, updated_at) VALUES ('note-a', ?, ?, 'tone', '说话慢一点', 3)`).run(first.agentId, first.ownerId);
     db.prepare(`INSERT INTO relationship_notes (id, agent_id, owner_id, kind, text, updated_at) VALUES ('note-b', ?, ?, 'tone', '别人的备注', 3)`).run(other.agentId, other.ownerId);
 

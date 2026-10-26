@@ -124,12 +124,12 @@ export function recallTool(rules: SafetyRules, clipChars: number, copy: RecallCo
 async function recall(args: unknown, ctx: ToolContext, rules: SafetyRules, clipChars: number, copy: RecallCopy): Promise<ToolOutcome> {
   const parsed = RecallSchema.safeParse(args);
   if (!parsed.success) return { ok: false, error: 'invalid_args' };
-  if (!ctx.store || !ctx.ownerId) return { ok: false, error: 'memory_unavailable' };
+  if (!ctx.store || !ctx.ownerId || !ctx.agentId) return { ok: false, error: 'memory_unavailable' };
   const query = parsed.data.query;
   const evidence = { questionPatterns: copy.questionPatterns, skipPatterns: copy.skipPatterns, lightAcks: copy.lightAcks };
   // Vague "what did we talk about" questions have no useful FTS tokens; use recent user statements.
   if (isRecentQuery(query, copy)) {
-    const recent = ctx.store.recentUserMessages(ctx.ownerId, 12)
+    const recent = ctx.store.recentUserMessages(ctx.ownerId, ctx.agentId, 12)
       .map((row) => stripInvisible(row.text, rules.invisibleCodePoints))
       .filter((text) => text.length > 0 && scanText(text, rules) !== 'reject' && isMemoryEvidence(text, evidence))
       .slice(0, 3)
@@ -140,9 +140,9 @@ async function recall(args: unknown, ctx: ToolContext, rules: SafetyRules, clipC
   const match = ftsMatch(searchText);
   // A single character has no bigrams; fall back to LIKE within this owner's user lines.
   const rows = match
-    ? ctx.store.searchMessages(ctx.ownerId, match, 50)
+    ? ctx.store.searchMessages(ctx.ownerId, ctx.agentId, match, 50)
     : [...searchText].length === 1
-      ? ctx.store.searchMessagesLike(ctx.ownerId, `%${escapeLike(searchText)}%`, 50)
+      ? ctx.store.searchMessagesLike(ctx.ownerId, ctx.agentId, `%${escapeLike(searchText)}%`, 50)
       : [];
   if (rows.length === 0) return outcome([], copy);
   const trigger = ctx.triggerText?.trim();

@@ -73,12 +73,13 @@ export class MemoryWorker implements MemoryExtractor {
     return this.jobs.get(jobId) ?? Promise.resolve(true);
   }
 
-  /** Enqueues the extract. The returned promise settles when that job finishes. */
+  /** Enqueues one job that extracts every agent of this owner with pending messages, one agent at a time. */
   extractOwner(ownerId: string, reason: ExtractReason, language?: Language): Promise<void> {
     return new Promise((resolve) => {
       this.enqueue(ownerId, async () => {
         try {
-          await this.run(ownerId, reason, language);
+          const agents = this.opts.store.agentsPendingExtraction().filter((entry) => entry.ownerId === ownerId);
+          for (const { agentId } of agents) await this.run(ownerId, agentId, reason, language);
         } finally {
           resolve();
         }
@@ -98,18 +99,18 @@ export class MemoryWorker implements MemoryExtractor {
     clearTimeout(timer);
   }
 
-  private async run(ownerId: string, reason: ExtractReason, language?: Language): Promise<void> {
+  private async run(ownerId: string, agentId: string, reason: ExtractReason, language?: Language): Promise<void> {
     const owner = this.opts.store.getOwner(ownerId);
     if (!owner || owner.memoryConsent === 'declined') return;
-    const epoch = this.opts.store.memoryEpoch(ownerId);
-    if (epoch === undefined) return;
-    const pending = this.opts.store.listPendingMessages(ownerId);
+    const epochs = this.opts.store.memoryEpochs(ownerId, agentId);
+    if (!epochs) return;
+    const pending = this.opts.store.listPendingMessages(ownerId, agentId);
     if (pending.length === 0) return;
     // Only user lines are evidence. Assistant text stays out of the extractor prompt entirely.
     const users = takePrefix(pending.filter((row) => row.role === 'user'), this.transcriptMaxChars);
     if (users.length === 0) {
       // Assistant-only tail: advance the watermark without spending a model call.
-      const applied = applyExtractOps(this.opts.store, ownerId, epoch, [], pending.map((row) => row.id));
+      const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, [], pending.map((row) => row.id));
       log('memory_extract', { reason, result: applied === 'applied' ? 'assistant_only' : applied, ops: 0, messages: pending.length });
       return;
     }
@@ -124,7 +125,7 @@ export class MemoryWorker implements MemoryExtractor {
     if (!systemPrompt) throw new Error(`extract_prompt_missing:${chosen}`);
     const now = this.opts.now?.() ?? Date.now();
     const labels = this.opts.labels?.[chosen] ?? DEFAULT_I18N.memory[chosen].extractLabels;
-    const user = renderInput(this.opts.store.memoryForExtract(ownerId), users, this.contextMaxChars, { reason, now }, labels);
+    const user = renderInput(this.opts.store.memoryForExtract(ownerId, agentId), users, this.contextMaxChars, { reason, now }, labels);
     const result = await runWithPolicy('extract', this.opts.policy, (signal) => this.opts.client.complete({
       system: systemPrompt,
       user,
@@ -152,7 +153,7 @@ export class MemoryWorker implements MemoryExtractor {
     }
     // Quotes must be verbatim user statements from the lines the model saw; anything else loses its quote.
     const vetted = vetFollowupQuotes(ops, users.map((row) => row.text), this.opts.quote);
-    const applied = applyExtractOps(this.opts.store, ownerId, epoch, vetted, consumed.map((row) => row.id));
+    const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, vetted, consumed.map((row) => row.id));
     if (applied === 'incomplete') {
       log('memory_extract_failed', { reason, code: 'extract_incomplete', ops: ops.length, messages: consumed.length });
       return;

@@ -284,5 +284,6 @@ if (registry) {
   setInterval(runCleanup, ORPHAN_CLEANUP_INTERVAL_MS).unref();
 }
 if (worker && store) {
-  for (const ownerId of store.ownersPendingExtraction()) void worker.extractOwner(ownerId, 'startup');
+  const owners = new Set(store.agentsPendingExtraction().map((entry) => entry.ownerId));
+  for (const ownerId of owners) void worker.extractOwner(ownerId, 'startup');
 }

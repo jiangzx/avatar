@@ -18,6 +18,7 @@ import { MockSummarizer } from '../src/session/ledger.ts';
 import { SessionManager } from '../src/session/manager.ts';
 import { Session, type Transport } from '../src/session/session.ts';
 import { ftsMatch } from '../src/session/tools/recall.ts';
+import { factRows, pendingUserRows, seedOwner } from './helpers/memory.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const i18n = loadI18n(`${root}config`);
@@ -107,7 +108,7 @@ describe('Plan C memory acceptance', () => {
         extractCalls += 1;
         if (extractCalls === 1) return FACTS;
         // Epoch moved during the model call: the existing write path returns stale.
-        store.bumpEpoch(ownerId);
+        store.bumpOwnerEpoch(ownerId);
         return JSON.stringify({
           ops: [{ op: 'add', table: 'user_facts', category: 'preference', text: '不该留下的尾部事实' }],
         });
@@ -198,7 +199,7 @@ describe('Plan C memory acceptance', () => {
     expect(extractCalls).toBe(1);
     expect(extracted(db, ownerId, '我喜欢喝茶')).toBe(1);
     expect(extracted(db, ownerId, '好，我记下了')).toBe(1);
-    expect(store.listFacts(ownerId)).toEqual(expect.arrayContaining([
+    expect(factRows(store, ownerId, agentId)).toEqual(expect.arrayContaining([
       { category: 'addressing', text: '称呼：王叔' },
       { category: 'preference', text: '喜欢喝茶' },
     ]));
@@ -240,19 +241,19 @@ describe('Plan C memory acceptance', () => {
     await drain(queued);
     expect(extractCalls).toBe(2);
     expect(extracted(db, ownerId, '昨天去了公园')).toBe(0);
-    expect(store.listFacts(ownerId).map((fact) => fact.text)).not.toContain('不该留下的尾部事实');
+    expect(factRows(store, ownerId, agentId).map((fact) => fact.text)).not.toContain('不该留下的尾部事实');
     now += 60_000;
     const later = opened(registeredA.deviceToken);
     expect(later.ctx.memorySnapshot).toContain('昨天去了公园');
     expect(later.ctx.memorySnapshot).toContain('称呼：王叔');
-    expect(store.snapshotRows(ownerId, agentId).map((row) => row.text)).toContain('昨天去了公园');
+    expect(pendingUserRows(store, ownerId, agentId).map((row) => row.text)).toContain('昨天去了公园');
 
     const sessionForget = await open(later);
     await finishCurrent(sessionForget.session);
     for (let i = 0; i < 9; i++) sessionForget.session.ledger.addUser(`先前${i}`, i);
     expect(await sessionForget.session.ledger.summarize(new MockSummarizer())).toBe(true);
     expect(sessionForget.session.ledger.summary).not.toBe('');
-    expect(store.searchMessages(ownerId, ftsMatch('喜欢喝茶')!, 12).map((row) => row.text)).toContain('我喜欢喝茶');
+    expect(store.searchMessages(ownerId, agentId, ftsMatch('喜欢喝茶')!, 12).map((row) => row.text)).toContain('我喜欢喝茶');
     sessionForget.session.handleClientMessage({ type: 'debug.userText', text: '忘掉这件事' });
     await vi.advanceTimersByTimeAsync(1_000);
     expect(sessionForget.session.ledger.summary).toBe('');
@@ -261,9 +262,9 @@ describe('Plan C memory acceptance', () => {
     const forgotten = opened(registeredA.deviceToken);
     expect(forgotten.ctx.memorySnapshot ?? '').not.toContain('喜欢喝茶');
     expect(instructions.at(-1)).not.toContain('泡茶的杯子');
-    expect(store.searchMessages(ownerId, ftsMatch('喜欢喝茶')!, 12)).toEqual([]);
-    expect(store.listFacts(ownerId).map((fact) => fact.text)).toContain('称呼：王叔');
-    expect(store.listFacts(ownerId).map((fact) => fact.text)).not.toContain('喜欢喝茶');
+    expect(store.searchMessages(ownerId, agentId, ftsMatch('喜欢喝茶')!, 12)).toEqual([]);
+    expect(factRows(store, ownerId, agentId).map((fact) => fact.text)).toContain('称呼：王叔');
+    expect(factRows(store, ownerId, agentId).map((fact) => fact.text)).not.toContain('喜欢喝茶');
     gate.end(sessionForget.tokens.sessionId);
     await drain(queued);
 
@@ -272,8 +273,8 @@ describe('Plan C memory acceptance', () => {
     sessionDecline.session.handleClientMessage({ type: 'debug.userText', text: '别记了' });
     await vi.advanceTimersByTimeAsync(1_000);
     expect(store.getOwner(ownerId)?.memoryConsent).toBe('declined');
-    expect(writer.append({ ownerId, sessionId: 'later', role: 'user', text: '这句不该留下', now: now + 1 })).toBe('skipped');
-    expect(store.snapshotRows(ownerId, agentId)).toEqual([]);
+    expect(writer.append({ ownerId, agentId, sessionId: 'later', role: 'user', text: '这句不该留下', now: now + 1 })).toBe('skipped');
+    expect(pendingUserRows(store, ownerId, agentId)).toEqual([]);
     expect(opened(registeredB.deviceToken).ctx.memorySnapshot ?? '').not.toContain('王叔');
     gate.end(sessionDecline.tokens.sessionId);
 
@@ -293,18 +294,18 @@ describe('snapshot latency', () => {
     const db = openDatabase(':memory:', { busyTimeoutMs: 1000 });
     dbs.push(db);
     const store = new SqliteMemoryStore(db);
-    const owner = store.createOwner({ tokenHash: 'latency', roleId: 'elder-companion', styleId: 'grandchild', now: 1 });
+    const owner = seedOwner(store, 'latency', 1);
     const insert = db.prepare(
-      `INSERT INTO user_facts (id, owner_id, category, text, sensitive, confidence, updated_at) VALUES (?, ?, ?, ?, 0, 1, ?)`,
+      `INSERT INTO agent_facts (id, owner_id, agent_id, category, text, sensitive, confidence, updated_at) VALUES (?, ?, ?, 'preference', ?, 0, 1, ?)`,
     );
-    for (let i = 0; i < 50; i++) insert.run(`fact-${i}`, owner.ownerId, i === 0 ? 'addressing' : 'preference', `事实${i}`, i);
-    store.insertMessage({ id: 'tail', sessionId: 's', ownerId: owner.ownerId, role: 'user', text: '未抽取', bigrams: '', now: 2 });
+    store.setAddressing(owner.ownerId, '事实0', 0);
+    for (let i = 1; i < 50; i++) insert.run(`fact-${i}`, owner.ownerId, owner.agentId, `事实${i}`, i);
+    store.insertMessage({ id: 'tail', sessionId: 's', ownerId: owner.ownerId, agentId: owner.agentId, role: 'user', text: '未抽取', bigrams: '', now: 2 });
 
     const started = performance.now();
-    const facts = store.listFacts(owner.ownerId);
-    const notes = store.listNotes(owner.ownerId, owner.agentId);
-    const tail = store.snapshotRows(owner.ownerId, owner.agentId);
-    const text = renderSnapshot({ facts, notes, tail, maxChars: 600 });
+    const facts = factRows(store, owner.ownerId, owner.agentId);
+    const tail = pendingUserRows(store, owner.ownerId, owner.agentId);
+    const text = renderSnapshot({ facts, notes: [], tail, maxChars: 600 });
     const elapsed = performance.now() - started;
 
     expect(facts).toHaveLength(50);

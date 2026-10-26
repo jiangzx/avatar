@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_CHARACTER_ID } from '@anyidea/protocol';
 import { DEFAULT_I18N } from '../i18n/load.ts';
 import type { I18nBundle } from '../i18n/types.ts';
 import { log } from '../log.ts';
@@ -80,8 +81,9 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     // Store bound is inclusive; +1 excludes owners created exactly 24 h ago.
     if (store.countOwnersCreatedSince(now - DAY_MS + 1) >= limits.dailyCap) return this.reject('register_daily_cap');
     const deviceToken = newDeviceToken();
-    const created = store.createOwner({ tokenHash: hashToken(deviceToken), roleId, styleId, now });
-    log('device_registered', { agent: shortHash(created.agentId), style: styleId });
+    // Agents are created per character on resolve. Styles are no longer stored; Task 7 removes them.
+    const created = store.createOwner({ tokenHash: hashToken(deviceToken), now });
+    log('device_registered', { device: shortHash(created.deviceId), style: styleId });
     return { ok: true, deviceToken };
   }
 
@@ -95,9 +97,9 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     }
     const now = this.now();
     const roleId = roles.defaultRole();
-    const agent = store.ensureAgent(device.ownerId, roleId, roles.defaultStyle(roleId), now);
-    // A style that left the catalog falls back to the default instead of failing the session.
-    const styleId = roles.hasStyle(roleId, agent.styleId) ? agent.styleId : roles.defaultStyle(roleId);
+    // Task 7 resolves the requested character; until then every session uses the default one.
+    const agent = store.ensureAgent(device.ownerId, DEFAULT_CHARACTER_ID, now);
+    const styleId = roles.defaultStyle(roleId);
     store.touchDevice(device.ownerId, device.deviceId, now);
     log('device_resolved', { agent: shortHash(agent.id), style: styleId });
     const owner = store.getOwner(device.ownerId);
@@ -105,10 +107,14 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     const ctx: SessionContext = { ownerId: device.ownerId, agentId: agent.id, roleId, styleId, voice: roles.voiceFor(roleId, styleId, language), language };
     // Read the store, not the live Session. The server flushes the previous owner before this resolve is used.
     // Only user-grounded memory enters prompts: no episodes, notes, sensitive facts, or assistant lines.
+    const profile = store.listProfileFacts(device.ownerId);
     const views = renderMemoryViews({
-      addressing: store.listFacts(device.ownerId).filter((fact) => fact.category === 'addressing').map((fact) => fact.text),
-      facts: store.listProactiveFacts(device.ownerId).map((fact) => fact.text),
-      tail: store.recentUserMessages(device.ownerId, 12).slice().reverse(),
+      addressing: profile.filter((fact) => fact.category === 'addressing').map((fact) => fact.text),
+      facts: [
+        ...profile.filter((fact) => fact.category === 'profile').map((fact) => fact.text),
+        ...store.listAgentFacts(device.ownerId, agent.id).filter((fact) => !fact.sensitive).map((fact) => fact.text),
+      ],
+      tail: store.recentUserMessages(device.ownerId, agent.id, 12).slice().reverse(),
       maxChars: this.snapshotMaxChars,
       labels: PROMPT_LABELS[language],
       rules: { addressingPatterns: this.i18n.memory[language].addressingPatterns, evidence: this.i18n.evidence },
@@ -131,11 +137,9 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     const { store, roles } = this.deps;
     const device = store.findDevice(hashToken(bearer));
     if (!device) return 'unauthorized';
-    const roleId = roles.defaultRole();
-    if (!roles.hasStyle(roleId, style)) return 'unknown_style';
-    const agent = store.ensureAgent(device.ownerId, roleId, roles.defaultStyle(roleId), this.now());
-    store.setAgentStyle(device.ownerId, agent.id, style);
-    log('agent_style_changed', { agent: shortHash(agent.id), style });
+    if (!roles.hasStyle(roles.defaultRole(), style)) return 'unknown_style';
+    // The baseline has no style column; Task 7 deletes PATCH /agent/style.
+    log('agent_style_ignored', { style });
     return 'ok';
   }
 

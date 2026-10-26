@@ -50,8 +50,8 @@ function storeStub(followup: Followup | undefined | 'throws') {
   });
   const closeCareFollowup = vi.fn();
   const store = {
-    listFacts: () => [{ category: 'addressing', text: '称呼：王叔' }],
-    listProactiveFacts: () => [],
+    listProfileFacts: () => [{ id: 'p1', category: 'addressing', text: '称呼：王叔' }],
+    listAgentFacts: () => [],
     recentUserMessages: () => [],
     careFollowup,
     closeCareFollowup,
@@ -123,7 +123,7 @@ describe('care opening', () => {
     const { client, careCalls } = careClient(async () => JSON.stringify({ text: CARE }));
     const s = setup(store, client);
     await s.session.start(s.transport);
-    expect(careFollowup).toHaveBeenCalledWith('owner-1', 'care-session', NOW, 7 * DAY);
+    expect(careFollowup).toHaveBeenCalledWith('owner-1', 'agent-1', 'care-session', NOW, 7 * DAY);
     expect(JSON.parse(careCalls[0]!.user)).toEqual({ userLine: QUOTE, daysAgo: 2 });
     expect(s.greetings()).toEqual([say(`王叔，又见面啦。${CARE}`)]);
     expect(closeCareFollowup).not.toHaveBeenCalled();

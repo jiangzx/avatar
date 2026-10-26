@@ -21,6 +21,8 @@ function stripDigits(text: string, digitChars: ReadonlySet<string>): string {
 export interface TranscriptWriter {
   append(input: {
     ownerId: string;
+    /** Server-side SessionContext agent; the store checks it belongs to ownerId. */
+    agentId: string;
     sessionId: string;
     role: 'user' | 'assistant';
     text: string;
@@ -43,6 +45,7 @@ export class SqliteTranscriptWriter implements TranscriptWriter {
 
   append(input: {
     ownerId: string;
+    agentId: string;
     sessionId: string;
     role: 'user' | 'assistant';
     text: string;
@@ -63,13 +66,14 @@ export class SqliteTranscriptWriter implements TranscriptWriter {
       id: randomUUID(),
       sessionId: input.sessionId,
       ownerId: input.ownerId,
+      agentId: input.agentId,
       role: input.role,
       text,
       bigrams: bigrams(text),
       now: input.now,
     });
     if (verdict === 'degrade') {
-      this.store.writeExtraction(input.ownerId, {
+      this.store.writeExtraction(input.ownerId, input.agentId, {
         now: input.now,
         messageIds: [],
         facts: [{ op: 'add', category: 'safety', text, sensitive: true }],

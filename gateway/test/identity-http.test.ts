@@ -160,7 +160,7 @@ describe('bearer sessions', () => {
     const sa = await call(base, 'POST', '/session', { bearer: a, body: { ownerId: ownerB, agentId: 'forged' } });
     expect(sa.status).toBe(200);
     expect((await call(base, 'POST', '/session', { bearer: b })).status).toBe(200);
-    expect(contexts.map((c) => [c.ownerId, c.styleId])).toEqual([[ownerA, 'old-friend'], [ownerB, 'grandchild']]);
+    expect(contexts.map((c) => [c.ownerId, c.styleId])).toEqual([[ownerA, 'grandchild'], [ownerB, 'grandchild']]);
     expect(contexts[0]!.agentId).not.toBe(contexts[1]!.agentId);
     await startSession(base, sa.json as unknown as SessionTokens);
     expect(store.listSessions(ownerA)).toHaveLength(1);
@@ -169,7 +169,7 @@ describe('bearer sessions', () => {
     expect((await call(base, 'PATCH', '/agent/style', { bearer: a, body: { style: 'grandchild' } })).status).toBe(200);
     await call(base, 'POST', '/session', { bearer: a });
     await call(base, 'POST', '/session', { bearer: b });
-    expect(contexts.slice(2).map((c) => [c.ownerId, c.styleId])).toEqual([[ownerA, 'grandchild'], [ownerB, 'old-friend']]);
+    expect(contexts.slice(2).map((c) => [c.ownerId, c.styleId])).toEqual([[ownerA, 'grandchild'], [ownerB, 'grandchild']]);
   });
 
   it('ends the previous session when the same owner opens a new one', async () => {

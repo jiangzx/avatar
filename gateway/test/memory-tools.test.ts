@@ -20,6 +20,7 @@ import { ConversationLedger, MockSummarizer } from '../src/session/ledger.ts';
 import { Session, type Transport } from '../src/session/session.ts';
 import { loadMemoryBudget } from '../src/session/pacing.ts';
 import { createToolRegistry, type ToolContext } from '../src/session/tools/registry.ts';
+import { factRows, pendingUserRows, seedOwner } from './helpers/memory.ts';
 
 const memory = loadMemoryBudget(fileURLToPath(new URL('../config/memory.json', import.meta.url)));
 const i18n = loadI18n(fileURLToPath(new URL('../config', import.meta.url)));
@@ -38,40 +39,41 @@ afterEach(() => {
 });
 
 function owner(store: SqliteMemoryStore, tokenHash: string, now = 1_000) {
-  return store.createOwner({ tokenHash, roleId: 'elder-companion', styleId: 'grandchild', now });
+  return seedOwner(store, tokenHash, now);
 }
 
 function say(store: SqliteMemoryStore, ownerId: string, id: string, text: string, now: number, sessionId = 's1') {
-  store.insertMessage({ id, sessionId, ownerId, role: 'user', text, bigrams: bigrams(text), now });
+  const agentId = store.ensureAgent(ownerId, 'xiaonuan', now).id;
+  store.insertMessage({ id, sessionId, ownerId, agentId, role: 'user', text, bigrams: bigrams(text), now });
 }
 
 function plant(db: DatabaseSync, ownerId: string, agentId: string, suffix: string) {
   db.prepare(
-    `INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at)
-     VALUES (?, ?, 'preference', ?, 1, 20)`,
-  ).run(`fact-${suffix}`, ownerId, `王叔喜欢喝茶${suffix}`);
+    `INSERT INTO agent_facts (id, owner_id, agent_id, category, text, sensitive, confidence, updated_at)
+     VALUES (?, ?, ?, 'preference', ?, 0, 1, 20)`,
+  ).run(`fact-${suffix}`, ownerId, agentId, `王叔喜欢喝茶${suffix}`);
   db.prepare(
     `INSERT INTO relationship_notes (id, agent_id, owner_id, kind, text, updated_at)
      VALUES (?, ?, ?, 'tone', ?, 21)`,
   ).run(`note-${suffix}`, agentId, ownerId, `跟王叔说话慢一点${suffix}`);
   db.prepare(
-    `INSERT INTO episodes (id, session_id, owner_id, summary, created_at)
-     VALUES (?, 's1', ?, ?, 22)`,
-  ).run(`ep-${suffix}`, ownerId, `王叔来过${suffix}`);
+    `INSERT INTO episodes (id, session_id, owner_id, agent_id, summary, created_at)
+     VALUES (?, 's1', ?, ?, ?, 22)`,
+  ).run(`ep-${suffix}`, ownerId, agentId, `王叔来过${suffix}`);
   db.prepare(
-    `INSERT INTO followups (id, owner_id, text, due_at) VALUES (?, ?, ?, 30)`,
-  ).run(`fu-${suffix}`, ownerId, `问问王叔${suffix}`);
+    `INSERT INTO followups (id, owner_id, agent_id, text, due_at, created_at) VALUES (?, ?, ?, ?, 30, 30)`,
+  ).run(`fu-${suffix}`, ownerId, agentId, `问问王叔${suffix}`);
   db.prepare(
-    `INSERT INTO memory_changes (id, owner_id, table_name, row_id, op, diff, actor, created_at)
-     VALUES (?, ?, 'user_facts', ?, 'add', ?, 'extract', 23)`,
-  ).run(`ch-${suffix}`, ownerId, `fact-${suffix}`, `王叔喜欢喝茶${suffix}`);
+    `INSERT INTO memory_changes (id, owner_id, agent_id, table_name, row_id, op, diff, actor, created_at)
+     VALUES (?, ?, ?, 'agent_facts', ?, 'add', ?, 'extract', 23)`,
+  ).run(`ch-${suffix}`, ownerId, agentId, `fact-${suffix}`, `王叔喜欢喝茶${suffix}`);
 }
 
 function counts(db: DatabaseSync, ownerId: string) {
   const n = (sql: string) => (db.prepare(sql).get(ownerId) as { n: number }).n;
   return {
     messages: n('SELECT count(*) AS n FROM messages WHERE owner_id = ?'),
-    facts: n('SELECT count(*) AS n FROM user_facts WHERE owner_id = ?'),
+    facts: n('SELECT count(*) AS n FROM agent_facts WHERE owner_id = ?'),
     notes: n('SELECT count(*) AS n FROM relationship_notes WHERE owner_id = ?'),
     episodes: n('SELECT count(*) AS n FROM episodes WHERE owner_id = ?'),
     followups: n('SELECT count(*) AS n FROM followups WHERE owner_id = ?'),
@@ -148,7 +150,7 @@ describe('memory tool registry', () => {
     const store = new SqliteMemoryStore(open());
     const a = owner(store, 'recall-ja');
     const text = '私は毎朝ヨガをしています。';
-    store.insertMessage({ id: 'm-ja', sessionId: 's1', ownerId: a.ownerId, role: 'user', text, bigrams: bigrams(text), now: 3 });
+    store.insertMessage({ id: 'm-ja', sessionId: 's1', ownerId: a.ownerId, agentId: a.agentId, role: 'user', text, bigrams: bigrams(text), now: 3 });
     const ja = createToolRegistry({
       language: 'ja',
       memory: i18n.memory.ja,
@@ -276,7 +278,7 @@ describe('memory tool registry', () => {
     const a = owner(store, 'vague-en');
     store.recordSessionStart('s-ended', a.agentId, 1);
     store.insertMessage({
-      id: 'en-movie', sessionId: 's-ended', ownerId: a.ownerId, role: 'user',
+      id: 'en-movie', sessionId: 's-ended', ownerId: a.ownerId, agentId: a.agentId, role: 'user',
       text: 'I like watching old movies.', bigrams: bigrams('I like watching old movies.'), now: 2,
     });
     store.recordSessionEnd('s-ended', a.agentId, 3);
@@ -401,7 +403,7 @@ describe('memory tool registry', () => {
     say(store, a.ownerId, 'tea', '我喜欢喝茶', 10);
     say(store, a.ownerId, 'walk', '我喜欢散步', 11);
     await createToolRegistry().handle('forget_memory', { query: '喜欢喝茶' }, ctxFor(store, worker(store), a));
-    expect(store.snapshotRows(a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我喜欢散步' }]);
+    expect(pendingUserRows(store, a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我喜欢散步' }]);
   });
 
   it('does not confirm a forget that matched nothing', async () => {
@@ -414,7 +416,7 @@ describe('memory tool registry', () => {
       ctxFor(store, worker(store), a),
     );
     expect(result).toEqual({ ok: false, error: 'not_found' });
-    expect(store.snapshotRows(a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我喜欢喝茶' }]);
+    expect(pendingUserRows(store, a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我喜欢喝茶' }]);
   });
 
   it('rejects a single-character forget query before it can mass-delete facts', async () => {
@@ -424,7 +426,7 @@ describe('memory tool registry', () => {
     plant(db, a.ownerId, a.agentId, 'a');
     const result = await createToolRegistry().handle('forget_memory', { query: '茶' }, ctxFor(store, worker(store), a));
     expect(result).toEqual({ ok: false, error: 'invalid_args' });
-    expect(store.listFacts(a.ownerId)).toHaveLength(1);
+    expect(factRows(store, a.ownerId, a.agentId)).toHaveLength(1);
   });
 
   it('forgets a care followup whose keyword appears only in its quote', async () => {
@@ -435,17 +437,17 @@ describe('memory tool registry', () => {
     store.recordSessionStart('s-old', a.agentId, 10);
     store.recordSessionEnd('s-old', a.agentId, 20);
     say(store, a.ownerId, 'm-old', '我下周二去医院复查膝盖', 11, 's-old');
-    store.immediate(() => store.writeExtraction(a.ownerId, {
+    store.immediate(() => store.writeExtraction(a.ownerId, a.agentId, {
       now: 15, messageIds: ['m-old'], facts: [], notes: [], episodes: [],
       followups: [{ op: 'add', text: '问问复查结果', dueAt: 99, quote: '我下周二去医院复查膝盖', sensitive: true }],
     }));
-    expect(store.careFollowup(a.ownerId, 's1', 30, 7 * day)).toMatchObject({ quote: '我下周二去医院复查膝盖' });
+    expect(store.careFollowup(a.ownerId, a.agentId, 's1', 30, 7 * day)).toMatchObject({ quote: '我下周二去医院复查膝盖' });
 
     const result = await createToolRegistry().handle('forget_memory', { query: '膝盖' }, ctxFor(store, worker(store), a));
 
     expect(result).toMatchObject({ ok: true, rebuild: 'forget' });
     expect(counts(db, a.ownerId).followups).toBe(0);
-    expect(store.careFollowup(a.ownerId, 's1', 30, 7 * day)).toBeUndefined();
+    expect(store.careFollowup(a.ownerId, a.agentId, 's1', 30, 7 * day)).toBeUndefined();
     expect(db.prepare("SELECT count(*) AS n FROM memory_changes WHERE owner_id = ? AND instr(diff, '膝盖') > 0").get(a.ownerId)).toEqual({ n: 0 });
   });
 
@@ -476,7 +478,7 @@ describe('memory tool registry', () => {
     const store = new SqliteMemoryStore(open());
     const a = owner(store, 'recall-role');
     say(store, a.ownerId, 'u1', '我说过喜欢喝茶', 10);
-    store.insertMessage({ id: 'a1', sessionId: 's1', ownerId: a.ownerId, role: 'assistant', text: '助手说过喜欢喝茶', bigrams: bigrams('助手说过喜欢喝茶'), now: 11 });
+    store.insertMessage({ id: 'a1', sessionId: 's1', ownerId: a.ownerId, agentId: a.agentId, role: 'assistant', text: '助手说过喜欢喝茶', bigrams: bigrams('助手说过喜欢喝茶'), now: 11 });
     const result = await createToolRegistry().handle('recall_memory', { query: '喝茶' }, ctxFor(store, worker(store), a));
     expect(result.ok).toBe(true);
     expect(result.text).toContain('我说过喜欢喝茶');
@@ -622,13 +624,13 @@ describe('memory tool registry', () => {
     expect(ledger.summary).toBe('');
     // Unrelated turns survive; only the forgotten line is removed.
     expect(ledger.recent.map((entry) => entry.text)).toEqual(['问1', '答1', '问2', '答2', '问3', '答3']);
-    expect(store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
+    expect(pendingUserRows(store, a.ownerId, a.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
     expect(ftsTexts(db, a.ownerId, '王叔')).toEqual([]);
-    expect(store.listFacts(a.ownerId)).toEqual([]);
+    expect(factRows(store, a.ownerId, a.agentId)).toEqual([]);
     expect(counts(db, a.ownerId)).toMatchObject({ notes: 0, episodes: 0, followups: 0, changes: 0 });
     expect(store.getOwner(a.ownerId)?.memoryEpoch).toBe(1);
-    expect(store.snapshotRows(b.ownerId, b.agentId).map((row) => row.text)).toEqual(['王叔是邻居']);
-    expect(store.listFacts(b.ownerId)).toEqual([{ category: 'preference', text: '王叔喜欢喝茶b' }]);
+    expect(pendingUserRows(store, b.ownerId, b.agentId).map((row) => row.text)).toEqual(['王叔是邻居']);
+    expect(factRows(store, b.ownerId, b.agentId)).toEqual([{ category: 'preference', text: '王叔喜欢喝茶b' }]);
     expect(counts(db, b.ownerId)).toEqual(beforeB);
     expect(store.getOwner(b.ownerId)?.memoryEpoch).toBe(0);
   });
@@ -657,7 +659,7 @@ describe('memory tool registry', () => {
     await forget;
     await extract;
 
-    expect(store.listFacts(a.ownerId)).toEqual([]);
+    expect(factRows(store, a.ownerId, a.agentId)).toEqual([]);
     expect(store.getOwner(a.ownerId)?.memoryEpoch).toBe(1);
   });
 
@@ -689,10 +691,10 @@ describe('memory tool registry', () => {
     expect(first).toMatchObject({ ok: true, confirmText: i18n.memory.zh.declineConfirmPrompt });
     expect(first.rebuild).toBeUndefined();
     expect(counts(db, a.ownerId)).toEqual(beforeA);
-    expect(store.snapshotRows(a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我叫王叔' }]);
+    expect(pendingUserRows(store, a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我叫王叔' }]);
     expect(ledger.recent).toEqual([{ role: 'user', text: '别记了', ts: 1 }]);
     expect(store.getOwner(a.ownerId)?.memoryConsent).not.toBe('declined');
-    expect(writer.append({ ownerId: a.ownerId, sessionId: 's1', role: 'user', text: '还在记', now: 60 })).toBe('stored');
+    expect(writer.append({ ownerId: a.ownerId, agentId: a.agentId, sessionId: 's1', role: 'user', text: '还在记', now: 60 })).toBe('stored');
 
     const second = await registry.handle(
       'set_memory_consent',
@@ -704,12 +706,12 @@ describe('memory tool registry', () => {
     expect(ledger.summary).toBe('');
     expect(ledger.recent).toEqual([]);
     expect(counts(db, a.ownerId)).toEqual({ messages: 0, facts: 0, notes: 0, episodes: 0, followups: 0, changes: 0 });
-    expect(store.snapshotRows(a.ownerId, a.agentId)).toEqual([]);
+    expect(pendingUserRows(store, a.ownerId, a.agentId)).toEqual([]);
     expect(store.getOwner(a.ownerId)?.memoryConsent).toBe('declined');
     expect(store.getOwner(a.ownerId)?.memoryEpoch).toBe(1);
-    expect(writer.append({ ownerId: a.ownerId, sessionId: 's1', role: 'user', text: '这句不该留下', now: 70 })).toBe('skipped');
+    expect(writer.append({ ownerId: a.ownerId, agentId: a.agentId, sessionId: 's1', role: 'user', text: '这句不该留下', now: 70 })).toBe('skipped');
     expect(counts(db, b.ownerId)).toEqual(beforeB);
-    expect(store.snapshotRows(b.ownerId, b.agentId)).toEqual([{ role: 'user', text: '王叔是邻居' }]);
+    expect(pendingUserRows(store, b.ownerId, b.agentId)).toEqual([{ role: 'user', text: '王叔是邻居' }]);
     expect(store.getOwner(b.ownerId)?.memoryConsent).not.toBe('declined');
     expect(store.getOwner(b.ownerId)?.memoryEpoch).toBe(0);
   });
@@ -726,8 +728,8 @@ describe('memory tool registry', () => {
 
     await registry.handle('forget_memory', { query: '王叔' }, ctxFor(store, worker(store), a));
 
-    expect(store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
-    expect(store.snapshotRows(b.ownerId, b.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
+    expect(pendingUserRows(store, a.ownerId, a.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
+    expect(pendingUserRows(store, b.ownerId, b.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
   });
 });
 
@@ -797,7 +799,7 @@ describe('session memory tools', () => {
     expect(calls.some((call) => call.cue === 'resume')).toBe(false);
     expect(sent.filter((message) => message.type === 'error').map((message) => message.code)).not.toContain('model_reconnecting');
     expect(mocks.length).toBeGreaterThan(1);
-    expect(store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
+    expect(pendingUserRows(store, a.ownerId, a.agentId).map((row) => row.text)).toEqual(['今天天气不错']);
     expect(session.ledger.recent.map((entry) => entry.text)).not.toContain('忘掉王叔');
     expect(session.ledger.recent.map((entry) => entry.text)).toContain('你好呀');
     expect(session.ledger.summary).toBe('');
@@ -898,7 +900,7 @@ describe('session memory tools', () => {
     });
     expect(calls.some((call) => call.cue === 'resume')).toBe(false);
     expect(mocks).toHaveLength(1);
-    expect(store.snapshotRows(a.ownerId, a.agentId).some((row) => row.text === '我叫王叔')).toBe(true);
+    expect(pendingUserRows(store, a.ownerId, a.agentId).some((row) => row.text === '我叫王叔')).toBe(true);
     session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
     await vi.advanceTimersByTimeAsync(200);
     expect(box.sent.some((message) => message.type === 'avatar.action' && message.action === 'wave')).toBe(true);
@@ -1039,8 +1041,8 @@ describe('session memory tools', () => {
     release();
     await extract;
     // The extraction started before the epoch bump and must not write after it.
-    expect(store.listFacts(a.ownerId)).toEqual([]);
-    const rows = store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text);
+    expect(factRows(store, a.ownerId, a.agentId)).toEqual([]);
+    const rows = pendingUserRows(store, a.ownerId, a.agentId).map((row) => row.text);
     expect(rows).toContain('今天天气不错');
     expect(rows).toContain('今天想喝茶');
     expect(rows).not.toContain('我叫王叔');
@@ -1107,7 +1109,7 @@ describe('session memory tools', () => {
       const result = row.result as { ok?: boolean };
       return result.ok === false;
     })).toBe(true);
-    expect(store.snapshotRows(a.ownerId, a.agentId).map((row) => row.text)).toContain('我叫王叔');
+    expect(pendingUserRows(store, a.ownerId, a.agentId).map((row) => row.text)).toContain('我叫王叔');
     session.end();
   });
 
@@ -1120,8 +1122,8 @@ describe('session memory tools', () => {
     insertFact(db, a.ownerId, 'pref', 'preference', '喜欢喝茶');
     store.recordSessionStart('episode-before-forget', a.agentId, 1);
     store.recordSessionEnd('episode-before-forget', a.agentId, 2);
-    db.prepare('INSERT INTO episodes (id, session_id, owner_id, summary, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run('kept-episode', 'episode-before-forget', a.ownerId, '聊过公园散步', 3);
+    db.prepare('INSERT INTO episodes (id, session_id, owner_id, agent_id, summary, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run('kept-episode', 'episode-before-forget', a.ownerId, a.agentId, '聊过公园散步', 3);
     const live = sessionWithSnapshot({
       store,
       who: a,
@@ -1143,7 +1145,7 @@ describe('session memory tools', () => {
     expect(rebuilt).not.toContain('喜欢喝茶');
     expect(rebuilt).toContain('称呼：王叔');
     // Stored episode remains auditable but is never injected as memory evidence.
-    expect(store.latestEpisode(a.ownerId, a.agentId)).toEqual({ summary: '聊过公园散步' });
+    expect(db.prepare('SELECT summary FROM episodes WHERE owner_id = ? AND agent_id = ?').get(a.ownerId, a.agentId)).toEqual({ summary: '聊过公园散步' });
     expect(rebuilt).not.toContain('聊过公园散步');
     live.session.end();
   });
@@ -1196,7 +1198,7 @@ describe('session memory tools', () => {
     await live.session.start(transport);
     await vi.advanceTimersByTimeAsync(1000);
     live.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
-    db.prepare('DELETE FROM user_facts WHERE owner_id = ?').run(a.ownerId);
+    db.prepare('DELETE FROM agent_facts WHERE owner_id = ?').run(a.ownerId);
     live.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
     await vi.advanceTimersByTimeAsync(1000);
     live.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
@@ -1209,9 +1211,14 @@ describe('session memory tools', () => {
 });
 
 function insertFact(db: DatabaseSync, ownerId: string, id: string, category: string, text: string): void {
-  db.prepare(
-    `INSERT INTO user_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, ?, ?, 1, 20)`,
-  ).run(id, ownerId, category, text);
+  if (category === 'addressing' || category === 'profile') {
+    db.prepare(`INSERT INTO profile_facts (id, owner_id, category, text, confidence, updated_at) VALUES (?, ?, ?, ?, 1, 20)`)
+      .run(id, ownerId, category, text);
+    return;
+  }
+  const agent = db.prepare(`SELECT id FROM agents WHERE owner_id = ? AND character_id = 'xiaonuan'`).get(ownerId) as { id: string };
+  db.prepare(`INSERT INTO agent_facts (id, owner_id, agent_id, category, text, sensitive, confidence, updated_at) VALUES (?, ?, ?, ?, ?, 0, 1, 20)`)
+    .run(id, ownerId, agent.id, category, text);
 }
 
 function sessionWithSnapshot(input: {

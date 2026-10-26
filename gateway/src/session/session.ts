@@ -557,7 +557,8 @@ export class Session {
 
   /** Writes finalized assistant replies that are not yet stored. User finals are not flushed here. */
   flush(): void {
-    if (!this.writer || !this.context.ownerId) return;
+    const { ownerId, agentId } = this.context;
+    if (!this.writer || !ownerId || !agentId) return;
     for (const state of this.bySeq.values()) {
       if (!state.finalized || state.flushed || !state.text) continue;
       if (this.dropTranscriptSeqs.has(state.seq)) {
@@ -566,7 +567,8 @@ export class Session {
       }
       try {
         this.writer.append({
-          ownerId: this.context.ownerId,
+          ownerId,
+          agentId,
           sessionId: this.sessionId,
           role: 'assistant',
           text: state.text,
@@ -1096,10 +1098,11 @@ export class Session {
     if (this.dropUserFinals) return;
     this.turnUserText = text;
     this.ledger.addUser(text, Date.now());
-    if (this.writer && this.context.ownerId) {
+    if (this.writer && this.context.ownerId && this.context.agentId) {
       try {
         this.writer.append({
           ownerId: this.context.ownerId,
+          agentId: this.context.agentId,
           sessionId: this.sessionId,
           role: 'user',
           text,
@@ -1508,12 +1511,17 @@ export class Session {
   private refreshMemorySnapshot(): void {
     const store = this.deps.store;
     const ownerId = this.context.ownerId;
+    const agentId = this.context.agentId;
     const maxChars = this.budgetFor(this.language)?.snapshotMaxChars;
-    if (!store || !ownerId || maxChars === undefined) return;
+    if (!store || !ownerId || !agentId || maxChars === undefined) return;
+    const profile = store.listProfileFacts(ownerId);
     const views = renderMemoryViews({
-      addressing: store.listFacts(ownerId).filter((fact) => fact.category === 'addressing').map((fact) => fact.text),
-      facts: store.listProactiveFacts(ownerId).map((fact) => fact.text),
-      tail: store.recentUserMessages(ownerId, 12).slice().reverse(),
+      addressing: profile.filter((fact) => fact.category === 'addressing').map((fact) => fact.text),
+      facts: [
+        ...profile.filter((fact) => fact.category === 'profile').map((fact) => fact.text),
+        ...store.listAgentFacts(ownerId, agentId).filter((fact) => !fact.sensitive).map((fact) => fact.text),
+      ],
+      tail: store.recentUserMessages(ownerId, agentId, 12).slice().reverse(),
       maxChars,
       labels: PROMPT_LABELS[this.language],
       rules: {
@@ -1570,7 +1578,8 @@ export class Session {
     const store = this.deps.store;
     const client = this.deps.textClient;
     const ownerId = this.context.ownerId;
-    if (!care || !store || !client || !ownerId || !this.safeGreetingWired) return null;
+    const agentId = this.context.agentId;
+    if (!care || !store || !client || !ownerId || !agentId || !this.safeGreetingWired) return null;
     const language = this.language;
     const templates = this.deps.roles.director(this.context.roleId, language).greetingCareTexts ?? [];
     const name = this.greetingName();
@@ -1579,7 +1588,7 @@ export class Session {
     const startedAt = this.now();
     let followup: { id: string; quote: string; createdAt: number } | undefined;
     try {
-      followup = store.careFollowup(ownerId, this.sessionId, startedAt, care.maxAgeDays * DAY_MS);
+      followup = store.careFollowup(ownerId, agentId, this.sessionId, startedAt, care.maxAgeDays * DAY_MS);
     } catch {
       log('care_opening', { outcome: 'store_failed' });
       return null;

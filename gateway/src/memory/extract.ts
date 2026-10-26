@@ -141,21 +141,23 @@ export function loadExtractPrompt(
 }
 
 /**
- * Re-reads memory_epoch inside the write transaction. A mismatch writes nothing.
+ * Re-reads both epochs inside the write transaction. Any mismatch writes nothing.
  * Applied ops and extracted=1 on the consumed message ids commit together.
  * An op that cannot be stored rolls the whole batch back.
  */
 export function applyExtractOps(
   store: MemoryStore,
   ownerId: string,
-  epochAtStart: number,
+  agentId: string,
+  epochsAtStart: { owner: number; agent: number },
   ops: readonly ExtractOp[],
   messageIds: readonly string[],
 ): 'applied' | 'stale' | 'incomplete' {
   try {
     return store.immediate(() => {
-      if (store.memoryEpoch(ownerId) !== epochAtStart) return 'stale';
-      store.writeExtraction(ownerId, {
+      const current = store.memoryEpochs(ownerId, agentId);
+      if (!current || current.owner !== epochsAtStart.owner || current.agent !== epochsAtStart.agent) return 'stale';
+      store.writeExtraction(ownerId, agentId, {
         now: Date.now(),
         messageIds,
         facts: ops.filter((op) => op.table === 'user_facts'),

@@ -137,6 +137,7 @@ describe('SessionManager owner invariant', () => {
       s.flush.mockImplementation(() => {
         writer.append({
           ownerId: ctx.ownerId ?? '',
+          agentId: ctx.agentId ?? '',
           sessionId,
           role: 'assistant',
           text: 'kept',
@@ -154,6 +155,7 @@ describe('SessionManager owner invariant', () => {
     expect(previous.flush.mock.invocationCallOrder[1]).toBeLessThan(previous.end.mock.invocationCallOrder[0]!);
     expect(writer.append).toHaveBeenCalledWith({
       ownerId: 'o1',
+      agentId: 'agent-o1',
       sessionId: first.sessionId,
       role: 'assistant',
       text: 'kept',

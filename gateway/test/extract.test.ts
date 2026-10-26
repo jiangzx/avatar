@@ -8,6 +8,7 @@ import { loadI18n } from '../src/i18n/load.ts';
 import { applyExtractOps, loadExtractPrompt, parseExtractOps, vetFollowupQuotes } from '../src/memory/extract.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
+import { agentOf, factRows, seedOwner } from './helpers/memory.ts';
 import { QwenTextClient } from '../src/memory/textClient.ts';
 import { loadMemoryBudget } from '../src/session/pacing.ts';
 
@@ -25,8 +26,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const owner = (store: SqliteMemoryStore) =>
-  store.createOwner({ tokenHash: 'h1', roleId: 'elder-companion', styleId: 'grandchild', now: 1_000 });
+const owner = (store: SqliteMemoryStore) => seedOwner(store, 'h1', 1_000);
 
 function extracted(db: DatabaseSync, id: string): number {
   return (db.prepare('SELECT extracted FROM messages WHERE id = ?').get(id) as { extracted: number }).extracted;
@@ -50,13 +50,13 @@ describe('applyExtractOps', () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
     const created = owner(store);
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天想喝茶', bigrams: '', now: 1 });
-    store.insertMessage({ id: 'm2', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '还没抽', bigrams: '', now: 2 });
-    const result = applyExtractOps(store, created.ownerId, 0, [
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '今天想喝茶', bigrams: '', now: 1 });
+    store.insertMessage({ id: 'm2', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '还没抽', bigrams: '', now: 2 });
+    const result = applyExtractOps(store, created.ownerId, created.agentId, { owner: 0, agent: 0 }, [
       { op: 'add', table: 'user_facts', category: 'preference', text: '喜欢喝茶', sensitive: false },
     ], ['m1']);
     expect(result).toBe('applied');
-    expect(store.listFacts(created.ownerId)).toEqual([{ category: 'preference', text: '喜欢喝茶' }]);
+    expect(factRows(store, created.ownerId, created.agentId)).toEqual([{ category: 'preference', text: '喜欢喝茶' }]);
     expect(extracted(db, 'm1')).toBe(1);
     expect(extracted(db, 'm2')).toBe(0);
   });
@@ -65,13 +65,13 @@ describe('applyExtractOps', () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
     const created = owner(store);
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天想喝茶', bigrams: '', now: 1 });
-    store.bumpEpoch(created.ownerId);
-    const result = applyExtractOps(store, created.ownerId, 0, [
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '今天想喝茶', bigrams: '', now: 1 });
+    store.bumpOwnerEpoch(created.ownerId);
+    const result = applyExtractOps(store, created.ownerId, created.agentId, { owner: 0, agent: 0 }, [
       { op: 'add', table: 'user_facts', category: 'preference', text: '不该留下', sensitive: false },
     ], ['m1']);
     expect(result).toBe('stale');
-    expect(store.listFacts(created.ownerId)).toEqual([]);
+    expect(factRows(store, created.ownerId, created.agentId)).toEqual([]);
     expect(extracted(db, 'm1')).toBe(0);
   });
 
@@ -79,36 +79,52 @@ describe('applyExtractOps', () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
     const created = owner(store);
-    const other = store.createOwner({ tokenHash: 'h2', roleId: 'elder-companion', styleId: 'grandchild', now: 2_000 });
-    expect(applyExtractOps(store, created.ownerId, 0, [
+    const other = seedOwner(store, 'h2', 2_000);
+    expect(applyExtractOps(store, created.ownerId, created.agentId, { owner: 0, agent: 0 }, [
       { op: 'add', table: 'user_facts', category: 'health', text: '膝盖不太好', sensitive: false },
     ], [])).toBe('applied');
-    const row = db.prepare('SELECT id, sensitive FROM user_facts WHERE owner_id = ?').get(created.ownerId) as { id: string; sensitive: number };
+    const row = db.prepare('SELECT id, sensitive FROM agent_facts WHERE owner_id = ?').get(created.ownerId) as { id: string; sensitive: number };
     expect(row.sensitive).toBe(1);
-    expect(applyExtractOps(store, other.ownerId, 0, [
+    expect(applyExtractOps(store, other.ownerId, other.agentId, { owner: 0, agent: 0 }, [
       { op: 'update', table: 'user_facts', id: row.id, text: '改成别人的' },
     ], [])).toBe('applied');
-    expect(store.listFacts(created.ownerId)).toEqual([{ category: 'health', text: '膝盖不太好' }]);
-    expect(applyExtractOps(store, created.ownerId, 0, [
+    expect(factRows(store, created.ownerId, created.agentId)).toEqual([{ category: 'health', text: '膝盖不太好' }]);
+    expect(applyExtractOps(store, created.ownerId, created.agentId, { owner: 0, agent: 0 }, [
       { op: 'update', table: 'user_facts', id: row.id, text: '膝盖旧伤' },
       { op: 'remove', table: 'user_facts', id: row.id },
     ], [])).toBe('applied');
-    expect(store.listFacts(created.ownerId)).toEqual([]);
+    expect(factRows(store, created.ownerId, created.agentId)).toEqual([]);
   });
 
   it('rolls back the batch when a note agent cannot be resolved', () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
     const created = owner(store);
-    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, role: 'user', text: '今天想喝茶', bigrams: '', now: 1 });
-    const result = applyExtractOps(store, created.ownerId, 0, [
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '今天想喝茶', bigrams: '', now: 1 });
+    const result = applyExtractOps(store, created.ownerId, created.agentId, { owner: 0, agent: 0 }, [
       { op: 'add', table: 'user_facts', category: 'preference', text: '喜欢喝茶', sensitive: false },
       { op: 'add', table: 'relationship_notes', agentId: 'missing-agent', text: '说话慢一点' },
     ], ['m1']);
     expect(result).toBe('incomplete');
-    expect(store.listFacts(created.ownerId)).toEqual([]);
+    expect(factRows(store, created.ownerId, created.agentId)).toEqual([]);
     expect(extracted(db, 'm1')).toBe(0);
     expect((db.prepare('SELECT count(*) AS n FROM relationship_notes').get() as { n: number }).n).toBe(0);
+  });
+
+  it('returns stale when the owner or this agent epoch moved, and ignores another agent', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = owner(store);
+    const other = agentOf(store, created.ownerId, 'xiaokai');
+    const add = [{ op: 'add' as const, table: 'user_facts' as const, category: 'preference' as const, text: '喜欢喝茶', sensitive: false }];
+    store.bumpAgentEpoch(created.ownerId, other.agentId);
+    expect(applyExtractOps(store, created.ownerId, created.agentId, { owner: 0, agent: 0 }, add, [])).toBe('applied');
+    store.bumpAgentEpoch(created.ownerId, created.agentId);
+    expect(applyExtractOps(store, created.ownerId, created.agentId, { owner: 0, agent: 0 }, add, [])).toBe('stale');
+    expect(applyExtractOps(store, created.ownerId, created.agentId, { owner: 0, agent: 1 }, add, [])).toBe('applied');
+    store.bumpOwnerEpoch(created.ownerId);
+    expect(applyExtractOps(store, created.ownerId, created.agentId, { owner: 0, agent: 1 }, add, [])).toBe('stale');
+    expect(store.listAgentFacts(created.ownerId, created.agentId).map((fact) => fact.text)).toEqual(['喜欢喝茶', '喜欢喝茶']);
   });
 });
 
