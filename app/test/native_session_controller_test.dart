@@ -679,6 +679,23 @@ void main() {
     await pumpEvents();
     expect(f.events.whereType<UiState>().last.state, 'speaking');
   });
+
+  test('assistant subtitles carry their response sequence; user lines do not', () async {
+    final f = SessionFakes();
+    final c = f.controller();
+    await c.start();
+    f.client.emit(const ResponseStart(9, 'reminder'));
+    f.client.emit(const TranscriptAssistant(9, '咱们聊了'));
+    f.client.emit(const TranscriptAssistant(9, '一个钟头了'));
+    f.client.emit(const TranscriptUser('嗯', true));
+    await pumpEvents();
+    final subtitles = f.events.whereType<UiSubtitle>().toList();
+    final assistant = subtitles.where((s) => s.role == 'assistant').last;
+    expect(assistant.text, '咱们聊了一个钟头了');
+    expect(assistant.responseSeq, 9);
+    expect(subtitles.where((s) => s.role == 'user').single.responseSeq, isNull);
+    expect(f.events.whereType<UiResponseStart>().single.kind, 'reminder');
+  });
 }
 
 class SessionFakes {

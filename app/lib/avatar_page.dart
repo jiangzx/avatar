@@ -10,6 +10,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'avatar_engine/avatar_engine.dart';
 import 'avatar_engine/legacy_web_session.dart';
 import 'avatar_engine/presence_chip.dart';
+import 'companion_config.dart';
 import 'config.dart';
 import 'diag_log.dart';
 import 'metrics.dart';
@@ -21,6 +22,7 @@ import 'native_session/session_controller.dart';
 import 'native_session/session_start_guard.dart';
 import 'native_session/thinking_config.dart';
 import 'overlay.dart';
+import 'reminder_toast.dart';
 
 export 'avatar_engine/webview_engine.dart' show buildAvatarConfig;
 
@@ -75,6 +77,7 @@ class AvatarPage extends StatefulWidget {
     this.onUnknownCharacter,
     this.characterId,
     this.displayName = '',
+    this.companion,
     this.handoff,
     this.platform = const AvatarPagePlatform(),
   });
@@ -96,6 +99,9 @@ class AvatarPage extends StatefulWidget {
 
   /// Corner label: the character title from assets/config/characters.json.
   final String displayName;
+
+  /// AI caption and rest-toast duration (assets/config/companion.json). Null shows neither.
+  final CompanionConfig? companion;
 
   /// When set, this page waits for the previous page to stop its session and release its engine.
   final EngineHandoff? handoff;
@@ -125,6 +131,7 @@ class _AvatarPageState extends State<AvatarPage> {
   /// End/dispose invalidates an in-flight session start; it must not leave a live mic.
   final _sessionGuard = SessionStartGuard();
   bool _released = false;
+  ReminderToast? _toast;
 
   /// The old WebView-owned audio path (AUDIO_MODE=web); null on the native path.
   LegacyWebSession? get _legacy => switch (_engine) {
@@ -135,9 +142,13 @@ class _AvatarPageState extends State<AvatarPage> {
   @override
   void initState() {
     super.initState();
+    final companion = widget.companion;
+    if (companion != null) _toast = ReminderToast(showFor: companion.restToast)..addListener(_onToast);
     widget.platform.setWakelock(true);
     unawaited(_init());
   }
+
+  void _onToast() => _update(() {});
 
   void _update(VoidCallback change) {
     if (mounted) setState(change);
@@ -291,6 +302,7 @@ class _AvatarPageState extends State<AvatarPage> {
       setState(() => _diag[event.key] = event.value);
       return;
     }
+    _toast?.onEvent(event);
     _engine.onSessionEvent(event);
     switch (event) {
       case UiStatus(:final status):
@@ -419,6 +431,9 @@ class _AvatarPageState extends State<AvatarPage> {
   @override
   void dispose() {
     _handOff();
+    _toast
+      ?..removeListener(_onToast)
+      ..dispose();
     _debugText.dispose();
     widget.platform.setWakelock(false);
     super.dispose();
@@ -470,6 +485,8 @@ class _AvatarPageState extends State<AvatarPage> {
             onToggleDebug: () => setState(() => _debug = !_debug),
             debugPanel: _debug ? _debugPanel() : null,
             presence: hint == null ? null : PresenceChip(hint: hint),
+            caption: widget.companion?.aiCaption,
+            toast: _toast?.text,
           ),
         ],
       ),

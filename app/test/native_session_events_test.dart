@@ -17,4 +17,10 @@ void main() {
     });
     expect(event.toJson().keys, isNot(anyOf(contains('pcm'), contains('text'))));
   });
+
+  test('the subtitle JSON for the WebView keeps its shape', () {
+    const event = UiSubtitle(role: 'assistant', text: '好', isFinal: false, responseSeq: 3);
+    expect(event.responseSeq, 3);
+    expect(event.toJson(), {'type': 'subtitle', 'role': 'assistant', 'text': '好', 'final': false});
+  });
 }

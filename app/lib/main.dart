@@ -6,6 +6,7 @@ import 'avatar_engine/avatar_engine.dart';
 import 'avatar_engine/engine_switch_controller.dart';
 import 'avatar_engine/webview_engine.dart';
 import 'avatar_page.dart';
+import 'companion_config.dart';
 import 'config.dart';
 import 'diag_log.dart';
 import 'duix/duix_bridge.dart';
@@ -28,7 +29,17 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  runApp(AvatarApp(catalog: await _loadCatalog()));
+  runApp(AvatarApp(catalog: await _loadCatalog(), companion: await _loadCompanion()));
+}
+
+/// Null when assets/config/companion.json is missing or invalid; the app shows a config error.
+Future<CompanionConfig?> _loadCompanion() async {
+  try {
+    return await loadCompanionConfig(rootBundle);
+  } catch (_) {
+    logcatDiagSink(formatDiag('companion_config_invalid', {}));
+    return null;
+  }
 }
 
 /// Null when assets/config/characters.json is missing or invalid; the app shows a config error.
@@ -42,14 +53,18 @@ Future<CharacterCatalog?> _loadCatalog() async {
 }
 
 class AvatarApp extends StatelessWidget {
-  const AvatarApp({super.key, required this.catalog});
+  const AvatarApp({super.key, required this.catalog, required this.companion});
 
   final CharacterCatalog? catalog;
+  final CompanionConfig? companion;
 
   @override
   Widget build(BuildContext context) {
     final catalog = this.catalog;
-    final problem = AppConfig.validate() ?? (catalog == null ? 'characters.json' : null);
+    final companion = this.companion;
+    final problem = AppConfig.validate() ??
+        (catalog == null ? 'characters.json' : null) ??
+        (companion == null ? 'companion.json' : null);
     return MaterialApp(
       title: '智伴',
       debugShowCheckedModeBanner: false,
@@ -62,8 +77,8 @@ class AvatarApp extends StatelessWidget {
         'secure_storage' => const SecureStorageSpikePage(),
         'duix_probe' => const DuixProbeSpikePage(),
         _ =>
-          catalog != null && problem == null
-              ? _Home(catalog: catalog)
+          catalog != null && companion != null && problem == null
+              ? _Home(catalog: catalog, companion: companion)
               : Scaffold(
                   body: Center(
                     child: Text(
@@ -79,9 +94,10 @@ class AvatarApp extends StatelessWidget {
 
 /// Owns the single DeviceIdentity for the app's lifetime.
 class _Home extends StatefulWidget {
-  const _Home({required this.catalog});
+  const _Home({required this.catalog, required this.companion});
 
   final CharacterCatalog catalog;
+  final CompanionConfig companion;
 
   @override
   State<_Home> createState() => _HomeState();
@@ -143,6 +159,7 @@ class _HomeState extends State<_Home> {
       identity: request.identity,
       characterId: request.character.id,
       displayName: request.character.title,
+      companion: widget.companion,
       onEngineFailure: request.onEngineFailure,
       onUnknownCharacter: request.onUnknownCharacter,
       handoff: _handoff,

@@ -73,4 +73,55 @@ void main() {
     final subtitle = tester.getTopLeft(find.text('王叔好'));
     expect(presence.dy, lessThan(subtitle.dy));
   });
+
+  testWidgets('the AI caption sits at the top, large, semi-transparent and clear of the name and status', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AvatarOverlay(
+          userLine: '', aiLine: '', status: '连接中…', error: null, muted: false, name: '小暖',
+          caption: '我是 AI 陪伴，不是真人',
+          onMute: () {}, onEnd: () {}, onToggleDebug: () {},
+        ),
+      ),
+    ));
+    final text = tester.widget<Text>(find.text('我是 AI 陪伴，不是真人'));
+    expect(text.style!.fontSize, greaterThanOrEqualTo(18));
+    expect(text.style!.color, const Color(0xCCFFFFFF));
+    final caption = tester.getRect(find.byKey(const Key('ai-caption')));
+    expect(caption.bottom, lessThan(2340 / 2.75 * 0.15));
+    expect(caption.overlaps(tester.getRect(find.text('小暖'))), isFalse);
+    expect(caption.overlaps(tester.getRect(find.text('连接中…'))), isFalse);
+  });
+
+  testWidgets('the rest toast shows above the subtitles in large text', (tester) async {
+    const line = '咱们聊了一个钟头了，要不要起来活动活动、喝口水？我在这儿等您。';
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AvatarOverlay(
+          userLine: '', aiLine: '王叔好', status: '', error: null, muted: false, name: '小暖',
+          toast: line,
+          onMute: () {}, onEnd: () {}, onToggleDebug: () {},
+        ),
+      ),
+    ));
+    expect(find.byKey(const Key('rest-toast')), findsOneWidget);
+    expect(tester.widget<Text>(find.text(line)).style!.fontSize, greaterThanOrEqualTo(18));
+    expect(tester.getTopLeft(find.text(line)).dy, lessThan(tester.getTopLeft(find.text('王叔好')).dy));
+  });
+
+  testWidgets('no caption and no toast unless given', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AvatarOverlay(
+          userLine: '', aiLine: '', status: '', error: null, muted: false, name: '小暖',
+          onMute: () {}, onEnd: () {}, onToggleDebug: () {},
+        ),
+      ),
+    ));
+    expect(find.byKey(const Key('ai-caption')), findsNothing);
+    expect(find.byKey(const Key('rest-toast')), findsNothing);
+  });
 }

@@ -19,10 +19,15 @@ class UiState extends NativeUiEvent {
 }
 
 class UiSubtitle extends NativeUiEvent {
-  const UiSubtitle({required this.role, required this.text, required this.isFinal});
+  const UiSubtitle({required this.role, required this.text, required this.isFinal, this.responseSeq});
   final String role;
   final String text;
   final bool isFinal;
+
+  /// Assistant subtitles carry their response; null for user lines and filler clips.
+  final int? responseSeq;
+
+  /// WebView contract: unchanged, without the sequence.
   @override
   Map<String, Object> toJson() => {'type': 'subtitle', 'role': role, 'text': text, 'final': isFinal};
 }

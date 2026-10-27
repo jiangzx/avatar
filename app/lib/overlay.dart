@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Native UI drawn over the WebView avatar. Large text and touch targets (≥18 sp, ≥60 dp).
+/// Native UI drawn over the avatar. Large text and touch targets (≥18 sp, ≥60 dp).
 class AvatarOverlay extends StatelessWidget {
   const AvatarOverlay({
     super.key,
@@ -16,6 +16,8 @@ class AvatarOverlay extends StatelessWidget {
     this.onRetry,
     this.debugPanel,
     this.presence,
+    this.caption,
+    this.toast,
   });
 
   final String userLine;
@@ -35,8 +37,19 @@ class AvatarOverlay extends StatelessWidget {
   /// Optional status pill shown just above the subtitle card.
   final Widget? presence;
 
+  /// Always-on AI notice under the top row (spec「AI 提示」); null hides it.
+  final String? caption;
+
+  /// Rest-reminder text above the subtitles; null hides it.
+  final String? toast;
+
   @override
   Widget build(BuildContext context) {
+    final error = this.error;
+    final presence = this.presence;
+    final debugPanel = this.debugPanel;
+    final caption = this.caption;
+    final toast = this.toast;
     return SafeArea(
       child: Stack(
         children: [
@@ -58,6 +71,28 @@ class AvatarOverlay extends StatelessWidget {
               right: 12,
               child: Text(status, style: const TextStyle(color: Colors.amberAccent, fontSize: 16)),
             ),
+          if (caption != null)
+            // Below the name and status row, above the face; never takes taps.
+            Positioned(
+              top: 52,
+              left: 12,
+              right: 12,
+              child: IgnorePointer(
+                child: Center(
+                  child: Container(
+                    key: const Key('ai-caption'),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(color: const Color(0x42000000), borderRadius: BorderRadius.circular(12)),
+                    child: Text(
+                      caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 18),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           Positioned(
             left: 16,
             right: 16,
@@ -66,8 +101,21 @@ class AvatarOverlay extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (toast != null) ...[
+                  Container(
+                    key: const Key('rest-toast'),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xE6203A38),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.tealAccent),
+                    ),
+                    child: Text(toast, style: const TextStyle(color: Colors.white, fontSize: 20)),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 if (presence != null) ...[
-                  Align(alignment: Alignment.centerLeft, child: presence!),
+                  Align(alignment: Alignment.centerLeft, child: presence),
                   const SizedBox(height: 8),
                 ],
                 Container(
@@ -107,7 +155,7 @@ class AvatarOverlay extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 20)),
+                    Text(error, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 20)),
                     if (onRetry != null) ...[
                       const SizedBox(height: 12),
                       TextButton(key: const Key('retry'), onPressed: onRetry, child: const Text('重试')),
@@ -116,7 +164,7 @@ class AvatarOverlay extends StatelessWidget {
                 ),
               ),
             ),
-          if (debugPanel != null) Positioned(top: 128, left: 8, right: 8, child: debugPanel!),
+          if (debugPanel != null) Positioned(top: 128, left: 8, right: 8, child: debugPanel),
         ],
       ),
     );

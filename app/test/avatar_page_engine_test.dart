@@ -1,5 +1,6 @@
 import 'package:avatar_app/avatar_engine/avatar_engine.dart';
 import 'package:avatar_app/avatar_page.dart';
+import 'package:avatar_app/companion_config.dart';
 import 'package:avatar_app/native_audio/audio_types.dart';
 import 'package:avatar_app/native_audio/speech_detector.dart';
 import 'package:avatar_app/native_session/events.dart';
@@ -167,5 +168,27 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     expect(engine.disposed, isTrue);
     expect(platform.wakelock, [true, false]);
+  });
+
+  testWidgets('the chat page shows the AI caption from the companion config', (tester) async {
+    final engine = FakeEngine();
+    await tester.pumpWidget(MaterialApp(
+      home: AvatarPage(
+        engineFactory: () => engine,
+        platform: FakePlatform(),
+        displayName: '小暖',
+        companion: const CompanionConfig(aiCaption: '我是 AI 陪伴，不是真人', restToastMs: 6000),
+      ),
+    ));
+    await tester.pump();
+    expect(find.text('我是 AI 陪伴，不是真人'), findsOneWidget);
+    expect(find.text('小暖'), findsOneWidget);
+    expect(find.byKey(const Key('rest-toast')), findsNothing);
+  });
+
+  testWidgets('without a companion config the page shows no caption', (tester) async {
+    await tester.pumpWidget(page(FakeEngine(), FakePlatform()));
+    await tester.pump();
+    expect(find.byKey(const Key('ai-caption')), findsNothing);
   });
 }

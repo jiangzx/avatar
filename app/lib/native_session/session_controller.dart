@@ -323,7 +323,7 @@ class NativeSessionController implements GatewayClientEvents {
         if (responseSeq <= _seqFloor) return;
         final next = '${_assistantText[responseSeq] ?? ''}$text';
         _assistantText[responseSeq] = next;
-        emit(UiSubtitle(role: 'assistant', text: next, isFinal: false));
+        emit(UiSubtitle(role: 'assistant', text: next, isFinal: false, responseSeq: responseSeq));
       case AvatarAction(:final action, :final source):
         emit(UiAvatarAction(action: action, source: source));
       case AvatarEmotion(:final emotion):
