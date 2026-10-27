@@ -14,6 +14,7 @@ import { loadMemoryBudget } from '../pacing.ts';
 import type { TurnAccess } from '../turnAccess.ts';
 import { consentTool } from './consent.ts';
 import { forgetTool } from './forget.ts';
+import { listTool } from './list.ts';
 import { pinTool } from './pin.ts';
 import { recallTool } from './recall.ts';
 import { loadWeatherConfig, weatherTool, type WeatherFetch } from './weather.ts';
@@ -82,6 +83,8 @@ export interface ToolRegistryOptions {
   healthWords?: readonly string[];
   /** Wait for this turn's user final; omitted = pinFinalWaitMs from gateway/config/memory.json. */
   turnFinalTimeoutMs?: number;
+  /** list_memory cap; omitted = gateway/config/memory.json listMaxItems. */
+  listMaxItems?: number;
 }
 
 function performActionTool(options: ToolRegistryOptions): ToolHandler {
@@ -94,7 +97,7 @@ function performActionTool(options: ToolRegistryOptions): ToolHandler {
   };
 }
 
-/** Recall, forget, pin, consent, perform_action, and weather. Unknown names do not throw. */
+/** Recall, forget, pin, list, consent, perform_action, and weather. Unknown names do not throw. */
 export class ToolRegistry {
   constructor(private readonly tools: readonly ToolHandler[]) {}
 
@@ -151,6 +154,10 @@ export function createToolRegistry(options: ToolRegistryOptions): ToolRegistry {
       maxPerCharacter: options.pinLimits?.maxPerCharacter ?? MEMORY_DEFAULTS.pinMaxPerCharacter,
       maxChars: options.pinLimits?.maxChars ?? MEMORY_DEFAULTS.pinMaxChars[options.language],
       turnFinalTimeoutMs: options.turnFinalTimeoutMs ?? MEMORY_DEFAULTS.pinFinalWaitMs,
+    }),
+    listTool({
+      copy: options.memory.list,
+      maxItems: options.listMaxItems ?? MEMORY_DEFAULTS.listMaxItems,
     }),
     consentTool({
       prompt: options.memory.declineConfirmPrompt,

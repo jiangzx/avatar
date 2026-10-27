@@ -87,5 +87,13 @@
     "toolDescription": "Call when the user clearly asks you to remember something: what they are saying now, or what they said just before. Pass only target and never paraphrase the content; the gateway uses the user's own words. After calling, say only the line the gateway returns.",
     "targetDescription": "this=the thing to remember is in this user line; previous=the user wants you to remember what they said just before"
   },
+  "list": {
+    "introText": "Here's what I remember: ",
+    "itemJoiner": "; ",
+    "itemEnd": ". ",
+    "sensitiveHint": "There are also some health notes you can see in Settings.",
+    "emptyText": "I haven't noted anything yet. Take your time and tell me.",
+    "toolDescription": "Call when the user asks what you remember about them. Do not list or guess yourself; the gateway reads out what is remembered. After calling, say only the line the gateway returns."
+  },
   "healthWords": ["blood pressure", "blood sugar", "diabetes", "heart", "stroke", "cancer", "tumor", "chemo", "medicine", "medication", "pill", "pills", "insulin", "hospital", "clinic", "doctor", "surgery", "operation", "checkup", "illness", "sick", "pain", "hurts", "dizzy", "insomnia", "fracture", "arthritis", "knee", "back pain", "allergy", "allergic", "depression", "anxiety", "dementia"]
 }

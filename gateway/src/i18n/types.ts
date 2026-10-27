@@ -92,6 +92,17 @@ export interface PinCopy {
   targetDescription: string;
 }
 
+/** list_memory template copy (spec 附录 B). */
+export interface ListCopy {
+  introText: string;
+  itemJoiner: string;
+  /** Closes the item run before an optional hint ("。" / ". "). */
+  itemEnd: string;
+  sensitiveHint: string;
+  emptyText: string;
+  toolDescription: string;
+}
+
 /** Everything one language needs for memory and evidence handling. */
 export interface MemoryCopy {
   noticeKeywords: readonly string[];
@@ -105,6 +116,7 @@ export interface MemoryCopy {
   addressingPatterns: readonly RegExp[];
   extractLabels: ExtractLabels;
   pin: PinCopy;
+  list: ListCopy;
   /** A pinned line that contains one of these is sensitive (kept out of greeting/proactive views). */
   healthWords: readonly string[];
 }

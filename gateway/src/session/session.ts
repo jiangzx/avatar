@@ -101,6 +101,8 @@ export interface SessionDeps {
   toolTurnTimeoutMs?: number;
   /** pin_memory limits (gateway/config/memory.json). Omitted in tests: the registry reads that file. */
   pin?: { maxPerCharacter: number; maxChars: Record<Language, number>; finalWaitMs: number };
+  /** list_memory cap (gateway/config/memory.json). Omitted in tests: the registry reads that file. */
+  listMaxItems?: number;
   /** Instruction size budget (gateway/config/memory.json); undefined = unbounded (tests). */
   budget?: InstructionBudget;
   /** Per-language instruction budgets; the current language's entry wins over `budget`. */
@@ -795,6 +797,7 @@ export class Session {
         healthWords: unique(LANGUAGES.flatMap((code) => i18n.memory[code].healthWords)),
         // Tests without deps.pin use the shipped default from gateway/config/memory.json.
         turnFinalTimeoutMs: this.deps.pin?.finalWaitMs ?? MEMORY_DEFAULTS.pinFinalWaitMs,
+        listMaxItems: this.deps.listMaxItems,
       });
       this.tools.set(language, tools);
     }

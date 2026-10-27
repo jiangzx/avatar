@@ -119,6 +119,14 @@ const MemoryFileSchema = z.object({
     toolDescription: z.string().min(1),
     targetDescription: z.string().min(1),
   }).strict(),
+  list: z.object({
+    introText: z.string().min(1).max(40),
+    itemJoiner: z.string().min(1).max(4),
+    itemEnd: z.string().min(1).max(4),
+    sensitiveHint: z.string().min(1).max(80),
+    emptyText: z.string().min(1).max(80),
+    toolDescription: z.string().min(1),
+  }).strict(),
   healthWords: PhraseList,
 }).strict();
 
@@ -276,6 +284,7 @@ function loadMemoryCopy(configRoot: string, language: Language): MemoryCopy {
     addressingPatterns: raw.addressingPatterns.map((source) => compilePattern(source, language, 'addressingPatterns')),
     extractLabels: raw.extractLabels,
     pin: raw.pin,
+    list: raw.list,
     healthWords: raw.healthWords,
   };
 }

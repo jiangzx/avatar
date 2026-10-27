@@ -632,7 +632,7 @@ describe('memory tool registry', () => {
     expect(ftsTexts(db, a.ownerId, '王叔')).toEqual([]);
     expect(factRows(store, a.ownerId, a.agentId)).toEqual([]);
     expect(counts(db, a.ownerId)).toMatchObject({ notes: 0, episodes: 0, followups: 0, changes: 0 });
-    expect(store.getOwner(a.ownerId)?.memoryEpoch).toBe(1);
+    expect(store.memoryEpochs(a.ownerId, a.agentId)).toEqual({ owner: 0, agent: 1 });
     expect(pendingUserRows(store, b.ownerId, b.agentId).map((row) => row.text)).toEqual(['王叔是邻居']);
     expect(factRows(store, b.ownerId, b.agentId)).toEqual([{ category: 'preference', text: '王叔喜欢喝茶b' }]);
     expect(counts(db, b.ownerId)).toEqual(beforeB);
@@ -664,7 +664,7 @@ describe('memory tool registry', () => {
     await extract;
 
     expect(factRows(store, a.ownerId, a.agentId)).toEqual([]);
-    expect(store.getOwner(a.ownerId)?.memoryEpoch).toBe(1);
+    expect(store.memoryEpochs(a.ownerId, a.agentId)).toEqual({ owner: 0, agent: 1 });
   });
 
   it('speaks the decline prompt before deleting, then wipes only that owner', async () => {

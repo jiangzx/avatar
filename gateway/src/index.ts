@@ -175,6 +175,7 @@ const manager = new SessionManager(
       push: pacing.push,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
       pin: { maxPerCharacter: memory.pinMaxPerCharacter, maxChars: memory.pinMaxChars, finalWaitMs: memory.pinFinalWaitMs },
+      listMaxItems: memory.listMaxItems,
       emotion: i18n.emotion,
       affect,
       languageRules: i18n.language,
