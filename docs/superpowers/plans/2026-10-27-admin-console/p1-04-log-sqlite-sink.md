@@ -321,8 +321,8 @@ export class SqliteLogSink implements LogSink {
   }
 
   close(): void {
+    // flush() owns timer cleanup: inside a transaction it schedules the retry instead.
     this.flush();
-    this.cancelTimers();
     this.closed = true;
   }
 
@@ -352,7 +352,7 @@ export function deleteLogsBefore(db: DatabaseSync, cutoff: number, limit: number
 }
 ```
 
-注意：`close()` 在数据库处于事务中时会把 flush 推迟到定时器；退出流程里在 `memoryDb.close()` 之前调用，此时没有事务。
+注意：`close()` 只调用 `flush()`，定时器由 `flush()` 自己清理；数据库处于事务中时，`flush()` 会把写入推迟到定时器重试而不是丢弃队列。退出流程里在 `memoryDb.close()` 之前调用，此时没有事务。
 
 - [ ] **Step 8: 运行，确认通过**
 

@@ -88,6 +88,17 @@ describe('SqliteLogSink', () => {
     sink.write(line('b'));
     expect(rows(d)).toHaveLength(1);
   });
+
+  it('close defers the flush while a transaction is open instead of discarding', async () => {
+    const d = db();
+    const sink = new SqliteLogSink({ db: d, flushMs: 10, maxBatch: 50 });
+    d.exec('BEGIN');
+    sink.write(line('a'));
+    sink.close();
+    d.exec('COMMIT');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(rows(d)).toHaveLength(1);
+  });
 });
 
 describe('deleteLogsBefore', () => {

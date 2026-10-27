@@ -61,8 +61,8 @@ export class SqliteLogSink implements LogSink {
   }
 
   close(): void {
+    // flush() owns timer cleanup: inside a transaction it schedules the retry instead.
     this.flush();
-    this.cancelTimers();
     this.closed = true;
   }
 
