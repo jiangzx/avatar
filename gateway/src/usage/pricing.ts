@@ -56,12 +56,24 @@ export function hasUsageDetails(usage: TokenUsage): boolean {
 }
 
 /**
- * Cost of one call in micro-yuan. With details each field uses its own unit (missing audio or cached
- * prices fall back to the text price; cached tokens are part of input text). Totals-only usage is
- * priced entirely as text.
+ * True when the detail fields add up to both totals, so per-modality pricing is exact.
+ * A side without details counts only when its total is zero; no details at all is not complete.
+ */
+export function hasCompleteUsageDetails(usage: TokenUsage): boolean {
+  if (!hasUsageDetails(usage)) return false;
+  const inputDetails = (usage.inputTextTokens ?? 0) + (usage.inputAudioTokens ?? 0);
+  if (inputDetails !== usage.inputTokens) return false;
+  const outputDetails = (usage.outputTextTokens ?? 0) + (usage.outputAudioTokens ?? 0);
+  return outputDetails === usage.outputTokens;
+}
+
+/**
+ * Cost of one call in micro-yuan. With complete details each field uses its own unit (missing audio
+ * or cached prices fall back to the text price; cached tokens are part of input text). Totals-only
+ * and partially detailed usage is priced entirely as text, so missing modalities cannot bill at 0.
  */
 export function costMicroYuan(price: PriceEntry, usage: TokenUsage): number {
-  if (!hasUsageDetails(usage)) {
+  if (!hasCompleteUsageDetails(usage)) {
     return Math.round((usage.inputTokens * price.inputText + usage.outputTokens * price.outputText) / 1e6);
   }
   const inText = usage.inputTextTokens ?? 0;

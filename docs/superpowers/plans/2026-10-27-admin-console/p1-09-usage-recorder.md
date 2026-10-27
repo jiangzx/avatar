@@ -26,7 +26,7 @@
 - Consumes：
   - C1 `usage_events` 列（逐列写入）。
   - C2 `Logger`（只用 `warn`）。
-  - C3 `UsageRecord`、`UsageRecorder`、`UsageTag`、`UsageAttribution`、`PriceBook`、`costMicroYuan`；P1-T8 的 `hasUsageDetails(usage): boolean`；P1-T7 的 `withUsageTag(client, tag)`、`MockOptions.emitUsage`、`QwenTextClientOptions.recorder`、`QwenSummarizerOptions.{recorder, tag}`。
+  - C3 `UsageRecord`、`UsageRecorder`、`UsageTag`、`UsageAttribution`、`PriceBook`、`costMicroYuan`；P1-T8 的 `hasUsageDetails(usage): boolean`、`hasCompleteUsageDetails(usage): boolean`；P1-T7 的 `withUsageTag(client, tag)`、`MockOptions.emitUsage`、`QwenTextClientOptions.recorder`、`QwenSummarizerOptions.{recorder, tag}`。
 - Produces：
   - C3 逐字：
     ```ts
@@ -49,7 +49,7 @@
 | `input_text_tokens` … `cached_tokens` | `usage` 对应字段，缺失写 NULL |
 | `input_tokens`、`output_tokens` | `usage.inputTokens`、`usage.outputTokens`；`usage` 为 null 时 NULL |
 | `first_audio_ms`、`gen_ms`、`error_code` | `record` 原样，缺失写 NULL |
-| `estimated` | `usage` 非 null 且（`usage.estimated` 为 true 或 `!hasUsageDetails(usage)`）时为 1，否则 0 |
+| `estimated` | `usage` 非 null 且（`usage.estimated` 为 true 或 `!hasCompleteUsageDetails(usage)`）时为 1，否则 0（details 不完整时费用按总数/文本价计，见 P1-T8） |
 | `price_id`、`cost_micro_yuan` | `usage` 非 null 且 `prices.priceFor(model, ts)` 有值时写价格 id 与 `costMicroYuan`；否则都为 NULL（「未定价」或失败调用） |
 
 - 批量：队列满 `maxBatch` 立即 flush；另有 `setInterval(flushMs)`，`unref()`。

@@ -29,3 +29,4 @@
 - p1-06 Step 13：本机有 Docker CLI 29.9.2 但无 compose 插件，`docker compose -f docker-compose.gateway.yml config --quiet` 无法运行；日志轮转配置已加，YAML 由系统 Ruby 解析验证，需在装有 compose 插件的环境复跑该检查。
 - 退出时的窄窗口：若其他写者恰在事务中，日志/用量队列可能来不及落盘（P1-T4/P1-T9 复查记录的同类残留）；本次 smoke 的关闭路径未触发，`usageRowsAfterShutdown` 断言通过。
 - 两个 smoke 均使用临时库与合成文本（「合成验收：我喜欢晨练」），未触碰真实记忆库；日志与 stdout 的内容泄漏检查均为 0。
+- 终审修复补充了 details 不完整时的回退（按总数/文本价计并 `estimated=1`）；两次 smoke 的上游 usage details 均完整，原证据仍成立。

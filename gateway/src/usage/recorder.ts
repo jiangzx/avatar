@@ -1,6 +1,6 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import type { Logger, LogFields } from '../log/logger.ts';
-import { costMicroYuan, hasUsageDetails, type PriceBook } from './pricing.ts';
+import { costMicroYuan, hasCompleteUsageDetails, type PriceBook } from './pricing.ts';
 import type { UsageRecord, UsageRecorder } from './types.ts';
 
 type Cell = string | number | null;
@@ -123,7 +123,7 @@ export class SqliteUsageRecorder implements UsageRecorder {
     const ts = r.ts ?? this.now();
     const u = r.usage;
     const price = u ? this.opts.prices.priceFor(r.model, ts) : null;
-    const estimated = u !== null && (u.estimated === true || !hasUsageDetails(u)) ? 1 : 0;
+    const estimated = u !== null && (u.estimated === true || !hasCompleteUsageDetails(u)) ? 1 : 0;
     const a = r.attribution;
     return [
       ts, a.ownerId, a.agentId, a.sessionId, a.characterId, r.kind, r.adapter, r.model,

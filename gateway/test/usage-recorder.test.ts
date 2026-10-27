@@ -83,6 +83,18 @@ describe('SqliteUsageRecorder', () => {
     expect(mock).toMatchObject({ estimated: 1, price_id: null, cost_micro_yuan: null, output_audio_tokens: 4 });
   });
 
+  it('marks partial usage details as estimated and prices both totals as text', () => {
+    const s = setup();
+    const base = { kind: 'realtime_reply', attribution: attribution(s.who) } as const;
+    // Input details 40 of 100: incomplete, so the whole call uses the totals/text price.
+    s.recorder.record({ ...base, adapter: 'qwen', model: 'qwen3.8-omni-flash-realtime', usage: { inputTokens: 100, outputTokens: 90, inputTextTokens: 40, outputTextTokens: 15, outputAudioTokens: 75 } });
+    s.recorder.record({ ...base, adapter: 'qwen', model: 'qwen3.8-omni-flash-realtime', usage: { inputTokens: 300, outputTokens: 90, inputTextTokens: 260, inputAudioTokens: 40, outputTextTokens: 15, outputAudioTokens: 75 } });
+    s.recorder.flush();
+    const [partial, complete] = s.rows();
+    expect(partial).toMatchObject({ estimated: 1, price_id: 'qwen3.8-omni-flash-realtime@1767196800000', cost_micro_yuan: 555 });
+    expect(complete).toMatchObject({ estimated: 0, cost_micro_yuan: 1598 });
+  });
+
   it('records failed text calls without tokens or cost', () => {
     const s = setup();
     s.recorder.record({ kind: 'memory_extract', adapter: 'text', model: 'qwen-plus', usage: null, errorCode: 'extract_http_429', genMs: 12,

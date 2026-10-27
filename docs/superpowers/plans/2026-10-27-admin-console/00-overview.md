@@ -331,7 +331,7 @@ export class SqliteUsageRecorder implements UsageRecorder {
 - `SessionDeps` 新增 `usage?: UsageRecorder` 和 `usageSource?: { adapter: 'qwen' | 'mock'; model: string }`，两者都有才记录 realtime 回复。Seeduplex 不传 `usageSource`，所以不计。`ReplyMetrics` 新增 `usage: TokenUsage | null`；`metricFields` 不变。
 - `export function purgeExpiredUsage(db: DatabaseSync, olderThan: number, limit: number): number`（P1-T10）。
 - 外键：owner 被删除后，recorder 队列里仍引用它的行在写入时违反外键。处理方式：该批改为逐行写入，丢弃违反外键的行，其余照常写入，`flush()` 不抛错（P1-T9 实现，P2-T5 有测试钉住）。
-- 计价：有 details 时按音频/文本分别计；只有总数时，全部按文本单价计并 `estimated=1`；`usage.estimated` 为 true 时同样 `estimated=1`；`priceFor` 返回 null 时 `price_id`、`cost_micro_yuan` 为 NULL。
+- 计价：details 完整（输入/输出两侧的 details 之和分别等于 `inputTokens`/`outputTokens`；无 details 的一侧总数为 0 也算完整）时按音频/文本分别计；只有总数或 details 不完整时，全部按文本单价计并 `estimated=1`；`usage.estimated` 为 true 时同样 `estimated=1`；`priceFor` 返回 null 时 `price_id`、`cost_micro_yuan` 为 NULL。
 - Session：deps 新增可选 `usage?: UsageRecorder`；每条回复 `finish()` 时用 `kind='realtime_reply'` 记录一次。归属来自 `SessionContext` 与 sessionId。
 
 ### C4 会话结束原因（P1-T10）

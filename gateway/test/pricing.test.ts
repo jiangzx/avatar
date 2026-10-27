@@ -5,7 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../src/memory/db.ts';
-import { SqlitePriceBook, costMicroYuan, hasUsageDetails, loadPricingBaseline, type PriceEntry } from '../src/usage/pricing.ts';
+import { SqlitePriceBook, costMicroYuan, hasCompleteUsageDetails, hasUsageDetails, loadPricingBaseline, type PriceEntry } from '../src/usage/pricing.ts';
 
 const baselinePath = fileURLToPath(new URL('../config/pricing.json', import.meta.url));
 const JAN_1 = 1767196800000;
@@ -77,10 +77,42 @@ describe('costMicroYuan', () => {
     expect(costMicroYuan(realtime, { inputTokens: 1000, outputTokens: 100 })).toBe(1950);
   });
 
+  it('uses text prices for all totals when input details are partial', () => {
+    // Input details 40 of 100: incomplete, so both totals use text prices.
+    // 100*1.5e6 + 90*4.5e6 = 150e6 + 405e6 = 555e6 → 555
+    expect(costMicroYuan(realtime, { inputTokens: 100, outputTokens: 90, inputTextTokens: 40, outputTextTokens: 15, outputAudioTokens: 75 })).toBe(555);
+  });
+
+  it('uses text prices for all totals when output details are partial', () => {
+    // Output details 15 of 90: incomplete.
+    // 300*1.5e6 + 90*4.5e6 = 450e6 + 405e6 = 855e6 → 855
+    expect(costMicroYuan(realtime, { inputTokens: 300, outputTokens: 90, inputTextTokens: 260, inputAudioTokens: 40, outputTextTokens: 15 })).toBe(855);
+  });
+
+  it('keeps per-modality prices for a pure-text realtime shape whose details add up', () => {
+    // input 100 text; output 20 text + 30 audio, all complete.
+    // 100*1.5e6 + 20*4.5e6 + 30*12e6 = 150e6 + 90e6 + 360e6 = 600e6 → 600
+    expect(costMicroYuan(realtime, { inputTokens: 100, outputTokens: 50, inputTextTokens: 100, outputTextTokens: 20, outputAudioTokens: 30 })).toBe(600);
+  });
+
   it('reports whether details exist', () => {
     expect(hasUsageDetails({ inputTokens: 1, outputTokens: 1 })).toBe(false);
     expect(hasUsageDetails({ inputTokens: 1, outputTokens: 1, cachedTokens: 1 })).toBe(false);
     expect(hasUsageDetails({ inputTokens: 1, outputTokens: 1, outputAudioTokens: 1 })).toBe(true);
+  });
+
+  it('reports whether details represent both totals', () => {
+    expect(hasCompleteUsageDetails({ inputTokens: 100, outputTokens: 90 })).toBe(false);
+    // Any detail is not enough: input details are 40 of 100.
+    expect(hasCompleteUsageDetails({ inputTokens: 100, outputTokens: 90, inputTextTokens: 40, outputTextTokens: 15, outputAudioTokens: 75 })).toBe(false);
+    // Output details are 15 of 90.
+    expect(hasCompleteUsageDetails({ inputTokens: 300, outputTokens: 90, inputTextTokens: 260, inputAudioTokens: 40, outputTextTokens: 15 })).toBe(false);
+    expect(hasCompleteUsageDetails({ inputTokens: 300, outputTokens: 90, inputTextTokens: 260, inputAudioTokens: 40, outputTextTokens: 15, outputAudioTokens: 75 })).toBe(true);
+    // A side without details counts only when its total is zero.
+    expect(hasCompleteUsageDetails({ inputTokens: 10, outputTokens: 0, inputTextTokens: 10 })).toBe(true);
+    expect(hasCompleteUsageDetails({ inputTokens: 10, outputTokens: 5, inputTextTokens: 10 })).toBe(false);
+    // Cached tokens are already part of input text and do not make the totals incomplete.
+    expect(hasCompleteUsageDetails({ inputTokens: 100, outputTokens: 5, inputTextTokens: 100, cachedTokens: 40, outputTextTokens: 5 })).toBe(true);
   });
 });
 

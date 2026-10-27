@@ -27,18 +27,20 @@
     constructor(db: DatabaseSync, baseline: readonly PriceEntry[]);
     add(entry: Omit<PriceEntry, 'id'>, actor: string, now: number): PriceEntry;
   }
-  /** Extra export: true when any of the four detail fields is present. Used by P1-T9 for `estimated`. */
+  /** Extra export: true when any of the four detail fields is present. */
   export function hasUsageDetails(usage: TokenUsage): boolean;
+  /** Extra export: true when the detail fields add up to both totals. Used by P1-T9 for `estimated`. */
+  export function hasCompleteUsageDetails(usage: TokenUsage): boolean;
   ```
 - 单位：所有单价都是「微元 / 百万 token」（1 元 = 1,000,000 微元）。官方价 1.5 元/百万 → `1500000`。
 
 ## 计价规则（写进代码注释和测试）
 
-1. **有 details**（`inputTextTokens`、`inputAudioTokens`、`outputTextTokens`、`outputAudioTokens` 任一存在）：
+1. **details 完整**（输入侧 `inputTextTokens + inputAudioTokens = inputTokens`，输出侧 `outputTextTokens + outputAudioTokens = outputTokens`；某一侧没有 details 且该侧总数为 0 也算完整）：
    - 输入文本 = `inputTextTokens − cached`，按 `inputText` 计；`cached = min(cachedTokens ?? 0, inputTextTokens ?? 0)`，按 `cached ?? inputText` 计。
    - 输入音频按 `inputAudio ?? inputText` 计；输出文本按 `outputText` 计；输出音频按 `outputAudio ?? outputText` 计。
-   - 缺失的 detail 字段按 0 计。
-2. **只有总数**：`inputTokens × inputText + outputTokens × outputText`（P1-T9 会把这种行标 `estimated=1`）。
+   - 缺失的 detail 字段按 0 计（完整判定也按 0 计）。
+2. **只有总数或 details 不完整**：`inputTokens × inputText + outputTokens × outputText`。不完整的 details 不能按模态计价，否则缺失的模态会被当成 0 token（P1-T9 会把这种行标 `estimated=1`）。
 3. 结果 `Math.round(总和 / 1e6)`，单位微元。
 4. **找价格**：同一模型中 `effectiveFrom ≤ ts` 的最新一条；`effectiveFrom` 相同时数据库条目优先于基线。没有则返回 `null`（费用显示「未定价」）。
 
