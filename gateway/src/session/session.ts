@@ -1073,13 +1073,19 @@ export class Session {
       if (released) this.releaseToolTurn(false);
       else if (missedNotice) this.director.onAiTurnEnded();
     });
-    a.on('error', (code, retryable) => {
+    a.on('error', (code, retryable, detail) => {
       if (!current()) return;
       const errorClass = classifyAdapterError(code, this.toolTurn.active);
-      const fields = { code, class: errorClass };
-      if (errorClass === 'fatal') this.log.error('adapter_error', fields);
-      else if (errorClass === 'retryable') this.log.warn('adapter_error', fields);
-      else this.log.info('adapter_error', fields);
+      const fields = {
+        source: 'realtime',
+        code,
+        class: errorClass,
+        ...(detail?.httpStatus !== undefined ? { http_status: detail.httpStatus } : {}),
+        ...(detail?.requestId ? { upstream_request_id: detail.requestId } : {}),
+      };
+      if (errorClass === 'fatal') this.log.error('upstream_error', fields);
+      else if (errorClass === 'retryable') this.log.warn('upstream_error', fields);
+      else this.log.info('upstream_error', fields);
       this.metrics.onError(code);
       if (errorClass === 'ignorable') return;
       if (errorClass === 'retryable') void this.rebuild('error');

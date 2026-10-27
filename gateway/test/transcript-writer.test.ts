@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ownerShortId } from '../src/log/ownerId.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
 import { SqliteTranscriptWriter } from '../src/memory/writer.ts';
@@ -117,7 +118,7 @@ describe('TranscriptWriter', () => {
     expect(facts(db, told.agentId)).toEqual([{ category: 'safety', text: '验证码是 ', sensitive: 1 }]);
     expect(facts(db, other.agentId)).toEqual([]);
     const events = writes.map((line) => JSON.parse(line) as { event?: string; code?: string }).filter((event) => event.event === 'safety_event');
-    expect(events).toEqual([{ t: expect.any(String), event: 'safety_event', code: 'degrade' }]);
+    expect(events).toEqual([{ t: expect.any(String), level: 'warn', event: 'safety_event', sid: 's1', oid: `{E}${ownerShortId(told.ownerId)}`, code: 'degrade' }]);
     expect(writes.join('')).not.toContain('123456');
     expect(writes.join('')).not.toContain('验证码');
   });

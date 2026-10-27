@@ -7,7 +7,6 @@ import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
 import { loadCharacterRegistry } from './characters/registry.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
 import { missingRoleLanguages } from './roles/catalog.ts';
-import { log } from './log.ts';
 import { loadAdminConfig } from './log/adminConfig.ts';
 import { createLogLevelControl } from './log/levels.ts';
 import { createLogger } from './log/logger.ts';
@@ -53,7 +52,7 @@ const logger = createLogger({ sinks: logSink ? [stdout, logSink] : [stdout], lev
 logger.info('log_sink_ready', { db: logSink !== null, level: config.logLevel });
 // Character cards (gateway/characters/): the id set must equal protocol CHARACTER_IDS, or startup fails.
 const characters = loadCharacterRegistry(`${root}characters`, LANGUAGES);
-log('characters_loaded', { count: characters.ids().length });
+logger.info('characters_loaded', { count: characters.ids().length });
 // File-backed roles (M1): gateway/roles/<role>/<language>/ + gateway/roles/_shared/<language>/.
 const roles = loadRoleCatalog(`${root}roles`, characters);
 for (const characterId of characters.ids()) {
@@ -82,7 +81,7 @@ for (const language of LANGUAGES) {
   languageBudgetFields[`${language}AffectMaxChars`] = budget.affectMaxChars ?? 0;
   languageBudgetFields[`${language}PinnedMaxChars`] = budget.pinnedMaxChars ?? 0;
 }
-log('instruction_budget', {
+logger.info('instruction_budget', {
   totalChars: budgetReport.budget.totalChars,
   minHistoryChars: budgetReport.minHistoryChars,
   ledgerCapped: budgetReport.ledgerCapped,
@@ -95,7 +94,7 @@ for (const pair of roles.characterLanguagePairs()) {
     throw new Error(`memory_notice_keyword_missing:${pair.characterId}:${pair.language}`);
   }
 }
-log('safety_rules', {
+logger.info('safety_rules', {
   rejectPhrases: i18n.safety.rejectPhrases.length,
   degradePhrases: i18n.safety.degradePhrases.length,
   markPhrases: i18n.safety.markPhrases.length,
@@ -103,15 +102,15 @@ log('safety_rules', {
 });
 const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
-if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
+if (!speech) logger.warn('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
 const store = memoryDb ? new SqliteMemoryStore(memoryDb) : null;
 if (store) {
   // This process is the only gateway for the DB: any row still open belongs to a dead process.
   const reconciled = store.closeOpenSessions(Date.now());
-  if (reconciled > 0) log('sessions_reconciled', { count: reconciled });
+  if (reconciled > 0) logger.info('sessions_reconciled', { count: reconciled });
   // One bounded pass over rows written before kana tokens existed. Never log message text.
   const backfilled = backfillKanaBigrams(store, memory.kanaBackfillBatch ?? 500);
-  if (backfilled > 0) log('kana_bigram_backfill', { changed: backfilled });
+  if (backfilled > 0) logger.info('kana_bigram_backfill', { changed: backfilled });
 }
 const registry = store
   ? new DeviceRegistry({
@@ -126,16 +125,18 @@ const registry = store
       },
       continuityGapMs: pacing.restReminder.continuityGapMs,
       i18n,
+      logger,
     })
   : null;
-log('identity_mode', { enabled: registry !== null, devEndpoints: identityConfig.enableDevEndpoints });
-const memoryService = store ? createMemoryService({ store, safety: i18n.safety }) : undefined;
-const writer = store ? new SqliteTranscriptWriter(store, i18n.safety) : undefined;
+logger.info('identity_mode', { enabled: registry !== null, devEndpoints: identityConfig.enableDevEndpoints });
+const memoryService = store ? createMemoryService({ store, safety: i18n.safety, logger }) : undefined;
+const writer = store ? new SqliteTranscriptWriter(store, i18n.safety, logger) : undefined;
 const textClient = config.qwenApiKey && config.summarizerEndpoint
   ? new QwenTextClient({
       apiKey: config.qwenApiKey,
       endpoint: config.summarizerEndpoint,
       model: memory.extractModel ?? 'qwen-plus',
+      logger,
     })
   : null;
 const worker = store && textClient
@@ -150,15 +151,16 @@ const worker = store && textClient
       contextMaxChars: memory.extractContextMaxChars ?? 4_000,
       // Care quotes are stored only while the care feature is on (data minimization).
       ...(affect.enabled ? { quote: { maxChars: affect.care.quoteMaxChars, safety: i18n.safety, evidence: i18n.evidence } } : {}),
+      logger,
     })
   : null;
 // session.start() may wait up to care.timeoutMs for the care line; it must fit inside the start timeout.
 if (affect.enabled && affect.care.timeoutMs >= config.sessionStartTimeoutMs) {
   throw new Error(`care_timeout_exceeds_session_start: ${affect.care.timeoutMs} >= ${config.sessionStartTimeoutMs}`);
 }
-if (store && !textClient) log('memory_extract_unconfigured', {});
+if (store && !textClient) logger.warn('memory_extract_unconfigured');
 // Sessions get the text client only for real adapters; Mock runs stay lexicon-only.
-log('affect_analyzer', { enabled: affect.enabled && config.adapter !== 'mock' && textClient !== null });
+logger.info('affect_analyzer', { enabled: affect.enabled && config.adapter !== 'mock' && textClient !== null });
 const manager = new SessionManager(
   (ctx, sessionId, noticePending = false) =>
     new Session({
@@ -235,9 +237,10 @@ const server = createGatewayServer({
   sessionRateLimit: { max: config.sessionRateLimitMax, windowMs: config.sessionRateLimitWindowMs },
   resumeRateLimit: { max: config.resumeRateLimitMax, windowMs: config.resumeRateLimitWindowMs },
   trustProxy: config.trustProxy,
+  logger,
 });
 
-server.listen(config.port, '0.0.0.0', () => log('gateway_listening', { port: config.port, adapter: config.adapter }));
+server.listen(config.port, '0.0.0.0', () => logger.info('gateway_listening', { port: config.port, adapter: config.adapter }));
 
 let stopping = false;
 const shutdown = () => {
@@ -258,7 +261,7 @@ const shutdown = () => {
         logSink?.close();
         if (memoryDb?.isOpen) memoryDb.close();
       } catch {
-        log('memory_db_close_failed', {});
+        logger.error('memory_db_close_failed');
       }
       process.exit(0);
     }
@@ -286,6 +289,7 @@ function adapterVoice(characterId: CharacterId, language: Language): string | un
 /** Same daily timer as orphan cleanup. Age and batch come from memory.json. */
 async function expireTranscripts(): Promise<void> {
   if (!store) return;
+  const log = logger.child({ job: 'retention' });
   const olderThan = Date.now() - memory.retentionDays * DAY_MS;
   const limit = memory.retentionBatch;
   for (const ownerId of store.ownerIds()) {
@@ -295,19 +299,19 @@ async function expireTranscripts(): Promise<void> {
       try {
         deleted = store.deleteExpiredMessages(ownerId, olderThan, limit);
       } catch {
-        log('memory_retention_failed', {});
+        log.error('memory_retention_failed');
         break;
       }
-      log('memory_retention_batch', { deleted, ms: Math.round(performance.now() - started) });
+      log.info('memory_retention_batch', { deleted, ms: Math.round(performance.now() - started) });
       if (deleted < limit) break;
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
     // Quotes older than the care window can never be asked about; drop them even when care is off (data minimization).
     try {
       const cleared = store.clearStaleCareQuotes(ownerId, Date.now() - affect.care.maxAgeDays * DAY_MS);
-      if (cleared > 0) log('care_quote_retention', { cleared });
+      if (cleared > 0) log.info('care_quote_retention', { cleared });
     } catch {
-      log('care_quote_retention_failed', {});
+      log.error('care_quote_retention_failed');
     }
   }
 }
@@ -334,8 +338,8 @@ async function expireLogs(): Promise<void> {
 // Message retention uses that same timer. Facts and notes are not deleted by age.
 if (registry) {
   const runCleanup = () => {
-    registry.cleanupOrphans().catch(() => log('orphan_cleanup_failed', {}));
-    void expireTranscripts().catch(() => log('memory_retention_failed', {}));
+    registry.cleanupOrphans().catch(() => logger.child({ job: 'orphan_cleanup' }).error('orphan_cleanup_failed'));
+    void expireTranscripts().catch(() => logger.child({ job: 'retention' }).error('memory_retention_failed'));
     void expireLogs().catch(() => logger.error('log_retention_failed'));
   };
   void runCleanup();

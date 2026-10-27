@@ -33,6 +33,12 @@ export interface TokenUsage {
   outputTokens: number;
 }
 
+/** Upstream ids for support tickets. Never carries upstream messages (they may echo content). */
+export interface UpstreamErrorDetail {
+  httpStatus?: number;
+  requestId?: string;
+}
+
 export type AdapterEvents = {
   userSpeechStarted: [];
   /** Server-side VAD detected the end of user speech (Qwen `input_audio_buffer.speech_stopped`). */
@@ -46,7 +52,7 @@ export type AdapterEvents = {
   responseCancelled: [id: string];
   /** Token usage reported when a response completes (Qwen `response.done.response.usage`). */
   responseUsage: [id: string, usage: TokenUsage];
-  error: [code: string, retryable: boolean];
+  error: [code: string, retryable: boolean, detail?: UpstreamErrorDetail];
   closed: [];
 };
 

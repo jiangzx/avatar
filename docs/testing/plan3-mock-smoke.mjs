@@ -167,7 +167,7 @@ async function main() {
       clearTimeout(timeout);
       assert.equal(code, 0, 'gateway graceful shutdown');
       assert.equal(signal, null);
-      assert(!/http_internal_error|memory_retention_failed|orphan_cleanup_failed|adapter_error/.test(logs));
+      assert(!/http_internal_error|memory_retention_failed|orphan_cleanup_failed|upstream_error/.test(logs));
       assert(logs.trim().split('\n').at(-1).includes('session_destroyed'));
     }
   }

@@ -3,7 +3,8 @@ import type { CharacterId } from '@anyidea/protocol';
 import type { CharacterRegistry } from '../characters/registry.ts';
 import { DEFAULT_I18N } from '../i18n/load.ts';
 import type { I18nBundle } from '../i18n/types.ts';
-import { log } from '../log.ts';
+import { defaultLogger, type Logger } from '../log/logger.ts';
+import { ownerShortId } from '../log/ownerId.ts';
 import { memoryViewSource, renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
@@ -49,6 +50,8 @@ export interface DeviceRegistryDeps {
   snapshotMaxChars?: number;
   /** Language packs for the initial snapshot. Defaults to DEFAULT_I18N. */
   i18n?: I18nBundle;
+  /** Root logger. Omitted in tests: the stdout default. */
+  logger?: Logger;
 }
 
 /** Device registration and bearer → owner/agent resolution. Only token hashes are stored. */
@@ -83,7 +86,7 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     const deviceToken = newDeviceToken();
     const created = store.createOwner({ tokenHash: hashToken(deviceToken), now });
     // Agents are created per character on POST /session. Log only a short device hash.
-    log('device_registered', { device: shortHash(created.deviceId) });
+    this.log.child({ oid: ownerShortId(created.ownerId) }).info('device_registered', { device: shortHash(created.deviceId) });
     return { ok: true, deviceToken };
   }
 
@@ -93,14 +96,14 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     if (bearer === undefined) return { ok: true, ctx: devContext(roles, characters, characterId), noticePending: false };
     const device = store.findDevice(hashToken(bearer));
     if (!device) {
-      log('device_unknown', {});
+      this.log.info('device_unknown');
       return { ok: false };
     }
     const now = this.now();
     // One agent per owner × character, created at the first meeting. The character only selects among this owner's agents.
     const agent = store.ensureAgent(device.ownerId, characterId, now);
     store.touchDevice(device.ownerId, device.deviceId, now);
-    log('device_resolved', { agent: shortHash(agent.id), character: characterId });
+    this.log.child({ oid: ownerShortId(device.ownerId), char: characterId }).info('device_resolved', { agent: shortHash(agent.id) });
     const owner = store.getOwner(device.ownerId);
     const language = roles.defaultLanguage(characters.roleOf(characterId));
     const ctx: SessionContext = {
@@ -138,7 +141,7 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
 
   deleteOwner(ownerId: string): boolean {
     const deleted = this.deps.store.deleteOwner(ownerId);
-    log('dev_owner_deleted', { deleted });
+    this.log.child({ oid: ownerShortId(ownerId) }).warn('dev_owner_deleted', { deleted });
     return deleted;
   }
 
@@ -152,14 +155,18 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
       const deleted = store.deleteOrphanOwners(cutoff, limits.orphanCleanupBatch);
       total += deleted;
       // Synchronous batch time = event loop blocking time.
-      log('orphan_cleanup_batch', { deleted, ms: Math.round(performance.now() - started) });
+      this.log.child({ job: 'orphan_cleanup' }).info('orphan_cleanup_batch', { deleted, ms: Math.round(performance.now() - started) });
       if (deleted < limits.orphanCleanupBatch) return total;
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
   }
 
   private reject(error: RegisterError): RegisterResult {
-    log('device_register_rejected', { reason: error });
+    this.log.warn('device_register_rejected', { reason: error });
     return { ok: false, error };
+  }
+
+  private get log(): Logger {
+    return this.deps.logger ?? defaultLogger();
   }
 }

@@ -1,3 +1,5 @@
+import { defaultLogger, type Logger } from '../log/logger.ts';
+
 export interface TextModelClient {
   /** Ask the provider for one bare JSON object when jsonMode is set. */
   complete(input: { system: string; user: string; maxTokens: number; temperature?: number; jsonMode?: boolean; signal: AbortSignal }): Promise<string>;
@@ -7,7 +9,12 @@ export interface QwenTextClientOptions {
   apiKey: string;
   endpoint: string;
   model: string;
+  /** Logs upstream HTTP failures (status, code, request id). Omitted in tests and scripts: stdout default. */
+  logger?: Logger;
 }
+
+/** Response headers that may carry the upstream request id (P1-T1 probe A4: only x-request-id was observed). */
+export const UPSTREAM_REQUEST_ID_HEADERS: readonly string[] = ['x-request-id'];
 
 /** OpenAI-compatible chat call. The key stays in env; nothing here is logged. */
 export class QwenTextClient implements TextModelClient {
@@ -40,7 +47,15 @@ export class QwenTextClient implements TextModelClient {
       if (error instanceof DOMException && error.name === 'AbortError') throw new Error('extract_timeout');
       throw new Error('extract_network_error');
     }
-    if (!response.ok) throw new Error(`extract_http_${response.status}`);
+    if (!response.ok) {
+      const code = `extract_http_${response.status}`;
+      const requestId = UPSTREAM_REQUEST_ID_HEADERS.map((name) => response.headers.get(name)).find((value): value is string => Boolean(value));
+      const fields = { source: 'text', model: this.opts.model, code, http_status: response.status, ...(requestId ? { upstream_request_id: requestId } : {}) };
+      const logger = this.opts.logger ?? defaultLogger();
+      if (response.status === 429 || response.status >= 500) logger.warn('upstream_error', fields);
+      else logger.error('upstream_error', fields);
+      throw new Error(code);
+    }
     let payload: unknown;
     try { payload = await response.json(); } catch { throw new Error('extract_invalid_json'); }
     const content = messageContent(payload);

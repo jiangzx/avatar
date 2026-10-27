@@ -187,8 +187,9 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     if (type === 'response.function_call_arguments.done') { const item = (e.item ?? e) as Json; let args: unknown = {}; try { args = JSON.parse(String(item.arguments ?? '{}')); } catch {} this.emit('toolCall', this.responseIdFrom(e), String(item.call_id ?? ''), String(item.name ?? ''), args); return; }
     if (type === 'error') {
       const err = e.error as Json | undefined;
+      const requestId = qwenErrorRequestId(e);
       if (this.initialization) this.failInitialization('qwen_session_rejected');
-      else this.emit('error', String(err?.code ?? err?.type ?? 'qwen_error'), true);
+      else this.emit('error', String(err?.code ?? err?.type ?? 'qwen_error'), true, requestId ? { requestId } : undefined);
     }
   }
   private responseIdFrom(e: Json): string { return typeof e.response_id === 'string' ? e.response_id : (this.responseId ?? 'unknown'); }
@@ -201,4 +202,10 @@ function parseUsage(raw: unknown): TokenUsage | null {
   if (!raw || typeof raw !== 'object') return null;
   const u = raw as Json;
   return typeof u.input_tokens === 'number' && typeof u.output_tokens === 'number' ? { inputTokens: u.input_tokens, outputTokens: u.output_tokens } : null;
+}
+
+/** The only id path a Qwen error event carries (P1-T1 probe A4). Never reads the message. */
+export function qwenErrorRequestId(event: Json): string | undefined {
+  const value = event.event_id;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }

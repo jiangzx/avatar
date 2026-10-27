@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { SafetyRules } from '../config.ts';
 import { DEFAULT_I18N } from '../i18n/load.ts';
-import { log } from '../log.ts';
+import { defaultLogger, type Logger } from '../log/logger.ts';
+import { ownerShortId } from '../log/ownerId.ts';
 import { bigrams } from './bigram.ts';
 import { redact } from './redact.ts';
 import { scanText } from './scan.ts';
@@ -45,6 +46,7 @@ export class SqliteTranscriptWriter implements TranscriptWriter {
   constructor(
     private readonly store: MemoryStore,
     private readonly rules: SafetyRules = DEFAULT_I18N.safety,
+    private readonly logger: Logger = defaultLogger(),
   ) {
     this.digitChars = new Set(Object.keys(rules.chineseDigits));
   }
@@ -66,7 +68,7 @@ export class SqliteTranscriptWriter implements TranscriptWriter {
     let text = redact(input.text);
     if (verdict === 'degrade') {
       text = stripDigits(text, this.digitChars);
-      log('safety_event', { code: 'degrade' });
+      this.logger.child({ sid: input.sessionId, oid: ownerShortId(input.ownerId) }).warn('safety_event', { code: 'degrade' });
     }
     const messageId = randomUUID();
     this.store.insertMessage({

@@ -79,11 +79,14 @@ describe('session logging', () => {
     expect(metrics[0]!.fields).toHaveProperty('reply_chars');
   });
 
-  it('logs adapter errors at the level of their class', async () => {
+  it('logs upstream errors at the level of their class, with the request id', async () => {
     const cap = captureLogger();
     const { adapter, session } = await startedWith(cap.logger);
-    adapter.emit('error', 'qwen_session_rejected', false);
-    expect(cap.events('adapter_error').map((l) => [l.level, l.fields])).toEqual([['error', { code: 'qwen_session_rejected', class: 'fatal' }]]);
+    adapter.emit('error', 'qwen_session_rejected', false, { requestId: 'evt-1' });
+    expect(cap.events('upstream_error').map((l) => [l.level, l.fields])).toEqual([
+      ['error', { source: 'realtime', code: 'qwen_session_rejected', class: 'fatal', upstream_request_id: 'evt-1' }],
+    ]);
+    expect(cap.events('adapter_error')).toEqual([]);
     session.end();
   });
 

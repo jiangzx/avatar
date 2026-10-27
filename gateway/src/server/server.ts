@@ -3,7 +3,9 @@ import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import { DEFAULT_CHARACTER_ID, FRAME_AI, FRAME_MIC, MIC_FRAME_SAMPLES, decodeAudioFrame, encodeAudioFrame } from '@anyidea/protocol';
 import type { IdentityService } from '../identity/registry.ts';
 import type { MemoryService } from '../identity/memoryService.ts';
-import { log } from '../log.ts';
+import { defaultLogger, type Logger } from '../log/logger.ts';
+import { ownerShortId } from '../log/ownerId.ts';
+import { errorCodeOf } from '../reliability/policy.ts';
 import type { ContextResolver } from '../session/context.ts';
 import type { SessionManager } from '../session/manager.ts';
 import type { Transport } from '../session/session.ts';
@@ -46,6 +48,8 @@ export interface GatewayServerOptions {
   memory?: MemoryService;
   /** Separate bucket for the memory routes (MEMORY_RATE_LIMIT_*). */
   memoryRateLimit?: { max: number; windowMs: number };
+  /** Root logger. Omitted in tests: the stdout default. */
+  logger?: Logger;
 }
 
 const BEARER = /^Bearer ([A-Za-z0-9_-]{16,128})$/;
@@ -66,7 +70,7 @@ export function createGatewayServer(opts: GatewayServerOptions): Server {
   };
   const server = createServer((req, res) => {
     handleHttp(req, res, opts, limiters).catch(() => {
-      log('http_internal_error', {});
+      loggerOf(opts).error('http_internal_error');
       if (!res.headersSent) json(res, 500, { error: 'internal' });
     });
   });
@@ -209,7 +213,7 @@ async function createSession(req: IncomingMessage, res: ServerResponse, opts: Ga
   // The body names the character only; owner and agent come only from the bearer. No body = default character.
   const body = SessionCreateSchema.safeParse(await readJson(req, 1024, {}));
   if (!body.success) {
-    log('session_rejected', { reason: 'unknown_character' });
+    loggerOf(opts).info('session_rejected', { reason: 'unknown_character' });
     json(res, 400, { error: 'unknown_character' });
     return;
   }
@@ -310,7 +314,7 @@ async function handleMemory(req: IncomingMessage, res: ServerResponse, opts: Gat
       const overview = route.memory.overview(ownerId);
       const count = (overview.profile.addressing ? 1 : 0) + overview.profile.items.length
         + overview.characters.reduce((sum, group) => sum + group.pinned.length + group.facts.length, 0);
-      log('memory_http', { op: 'overview', count, ms: Math.round(performance.now() - startedAt) });
+      loggerOf(opts).child({ oid: ownerShortId(ownerId) }).info('memory_http', { op: 'overview', count, ms: Math.round(performance.now() - startedAt) });
       json(res, 200, overview);
       return;
     }
@@ -357,7 +361,7 @@ async function handleMemory(req: IncomingMessage, res: ServerResponse, opts: Gat
       break;
     }
   }
-  log('memory_http', { op: route.kind, ms: Math.round(performance.now() - startedAt) });
+  loggerOf(opts).child({ oid: ownerShortId(ownerId) }).info('memory_http', { op: route.kind, ms: Math.round(performance.now() - startedAt) });
   res.writeHead(204).end();
 }
 
@@ -406,6 +410,7 @@ class RateLimiter {
 
 function bindConnection(ws: WebSocket, sessionId: string, connId: number, opts: GatewayServerOptions): void {
   const { manager } = opts;
+  const log = loggerOf(opts).child({ sid: sessionId });
   const maxFrames = opts.maxFramesPerSecond ?? 100;
   let begun = false;
   let frames = 0;
@@ -421,7 +426,7 @@ function bindConnection(ws: WebSocket, sessionId: string, connId: number, opts: 
   };
   // ws emits protocol errors on the socket; without a listener Node throws and kills the gateway.
   ws.on('error', () => {
-    log('ws_error', {});
+    log.warn('ws_error');
     ws.terminate();
   });
   if (!manager.attachSocket(sessionId, connId, () => ws.terminate())) {
@@ -430,7 +435,7 @@ function bindConnection(ws: WebSocket, sessionId: string, connId: number, opts: 
   }
   const heartbeat = setInterval(() => {
     if (!alive) {
-      log('ws_heartbeat_timeout', {});
+      log.info('ws_heartbeat_timeout');
       ws.terminate();
       return;
     }
@@ -480,7 +485,7 @@ function bindConnection(ws: WebSocket, sessionId: string, connId: number, opts: 
           if (!ok) ws.close(4002, 'bad_state');
         })
         .catch((error: unknown) => {
-          log('session_begin_failed', { code: error instanceof Error ? error.message : 'unknown' });
+          log.error('session_begin_failed', { code: errorCodeOf(error) });
           ws.close(1011, 'internal');
         });
       return;
@@ -538,4 +543,8 @@ function readJson(req: IncomingMessage, limit: number, emptyAs?: unknown): Promi
     });
     req.on('error', () => resolve(null));
   });
+}
+
+function loggerOf(opts: GatewayServerOptions): Logger {
+  return opts.logger ?? defaultLogger();
 }

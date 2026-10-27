@@ -3,7 +3,8 @@ import type { Language } from '@anyidea/protocol';
 import { dominantLanguage } from '../i18n/language.ts';
 import { DEFAULT_I18N } from '../i18n/load.ts';
 import type { ExtractLabels } from '../i18n/types.ts';
-import { log } from '../log.ts';
+import { defaultLogger, type Logger } from '../log/logger.ts';
+import { ownerShortId } from '../log/ownerId.ts';
 import { errorCodeOf, runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import type { SessionContext } from '../session/context.ts';
 import type { SessionLifecycle } from '../session/manager.ts';
@@ -37,6 +38,8 @@ export interface MemoryWorkerOptions {
   now?: () => number;
   /** Followup quote checks for the care revisit. Absent = every quote is dropped. */
   quote?: QuoteRules;
+  /** Root logger. Omitted in tests: the stdout default. */
+  logger?: Logger;
 }
 
 /** One queue per owner. Jobs never overlap; a later job starts only after the earlier one settles. Each extract job handles one agent. */
@@ -58,7 +61,7 @@ export class MemoryWorker implements MemoryExtractor {
     let failed = false;
     const run = prev.then(() => job()).then(() => undefined, (error) => {
       failed = true;
-      log('memory_worker_failed', { code: errorCodeOf(error) });
+      this.logFor(ownerId, 'memory').error('memory_worker_failed', { code: errorCodeOf(error) });
     });
     const done = run.then(() => !failed);
     this.jobs.set(id, done);
@@ -103,6 +106,7 @@ export class MemoryWorker implements MemoryExtractor {
   }
 
   private async run(ownerId: string, agentId: string, reason: ExtractReason, language?: Language): Promise<void> {
+    const log = this.logFor(ownerId, 'extract');
     const owner = this.opts.store.getOwner(ownerId);
     if (!owner || owner.memoryConsent === 'declined') return;
     const epochs = this.opts.store.memoryEpochs(ownerId, agentId);
@@ -114,7 +118,7 @@ export class MemoryWorker implements MemoryExtractor {
     if (users.length === 0) {
       // Assistant-only tail: advance the watermark without spending a model call.
       const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, [], pending.map((row) => row.id));
-      log('memory_extract', { reason, result: applied === 'applied' ? 'assistant_only' : applied, ops: 0, messages: pending.length });
+      log.info('memory_extract', { reason, result: applied === 'applied' ? 'assistant_only' : applied, ops: 0, messages: pending.length });
       return;
     }
     const last = users[users.length - 1]!;
@@ -145,16 +149,17 @@ export class MemoryWorker implements MemoryExtractor {
         if (code.startsWith('extract_http_4') || code === 'extract_invalid_response' || code === 'extract_invalid_json') return 'fatal';
         return 'retryable';
       },
+      logger: log,
     });
     if (!result.ok) {
-      log('memory_extract_failed', { reason, code: result.code });
+      log.warn('memory_extract_failed', { reason, code: result.code });
       return;
     }
     let batch: ExtractBatch;
     try {
       batch = parseExtractBatch(result.value);
     } catch {
-      log('memory_extract_failed', { reason, code: 'extract_parse' });
+      log.warn('memory_extract_failed', { reason, code: 'extract_parse' });
       return;
     }
     const addressingIds = new Set(memory.facts.filter((fact) => fact.category === 'addressing').map((fact) => fact.id));
@@ -172,10 +177,14 @@ export class MemoryWorker implements MemoryExtractor {
       droppedAddressing: named.droppedAddressing,
     };
     if (applied === 'incomplete') {
-      log('memory_extract_failed', { reason, code: 'extract_incomplete', ops: batch.ops.length, messages: consumed.length, ...counts });
+      log.warn('memory_extract_failed', { reason, code: 'extract_incomplete', ops: batch.ops.length, messages: consumed.length, ...counts });
       return;
     }
-    log('memory_extract', { reason, result: applied, ops: batch.ops.length, messages: consumed.length, ...counts });
+    log.info('memory_extract', { reason, result: applied, ops: batch.ops.length, messages: consumed.length, ...counts });
+  }
+
+  private logFor(ownerId: string, job: 'memory' | 'extract'): Logger {
+    return (this.opts.logger ?? defaultLogger()).child({ oid: ownerShortId(ownerId), job });
   }
 }
 

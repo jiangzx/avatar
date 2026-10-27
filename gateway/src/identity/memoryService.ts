@@ -1,6 +1,7 @@
 import { CHARACTER_IDS, type CharacterId, type MemoryClearScope, type MemoryOverview } from '@anyidea/protocol';
 import type { SafetyRules } from '../config.ts';
-import { log } from '../log.ts';
+import { defaultLogger, type Logger } from '../log/logger.ts';
+import { ownerShortId } from '../log/ownerId.ts';
 import { ftsMatch } from '../memory/fts.ts';
 import type { AgentRecord, DeletedItem, MemoryStore } from '../memory/store.ts';
 import { cleanUserLine, trimEdges } from '../memory/userText.ts';
@@ -19,6 +20,7 @@ export interface MemoryServiceDeps {
   store: MemoryStore;
   safety: SafetyRules;
   now?: () => number;
+  logger?: Logger;
 }
 
 /** Upper bound on lines one fallback match may delete; the FTS match is already all-tokens. */
@@ -33,6 +35,7 @@ const TABLE_OF: Record<DeletedItem['kind'], string> = {
 export function createMemoryService(deps: MemoryServiceDeps): MemoryService {
   const { store, safety } = deps;
   const now = deps.now ?? Date.now;
+  const logger = deps.logger ?? defaultLogger();
 
   const agentFor = (ownerId: string, characterId: CharacterId): AgentRecord | undefined =>
     store.listAgents(ownerId).find((agent) => agent.characterId === characterId);
@@ -92,7 +95,7 @@ export function createMemoryService(deps: MemoryServiceDeps): MemoryService {
         if (old) store.scrubChangeDiffs(ownerId, { rowId: old.id });
         store.recordMemoryChange({ ownerId, agentId: null, table: 'profile_facts', rowId: 'addressing', op: 'set', now: now() });
       });
-      log('memory_addressing_set', {});
+      logger.child({ oid: ownerShortId(ownerId) }).info('memory_addressing_set');
       return 'ok';
     },
 
@@ -110,7 +113,7 @@ export function createMemoryService(deps: MemoryServiceDeps): MemoryService {
         return { kind: item.kind, ...sources };
       });
       if (!outcome) return false;
-      log('memory_item_deleted', { kind: outcome.kind, sources: outcome.deleted, fallback: outcome.fallback, ms: now() - startedAt });
+      logger.child({ oid: ownerShortId(ownerId) }).info('memory_item_deleted', { kind: outcome.kind, sources: outcome.deleted, fallback: outcome.fallback, ms: now() - startedAt });
       return true;
     },
 
@@ -134,7 +137,7 @@ export function createMemoryService(deps: MemoryServiceDeps): MemoryService {
         }
         store.recordMemoryChange({ ownerId, agentId: null, table: 'memory', rowId: scope, op: 'clear', now: now() });
       });
-      log('memory_cleared', { scope, ms: now() - startedAt });
+      logger.child({ oid: ownerShortId(ownerId) }).info('memory_cleared', { scope, ms: now() - startedAt });
     },
   };
 }
