@@ -1,4 +1,5 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
+import type { AdminAuditRow, AdminPage } from '@anyidea/protocol';
 import { guardFields } from '../log/fieldGuard.ts';
 import type { LogFields, Logger } from '../log/logger.ts';
 
@@ -34,4 +35,21 @@ export class AdminAudit {
 
 export function expireAdminAudit(db: DatabaseSync, olderThan: number): number {
   return Number(db.prepare('DELETE FROM admin_audit WHERE ts < ?').run(olderThan).changes);
+}
+
+export function listAudit(db: DatabaseSync, f: { action: string | null; from: number; to: number; cursor: number | null; limit: number }): AdminPage<AdminAuditRow> {
+  const rows = db.prepare(`SELECT id, ts, actor, action, target, detail FROM admin_audit
+    WHERE ($action IS NULL OR action = $action) AND ts >= $from AND ts < $to AND ($cursor IS NULL OR id < $cursor)
+    ORDER BY id DESC LIMIT $limit`).all({ action: f.action, from: f.from, to: f.to, cursor: f.cursor, limit: f.limit + 1 }) as Array<Record<string, unknown>>;
+  const items: AdminAuditRow[] = rows.slice(0, f.limit).map((r) => {
+    let detail: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(String(r.detail)) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) detail = parsed as Record<string, unknown>;
+    } catch {
+      // keep {}
+    }
+    return { id: Number(r.id), ts: Number(r.ts), actor: String(r.actor), action: String(r.action), target: (r.target as string | null) ?? null, detail };
+  });
+  return { items, nextCursor: rows.length > f.limit ? String(items.at(-1)!.id) : null };
 }

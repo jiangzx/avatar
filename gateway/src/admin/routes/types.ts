@@ -1,10 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AdminAudit } from '../audit.ts';
 import type { LoginGuard } from '../loginGuard.ts';
+import type { AdminQueries } from '../queries.ts';
 import type { AdminDeps } from '../server.ts';
 import type { AdminSession, AdminSessionStore } from '../sessions.ts';
 
-export interface AdminServices { sessions: AdminSessionStore; guard: LoginGuard; audit: AdminAudit; now: () => number }
+export interface AdminServices { sessions: AdminSessionStore; guard: LoginGuard; audit: AdminAudit; queries: AdminQueries; now: () => number }
 
 export interface RouteContext {
   req: IncomingMessage;

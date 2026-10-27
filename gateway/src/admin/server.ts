@@ -10,7 +10,9 @@ import type { AdminConfig } from './config.ts';
 import { ADMIN_COOKIE, readCookie } from './cookies.ts';
 import { applySecurityHeaders, readJsonBody, sameOrigin, sendError } from './http.ts';
 import { LoginGuard } from './loginGuard.ts';
+import { AdminQueries } from './queries.ts';
 import { authRoutes } from './routes/auth.ts';
+import { readRoutes } from './routes/read.ts';
 import type { AdminRoute, AdminServices, RouteContext } from './routes/types.ts';
 import { AdminSessionStore, csrfMatches, type AdminSession } from './sessions.ts';
 import { serveStatic } from './static.ts';
@@ -38,10 +40,11 @@ export function createAdminServer(deps: AdminDeps): Server {
     sessions: new AdminSessionStore({ ...deps.config.session, now }),
     guard: new LoginGuard({ ...deps.config.login, now }),
     audit: new AdminAudit(deps.db, deps.logger, now),
+    queries: new AdminQueries(deps.db, now),
     now,
   };
   // Later tasks append their route groups here.
-  const routes: readonly AdminRoute[] = [...authRoutes()];
+  const routes: readonly AdminRoute[] = [...authRoutes(), ...readRoutes()];
   return createServer((req, res) => {
     handle(req, res, deps, services, routes).catch(() => {
       deps.logger.error('admin_http_error', { route: 'unmatched' });
