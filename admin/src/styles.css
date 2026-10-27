@@ -76,3 +76,125 @@ h3 {
   max-width: 1120px;
   padding: 32px 40px 64px;
 }
+
+.section {
+  margin-top: 40px;
+}
+
+.section h2 {
+  font-size: 17px;
+  margin-bottom: 12px;
+}
+
+.brief {
+  margin: 24px 0 32px;
+}
+
+.brief-line {
+  font-size: 30px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 28em;
+}
+
+.brief-line a,
+.brief-line .link-button {
+  color: #2f6f68;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}
+
+.brief-delta {
+  margin: 8px 0 0;
+}
+
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alert-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alert-list a {
+  margin-left: 16px;
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.inline-bar {
+  display: inline-block;
+  width: 64px;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 3px;
+  background: #dce3e1;
+  vertical-align: middle;
+  overflow: hidden;
+}
+
+.inline-bar > span {
+  display: block;
+  height: 100%;
+}
+
+.num-cell {
+  white-space: nowrap;
+}
+
+.spend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+}
+
+.spend-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 24px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}

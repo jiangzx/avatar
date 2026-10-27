@@ -18,6 +18,17 @@ export const FONT_STACK = '"PingFang SC", "Noto Sans SC", "Microsoft YaHei", san
 
 export const typeScale = { caption: 13, body: 15, rowTitle: 17, pageTitle: 22, brief: 30 } as const;
 
+/**
+ * Bar colours per character, chosen and checked with the dataviz method (P2-T7 Step 4).
+ * validate_palette.js --mode light --pairs all --surface "#F6F8F7" and "#FFFFFF":
+ * all checks pass; worst all-pairs CVD dE 13.1 (protan), normal-vision dE 21.7.
+ */
+export const CHARACTER_COLORS: Record<string, string> = {
+  xiaonuan: '#0E8F7D',
+  xiaokai: '#6A4C93',
+  xiaoxin: '#C25E00',
+};
+
 export const adminTheme: ThemeConfig = {
   token: {
     colorPrimary: palette.celadon,
