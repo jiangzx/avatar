@@ -2,7 +2,7 @@
 import { z } from 'zod';
 import { containsPhrase } from '../i18n/text.ts';
 import type { SilenceRules } from '../i18n/types.ts';
-import { log } from '../log.ts';
+import { defaultLogger, type Logger } from '../log/logger.ts';
 import type { TextModelClient } from '../memory/textClient.ts';
 import { runWithPolicy } from '../reliability/policy.ts';
 import type { SilenceDecisionConfig } from '../roles/types.ts';
@@ -41,7 +41,7 @@ function variationHint(config: SilenceDecisionConfig, context: SilenceContext): 
 }
 
 /** Optional speech earns a turn only after a validated, current decision. */
-export function createSilencePlanner(client: TextModelClient, config: SilenceDecisionConfig, rules: SilenceRules) {
+export function createSilencePlanner(client: TextModelClient, config: SilenceDecisionConfig, rules: SilenceRules, logger: Logger = defaultLogger()) {
   const decisionSchema = z.discriminatedUnion('speak', [
     z.object({ speak: z.literal(false), close: z.boolean().optional() }).strict(),
     z.object({ speak: z.literal(true), text: z.string().trim().min(1).max(config.maxReplyChars) }).strict(),
@@ -62,7 +62,7 @@ export function createSilencePlanner(client: TextModelClient, config: SilenceDec
     const input = { ...context, memorySnapshot };
     const inputChars = usedChars + memorySnapshot.length;
     if (inputChars > config.maxInputChars) {
-      log('silence_decision_skipped', { code: 'input_budget' });
+      logger.info('silence_decision_skipped', { code: 'input_budget' });
       return null;
     }
     const hint = variationHint(config, context);
@@ -84,14 +84,14 @@ export function createSilencePlanner(client: TextModelClient, config: SilenceDec
       } catch {
         throw new Error('silence_invalid_response');
       }
-    }, { classify: () => signal.aborted ? 'ignorable' : 'fatal' });
+    }, { classify: () => signal.aborted ? 'ignorable' : 'fatal', logger });
     if (signal.aborted) return null;
     const decision = result.ok ? result.value : null;
     if (decision?.speak && !stageContentOk(context.stage, decision.text, rules)) {
-      log('silence_decision_rejected', { stage: context.stage, code: 'stage_content' });
+      logger.info('silence_decision_rejected', { stage: context.stage, code: 'stage_content' });
       return null;
     }
-    log('silence_decision', { stage: context.stage, outcome: decision?.speak ? 'speak' : 'silent' });
+    logger.info('silence_decision', { stage: context.stage, outcome: decision?.speak ? 'speak' : 'silent' });
     if (!decision) return null;
     if (decision.speak) return { text: decision.text };
     return decision.close ? { text: null, close: true } : { text: null };

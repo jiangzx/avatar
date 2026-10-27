@@ -14,7 +14,8 @@ import {
 import { classifyAdapterError } from '../adapters/errorClass.ts';
 import type { AdapterFactory, ProactiveRequest, RealtimeAdapter, SessionConfig } from '../adapters/types.ts';
 import type { CharacterRegistry } from '../characters/registry.ts';
-import { log } from '../log.ts';
+import { defaultLogger, type Logger } from '../log/logger.ts';
+import { sessionLogBinding } from './logBinding.ts';
 import { unique } from '../unique.ts';
 import { memoryViewSource, renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
@@ -148,6 +149,8 @@ export interface SessionDeps {
   voiceFor?: (language: Language) => string | undefined;
   /** Loaded language rules (gateway/config/i18n). Undefined = script heuristic only (tests). */
   languageRules?: LanguageRules;
+  /** Root logger; the session binds sid/oid/char itself. Omitted in tests: the stdout default. */
+  logger?: Logger;
 }
 
 interface ResponseState {
@@ -183,6 +186,7 @@ const MEMORY_DEFAULTS = loadMemoryBudget(fileURLToPath(new URL('../../config/mem
 export class Session {
   readonly ledger: ConversationLedger;
   readonly context: SessionContext;
+  private readonly log: Logger;
   private readonly writer: TranscriptWriter | undefined;
   private readonly i18n: I18nBundle;
   private language: Language;
@@ -277,7 +281,7 @@ export class Session {
   /** User utterance for this turn. Cleared when that reply is finalized. */
   private turnUserText: string | null = null;
   /** User finals for tools that need the user's own words (pin_memory, spec §6). */
-  private readonly turns = new TurnFinals(() => this.ledger.recent);
+  private readonly turns = new TurnFinals(() => this.ledger.recent, () => this.log);
   /** Forget/decline is waiting on the owner queue. Origin done during this still counts. */
   private memoryToolWaiting = false;
   /** User finals during a forget/decline turn are not stored. */
@@ -313,6 +317,7 @@ export class Session {
     readonly sessionId: string = randomUUID(),
     private readonly noticePending = false,
   ) {
+    this.log = (deps.logger ?? defaultLogger()).child(sessionLogBinding(sessionId, ctx));
     this.writer = deps.writer;
     this.context = ctx;
     this.roleId = deps.characters?.roleOf(ctx.characterId) ?? deps.roles.defaultRole();
@@ -358,6 +363,7 @@ export class Session {
           ...(deps.affect?.enabled ? { getPlanExtras: () => this.planExtras() } : {}),
         } : {}),
         ...(extractor && ownerId && agentId ? { onQuietRest: () => { void extractor.enqueue(ownerId, agentId, 'silence', this.language); } } : {}),
+        logger: this.log,
       },
       this.noticePending,
       extractor ? deps.extractSilenceMs : undefined,
@@ -376,6 +382,7 @@ export class Session {
           // Accepted cards stay on the tracker (this.affect.card); the session mirrors the latest one.
           onCard: (card) => this.onAffectCard(card),
           declinePhrases: (language) => this.i18n.affect[language].declinePhrases,
+          logger: this.log,
         })
       : null;
     this.interrupt = new InterruptCoordinator({
@@ -490,7 +497,7 @@ export class Session {
         }
         if (speaking) this.vadSpeakingCount++;
         else this.vadSilentCount++;
-        log('vad_edge', {
+        this.log.info('vad_edge', {
           state: msg.state,
           count: speaking ? this.vadSpeakingCount : this.vadSilentCount,
           activeSeq: this.interrupt.active ?? 0,
@@ -564,7 +571,7 @@ export class Session {
         break;
       case 'debug.userText':
         if (!this.adapter.supportsUserText) {
-          log('debug_text_unsupported', {});
+          this.log.warn('debug_text_unsupported');
           this.send({ type: 'error', code: 'debug_text_unsupported', retryable: false });
           break;
         }
@@ -602,7 +609,7 @@ export class Session {
         });
         state.flushed = true;
       } catch {
-        log('transcript_write_failed', { role: 'assistant' });
+        this.log.error('transcript_write_failed', { role: 'assistant' });
       }
     }
   }
@@ -624,7 +631,7 @@ export class Session {
     this.director.stop();
     this.emotion?.dispose();
     if (this.affect) {
-      log('affect_summary', affectSummaryFields(this.affect.summary()));
+      this.log.info('affect_summary', affectSummaryFields(this.affect.summary()));
       this.affect.dispose();
     }
     this.interrupt.dispose();
@@ -664,7 +671,7 @@ export class Session {
   private resolveLanguage(language: Language): Language {
     const supported = this.deps.roles.supportedLanguages(this.roleId);
     if (supported.includes(language)) return language;
-    log('language_unsupported', { roleId: this.roleId, language });
+    this.log.warn('language_unsupported', { roleId: this.roleId, language });
     return this.deps.roles.defaultLanguage(this.roleId);
   }
 
@@ -686,7 +693,7 @@ export class Session {
     if (!config || !client) return null;
     let planner = this.silencePlanners.get(this.language);
     if (!planner) {
-      planner = createSilencePlanner(client, config, this.i18n.silence[this.language]);
+      planner = createSilencePlanner(client, config, this.i18n.silence[this.language], this.log);
       this.silencePlanners.set(this.language, planner);
     }
     return planner(context, signal);
@@ -740,7 +747,7 @@ export class Session {
     if (card.openLoop) this.openLoop = card.openLoop;
     if (card.crisis && !this.crisisLogged) {
       this.crisisLogged = true;
-      log('affect_crisis', {});
+      this.log.warn('affect_crisis');
     }
     this.emotion?.onAffect(card, isLow(card, config.lowIntensity));
     this.syncAffectRender();
@@ -835,7 +842,7 @@ export class Session {
   private sendSessionUpdate(update: PushRequest): void {
     const instructions = update.instructions ? this.instructions() : undefined;
     if (instructions !== undefined) this.lastInstructionsChars = instructions.length;
-    log('session_push', { instructions: instructions !== undefined, voice: update.voice !== undefined });
+    this.log.debug('session_push', { instructions: instructions !== undefined, voice: update.voice !== undefined });
     if (this.adapter.updateSession) {
       this.adapter.updateSession({
         ...(instructions !== undefined ? { instructions } : {}),
@@ -863,7 +870,7 @@ export class Session {
     this.replyWatch = setTimeout(() => {
       this.replyWatch = null;
       if (this.ended) return;
-      if (logOnExpiry) log('no_response_after_final', { sinceFinalMs: this.now() - startedAt });
+      if (logOnExpiry) this.log.warn('no_response_after_final', { sinceFinalMs: this.now() - startedAt });
       this.gate.flush();
     }, this.push.noResponseAfterMs);
     this.replyWatch.unref?.();
@@ -910,7 +917,7 @@ export class Session {
   private finishNotice(seq: number): void {
     if (seq !== this.noticeSeq) return;
     if (!this.noticeVerified(seq)) {
-      log('memory_notice_unverified', {});
+      this.log.warn('memory_notice_unverified');
       this.missNotice(seq);
       return;
     }
@@ -919,7 +926,7 @@ export class Session {
         this.writer.markNotified(this.context.ownerId, Date.now());
       } catch {
         // The user heard it; failing to persist only means the next session asks again.
-        log('memory_notice_write_failed', {});
+        this.log.error('memory_notice_write_failed');
       }
     }
     this.noticeSeq = null;
@@ -992,7 +999,7 @@ export class Session {
         this.noticeSeq = s.seq;
       }
       if (s.kind === 'greeting') this.closeCareIfSpoken();
-      log('response_start', { seq: s.seq, kind: s.kind });
+      this.log.child({ seq: s.seq }).info('response_start', { kind: s.kind });
       this.clearReplyWatch();
       this.responseSinceSpeech = true;
       this.metrics.onResponseStarted(s.seq, s.kind);
@@ -1035,7 +1042,7 @@ export class Session {
       const s = this.live(a, id);
       if (s) {
         s.responseDone = true;
-        log('response_end', { seq: s.seq });
+        this.log.child({ seq: s.seq }).info('response_end');
         this.metrics.onDone(s.seq);
         this.send({ type: 'response.end', responseSeq: s.seq });
         this.modelGenerating = false;
@@ -1058,7 +1065,7 @@ export class Session {
       if (!s || !this.interrupt.onModelAutoCancelled(s.seq)) return;
       this.modelGenerating = false;
       this.responseLive = false;
-      log('model_auto_cancel', { seq: s.seq });
+      this.log.child({ seq: s.seq }).info('model_auto_cancel');
       this.finalize(s, true);
       const missedNotice = s.seq === this.noticeSeq;
       this.missNotice(s.seq);
@@ -1069,7 +1076,10 @@ export class Session {
     a.on('error', (code, retryable) => {
       if (!current()) return;
       const errorClass = classifyAdapterError(code, this.toolTurn.active);
-      log('adapter_error', { code, class: errorClass });
+      const fields = { code, class: errorClass };
+      if (errorClass === 'fatal') this.log.error('adapter_error', fields);
+      else if (errorClass === 'retryable') this.log.warn('adapter_error', fields);
+      else this.log.info('adapter_error', fields);
       this.metrics.onError(code);
       if (errorClass === 'ignorable') return;
       if (errorClass === 'retryable') void this.rebuild('error');
@@ -1090,7 +1100,7 @@ export class Session {
   }
 
   private cancel(seq: number, source: string): void {
-    log('response_cancel', { seq, source });
+    this.log.child({ seq }).info('response_cancel', { source });
     this.modelGenerating = false;
     if (this.responseLive) this.adapter.cancelResponse();
     this.responseLive = false;
@@ -1105,7 +1115,7 @@ export class Session {
     s.finalized = true;
     const m = this.metrics.finish(s.seq, interrupted ? 'interrupted' : 'ended');
     if (m) {
-      log('reply_metrics', metricFields(m));
+      this.log.child({ seq: m.seq }).info('reply_metrics', metricFields(m));
       this.deps.onReplyMetrics?.(m);
     }
       const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
@@ -1127,7 +1137,7 @@ export class Session {
     // An explicit request stays in force. Otherwise the script heuristic can still move the session.
     const nextLanguage = requested ?? (this.languageLock ?? detectLanguage(text, this.language, rules));
     if (nextLanguage !== this.language) {
-      log('language_set', { language: nextLanguage, locked: this.languageLock !== null });
+      this.log.info('language_set', { language: nextLanguage, locked: this.languageLock !== null });
       this.applyLanguage(nextLanguage);
     }
     if (echo) this.send({ type: 'transcript.user', text, final: true });
@@ -1150,7 +1160,7 @@ export class Session {
           now: Date.now(),
         }).messageId ?? null;
       } catch {
-        log('transcript_write_failed', { role: 'user' });
+        this.log.error('transcript_write_failed', { role: 'user' });
       }
     }
     this.turns.onFinal(text, messageId, true);
@@ -1247,10 +1257,11 @@ export class Session {
       ...(triggerText ? { triggerText } : {}),
       turn: this.turns.access(),
       memoryGate: () => this.memoryGate(),
+      logger: this.log,
     });
     this.memoryToolWaiting = false;
     if (a !== this.adapter || this.ended) return;
-    log('tool_invoked', { name: name.slice(0, 64), ok: outcome.ok, ...(outcome.error ? { code: outcome.error } : {}) });
+    this.log.info('tool_invoked', { name: name.slice(0, 64), ok: outcome.ok, ...(outcome.error ? { code: outcome.error } : {}) });
     a.sendToolResult(callId, toolPayload(outcome));
     if (s) this.metrics.onToolCall(s.seq);
     if (outcome.ok && outcome.action && !cancelled) this.send({ type: 'avatar.action', action: outcome.action, source: 'tool' });
@@ -1388,7 +1399,7 @@ export class Session {
     if (!this.ledger.needsSummary() || this.summarizeInFlight) return;
     if (Date.now() < this.summarizeRetryAt) return;
     this.summarizeInFlight = true;
-    void runWithPolicy('summarize', this.deps.summarizePolicy ?? DEFAULT_SUMMARIZE_POLICY, () => this.ledger.summarize(this.deps.summarizer, this.language)).then((r) => {
+    void runWithPolicy('summarize', this.deps.summarizePolicy ?? DEFAULT_SUMMARIZE_POLICY, () => this.ledger.summarize(this.deps.summarizer, this.language), { logger: this.log }).then((r) => {
       this.summarizeInFlight = false;
       if (r.ok) {
         this.summarizeRetryAt = 0;
@@ -1399,7 +1410,7 @@ export class Session {
       // The policy already logged policy_failed with the code; keep the cross-call cool-down.
       this.summarizeRetryAt = Date.now() + this.summarizeBackoffMs;
       this.summarizeBackoffMs = Math.min(this.summarizeBackoffMs * 2, 30_000);
-      log('summarize_failed', { code: r.code });
+      this.log.warn('summarize_failed', { code: r.code });
     });
   }
 
@@ -1469,7 +1480,7 @@ export class Session {
       this.turnsSinceRebuild = 0;
       this.charsSinceRebuild = 0;
     } catch {
-      log('model_rebuild_failed', { reason });
+      this.log.error('model_rebuild_failed', { reason });
       // A silent slim rebuild never surfaces reconnect copy; presence ready ends the thinking pose.
       if (reason !== 'slim') this.send({ type: 'error', code: 'model_unavailable', retryable: true });
       this.scheduleRebuild(reason);
@@ -1478,7 +1489,7 @@ export class Session {
       if (reason === 'slim') bridge = this.finishSlimRebuild(connected, startedAt);
       this.armSlimInterval();
       const elapsedMs = this.now() - startedAt;
-      log('model_rebuild', { reason, elapsedMs, bridge });
+      this.log.info('model_rebuild', { reason, elapsedMs, bridge });
       const again = this.rebuildAgain;
       this.rebuildAgain = null;
       if (again && !this.ended) await this.rebuild(again, true);
@@ -1664,7 +1675,7 @@ export class Session {
     if (care && care.language === this.language) return care.text;
     if (care) {
       this.careOpening = null;
-      log('care_opening', { outcome: 'language_mismatch' });
+      this.log.info('care_opening', { outcome: 'language_mismatch' });
     }
     const config = this.deps.roles.director(this.context.characterId, this.language);
     const templates = config.greetingNameTexts;
@@ -1705,7 +1716,7 @@ export class Session {
     try {
       followup = store.careFollowup(ownerId, agentId, this.sessionId, startedAt, care.maxAgeDays * DAY_MS);
     } catch {
-      log('care_opening', { outcome: 'store_failed' });
+      this.log.warn('care_opening', { outcome: 'store_failed' });
       return null;
     }
     if (!followup) return null;
@@ -1717,23 +1728,24 @@ export class Session {
       { userLine: quote, daysAgo },
       { timeoutMs: care.timeoutMs, maxChars: care.maxChars[language], maxTokens: care.maxTokens, temperature: care.temperature },
       this.i18n.safety,
+      this.log,
     ).then((line) => {
       // end() may race the model: never touch a disposed session.
       if (this.ended) return;
       const ms = this.now() - startedAt;
       if (!line) {
-        log('care_opening', { outcome: 'failed', ms });
+        this.log.warn('care_opening', { outcome: 'failed', ms });
         return;
       }
       // An opening already reached the adapter (the user spoke during the wait): retries must
       // repeat that same sentence, so a late care line is dropped and the followup stays open.
       if (this.greetingText !== null) {
-        log('care_opening', { outcome: 'late', ms });
+        this.log.info('care_opening', { outcome: 'late', ms });
         return;
       }
       const template = templates[Math.floor(Math.random() * templates.length)]!;
       this.careOpening = { followupId: id, text: composeCareGreeting(template, name, line), language };
-      log('care_opening', { outcome: 'ready', ms });
+      this.log.info('care_opening', { outcome: 'ready', ms });
     });
   }
 
@@ -1746,9 +1758,9 @@ export class Session {
     this.careClosed = true;
     try {
       store.closeCareFollowup(ownerId, care.followupId, this.now());
-      log('care_opening', { outcome: 'closed' });
+      this.log.info('care_opening', { outcome: 'closed' });
     } catch {
-      log('care_opening', { outcome: 'close_failed' });
+      this.log.warn('care_opening', { outcome: 'close_failed' });
     }
   }
 

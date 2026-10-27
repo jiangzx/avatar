@@ -1874,7 +1874,7 @@ describe('Session', () => {
       .filter((line) => line.includes('"event":"model_rebuild"'))
       .map((line) => JSON.parse(line) as Record<string, unknown>);
     expect(rebuilds).toHaveLength(1);
-    expect(Object.keys(rebuilds[0]!).sort()).toEqual(['bridge', 'elapsedMs', 'event', 'reason', 't']);
+    expect(Object.keys(rebuilds[0]!).sort()).toEqual(['bridge', 'char', 'elapsedMs', 'event', 'level', 'reason', 'sid', 't']);
     expect(chunks.join('')).not.toContain(slimOn.bridge.zh);
   });
 });

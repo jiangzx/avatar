@@ -1,4 +1,5 @@
 // High-risk memory contract: read docs/project/roadmap.md "记忆与回忆：已踩过的坑" before changing.
+import { defaultLogger, type Logger } from '../log/logger.ts';
 import type { SafetyRules } from '../config.ts';
 import { grounded, parsePhrase } from '../memory/grounding.ts';
 import { scanText } from '../memory/scan.ts';
@@ -16,6 +17,7 @@ export async function generateCareLine(
   input: { userLine: string; daysAgo: number },
   opts: { timeoutMs: number; maxChars: number; maxTokens: number; temperature: number },
   safety: SafetyRules,
+  logger: Logger = defaultLogger(),
 ): Promise<string | null> {
   // runWithPolicy aborts the request through its AbortController at the deadline.
   const result = await runWithPolicy(
@@ -29,7 +31,7 @@ export async function generateCareLine(
       jsonMode: true,
       signal,
     }),
-    { classify: () => 'ignorable' },
+    { classify: () => 'ignorable', logger },
   );
   if (!result.ok) return null;
   const text = parsePhrase(result.value);

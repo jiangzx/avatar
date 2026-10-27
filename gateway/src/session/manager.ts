@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Language, SessionTokens } from '@anyidea/protocol';
-import { log } from '../log.ts';
+import { defaultLogger, type Logger } from '../log/logger.ts';
 import type { SessionContext } from './context.ts';
+import { sessionLogBinding } from './logBinding.ts';
 import type { Session, Transport } from './session.ts';
 import { TokenStore } from './tokens.ts';
 
@@ -44,7 +45,12 @@ export class SessionManager {
     private readonly unclaimedMs = 5 * 60_000,
     private readonly startTimeoutMs = 10_000,
     private readonly lifecycle?: SessionLifecycle,
+    private readonly logger: Logger = defaultLogger(),
   ) {}
+
+  private logFor(sessionId: string, ctx: SessionContext): Logger {
+    return this.logger.child(sessionLogBinding(sessionId, ctx));
+  }
 
   get size(): number {
     return this.sessions.size;
@@ -60,7 +66,7 @@ export class SessionManager {
     // claim() clears this timer, like the disconnect grace timer.
     const grace = setTimeout(() => this.destroy(sessionId, 'unclaimed'), this.unclaimedMs);
     this.sessions.set(sessionId, { session: this.makeSession(ctx, sessionId, noticePending), ctx, started: false, starting: false, connId: 0, terminate: null, grace });
-    log('session_created', { sessions: this.sessions.size });
+    this.logFor(sessionId, ctx).info('session_created', { sessions: this.sessions.size });
     return this.tokens.issue(sessionId);
   }
 
@@ -70,7 +76,7 @@ export class SessionManager {
     for (const [sessionId, entry] of [...this.sessions]) {
       if (entry.ctx.ownerId !== ownerId) continue;
       const terminate = entry.terminate;
-      this.flushSession(entry);
+      this.flushSession(entry, this.logFor(sessionId, entry.ctx));
       this.destroy(sessionId, reason);
       terminate?.(); // the socket's close event then finds no entry and is ignored
       ended++;
@@ -101,7 +107,7 @@ export class SessionManager {
       entry.terminate = null;
       if (entry.started) entry.session.detachTransport();
       terminate?.();
-      log('connection_superseded', {});
+      this.logFor(sessionId, entry.ctx).info('connection_superseded');
     }
     entry.connId = ++this.nextConnId;
     // A claimed socket that never sends session.start/resume must not hold a slot forever.
@@ -136,7 +142,7 @@ export class SessionManager {
         const current = this.sessions.get(sessionId);
         if (!current) return false;
         current.started = true;
-        this.notify(() => this.lifecycle?.started(sessionId, current.ctx));
+        this.notify(this.logFor(sessionId, current.ctx), () => this.lifecycle?.started(sessionId, current.ctx));
         if (current.connId !== connId) {
           current.session.detachTransport();
           return false;
@@ -153,7 +159,7 @@ export class SessionManager {
     if (!entry.started) return false;
     this.clearGrace(entry);
     entry.session.attachTransport(transport);
-    log('session_resumed', {});
+    this.logFor(sessionId, entry.ctx).info('session_resumed');
     return true;
   }
 
@@ -194,41 +200,42 @@ export class SessionManager {
   private destroy(sessionId: string, reason: string): void {
     const entry = this.sessions.get(sessionId);
     if (!entry) return;
+    const log = this.logFor(sessionId, entry.ctx);
     if (entry.grace) clearTimeout(entry.grace);
-    this.flushSession(entry);
-    this.endSession(entry);
+    this.flushSession(entry, log);
+    this.endSession(entry, log);
     this.tokens.revoke(sessionId);
     this.sessions.delete(sessionId);
     if (entry.started) {
-      this.notify(() => this.lifecycle?.ended(sessionId, entry.ctx, reason));
-      this.notify(() => this.lifecycle?.extract?.(sessionId, entry.ctx, reason));
+      this.notify(log, () => this.lifecycle?.ended(sessionId, entry.ctx, reason));
+      this.notify(log, () => this.lifecycle?.extract?.(sessionId, entry.ctx, reason));
     }
-    log('session_destroyed', { reason, sessions: this.sessions.size });
+    log.info('session_destroyed', { reason, sessions: this.sessions.size });
   }
 
   /** Storage or adapter failures must not crash a timer or a WS handler. */
-  private flushSession(entry: Entry): void {
+  private flushSession(entry: Entry, log: Logger): void {
     try {
       entry.session.flush();
     } catch {
-      log('session_flush_failed', {});
+      log.error('session_flush_failed');
     }
   }
 
-  private endSession(entry: Entry): void {
+  private endSession(entry: Entry, log: Logger): void {
     try {
       entry.session.end();
     } catch {
-      log('session_end_failed', {});
+      log.error('session_end_failed');
     }
   }
 
   /** Lifecycle hooks must never break the session flow. */
-  private notify(hook: () => void): void {
+  private notify(log: Logger, hook: () => void): void {
     try {
       hook();
     } catch {
-      log('session_lifecycle_failed', {});
+      log.error('session_lifecycle_failed');
     }
   }
 

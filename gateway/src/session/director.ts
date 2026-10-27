@@ -2,7 +2,7 @@ import type { Language, ResponseKind } from '@anyidea/protocol';
 import type { DirectorCue, ProactiveRequest } from '../adapters/types.ts';
 import { containsPhrase } from '../i18n/text.ts';
 import type { DirectorConfig } from '../roles/types.ts';
-import { log } from '../log.ts';
+import { defaultLogger, type Logger } from '../log/logger.ts';
 import type { AffectCard } from './affect.ts';
 
 export type { DirectorConfig, TopicCard } from '../roles/types.ts';
@@ -52,6 +52,8 @@ export interface DirectorDeps {
   onQuietRest?(): void;
   /** Rest reminder line in the current language; absent = reminders off. */
   restReminderRequest?(): ProactiveRequest;
+  /** Session child logger (sid/oid/char). Omitted in tests: the stdout default. */
+  logger?: Logger;
 }
 
 type SilenceStep = 'context' | 'check' | 'leave' | 'checkin' | 'rest';
@@ -155,6 +157,8 @@ export class Director {
     this.configFor = typeof config === 'function' ? config : () => config;
     this.noticePending = noticePending;
   }
+
+  private get log(): Logger { return this.deps.logger ?? defaultLogger(); }
 
   /** Swaps copy without touching timers, ladder state, or pending decisions. */
   setLanguage(language: Language): void {
@@ -569,7 +573,7 @@ export class Director {
       }
       // The planner saw previousTexts but may still repeat one; a duplicate is a new topic, not a stage.
       if (this.ladderTexts.some((previous) => normalizeUtterance(previous) === normalizeUtterance(text))) {
-        log('proactive_decision_rejected', { stage: step, code: 'duplicate' });
+        this.log.info('proactive_decision_rejected', { stage: step, code: 'duplicate' });
         this.requestSilenceStep(step);
         return;
       }
@@ -585,7 +589,7 @@ export class Director {
     };
     const failed = () => {
       if (this.decision !== controller) return;
-      log('proactive_decision_failed', { stage: step, code: 'decision_error' });
+      this.log.warn('proactive_decision_failed', { stage: step, code: 'decision_error' });
       accept(null);
     };
     try {
@@ -636,7 +640,7 @@ export class Director {
     };
     const failed = () => {
       if (this.greetingDecision !== controller) return;
-      log('proactive_decision_failed', { stage: 'greeting', code: 'decision_error' });
+      this.log.warn('proactive_decision_failed', { stage: 'greeting', code: 'decision_error' });
       accept(null);
     };
     try {

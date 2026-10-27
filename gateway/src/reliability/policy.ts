@@ -1,4 +1,4 @@
-import { log as defaultLog } from '../log.ts';
+import { defaultLogger, type Logger } from '../log/logger.ts';
 
 export type ErrorClass = 'ignorable' | 'retryable' | 'fatal';
 
@@ -17,7 +17,8 @@ export interface PolicyOptions<T> {
   classify?: (error: unknown) => ErrorClass;
   fallback?: () => T;
   sleep?: (ms: number) => Promise<void>;
-  log?: (event: string, fields: Record<string, string | number | boolean | null>) => void;
+  /** Caller's logger (usually a session or job child). Defaults to the stdout logger. */
+  logger?: Logger;
 }
 
 export class PolicyTimeoutError extends Error {
@@ -43,7 +44,7 @@ export async function runWithPolicy<T>(
 ): Promise<PolicyResult<T>> {
   const classify = opts.classify ?? (() => 'retryable' as const);
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  const log = opts.log ?? defaultLog;
+  const logger = opts.logger ?? defaultLogger();
   for (let attempt = 1; ; attempt++) {
     const controller = new AbortController();
     let timer: NodeJS.Timeout | undefined;
@@ -60,11 +61,14 @@ export async function runWithPolicy<T>(
       const errorClass: ErrorClass = error instanceof PolicyTimeoutError ? 'retryable' : classify(error);
       const code = errorCodeOf(error);
       if (errorClass === 'retryable' && attempt <= spec.retries) {
-        log('policy_retry', { name, code, attempt });
+        logger.warn('policy_retry', { name, code, attempt });
         await sleep(Math.min(spec.backoffMs * 2 ** (attempt - 1), spec.maxBackoffMs));
         continue;
       }
-      log(errorClass === 'ignorable' ? 'policy_ignored' : 'policy_failed', { name, code, class: errorClass, attempts: attempt });
+      const fields = { name, code, class: errorClass, attempts: attempt };
+      if (errorClass === 'ignorable') logger.info('policy_ignored', fields);
+      else if (errorClass === 'fatal') logger.error('policy_failed', fields);
+      else logger.warn('policy_failed', fields);
       return { ok: false, code, errorClass, attempts: attempt, ...(opts.fallback ? { fallback: opts.fallback() } : {}) };
     } finally {
       clearTimeout(timer);

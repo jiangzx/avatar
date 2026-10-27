@@ -1,3 +1,4 @@
+import { defaultLogger, type Logger } from '../log/logger.ts';
 import type { UserFinal } from '../memory/store.ts';
 import { runWithPolicy } from '../reliability/policy.ts';
 import type { LedgerEntry } from './ledger.ts';
@@ -34,7 +35,7 @@ export class TurnFinals {
   private readonly recent: SeenFinal[] = [];
   private readonly waiters = new Set<Waiter>();
 
-  constructor(private readonly ledger: () => readonly LedgerEntry[]) {}
+  constructor(private readonly ledger: () => readonly LedgerEntry[], private readonly logger: () => Logger = defaultLogger) {}
 
   /** Every user final, stored or dropped. messageId is null when nothing was written. */
   onFinal(text: string, messageId: string | null, inLedger: boolean): void {
@@ -79,6 +80,7 @@ export class TurnFinals {
         box.waiter = resolve;
         this.waiters.add(resolve);
       }),
+      { logger: this.logger() },
     );
     if (box.waiter) this.waiters.delete(box.waiter);
     return result.ok ? result.value : null;

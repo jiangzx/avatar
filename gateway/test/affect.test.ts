@@ -380,7 +380,7 @@ describe('AffectTracker', () => {
     s.tracker.onUserFinal('我老伴走了三年了，有时候真不想活了', 'zh');
     s.calls[0]!.resolve(reply({ ...sadCard, intensity: 3, crisis: true, openLoop: '我老伴走了三年了' }));
     await settle();
-    for (const event of events('affect')) expect(Object.keys(event).sort()).toEqual(['event', 'ms', 'outcome', 't']);
+    for (const event of events('affect')) expect(Object.keys(event).sort()).toEqual(['event', 'level', 'ms', 'outcome', 't']);
     const all = writes.join('');
     expect(all).not.toContain('老伴');
     expect(all).not.toContain('"sad"');

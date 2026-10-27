@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { SafetyRules } from '../../config.ts';
 import { containsPhrase } from '../../i18n/text.ts';
 import type { EvidenceRules, PinCopy } from '../../i18n/types.ts';
-import { log } from '../../log.ts';
+import { defaultLogger } from '../../log/logger.ts';
 import { cleanUserLine, trimEdges } from '../../memory/userText.ts';
 import type { ToolContext, ToolHandler, ToolOutcome } from './registry.ts';
 
@@ -119,7 +119,7 @@ export function pinTool(options: PinOptions): ToolHandler {
         sourceMessageId: source.messageId,
         now: ctx.now,
       });
-      log('memory_pinned', { sensitive, count: pinned.length + 1 });
+      (ctx.logger ?? defaultLogger()).info('memory_pinned', { sensitive, count: pinned.length + 1 });
       return { ok: true, spokenText: copy.confirmText, spokenFound: true, refreshSnapshot: true };
     },
   };

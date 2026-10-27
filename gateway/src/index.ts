@@ -162,6 +162,7 @@ log('affect_analyzer', { enabled: affect.enabled && config.adapter !== 'mock' &&
 const manager = new SessionManager(
   (ctx, sessionId, noticePending = false) =>
     new Session({
+      logger,
       adapterFactory: () => config.adapter === 'seeduplex'
         ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
         : config.adapter === 'qwen'
@@ -214,6 +215,7 @@ const manager = new SessionManager(
   config.sessionUnclaimedMs,
   config.sessionStartTimeoutMs,
   registry ? (worker ? withExtraction(registry.lifecycle, worker) : registry.lifecycle) : undefined,
+  logger,
 );
 const server = createGatewayServer({
   manager,

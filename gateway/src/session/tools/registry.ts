@@ -3,6 +3,7 @@ import { LANGUAGES, type ActionName, type CharacterId, type Language } from '@an
 import type { SafetyRules } from '../../config.ts';
 import { DEFAULT_I18N } from '../../i18n/load.ts';
 import type { EvidenceRules, MemoryCopy } from '../../i18n/types.ts';
+import type { Logger } from '../../log/logger.ts';
 import type { MemoryStore } from '../../memory/store.ts';
 import type { TextModelClient } from '../../memory/textClient.ts';
 import type { MemoryWorker } from '../../memory/worker.ts';
@@ -40,6 +41,8 @@ export interface ToolContext {
   turn: TurnAccess;
   /** Transcript write gate: declined consent, or the one-time notice has not played yet. */
   memoryGate(): 'ok' | 'declined' | 'notice_pending';
+  /** Session child logger (sid/oid/char). Omitted in tests: the stdout default. */
+  logger?: Logger;
 }
 
 export interface ToolOutcome {

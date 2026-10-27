@@ -4,7 +4,7 @@ import type { Language } from '@anyidea/protocol';
 import { z } from 'zod';
 import type { SafetyRules } from '../config.ts';
 import type { EvidenceRules } from '../i18n/types.ts';
-import { log } from '../log.ts';
+import { defaultLogger, type Logger } from '../log/logger.ts';
 import { isMemoryEvidence } from '../memory/evidence.ts';
 import { normalizeForMatch } from '../memory/grounding.ts';
 import { scanText } from '../memory/scan.ts';
@@ -165,6 +165,8 @@ export interface AffectTrackerDeps {
   onCard: (card: AffectCard) => void;
   /** Decline phrases for the final's language (i18n affect.json); missing means no decline cooldown. */
   declinePhrases?: (language: Language) => readonly string[];
+  /** Session child logger. Omitted in tests: the stdout default. */
+  logger?: Logger;
 }
 
 type CardEnums = Omit<AffectCard, 'openLoop'>;
@@ -215,6 +217,8 @@ export class AffectTracker {
     this.exhaustion = new TopicExhaustion(deps.config.exhausted);
   }
 
+  private get log(): Logger { return this.deps.logger ?? defaultLogger(); }
+
   get card(): AffectCard | null {
     return this.latest;
   }
@@ -235,7 +239,7 @@ export class AffectTracker {
       this.seq += 1;
       this.inflight?.abort();
       this.inflight = null;
-      log('affect', { outcome: 'skipped', ms: 0, code: 'input_budget' });
+      this.log.info('affect', { outcome: 'skipped', ms: 0, code: 'input_budget' });
       return;
     }
     this.inflight?.abort();
@@ -243,7 +247,7 @@ export class AffectTracker {
     this.inflight = own;
     const seq = ++this.seq;
     this.calls += 1;
-    this.analyze(seq, own, user, language).catch(() => log('affect_card_failed', {}));
+    this.analyze(seq, own, user, language).catch(() => this.log.warn('affect_card_failed'));
   }
 
   /** Light or short final: T2 only records the line; T4 adds the exhaustion counters. */
@@ -325,29 +329,29 @@ export class AffectTracker {
       });
       if (own.signal.aborted) throw new Error('affect_cancelled');
       return raw;
-    }, { classify: () => 'ignorable' });
+    }, { classify: () => 'ignorable', logger: this.log });
     const ms = Date.now() - started;
     if (seq !== this.seq || own.signal.aborted) {
-      log('affect', { outcome: 'stale', ms });
+      this.log.info('affect', { outcome: 'stale', ms });
       return;
     }
     this.inflight = null;
     if (!result.ok) {
       this.failures += 1;
-      log('affect', { outcome: 'failed', ms, code: result.code });
+      this.log.warn('affect', { outcome: 'failed', ms, code: result.code });
       return;
     }
     const card = this.parseCard(result.value);
     if (!card) {
       this.failures += 1;
-      log('affect', { outcome: 'failed', ms, code: 'invalid' });
+      this.log.warn('affect', { outcome: 'failed', ms, code: 'invalid' });
       return;
     }
     this.latest = card;
     this.byEmotion[card.emotion] += 1;
     if (card.crisis) this.crisisSeen = true;
     this.exhaustion.onCard(card, isLow(card, this.deps.config.lowIntensity));
-    log('affect', { outcome: 'ok', ms });
+    this.log.info('affect', { outcome: 'ok', ms });
     this.deps.onCard(card);
   }
 
