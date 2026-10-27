@@ -1,8 +1,11 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { LANGUAGES } from '@anyidea/protocol';
 import { loadConfig } from '../../gateway/src/config.ts';
 import { QwenAdapter } from '../../gateway/src/adapters/qwen.ts';
+import { loadCharacterRegistry } from '../../gateway/src/characters/registry.ts';
+import { loadI18n } from '../../gateway/src/i18n/load.ts';
 import { QwenTextClient } from '../../gateway/src/memory/textClient.ts';
 import { loadRoleCatalog } from '../../gateway/src/roles/fileCatalog.ts';
 import { MockSummarizer } from '../../gateway/src/session/ledger.ts';
@@ -13,7 +16,9 @@ import { Session } from '../../gateway/src/session/session.ts';
 // node --env-file-if-exists=gateway/.env --import tsx docs/testing/plan3-silence-flow-probe.mjs
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const config = loadConfig({ ...process.env, ADAPTER: 'qwen', APP_SECRET: 'synthetic-silence-probe-secret' });
-const roles = loadRoleCatalog(join(root, 'gateway/roles'));
+const characters = loadCharacterRegistry(join(root, 'gateway/characters'), LANGUAGES);
+const roles = loadRoleCatalog(join(root, 'gateway/roles'), characters);
+const i18n = loadI18n(join(root, 'gateway/config'));
 const hostname = new URL(config.qwenEndpoint).hostname;
 if (!config.summarizerEndpoint && !/^[a-z0-9-]+\.cn-beijing\.maas\.aliyuncs\.com$/.test(hostname)) {
   throw new Error('probe_text_endpoint_unverified');
@@ -45,14 +50,15 @@ if (report.synthetic !== true || report.phoneAcceptance !== false) throw new Err
 const save = () => writeFileSync(join(root, 'docs/testing', reportName), `${JSON.stringify(report, null, 2)}\n`);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-if (!renderOnly) for (const style of ['grandchild', 'old-friend']) {
-  const decisionConfig = roles.director('elder-companion').silenceDecision;
+// Styles were replaced by characters; one run per character would repeat the same silence pack.
+if (!renderOnly) for (const style of ['xiaonuan']) {
+  const decisionConfig = roles.director('xiaonuan').silenceDecision;
   for (const fixture of fixtures) {
     const began = Date.now();
     let raw;
     const observedClient = { complete: async input => { raw = await client.complete(input); return raw; } };
-    const observedPlan = createSilencePlanner(observedClient, decisionConfig);
-    const text = await observedPlan({ userText: fixture.userText, assistantText: fixture.assistantText }, new AbortController().signal);
+    const observedPlan = createSilencePlanner(observedClient, decisionConfig, i18n.silence.zh);
+    const text = await observedPlan({ stage: 'context', userText: fixture.userText, assistantText: fixture.assistantText, previousTexts: [], memorySnapshot: '' }, new AbortController().signal);
     let decisionValid = false;
     try {
       const parsed = JSON.parse(raw);
@@ -68,11 +74,10 @@ if (!renderOnly) for (const style of ['grandchild', 'old-friend']) {
   }
 
   // Accelerate only waiting intervals; the production decision timeout stays unchanged.
-  const probeRoles = {
-    ...roles,
-    director: id => ({ ...roles.director(id), contextAfterMs: 100, checkAfterMs: 100, leaveAfterMs: 100, restAfterMs: 200 }),
-    buildPersona: (role, chosenStyle) => roles.buildPersona(role, chosenStyle),
-  };
+  // Class methods live on the prototype; spreading the catalog would drop them.
+  const probeRoles = Object.create(roles);
+  probeRoles.director = id => ({ ...roles.director(id), contextAfterMs: 100, checkAfterMs: 100, leaveAfterMs: 100, restAfterMs: 200 });
+  probeRoles.buildPersona = (characterId, language) => roles.buildPersona(characterId, language);
   const bySeq = new Map();
   const completed = [];
   const errors = [];
@@ -108,7 +113,7 @@ if (!renderOnly) for (const style of ['grandchild', 'old-friend']) {
       roles: probeRoles, textClient: sessionClient, modelOwnsTurns: true,
       adapterFactory: () => new QwenAdapter({ apiKey: config.qwenApiKey, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice }),
       summarizer: new MockSummarizer(),
-    }, { roleId: 'elder-companion', styleId: style }, `synthetic-flow-${style}`, false);
+    }, { characterId: 'xiaonuan', firstMeet: false }, `synthetic-flow-${style}`, false);
     await session.start(transport);
     await nextReply(1);
     const turns = ['我叫陈叔，叫我陈叔就好。', '我今天去了公园，绕着湖走了一圈。', '今天先聊到这里，再见。'];
@@ -135,7 +140,7 @@ if (!renderOnly) for (const style of ['grandchild', 'old-friend']) {
 
 // Exercise approved speech through the actual realtime adapter without storing PCM.
 report.renderings = [];
-for (const style of ['grandchild', 'old-friend']) {
+for (const style of ['xiaonuan']) {
   const candidate = report.cases.find(row => row.style === style && row.id === 'omitted-feeling')?.text;
   if (!candidate) throw new Error('probe_missing_candidate');
   const adapter = new QwenAdapter({ apiKey: config.qwenApiKey, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice });
@@ -144,7 +149,7 @@ for (const style of ['grandchild', 'old-friend']) {
   const errors = [];
   let timer;
   try {
-    await adapter.connect({ instructions: roles.buildPersona('elder-companion', style), tools: [] });
+    await adapter.connect({ instructions: roles.buildPersona('xiaonuan', 'zh'), tools: [] });
     await new Promise((resolve, reject) => {
       timer = setTimeout(() => reject(new Error('probe_render_timeout')), 20000);
       adapter.on('textDelta', (_id, delta) => { text += delta; });
@@ -153,7 +158,7 @@ for (const style of ['grandchild', 'old-friend']) {
       adapter.on('responseDone', resolve);
       adapter.createResponse({
         cue: 'followup', fallbackText: candidate,
-        instruction: roles.director('elder-companion').silenceDecision.speakInstruction.replaceAll('{continuation}', JSON.stringify(candidate)),
+        instruction: roles.director('xiaonuan').silenceDecision.speakInstruction.replaceAll('{continuation}', JSON.stringify(candidate)),
       });
     });
     const normalized = value => value.replace(/[\s\p{P}]/gu, '');

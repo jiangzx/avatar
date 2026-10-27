@@ -3,6 +3,8 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LANGUAGES } from '@anyidea/protocol';
+import { loadCharacterRegistry } from '../../gateway/src/characters/registry.ts';
 import { loadI18n } from '../../gateway/src/i18n/load.ts';
 import { grounded } from '../../gateway/src/memory/grounding.ts';
 import { QwenTextClient } from '../../gateway/src/memory/textClient.ts';
@@ -27,7 +29,8 @@ async function main() {
   if (!process.env.DASHSCOPE_API_KEY || !process.env.QWEN_SUMMARIZER_ENDPOINT) throw new Error('probe_env_missing');
   const memory = loadMemoryBudget(join(root, 'gateway/config/memory.json'));
   const client = new QwenTextClient({ apiKey: process.env.DASHSCOPE_API_KEY, endpoint: process.env.QWEN_SUMMARIZER_ENDPOINT, model: memory.extractModel ?? 'qwen-plus' });
-  const roles = loadRoleCatalog(join(root, 'gateway/roles'));
+  const characters = loadCharacterRegistry(join(root, 'gateway/characters'), LANGUAGES);
+  const roles = loadRoleCatalog(join(root, 'gateway/roles'), characters);
   const i18n = loadI18n(join(root, 'gateway/config'));
   const { care } = loadAffectConfig(join(root, 'gateway/config/affect.json'));
   const rows = [];
@@ -36,7 +39,7 @@ async function main() {
     const started = performance.now();
     const line = await generateCareLine(
       client,
-      roles.carePrompt('zh'),
+      roles.carePrompt('xiaonuan', 'zh'),
       { userLine: q.userLine, daysAgo: q.daysAgo },
       { timeoutMs: care.timeoutMs, maxChars: care.maxChars.zh, maxTokens: care.maxTokens, temperature: care.temperature },
       i18n.safety,

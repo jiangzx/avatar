@@ -1,8 +1,10 @@
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { LANGUAGES } from '@anyidea/protocol';
 import { loadConfig } from '../../gateway/src/config.ts';
 import { QwenAdapter } from '../../gateway/src/adapters/qwen.ts';
+import { loadCharacterRegistry } from '../../gateway/src/characters/registry.ts';
 import { QwenTextClient } from '../../gateway/src/memory/textClient.ts';
 import { DeviceRegistry } from '../../gateway/src/identity/registry.ts';
 import { openDatabase } from '../../gateway/src/memory/db.ts';
@@ -19,7 +21,8 @@ import { errorCodeOf } from '../../gateway/src/reliability/policy.ts';
 // node --env-file-if-exists=gateway/.env --import tsx docs/testing/plan3-topic-continuity-probe.mjs [case|all] [report.json]
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const config = loadConfig({ ...process.env, ADAPTER: 'qwen', APP_SECRET: 'synthetic-topic-probe-secret' });
-const roles = loadRoleCatalog(join(root, 'gateway/roles'));
+const characters = loadCharacterRegistry(join(root, 'gateway/characters'), LANGUAGES);
+const roles = loadRoleCatalog(join(root, 'gateway/roles'), characters);
 const hostname = new URL(config.qwenEndpoint).hostname;
 if (!config.summarizerEndpoint && !/^[a-z0-9-]+\.cn-beijing\.maas\.aliyuncs\.com$/.test(hostname)) throw new Error('probe_text_endpoint_unverified');
 const textClient = new QwenTextClient({
@@ -28,17 +31,18 @@ const textClient = new QwenTextClient({
   model: 'qwen-plus',
 });
 // Only accelerate silence waits; keep the production decision budget.
-const probeRoles = {
-  ...roles,
-  director: id => ({ ...roles.director(id), contextAfterMs: 100, checkAfterMs: 100, leaveAfterMs: 100, restAfterMs: 200 }),
-  buildPersona: (roleId, styleId) => roles.buildPersona(roleId, styleId),
-};
+// Class methods live on the prototype; spreading the catalog would drop them.
+const probeRoles = Object.create(roles);
+probeRoles.director = id => ({ ...roles.director(id), contextAfterMs: 100, checkAfterMs: 100, leaveAfterMs: 100, restAfterMs: 200 });
+probeRoles.buildPersona = (characterId, language) => roles.buildPersona(characterId, language);
 const pacing = loadPacing(join(root, 'gateway/config/pacing.json'));
 const memory = loadMemoryBudget(join(root, 'gateway/config/memory.json'));
-const budget = validateBudgets(pacing, memory, config.ledger, roles.pairs().map(p => roles.buildPersona(p.roleId, p.styleId))).budget;
-const cases = ['old-friend', 'grandchild'].flatMap(style => [false, true].map(history => ({
-  id: `${history ? 'known' : 'empty'}-${style}`, style, history,
-})));
+const personasByLanguage = {};
+for (const pair of roles.characterLanguagePairs()) (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.characterId, pair.language));
+const budget = validateBudgets(pacing, memory, config.ledger, personasByLanguage).budget;
+const cases = [false, true].map(history => ({
+  id: `${history ? 'known' : 'empty'}-xiaonuan`, character: 'xiaonuan', history,
+}));
 const selected = process.argv[2] ?? 'all';
 const reportName = process.argv[3] ?? 'plan3-topic-continuity-latest.json';
 if (!/^[a-z0-9-]+\.json$/.test(reportName) || !['all', ...cases.map(c => c.id)].includes(selected)) throw new Error('invalid_probe_args');
@@ -56,10 +60,10 @@ async function run(test) {
   const decisions = [];
   try {
     const store = new SqliteMemoryStore(db);
-    const registry = new DeviceRegistry({ store, roles, limits: { maxOwners: 2, dailyCap: 2, orphanOwnerDays: 7, orphanCleanupBatch: 2 } });
-    const registered = registry.register(test.style);
+    const registry = new DeviceRegistry({ store, roles, characters, limits: { maxOwners: 2, dailyCap: 2, orphanOwnerDays: 7, orphanCleanupBatch: 2 }, continuityGapMs: pacing.restReminder.continuityGapMs });
+    const registered = registry.register();
     if (!registered.ok) throw new Error('probe_register_failed');
-    const initial = registry.resolve(registered.deviceToken);
+    const initial = registry.resolve(registered.deviceToken, 'xiaonuan');
     if (!initial.ok) throw new Error('probe_resolve_failed');
     const { ownerId, agentId } = initial.ctx;
     store.markNotified(ownerId, Date.now());
@@ -67,13 +71,13 @@ async function run(test) {
       store.recordSessionStart('synthetic-previous', agentId, 1);
       store.recordSessionEnd('synthetic-previous', agentId, 2);
       const text = '昨天青岛天气不错，我们聊了去海边散步。';
-      store.insertMessage({ id: 'synthetic-line', sessionId: 'synthetic-previous', ownerId, role: 'user', text, bigrams: bigrams(text), now: 2 });
-      applyExtractOps(store, ownerId, store.memoryEpoch(ownerId), [
+      store.insertMessage({ id: 'synthetic-line', sessionId: 'synthetic-previous', ownerId, agentId, role: 'user', text, bigrams: bigrams(text), now: 2 });
+      applyExtractOps(store, ownerId, agentId, store.memoryEpochs(ownerId, agentId), [
         { op: 'add', table: 'user_facts', category: 'addressing', text: '称呼：陈叔' },
         { op: 'add', table: 'episodes', summary: '上次聊了青岛天气，以及去海边散步。' },
       ], ['synthetic-line']);
     }
-    const resolved = registry.resolve(registered.deviceToken);
+    const resolved = registry.resolve(registered.deviceToken, 'xiaonuan');
     if (!resolved.ok) throw new Error('probe_snapshot_failed');
     const bySeq = new Map();
     const completed = [];
@@ -150,7 +154,7 @@ async function run(test) {
     };
     return { ...test, question, records, checks, toolCalls: metrics.reduce((n, m) => n + m.toolCalls, 0), errors, automatedPassed: Object.values(checks).every(Boolean), manualReview: null, passed: null };
   } catch (error) {
-    return { ...test, question, records, errors, automatedPassed: false, manualReview: null, passed: false, code: errorCodeOf(error) };
+    return { ...test, question, records, errors, automatedPassed: false, manualReview: null, passed: false, code: errorCodeOf(error), message: error instanceof Error ? error.message : 'probe_failed' };
   } finally {
     session?.end();
     db.close();

@@ -2,6 +2,8 @@
 // Synthetic lines only. Prints enums, booleans, durations, and error counts; never the lines or the cards' text.
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LANGUAGES } from '@anyidea/protocol';
+import { loadCharacterRegistry } from '../../gateway/src/characters/registry.ts';
 import { loadI18n } from '../../gateway/src/i18n/load.ts';
 import { QwenTextClient } from '../../gateway/src/memory/textClient.ts';
 import { loadRoleCatalog } from '../../gateway/src/roles/fileCatalog.ts';
@@ -31,7 +33,8 @@ async function main() {
   if (!process.env.DASHSCOPE_API_KEY) throw new Error('probe_key_missing');
   const memory = loadMemoryBudget(join(root, 'gateway/config/memory.json'));
   const client = new QwenTextClient({ apiKey: process.env.DASHSCOPE_API_KEY, endpoint: endpointFromEnv(), model: memory.extractModel ?? 'qwen-plus' });
-  const roles = loadRoleCatalog(join(root, 'gateway/roles'));
+  const characters = loadCharacterRegistry(join(root, 'gateway/characters'), LANGUAGES);
+  const roles = loadRoleCatalog(join(root, 'gateway/roles'), characters);
   const i18n = loadI18n(join(root, 'gateway/config'));
   const config = loadAffectConfig(join(root, 'gateway/config/affect.json'));
   let matched = 0;
@@ -44,7 +47,7 @@ async function main() {
       tracker = new AffectTracker({
         client,
         config,
-        prompt: (language) => roles.affectPrompt(language),
+        prompt: (language) => roles.affectPrompt('xiaonuan', language),
         history: () => [],
         evidence: i18n.evidence,
         safety: i18n.safety,
