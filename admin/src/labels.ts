@@ -19,13 +19,24 @@ export const END_REASON_LABELS: Record<string, string> = {
   client_end: '用户挂断',
   grace_expired: '网络断开后没有回来',
   start_timeout: '重连后没有完成恢复',
-  owner_replaced: '开始了新通话',
+  owner_replaced: '同一用户开始了新通话',
   owner_deleted: '用户数据被删除',
   owner_banned: '用户被封禁',
   memory_changed: '记忆更新后结束',
-  shutdown: '网关重启',
+  shutdown: '网关正常关机',
   process_restart: '网关异常退出后补记',
 };
+
+const ADAPTER_LABELS: Record<string, string> = {
+  qwen: '通义千问',
+  seeduplex: 'Seeduplex',
+  mock: 'Mock（测试）',
+};
+
+export function adapterLabel(id: string | null): string {
+  if (!id) return '未记录';
+  return ADAPTER_LABELS[id] ?? id;
+}
 
 export function characterName(id: string): string {
   return CHARACTER_NAMES[id] ?? id;

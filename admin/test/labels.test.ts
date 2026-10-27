@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contrastRatio } from '../src/color.ts';
-import { END_REASON_LABELS, characterName, endReasonLabel, kindLabel } from '../src/labels.ts';
+import { END_REASON_LABELS, adapterLabel, characterName, endReasonLabel, kindLabel } from '../src/labels.ts';
 import { CHARACTER_COLORS, palette } from '../src/theme.ts';
 
 describe('labels', () => {
@@ -23,9 +23,19 @@ describe('labels', () => {
 
   it('reads end reasons in plain words, including unknown and open sessions', () => {
     expect(endReasonLabel({ endedAt: 1, endReason: 'client_end' })).toBe('用户挂断');
+    expect(endReasonLabel({ endedAt: 1, endReason: 'shutdown' })).toBe('网关正常关机');
+    expect(endReasonLabel({ endedAt: 1, endReason: 'owner_replaced' })).toBe('同一用户开始了新通话');
     expect(endReasonLabel({ endedAt: null, endReason: null })).toBe('进行中');
     expect(endReasonLabel({ endedAt: 1, endReason: null })).toBe('未记录');
     expect(endReasonLabel({ endedAt: 1, endReason: 'new_reason' })).toBe('其他（new_reason）');
+  });
+
+  it('names the adapter that carried each call', () => {
+    expect(adapterLabel('qwen')).toBe('通义千问');
+    expect(adapterLabel('seeduplex')).toBe('Seeduplex');
+    expect(adapterLabel('mock')).toBe('Mock（测试）');
+    expect(adapterLabel('other')).toBe('other');
+    expect(adapterLabel(null)).toBe('未记录');
   });
 
   it('names characters and usage kinds', () => {

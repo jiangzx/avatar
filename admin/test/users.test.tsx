@@ -57,6 +57,30 @@ describe('UsersPage', () => {
     expect(calls.filter((c) => c.url.pathname === '/admin/api/owners').map((c) => c.url.searchParams.get('cursor'))).toEqual([null, 'c2']);
   });
 
+  it('shows a failed 加载更多 and retries it when asked', async () => {
+    let failNext = true;
+    const { fetch } = fakeFetch({
+      'GET /admin/api/owners': (url: URL) => {
+        if (url.searchParams.get('cursor') === 'c2') {
+          if (failNext) {
+            failNext = false;
+            return { status: 500, body: { error: 'internal', message: '这一页暂时读不出来，请稍后再试。' } };
+          }
+          return { body: { items: [owner('bbbbbbbbbbbb')], nextCursor: null } };
+        }
+        return { body: { items: [owner('aaaaaaaaaaaa')], nextCursor: 'c2' } };
+      },
+    });
+    renderWithProviders(<UsersPage />, fetch);
+    await userEvent.click(await screen.findByRole('button', { name: '加载更多' }));
+    expect(await screen.findByText('这一页暂时读不出来，请稍后再试。')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'aaaaaaaaaaaa' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(await screen.findByRole('link', { name: 'bbbbbbbbbbbb' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'aaaaaaaaaaaa' })).toBeTruthy();
+    expect(screen.queryByText('这一页暂时读不出来，请稍后再试。')).toBeNull();
+  });
+
   it('has an empty state', async () => {
     const { fetch } = fakeFetch({ 'GET /admin/api/owners': { items: [], nextCursor: null } });
     renderWithProviders(<UsersPage />, fetch);

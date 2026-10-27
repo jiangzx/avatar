@@ -7,6 +7,7 @@ export interface Paged<T> {
   status: 'loading' | 'ready' | 'error';
   error: string | null;
   hasMore: boolean;
+  moreLoading: boolean;
   more(): Promise<void>;
   reload(): void;
 }
@@ -17,6 +18,7 @@ export function usePaged<T>(fetchPage: (cursor: string | null) => Promise<AdminP
   const [cursor, setCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<Paged<T>['status']>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [moreLoading, setMoreLoading] = useState(false);
   const [tick, setTick] = useState(0);
   const fetchRef = useRef(fetchPage);
   fetchRef.current = fetchPage;
@@ -26,6 +28,7 @@ export function usePaged<T>(fetchPage: (cursor: string | null) => Promise<AdminP
     setStatus('loading');
     setItems([]);
     setError(null);
+    setMoreLoading(false);
     fetchRef.current(null).then(
       (page) => {
         if (!live) return;
@@ -45,7 +48,10 @@ export function usePaged<T>(fetchPage: (cursor: string | null) => Promise<AdminP
   }, [...deps, tick]);
 
   const more = useCallback(async () => {
-    if (!cursor) return;
+    if (!cursor || moreLoading) return;
+    setMoreLoading(true);
+    setError(null);
+    setStatus('ready');
     try {
       const page = await fetchRef.current(cursor);
       setItems((prev) => [...prev, ...page.items]);
@@ -53,9 +59,11 @@ export function usePaged<T>(fetchPage: (cursor: string | null) => Promise<AdminP
     } catch (err) {
       setError(errorMessage(err));
       setStatus('error');
+    } finally {
+      setMoreLoading(false);
     }
-  }, [cursor]);
+  }, [cursor, moreLoading]);
 
   const reload = useCallback(() => setTick((n) => n + 1), []);
-  return { items, status, error, hasMore: cursor !== null, more, reload };
+  return { items, status, error, hasMore: cursor !== null, moreLoading, more, reload };
 }

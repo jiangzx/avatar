@@ -35,6 +35,17 @@ describe('SessionsPage', () => {
     expect(screen.getAllByText('小暖').length).toBe(2);
   });
 
+  it('shows how each call was connected', async () => {
+    const { fetch } = fakeFetch({
+      'GET /admin/api/sessions': { items: [row(), row({ sid: 'mock-1', adapter: 'mock' }), row({ sid: 'old-1', adapter: null })], nextCursor: null },
+    });
+    renderWithProviders(<SessionsPage oid={undefined} now={() => NOW} />, fetch);
+    expect(await screen.findByRole('columnheader', { name: '接入方式' })).toBeTruthy();
+    expect(screen.getByText('通义千问')).toBeTruthy();
+    expect(screen.getByText('Mock（测试）')).toBeTruthy();
+    expect(screen.getByText('未记录')).toBeTruthy();
+  });
+
   it('filters by the user from the address and by today in Shanghai', async () => {
     const { fetch, calls } = fakeFetch({ 'GET /admin/api/sessions': { items: [], nextCursor: null } });
     renderWithProviders(<SessionsPage oid="3f9a1c2b4d5e" now={() => NOW} />, fetch);

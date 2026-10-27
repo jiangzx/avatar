@@ -4,7 +4,7 @@ import type { AdminRange, AdminSessionRow } from '@anyidea/protocol';
 import { useApi } from '../auth/AuthContext.tsx';
 import { PagedTable } from '../components/PagedTable.tsx';
 import { formatDateTime, formatDuration, formatMoney, formatSeconds, rangeStart } from '../format.ts';
-import { characterName, endReasonLabel } from '../labels.ts';
+import { adapterLabel, characterName, endReasonLabel } from '../labels.ts';
 import { useViewOptions } from '../layout/ViewOptions.tsx';
 import { href } from '../router.ts';
 import { palette } from '../theme.ts';
@@ -27,6 +27,7 @@ const columns: TableColumnsType<AdminSessionRow> = [
   { title: '开始时间', dataIndex: 'startedAt', render: (ts: number) => formatDateTime(ts) },
   { title: '角色', dataIndex: 'character', render: (id: string) => characterName(id) },
   { title: '用户', dataIndex: 'oid', render: (oid: string) => <a href={href(`/users/${oid}`)}>{oid}</a> },
+  { title: '接入方式', dataIndex: 'adapter', render: (id: string | null) => adapterLabel(id) },
   { title: '时长', key: 'duration', render: (_: unknown, r: AdminSessionRow) => (r.endedAt === null ? '进行中' : formatDuration(r.endedAt - r.startedAt)) },
   { title: '回复', dataIndex: 'replies', align: 'right' },
   {
@@ -63,7 +64,7 @@ export function SessionsPage({ oid, now = Date.now }: { oid: string | undefined;
           </span>
         )}
       </div>
-      <PagedTable paged={paged} columns={columns} rowKey={(r) => r.sid} empty="这段时间没有通话。" />
+      <PagedTable paged={paged} columns={columns} rowKey={(r) => r.sid} empty="这段时间没有通话。" scroll={{ x: 1100 }} />
     </div>
   );
 }
