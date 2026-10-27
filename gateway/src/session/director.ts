@@ -44,6 +44,8 @@ export interface DirectorDeps {
   getMemorySnapshot?(stage: ProactivePlanStage): string;
   /** Planner-only extras read at planning time: latest affect card, open loop, localized time words. */
   getPlanExtras?(): Pick<SilenceContext, 'affect' | 'openLoop' | 'timeOfDay' | 'season' | 'solarTerm'>;
+  /** First meeting with a known name: a card template with {name} filled in; undefined otherwise. Checked before safeGreeting. */
+  firstMeetGreeting?(): string | undefined;
   /** Deterministic opening when the name is known; never let the planner invent a past topic. */
   safeGreeting?(): string | null;
   /** Once per quiet stretch, when silence reaches the rest step. */
@@ -548,8 +550,8 @@ export class Director {
   /** The opening is planned like every other conversational line; configured copy is the failure fallback. */
   private requestGreeting(): void {
     if (this.blocked() || this.left || this.opened) return;
-    // With a stored name, never let the planner invent a past topic.
-    const safe = this.deps.safeGreeting?.();
+    // A known name never goes to the planner: first-meet template first, then the met-before name greeting.
+    const safe = this.deps.firstMeetGreeting?.() ?? this.deps.safeGreeting?.();
     if (safe) {
       this.deps.requestResponse('greeting', { cue: 'greeting', instruction: safe, fallbackText: safe });
       return;

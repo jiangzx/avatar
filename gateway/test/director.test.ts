@@ -149,6 +149,39 @@ describe('Director', () => {
     }]);
   });
 
+  it('prefers the first-meet template over the name greeting and never plans', () => {
+    const reqs: ProactiveRequest[] = [];
+    let planned = 0;
+    const d = new Director(cfg, {
+      requestResponse: (_k, r) => reqs.push(r),
+      planProactiveLine: () => { planned += 1; return { text: '又见面啦' }; },
+      getMemorySnapshot: () => '称呼：王叔',
+      firstMeetGreeting: () => '王叔您好，我是小凯，头一回来陪您。',
+      safeGreeting: () => '王叔，又见面啦。',
+    });
+    d.onSessionStart(true);
+    expect(planned).toBe(0);
+    expect(reqs).toEqual([{
+      cue: 'greeting',
+      instruction: '王叔您好，我是小凯，头一回来陪您。',
+      fallbackText: '王叔您好，我是小凯，头一回来陪您。',
+    }]);
+  });
+
+  it('falls through to the name greeting when there is no first-meet template', () => {
+    const reqs: ProactiveRequest[] = [];
+    let planned = 0;
+    const d = new Director(cfg, {
+      requestResponse: (_k, r) => reqs.push(r),
+      planProactiveLine: () => { planned += 1; return { text: '又见面啦' }; },
+      firstMeetGreeting: () => undefined,
+      safeGreeting: () => '王叔，又见面啦。',
+    });
+    d.onSessionStart(true);
+    expect(planned).toBe(0);
+    expect(reqs).toEqual([{ cue: 'greeting', instruction: '王叔，又见面啦。', fallbackText: '王叔，又见面啦。' }]);
+  });
+
   it('plans the first silence step after a recall question instead of speaking fallback copy', () => {
     const contexts: SilenceContext[] = [];
     const reqs: ProactiveRequest[] = [];

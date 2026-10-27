@@ -29,7 +29,7 @@ import type { I18nBundle, LanguageRules } from '../i18n/types.ts';
 import type { RoleCatalog } from '../roles/catalog.ts';
 import { PROMPT_LABELS } from '../roles/labels.ts';
 import { devContext, type SessionContext } from './context.ts';
-import { Director, type SilenceContext, type SilencePlan } from './director.ts';
+import { Director, type DirectorConfig, type SilenceContext, type SilencePlan } from './director.ts';
 import { EmotionTagger, type EmotionConfig } from './emotion.ts';
 import { InterruptCoordinator } from './interrupt.ts';
 import { buildInstructions, historyBudget, type InstructionBudget } from './instructions.ts';
@@ -285,6 +285,10 @@ export class Session {
   private crisisLogged = false;
   /** Last validated open loop from an accepted card; planner input only, never logged. */
   private openLoop: string | undefined;
+  /** First-meet opening, picked once per language so a cut-off opening repeats the same sentence. */
+  private firstMeetLine: { language: Language; text: string } | null = null;
+  /** First meetings only: director configs whose greetingText is the card's no-name line. */
+  private readonly firstMeetDirectors = new Map<Language, DirectorConfig>();
 
   constructor(
     private readonly deps: SessionDeps,
@@ -322,13 +326,15 @@ export class Session {
       .some((language) => deps.roles.director(ctx.characterId, language).silenceDecision !== undefined);
     this.safeGreetingWired = Boolean(deps.textClient) && hasSilencePlanner;
     this.director = new Director(
-      (language) => deps.roles.director(ctx.characterId, language),
+      (language) => this.directorConfig(language),
       {
         requestResponse: (kind, request) => this.requestResponse(kind, request),
+        firstMeetGreeting: () => this.firstMeetGreeting(),
         ...(deps.textClient && hasSilencePlanner ? {
           planProactiveLine: (context, signal) => this.planProactiveLine(context, signal),
           getMemorySnapshot: (stage) => stage === 'greeting'
-            ? this.context.greetingMemorySnapshot ?? ''
+            // A first meeting must not sound like a reunion: the greeting planner sees no memory.
+            ? (this.context.firstMeet ? '' : this.context.greetingMemorySnapshot ?? '')
             : this.context.proactiveMemorySnapshot ?? '',
           safeGreeting: () => this.safeGreeting(),
           ...(deps.affect?.enabled ? { getPlanExtras: () => this.planExtras() } : {}),
@@ -384,7 +390,7 @@ export class Session {
       this.adapter.close();
       return;
     }
-    this.director.onSessionStart(Boolean(this.context.memorySnapshot?.trim()));
+    this.director.onSessionStart(this.openingHasMemory());
     this.armSlimInterval();
   }
 
@@ -1528,6 +1534,39 @@ export class Session {
     else delete this.context.pinnedMemory;
   }
 
+  /** First meeting with a known name: a card template with {name}. Never the planner. */
+  private firstMeetGreeting(): string | undefined {
+    const characters = this.deps.characters;
+    if (!this.context.firstMeet || !characters) return undefined;
+    const name = this.greetingName();
+    if (!name) return undefined;
+    const picked = this.firstMeetLine;
+    if (picked && picked.language === this.language) return picked.text;
+    const templates = characters.greetingsFirstMeet(this.context.characterId, this.language);
+    const text = templates[Math.floor(Math.random() * templates.length)]!.replaceAll('{name}', name);
+    this.firstMeetLine = { language: this.language, text };
+    return text;
+  }
+
+  /** First meeting: the card's no-name line replaces greetingText as the planner-failure fallback. */
+  private directorConfig(language: Language): DirectorConfig {
+    const base = this.deps.roles.director(this.context.characterId, language);
+    const characters = this.deps.characters;
+    if (!this.context.firstMeet || !characters) return base;
+    let config = this.firstMeetDirectors.get(language);
+    if (!config) {
+      config = { ...base, greetingText: characters.greetingNoName(this.context.characterId, language) };
+      this.firstMeetDirectors.set(language, config);
+    }
+    return config;
+  }
+
+  /** A first meeting without a name opens like a session with no memory: introduce yourself, ask the name. */
+  private openingHasMemory(): boolean {
+    if (!this.context.memorySnapshot?.trim()) return false;
+    return !(this.context.firstMeet && !this.greetingName());
+  }
+
   /** Safe name-based opening; null lets the planner handle the no-memory case (ask for a name). */
   private safeGreeting(): string | null {
     const name = this.greetingName();
@@ -1560,6 +1599,8 @@ export class Session {
    * Null = nothing to revisit or care is off, so the opening does not wait at all.
    */
   private startCareOpening(): Promise<void> | null {
+    // A new character has nothing left over to ask about.
+    if (this.context.firstMeet) return null;
     const care = this.deps.affect?.enabled ? this.deps.affect.care : undefined;
     const store = this.deps.store;
     const client = this.deps.textClient;
