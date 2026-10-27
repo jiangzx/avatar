@@ -1,14 +1,12 @@
+import { AuditPage } from './pages/AuditPage.tsx';
 import { OverviewPage } from './pages/OverviewPage.tsx';
 import { SessionsPage } from './pages/SessionsPage.tsx';
+import { TracePage } from './pages/TracePage.tsx';
 import { UserDetailPage } from './pages/UserDetailPage.tsx';
 import { UsersPage } from './pages/UsersPage.tsx';
 import { useRoute } from './router.ts';
 
-function TitleOnly({ title }: { title: string }) {
-  return <h1 className="page-title">{title}</h1>;
-}
-
-/** Route table. P2-T8 replaces the remaining TitleOnly entries. */
+/** Route table. Plan 3 adds the 调设置 pages here. */
 export function PageRoutes() {
   const route = useRoute();
   const [top, id] = route.segments;
@@ -18,9 +16,9 @@ export function PageRoutes() {
     case 'sessions':
       return <SessionsPage oid={route.query.get('oid') ?? undefined} />;
     case 'trace':
-      return <TitleOnly title="排查" />;
+      return <TracePage sid={id} query={route.query} />;
     case 'audit':
-      return <TitleOnly title="审计" />;
+      return <AuditPage />;
     default:
       return <OverviewPage />;
   }

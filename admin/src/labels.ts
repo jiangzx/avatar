@@ -51,3 +51,30 @@ export function endReasonLabel(row: { endedAt: number | null; endReason: string 
   if (row.endReason === null) return '未记录';
   return END_REASON_LABELS[row.endReason] ?? `其他（${row.endReason}）`;
 }
+
+const LEVEL_LABELS: Record<string, string> = { error: '错误', warn: '警告', info: '一般', debug: '详细' };
+
+export function levelLabel(level: string): string {
+  return LEVEL_LABELS[level] ?? level;
+}
+
+/** Actions written to admin_audit (spec「后台 HTTP API」审计动作). */
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  login_succeeded: '登录成功',
+  login_failed: '登录失败',
+  logout: '退出登录',
+  config_published: '发布配置',
+  config_rolled_back: '回滚配置',
+  config_reset: '恢复默认配置',
+  secret_updated: '更新 Key',
+  secret_revealed: '查看 Key',
+  price_added: '新增价格',
+  owner_banned: '封禁用户',
+  owner_unbanned: '解封用户',
+  owner_deleted: '删除用户数据',
+  log_level_changed: '调整日志详细程度',
+};
+
+export function actionLabel(action: string): string {
+  return AUDIT_ACTION_LABELS[action] ?? action;
+}

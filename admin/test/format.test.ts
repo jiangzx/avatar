@@ -8,6 +8,7 @@ import {
   formatMoney,
   formatPercent,
   formatSeconds,
+  formatTimeOfDay,
   formatYuan,
   rangeStart,
   shanghaiDay,
@@ -65,6 +66,12 @@ describe('dates in Asia/Shanghai', () => {
 
   it('formats a timestamp as month, day and 24h time', () => {
     expect(formatDateTime(Date.parse('2026-10-27T06:02:00Z'))).toBe('10月27日 14:02');
+  });
+
+  it('formats the time of day', () => {
+    const ts = Date.parse('2026-10-27T06:02:31Z');
+    expect(formatTimeOfDay(ts)).toBe('14:02');
+    expect(formatTimeOfDay(ts, true)).toBe('14:02:31');
   });
 
   it('starts ranges at Shanghai midnight', () => {

@@ -198,3 +198,41 @@ h3 {
   gap: 16px;
   margin-bottom: 16px;
 }
+
+.timeline {
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+  border-left: 2px solid #dce3e1;
+}
+
+.timeline li {
+  display: grid;
+  grid-template-columns: 64px minmax(240px, 1fr) 280px;
+  align-items: start;
+  column-gap: 16px;
+  padding: 6px 0 6px 16px;
+}
+
+.timeline-clock {
+  text-align: right;
+  color: #4d5d63;
+}
+
+.timeline-bar {
+  display: inline-block;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.timeline details {
+  grid-column: 2 / 4;
+  font-size: 13px;
+}
+
+.timeline details ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}

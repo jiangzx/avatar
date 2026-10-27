@@ -79,6 +79,18 @@ export function formatDateTime(ts: number): string {
   return `${Number(p.month)}月${Number(p.day)}日 ${p.hour}:${p.minute}`;
 }
 
+export function formatTimeOfDay(ts: number, withSeconds = false): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(withSeconds ? { second: '2-digit' as const } : {}),
+    hourCycle: 'h23',
+  }).formatToParts(new Date(ts));
+  const p = Object.fromEntries(parts.map((x) => [x.type, x.value]));
+  return withSeconds ? `${p.hour}:${p.minute}:${p.second}` : `${p.hour}:${p.minute}`;
+}
+
 const RANGE_DAYS: Record<AdminRange, number> = { today: 1, '7d': 7, '30d': 30 };
 
 /** First millisecond of the range, counted in whole Shanghai days ending today. */
