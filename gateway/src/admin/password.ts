@@ -17,6 +17,9 @@ function derive(password: string, salt: Buffer, N: number, r: number, p: number,
 }
 
 export async function hashPassword(password: string, salt: Buffer = randomBytes(SCRYPT_PARAMS.saltLen)): Promise<string> {
+  if (salt.length !== SCRYPT_PARAMS.saltLen) {
+    throw new Error(`salt must be ${SCRYPT_PARAMS.saltLen} bytes`);
+  }
   const { N, r, p, keyLen } = SCRYPT_PARAMS;
   const key = await derive(password, salt, N, r, p, keyLen);
   return `scrypt$${N}$${r}$${p}$${salt.toString('base64')}$${key.toString('base64')}`;
@@ -33,7 +36,8 @@ export function parsePasswordHash(encoded: string): ParsedPasswordHash | null {
   const powerOfTwo = (N & (N - 1)) === 0;
   if (!powerOfTwo || N < MIN_N || N > MAX_N) return null;
   if (parsed.r < 8 || parsed.r > 32 || parsed.p < 1 || parsed.p > 16) return null;
-  if (128 * N * parsed.r > MAXMEM) return null;
+  // OpenSSL needs 128*r*(N + p + 2) bytes; 128*N*r alone would let a hash that can never derive pass.
+  if (128 * parsed.r * (N + parsed.p + 2) > MAXMEM) return null;
   if (parsed.salt.length < SCRYPT_PARAMS.saltLen || parsed.hash.length !== SCRYPT_PARAMS.keyLen) return null;
   return parsed;
 }

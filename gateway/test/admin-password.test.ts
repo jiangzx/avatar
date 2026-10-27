@@ -21,6 +21,24 @@ describe('admin password', () => {
     expect(await hashPassword('pw-0123456789', salt)).toBe(await hashPassword('pw-0123456789', salt));
   });
 
+  it('rejects parameters that parse but can never derive', async () => {
+    const salt = Buffer.alloc(16, 1).toString('base64');
+    const hash = Buffer.alloc(32, 2).toString('base64');
+    // At exactly 64 MiB by the naive formula, but OpenSSL needs 128*r*(N+p+2) bytes.
+    const atCap = `scrypt$65536$8$1$${salt}$${hash}`;
+    expect(parsePasswordHash(atCap)).toBeNull();
+    expect(await verifyPassword('anything', atCap)).toBe(false);
+    // The shipped parameters stay accepted and usable.
+    const encoded = await hashPassword('boundary check password');
+    expect(parsePasswordHash(encoded)).not.toBeNull();
+    expect(await verifyPassword('boundary check password', encoded)).toBe(true);
+  });
+
+  it('rejects a caller-supplied salt of the wrong length', async () => {
+    await expect(hashPassword('pw-0123456789', Buffer.alloc(8))).rejects.toThrow(/salt/);
+    await expect(hashPassword('pw-0123456789', Buffer.alloc(32))).rejects.toThrow(/salt/);
+  });
+
   it('refuses weak or malformed hashes', async () => {
     const salt = Buffer.alloc(16, 1).toString('base64');
     const hash = Buffer.alloc(32, 2).toString('base64');

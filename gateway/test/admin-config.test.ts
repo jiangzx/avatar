@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AdminConfigSchema, loadAdminConfig, loadAdminEnv } from '../src/admin/config.ts';
+import { AdminConfigSchema, loadAdminConfig, loadAdminEnv } from '../src/log/adminConfig.ts';
 
 const ADMIN_JSON = fileURLToPath(new URL('../config/admin.json', import.meta.url));
 const shipped = () => JSON.parse(readFileSync(ADMIN_JSON, 'utf8')) as Record<string, unknown>;
@@ -96,6 +96,9 @@ describe('loadAdminEnv', () => {
     expect(loadAdminEnv({ ADMIN_PORT: '8788', ADMIN_PASSWORD_HASH: 'plain-password' })).toEqual({ enabled: false, reason: 'admin_password_hash_invalid' });
     const weak = `scrypt$1024$8$1$${Buffer.alloc(16, 1).toString('base64')}$${Buffer.alloc(32, 2).toString('base64')}`;
     expect(loadAdminEnv({ ADMIN_PORT: '8788', ADMIN_PASSWORD_HASH: weak })).toEqual({ enabled: false, reason: 'admin_password_hash_invalid' });
+    // Parses under the naive 128*N*r cap but exceeds what scrypt can derive with maxmem = 64 MiB.
+    const atCap = `scrypt$65536$8$1$${Buffer.alloc(16, 1).toString('base64')}$${Buffer.alloc(32, 2).toString('base64')}`;
+    expect(loadAdminEnv({ ADMIN_PORT: '8788', ADMIN_PASSWORD_HASH: atCap })).toEqual({ enabled: false, reason: 'admin_password_hash_invalid' });
   });
 
   it('accepts a valid pair', () => {
