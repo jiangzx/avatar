@@ -4,6 +4,8 @@ import { z } from 'zod';
 import type { Language } from '@anyidea/protocol';
 import type { DirectorConfig } from './roles/types.ts';
 import type { LedgerOptions } from './session/ledger.ts';
+import { parseLogLevel } from './log/levels.ts';
+import type { LogLevel } from './log/logger.ts';
 import { unique } from './unique.ts';
 
 export interface GatewayConfig {
@@ -46,6 +48,10 @@ export interface GatewayConfig {
   trustProxy: boolean;
   rebuildBackoffBaseMs: number;
   rebuildBackoffMaxMs: number;
+  /** LOG_LEVEL; admin overrides can make it more verbose for a while. */
+  logLevel: LogLevel;
+  /** Throw on content-like log fields (NODE_ENV test/development); production drops them instead. */
+  logStrict: boolean;
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): GatewayConfig {
@@ -150,6 +156,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     trustProxy,
     rebuildBackoffBaseMs,
     rebuildBackoffMaxMs,
+    logLevel: parseLogLevel(env.LOG_LEVEL),
+    logStrict: env.NODE_ENV === 'test' || env.NODE_ENV === 'development',
   };
 }
 

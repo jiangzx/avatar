@@ -25,7 +25,17 @@ describe('config', () => {
 
   it('parses defaults and dev origins', () => {
     const c = loadConfig({ APP_SECRET: 'x'.repeat(16), DEV_ORIGINS: 'http://localhost:5173, http://a.test' });
-    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', seeduplexVoices: { zh: 'zh_male_xiaotian_jupiter_bigtts', en: 'en_male_tim_uranus_bigtts' }, qwenEndpoint: '', qwenModel: 'qwen3.8-omni-flash-realtime', qwenVoice: 'longanlingxin', qwenVoices: { zh: 'longanlingxin', ja: 'Tina', en: 'Tina' }, summarizer: 'mock', summarizerEndpoint: '', summarizerModel: 'qwen-flash', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, mockPaceFactor: 2, sessionStartTimeoutMs: 10000, confirmWindowMs: 300, ledger: { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6000 }, sessionGraceMs: 60000, sessionUnclaimedMs: 300000, wsHeartbeatMs: 10000, wsMaxFramesPerSecond: 100, maxSessions: 100, sessionRateLimitMax: 10, sessionRateLimitWindowMs: 60000, resumeRateLimitMax: 30, resumeRateLimitWindowMs: 60000, trustProxy: false, rebuildBackoffBaseMs: 1000, rebuildBackoffMaxMs: 8000 });
+    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', seeduplexVoices: { zh: 'zh_male_xiaotian_jupiter_bigtts', en: 'en_male_tim_uranus_bigtts' }, qwenEndpoint: '', qwenModel: 'qwen3.8-omni-flash-realtime', qwenVoice: 'longanlingxin', qwenVoices: { zh: 'longanlingxin', ja: 'Tina', en: 'Tina' }, summarizer: 'mock', summarizerEndpoint: '', summarizerModel: 'qwen-flash', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, mockPaceFactor: 2, sessionStartTimeoutMs: 10000, confirmWindowMs: 300, ledger: { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6000 }, sessionGraceMs: 60000, sessionUnclaimedMs: 300000, wsHeartbeatMs: 10000, wsMaxFramesPerSecond: 100, maxSessions: 100, sessionRateLimitMax: 10, sessionRateLimitWindowMs: 60000, resumeRateLimitMax: 30, resumeRateLimitWindowMs: 60000, trustProxy: false, rebuildBackoffBaseMs: 1000, rebuildBackoffMaxMs: 8000, logLevel: 'info', logStrict: false });
+  });
+
+  it('parses LOG_LEVEL and turns on strict log checks only in test and development', () => {
+    const base = { APP_SECRET: 'x'.repeat(16) };
+    expect(loadConfig({ ...base, LOG_LEVEL: 'debug' }).logLevel).toBe('debug');
+    expect(() => loadConfig({ ...base, LOG_LEVEL: 'loud' })).toThrow('Unsupported LOG_LEVEL "loud"');
+    expect(loadConfig({ ...base, NODE_ENV: 'test' }).logStrict).toBe(true);
+    expect(loadConfig({ ...base, NODE_ENV: 'development' }).logStrict).toBe(true);
+    expect(loadConfig({ ...base, NODE_ENV: 'production' }).logStrict).toBe(false);
+    expect(loadConfig(base).logStrict).toBe(false);
   });
 
   it('parses per-language voice maps with zh fallbacks', () => {
