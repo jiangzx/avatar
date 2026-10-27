@@ -1,3 +1,5 @@
+import type { Server } from 'node:http';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LANGUAGES, type CharacterId, type Language } from '@anyidea/protocol';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
@@ -7,6 +9,9 @@ import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
 import { loadCharacterRegistry } from './characters/registry.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
 import { missingRoleLanguages } from './roles/catalog.ts';
+import { expireAdminAudit } from './admin/audit.ts';
+import { loadAdminEnv } from './admin/config.ts';
+import { createAdminServer } from './admin/server.ts';
 import { loadAdminConfig } from './log/adminConfig.ts';
 import { createLogLevelControl } from './log/levels.ts';
 import { createLogger } from './log/logger.ts';
@@ -263,6 +268,29 @@ const server = createGatewayServer({
 
 server.listen(config.port, '0.0.0.0', () => logger.info('gateway_listening', { port: config.port, adapter: config.adapter }));
 
+// Admin console: same process (single DB writer), loopback only. Opt-in via ADMIN_PORT.
+const adminEnv = loadAdminEnv(process.env);
+let adminServer: Server | null = null;
+if (!adminEnv.enabled) {
+  logger.info('admin_disabled', { reason: adminEnv.reason });
+} else if (!memoryDb || !store || !prices) {
+  logger.info('admin_disabled', { reason: 'memory_db_unset' });
+} else {
+  adminServer = createAdminServer({
+    db: memoryDb,
+    store,
+    manager,
+    logger,
+    levels,
+    prices,
+    config: adminConfig,
+    passwordHash: adminEnv.passwordHash,
+    adapterName: config.adapter,
+    staticDir: resolve(root, '..', 'admin', 'dist'),
+  });
+  adminServer.listen(adminEnv.port, '127.0.0.1', () => logger.info('admin_listening', { port: adminEnv.port }));
+}
+
 let stopping = false;
 const shutdown = () => {
   if (stopping) return;
@@ -274,6 +302,8 @@ const shutdown = () => {
   // Upgraded sockets are not closed by server.close(); closeAllConnections is the last-resort
   // guarantee for connections the manager never tracked (e.g. a mid-upgrade socket).
   server.closeAllConnections();
+  adminServer?.close();
+  adminServer?.closeAllConnections();
   void (async () => {
     try {
       if (worker) await worker.drain(memory.extractDrainMs ?? 8_000);
@@ -386,6 +416,14 @@ if (registry) {
   const runCleanup = () => {
     registry.cleanupOrphans().catch(() => logger.child({ job: 'orphan_cleanup' }).error('orphan_cleanup_failed'));
     void expireTranscripts().catch(() => logger.child({ job: 'retention' }).error('memory_retention_failed'));
+    if (memoryDb) {
+      try {
+        const deleted = expireAdminAudit(memoryDb, Date.now() - adminConfig.retention.auditDays * DAY_MS);
+        if (deleted > 0) logger.info('admin_audit_retention', { deleted });
+      } catch {
+        logger.error('admin_audit_retention_failed', {});
+      }
+    }
     void expireLogs().catch(() => logger.error('log_retention_failed'));
     void expireUsage().catch(() => logger.warn('usage_retention_failed', {}));
   };
