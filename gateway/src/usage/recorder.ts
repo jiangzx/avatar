@@ -1,5 +1,5 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
-import type { Logger } from '../log/logger.ts';
+import type { Logger, LogFields } from '../log/logger.ts';
 import { costMicroYuan, hasUsageDetails, type PriceBook } from './pricing.ts';
 import type { UsageRecord, UsageRecorder } from './types.ts';
 
@@ -40,10 +40,17 @@ export class SqliteUsageRecorder implements UsageRecorder {
     try {
       this.queue.push(this.toRow(record));
     } catch {
-      this.opts.logger.warn('usage_record_failed', { kind: record.kind });
+      this.warn('usage_record_failed', { kind: record.kind });
       return;
     }
-    if (this.queue.length >= this.opts.maxBatch) this.flush();
+    if (this.queue.length >= this.opts.maxBatch) {
+      try {
+        this.flush();
+      } catch {
+        // C3: record() must never throw, even when a batch-full flush fails unexpectedly.
+        this.dropBatch();
+      }
+    }
   }
 
   flush(): void {
@@ -52,21 +59,34 @@ export class SqliteUsageRecorder implements UsageRecorder {
       this.stopTimerWhenDrained();
       return;
     }
+    let inTransaction: boolean;
+    try {
+      inTransaction = db.isTransaction;
+    } catch {
+      // A closed or broken DB can never take these rows; flush() itself must not throw either.
+      this.dropBatch();
+      return;
+    }
     // Another writer holds a transaction in this tick; try again on the next flush.
-    if (db.isTransaction) return;
+    if (inTransaction) return;
     const rows = this.queue.splice(0);
     try {
       db.exec('BEGIN IMMEDIATE');
       for (const row of rows) this.insert.run(...row);
       db.exec('COMMIT');
     } catch {
-      if (db.isTransaction) db.exec('ROLLBACK');
+      // Only roll back a transaction we own, and never let a rollback failure escape.
+      try {
+        if (db.isTransaction) db.exec('ROLLBACK');
+      } catch {
+        // The row-by-row retry below still runs; a failed rollback is not fatal here.
+      }
       // One bad row (e.g. its owner was just deleted) must not drop the rest.
       let dropped = 0;
       for (const row of rows) {
         try { this.insert.run(...row); } catch { dropped++; }
       }
-      if (dropped > 0) this.opts.logger.warn('usage_write_failed', { rows: dropped });
+      if (dropped > 0) this.warn('usage_write_failed', { rows: dropped });
     }
     this.stopTimerWhenDrained();
   }
@@ -81,6 +101,22 @@ export class SqliteUsageRecorder implements UsageRecorder {
   /** A close during another writer's transaction leaves rows queued; the timer retries until empty. */
   private stopTimerWhenDrained(): void {
     if (this.closed && this.queue.length === 0) clearInterval(this.timer);
+  }
+
+  /** Rows a failed flush can no longer write. Count only; never throws. */
+  private dropBatch(): void {
+    const dropped = this.queue.length;
+    this.queue = [];
+    if (dropped > 0) this.warn('usage_write_failed', { rows: dropped });
+    this.stopTimerWhenDrained();
+  }
+
+  private warn(event: 'usage_record_failed' | 'usage_write_failed', fields: LogFields): void {
+    try {
+      this.opts.logger.warn(event, fields);
+    } catch {
+      // Logging must never break the recording path.
+    }
   }
 
   private toRow(r: UsageRecord): Cell[] {

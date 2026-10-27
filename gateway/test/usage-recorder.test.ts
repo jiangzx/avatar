@@ -43,7 +43,10 @@ function setup(maxBatch = 100) {
 }
 
 afterEach(() => {
-  for (const r of recorders.splice(0)) r.close();
+  for (const r of recorders.splice(0)) {
+    // The closed-DB test leaves a recorder behind an unusable database; teardown must tolerate it.
+    try { r.close(); } catch { /* close() must not throw; tolerate a broken DB in teardown */ }
+  }
   for (const db of dbs.splice(0)) if (db.isOpen) db.close();
   vi.useRealTimers();
 });
@@ -152,5 +155,14 @@ describe('SqliteUsageRecorder', () => {
     s.db.exec('COMMIT');
     vi.advanceTimersByTime(5000);
     expect(s.rows()).toHaveLength(1);
+  });
+
+  it('never throws from record when the flush path fails', () => {
+    const s = setup(1);
+    s.db.close();
+    const r: UsageRecord = { kind: 'care', adapter: 'text', model: 'qwen-plus', usage: null, attribution: attribution(s.who) };
+    expect(() => s.recorder.record(r)).not.toThrow();
+    // The unwritable batch is dropped and counted, never rethrown.
+    expect(s.logger.warns).toEqual([['usage_write_failed', { rows: 1 }]]);
   });
 });
