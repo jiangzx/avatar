@@ -141,6 +141,8 @@ export class MemoryWorker implements MemoryExtractor {
       user,
       maxTokens: this.opts.maxTokens,
       signal,
+      // Character is not known here; admin queries join agents for it.
+      usage: { kind: 'memory_extract', attribution: { ownerId, agentId, sessionId: null, characterId: null } },
     }), {
       classify: (error) => {
         const code = errorCodeOf(error);

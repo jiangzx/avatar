@@ -17,6 +17,7 @@ describe('ReplyMetricsTracker', () => {
     expect(m.finish(1, 'ended')).toEqual({
       seq: 1, kind: 'reply', outcome: 'ended', speechToFirstAudioMs: 600, vadToFirstAudioMs: 800, genMs: 1000,
       inputTokens: 300, outputTokens: 40, toolCalls: 1, replyChars: 12, errorCode: null,
+      usage: { inputTokens: 300, outputTokens: 40 },
     });
     expect(m.finish(1, 'ended')).toBeNull();
   });
@@ -32,7 +33,7 @@ describe('ReplyMetricsTracker', () => {
   });
 
   it('maps metrics to snake_case log fields', () => {
-    expect(metricFields({ seq: 3, kind: 'reply', outcome: 'ended', speechToFirstAudioMs: 1, vadToFirstAudioMs: 2, genMs: 3, inputTokens: 4, outputTokens: 5, toolCalls: 0, replyChars: 6, errorCode: null })).toEqual({
+    expect(metricFields({ seq: 3, kind: 'reply', outcome: 'ended', speechToFirstAudioMs: 1, vadToFirstAudioMs: 2, genMs: 3, inputTokens: 4, outputTokens: 5, toolCalls: 0, replyChars: 6, errorCode: null, usage: null })).toEqual({
       seq: 3, kind: 'reply', outcome: 'ended', speech_to_first_audio_ms: 1, vad_to_first_audio_ms: 2, gen_ms: 3, input_tokens: 4, output_tokens: 5, tool_calls: 0, reply_chars: 6, error_code: null,
     });
   });

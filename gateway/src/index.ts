@@ -29,6 +29,8 @@ import { SqliteMemoryStore } from './memory/store.ts';
 import { QwenTextClient } from './memory/textClient.ts';
 import { MemoryWorker, withExtraction } from './memory/worker.ts';
 import { SqliteTranscriptWriter } from './memory/writer.ts';
+import { SqlitePriceBook, loadPricingBaseline } from './usage/pricing.ts';
+import { SqliteUsageRecorder } from './usage/recorder.ts';
 import { loadI18n } from './i18n/load.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -104,6 +106,16 @@ const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) logger.warn('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
 const store = memoryDb ? new SqliteMemoryStore(memoryDb) : null;
+// Validated at every start, even without a DB, so a bad price file fails fast.
+const pricingBaseline = loadPricingBaseline(`${root}config/pricing.json`);
+const prices = memoryDb ? new SqlitePriceBook(memoryDb, pricingBaseline) : null;
+const usage = memoryDb && prices
+  ? new SqliteUsageRecorder({ db: memoryDb, prices, logger, flushMs: adminConfig.usageSink.flushMs, maxBatch: adminConfig.usageSink.maxBatch })
+  : null;
+// Seeduplex is not counted (spec Q9/Q14).
+const usageSource = config.adapter === 'qwen'
+  ? { adapter: 'qwen' as const, model: config.qwenModel }
+  : config.adapter === 'mock' ? { adapter: 'mock' as const, model: 'mock' } : null;
 if (store) {
   // This process is the only gateway for the DB: any row still open belongs to a dead process.
   const reconciled = store.closeOpenSessions(Date.now());
@@ -137,6 +149,7 @@ const textClient = config.qwenApiKey && config.summarizerEndpoint
       endpoint: config.summarizerEndpoint,
       model: memory.extractModel ?? 'qwen-plus',
       logger,
+      ...(usage ? { recorder: usage } : {}),
     })
   : null;
 const worker = store && textClient
@@ -169,14 +182,20 @@ const manager = new SessionManager(
         ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
         : config.adapter === 'qwen'
           ? new QwenAdapter({ apiKey: config.qwenApiKey!, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice })
-          : new MockAdapter({ script: withCharacterName(script, characters.name(ctx.characterId, 'zh')), speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor }),
+          : new MockAdapter({ script: withCharacterName(script, characters.name(ctx.characterId, 'zh')), speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor, emitUsage: usage !== null }),
       summarizer: config.summarizer === 'qwen'
-        ? new QwenSummarizer({ apiKey: config.qwenApiKey!, endpoint: config.summarizerEndpoint, model: config.summarizerModel })
+        ? new QwenSummarizer({
+            apiKey: config.qwenApiKey!,
+            endpoint: config.summarizerEndpoint,
+            model: config.summarizerModel,
+            ...(usage ? { recorder: usage, tag: { kind: 'summarize' as const, attribution: { ownerId: ctx.ownerId ?? null, agentId: ctx.agentId ?? null, sessionId, characterId: ctx.characterId } } } : {}),
+          })
         : new MockSummarizer(),
       roles,
       characters,
       ledger: config.ledger,
       ...(config.adapter !== 'mock' && textClient ? { textClient } : {}),
+      ...(usage && usageSource ? { usage, usageSource } : {}),
       confirmWindowMs: config.confirmWindowMs,
       rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,
       rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
@@ -257,6 +276,11 @@ const shutdown = () => {
     try {
       if (worker) await worker.drain(memory.extractDrainMs ?? 8_000);
     } finally {
+      try {
+        usage?.close();
+      } catch {
+        logger.warn('usage_close_failed', {});
+      }
       try {
         logSink?.close();
         if (memoryDb?.isOpen) memoryDb.close();

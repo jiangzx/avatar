@@ -14,6 +14,8 @@ export interface ReplyMetrics {
   toolCalls: number;
   replyChars: number;
   errorCode: string | null;
+  /** Full provider usage for billing (P1-T9); logs keep only the two totals. */
+  usage: TokenUsage | null;
 }
 
 interface Open {
@@ -101,6 +103,7 @@ export class ReplyMetricsTracker {
       toolCalls: o.toolCalls,
       replyChars: o.chars,
       errorCode: o.errorCode,
+      usage: o.usage,
     };
   }
 }

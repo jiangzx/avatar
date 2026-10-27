@@ -18,6 +18,7 @@ import { timeContext } from '../src/session/timeContext.ts';
 import { InterruptCoordinator } from '../src/session/interrupt.ts';
 import type { PacingConfig } from '../src/session/pacing.ts';
 import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
+import type { UsageRecord, UsageRecorder } from '../src/usage/types.ts';
 
 const i18n = loadI18n(`${fileURLToPath(new URL('..', import.meta.url))}config`);
 const languageRules = i18n.language;
@@ -870,6 +871,36 @@ describe('Session', () => {
     const lines = writes.filter((w) => w.includes('"reply_metrics"'));
     expect(lines).toHaveLength(2);
     expect(lines.join('')).not.toMatch(/你好呀|好呀|挥挥手/);
+  });
+
+  it('records one usage row per finalized reply with the session attribution', async () => {
+    const rows: UsageRecord[] = [];
+    const usage: UsageRecorder = { record: (r) => { rows.push(r); }, flush: () => {} };
+    const s = setup({ usage, usageSource: { adapter: 'mock', model: 'mock' } }, ownedCtx, 'usage-session');
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    s.mocks[0]!.emit('responseUsage', 'mock-1', { inputTokens: 10, outputTokens: 5, outputAudioTokens: 4 });
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    s.session.handleClientMessage({ type: 'debug.userText', text: '跟我挥挥手' });
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    const attribution = { ownerId: 'owner-1', agentId: 'agent-1', sessionId: 'usage-session', characterId: 'xiaonuan' };
+    expect(rows).toEqual([
+      expect.objectContaining({ kind: 'realtime_reply', adapter: 'mock', model: 'mock', attribution, usage: { inputTokens: 10, outputTokens: 5, outputAudioTokens: 4 }, errorCode: null }),
+      expect.objectContaining({ kind: 'realtime_reply', attribution, usage: null }),
+    ]);
+    s.session.end();
+  });
+
+  it('records nothing without a usage source', async () => {
+    const rows: UsageRecord[] = [];
+    const usage: UsageRecorder = { record: (r) => { rows.push(r); }, flush: () => {} };
+    const s = setup({ usage }, ownedCtx, 'no-source');
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    expect(rows).toEqual([]);
+    s.session.end();
   });
 
   it('times out a hanging summarizer through the policy and retries after backoff', async () => {
@@ -1909,6 +1940,16 @@ describe('Session affect tracker', () => {
       current: '今天腰有点疼，心里也闷',
       history: [{ role: 'user', text: '嗯' }],
     });
+    s.session.end();
+  });
+
+  it('bills affect calls to the session that made them', async () => {
+    const tags: unknown[] = [];
+    const client: TextModelClient = { complete: async (input) => { tags.push(input.usage); return sadCard; } };
+    const s = setup({ textClient: client, affect: affectConfig }, ownedCtx, 'affect-usage');
+    s.mocks[0]!.emit('userTranscript', '今天腰有点疼，心里也闷', true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(tags).toEqual([{ kind: 'affect', attribution: { ownerId: 'owner-1', agentId: 'agent-1', sessionId: 'affect-usage', characterId: 'xiaonuan' } }]);
     s.session.end();
   });
 

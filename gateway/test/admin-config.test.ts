@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,11 +17,20 @@ function file(content: unknown): string {
   return path;
 }
 
-const valid = { retention: { usageDays: 180, logDays: 7, auditDays: 365 }, logSink: { flushMs: 1000, maxBatch: 200 } };
+const valid = {
+  retention: { usageDays: 180, logDays: 7, auditDays: 365 },
+  logSink: { flushMs: 1000, maxBatch: 200 },
+  usageSink: { flushMs: 1000, maxBatch: 100 },
+};
 
 describe('admin config', () => {
   it('ships the agreed retention and sink values', () => {
     expect(loadAdminConfig(shipped)).toEqual(valid);
+  });
+
+  it('ships the usage sink settings', () => {
+    const config = AdminConfigSchema.parse(JSON.parse(readFileSync(fileURLToPath(new URL('../config/admin.json', import.meta.url)), 'utf8')));
+    expect(config.usageSink).toEqual({ flushMs: 1000, maxBatch: 100 });
   });
 
   it('rejects unknown keys', () => {
@@ -34,6 +43,7 @@ describe('admin config', () => {
     expect(() => AdminConfigSchema.parse({ ...valid, retention: { ...valid.retention, logDays: 91 } })).toThrow();
     expect(() => AdminConfigSchema.parse({ ...valid, logSink: { flushMs: 50, maxBatch: 200 } })).toThrow();
     expect(() => AdminConfigSchema.parse({ ...valid, logSink: { flushMs: 1000, maxBatch: 0 } })).toThrow();
+    expect(() => AdminConfigSchema.parse({ ...valid, usageSink: { flushMs: 1000, maxBatch: 0 } })).toThrow();
     expect(() => AdminConfigSchema.parse({ ...valid, retention: { ...valid.retention, usageDays: 1.5 } })).toThrow();
   });
 });

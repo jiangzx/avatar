@@ -19,7 +19,8 @@ import { sessionLogBinding } from './logBinding.ts';
 import { unique } from '../unique.ts';
 import { memoryViewSource, renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
-import type { TextModelClient } from '../memory/textClient.ts';
+import { withUsageTag, type TextModelClient } from '../memory/textClient.ts';
+import type { UsageAttribution, UsageKind, UsageRecorder } from '../usage/types.ts';
 import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
@@ -95,6 +96,10 @@ export interface SessionDeps {
   modelOwnsTurns?: boolean;
   /** Receives each finalized reply's metrics (eval harness). Production only logs them. */
   onReplyMetrics?: (m: ReplyMetrics) => void;
+  /** Usage sink for realtime replies. Unset in eval and most tests, so nothing is billed there. */
+  usage?: UsageRecorder;
+  /** Adapter and model billed for realtime replies. Seeduplex passes none: its usage is not counted. */
+  usageSource?: { adapter: 'qwen' | 'mock'; model: string };
   summarizePolicy?: PolicySpec;
   maxOutputTokens?: number;
   /** Uplink resumes this long after playback ended (reason=ended) when the model owns turns. */
@@ -373,7 +378,7 @@ export class Session {
     const affectConfig = deps.affect;
     this.affect = deps.textClient && affectConfig?.enabled
       ? new AffectTracker({
-          client: deps.textClient,
+          client: withUsageTag(deps.textClient, { kind: 'affect', attribution: this.usageAttribution() }),
           config: affectConfig,
           prompt: (language) => deps.roles.affectPrompt(ctx.characterId, language),
           history: () => this.ledger.recent,
@@ -687,9 +692,36 @@ export class Session {
     return this.deps.budgets?.[language] ?? this.deps.budget;
   }
 
+  /** Billing identity for this session's model calls. */
+  private usageAttribution(): UsageAttribution {
+    return { ownerId: this.context.ownerId ?? null, agentId: this.context.agentId ?? null, sessionId: this.sessionId, characterId: this.context.characterId };
+  }
+
+  /** The shared text client, tagged so its calls are billed to this session. */
+  private textFor(kind: UsageKind): TextModelClient | undefined {
+    const client = this.deps.textClient;
+    return client ? withUsageTag(client, { kind, attribution: this.usageAttribution() }) : undefined;
+  }
+
+  /** One usage row per finalized reply; interrupted replies keep whatever usage the model reported. */
+  private recordReplyUsage(m: ReplyMetrics): void {
+    const { usage, usageSource } = this.deps;
+    if (!usage || !usageSource) return;
+    usage.record({
+      kind: 'realtime_reply',
+      adapter: usageSource.adapter,
+      model: usageSource.model,
+      usage: m.usage,
+      attribution: this.usageAttribution(),
+      firstAudioMs: m.speechToFirstAudioMs ?? m.vadToFirstAudioMs,
+      genMs: m.genMs,
+      errorCode: m.errorCode,
+    });
+  }
+
   private planProactiveLine(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null> {
     const config = this.deps.roles.director(this.context.characterId, this.language).silenceDecision;
-    const client = this.deps.textClient;
+    const client = this.textFor('silence_plan');
     if (!config || !client) return null;
     let planner = this.silencePlanners.get(this.language);
     if (!planner) {
@@ -1123,6 +1155,7 @@ export class Session {
     if (m) {
       this.log.child({ seq: m.seq }).info('reply_metrics', metricFields(m));
       this.deps.onReplyMetrics?.(m);
+      this.recordReplyUsage(m);
     }
       const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
     s.text = text;
@@ -1249,6 +1282,7 @@ export class Session {
       this.beginToolTurn(s);
     }
     const triggerText = this.turnUserText ?? undefined;
+    const recallClient = this.textFor('recall_wrap');
     const outcome = await this.toolsFor(this.language).handle(name, args, {
       ownerId: this.context.ownerId,
       agentId: this.context.agentId,
@@ -1256,7 +1290,7 @@ export class Session {
       sessionId: this.sessionId,
       store: this.deps.store,
       worker: this.deps.worker instanceof MemoryWorker ? this.deps.worker : undefined,
-      ...(this.deps.textClient ? { textClient: this.deps.textClient } : {}),
+      ...(recallClient ? { textClient: recallClient } : {}),
       ledger: this.ledger,
       actions: this.actions,
       now: Date.now(),
@@ -1708,7 +1742,7 @@ export class Session {
     if (this.context.firstMeet) return null;
     const care = this.deps.affect?.enabled ? this.deps.affect.care : undefined;
     const store = this.deps.store;
-    const client = this.deps.textClient;
+    const client = this.textFor('care');
     const ownerId = this.context.ownerId;
     const agentId = this.context.agentId;
     if (!care || !store || !client || !ownerId || !agentId || !this.safeGreetingWired) return null;

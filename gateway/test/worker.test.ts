@@ -287,6 +287,16 @@ describe('MemoryWorker queue', () => {
     lifecycle.extract?.('s2', { ownerId: 'owner-1', language: 'ja' } as SessionContext, 'client_end');
     expect(seen).toEqual([{ ownerId: 'owner-1', agentId: 'agent-1', reason: 'session_end', language: 'ja' }]);
   });
+
+  it('bills extraction to the owner and agent of the job', async () => {
+    const store = new SqliteMemoryStore(open());
+    const created = seedOwner(store, 'h1', 1);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '今天想喝茶', bigrams: '', now: 2 });
+    const tags: unknown[] = [];
+    const client: TextModelClient = { complete: async (input) => { tags.push(input.usage); return '{"ops":[]}'; } };
+    await worker(store, client).enqueue(created.ownerId, created.agentId, 'session_end');
+    expect(tags).toEqual([{ kind: 'memory_extract', attribution: { ownerId: created.ownerId, agentId: created.agentId, sessionId: null, characterId: null } }]);
+  });
 });
 
 describe('followup quotes in the worker', () => {
