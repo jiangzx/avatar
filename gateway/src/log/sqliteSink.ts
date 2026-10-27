@@ -36,13 +36,23 @@ export class SqliteLogSink implements LogSink {
 
   flush(): void {
     this.cancelTimers();
-    if (this.opts.db.isTransaction) {
+    if (this.queue.length === 0 && this.dropped === 0) return;
+    let inTransaction: boolean;
+    try {
+      inTransaction = this.opts.db.isTransaction;
+    } catch {
+      // A closed or broken DB can never take these lines; flush() itself must not throw either.
+      this.dropBatch();
+      return;
+    }
+    // Never flush inside another writer's transaction: retry after it ends.
+    if (inTransaction) {
       this.scheduleLater();
       return;
     }
     if (this.dropped > 0) {
       this.dropped = 0;
-      this.opts.onError?.('log_sink_overflow');
+      this.report('log_sink_overflow');
     }
     const batch = this.queue.splice(0, this.opts.maxBatch * 10);
     if (batch.length === 0) return;
@@ -55,8 +65,13 @@ export class SqliteLogSink implements LogSink {
       }
       db.exec('COMMIT');
     } catch {
-      if (db.isTransaction) db.exec('ROLLBACK');
-      this.opts.onError?.('log_sink_write_failed');
+      // Only roll back a transaction we own, and never let a rollback failure escape.
+      try {
+        if (db.isTransaction) db.exec('ROLLBACK');
+      } catch {
+        // A failed rollback is not fatal: the batch is dropped either way.
+      }
+      this.report('log_sink_write_failed');
     }
   }
 
@@ -64,6 +79,22 @@ export class SqliteLogSink implements LogSink {
     // flush() owns timer cleanup: inside a transaction it schedules the retry instead.
     this.flush();
     this.closed = true;
+  }
+
+  /** A closed or broken DB can never take queued lines: clear them and report once. */
+  private dropBatch(): void {
+    this.queue = [];
+    this.dropped = 0;
+    this.report('log_sink_write_failed');
+  }
+
+  /** onError runs from timer callbacks, so a throwing callback must never become an uncaught exception. */
+  private report(code: 'log_sink_overflow' | 'log_sink_write_failed'): void {
+    try {
+      this.opts.onError?.(code);
+    } catch {
+      // Best effort only: the sink must never fail the process.
+    }
   }
 
   private scheduleNow(): void {

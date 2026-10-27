@@ -68,6 +68,39 @@ describe('SqliteLogSink', () => {
     expect(d.isTransaction).toBe(false);
   });
 
+  it('does not throw when the database is closed, drops the batch and reports once', () => {
+    const d = db();
+    const errors: string[] = [];
+    const sink = new SqliteLogSink({ db: d, flushMs: 10, maxBatch: 50, onError: (code) => errors.push(code) });
+    sink.write(line('a'));
+    d.close();
+    expect(() => sink.flush()).not.toThrow();
+    expect(errors).toEqual(['log_sink_write_failed']);
+    // The dropped queue is gone: a later flush has nothing to report.
+    expect(() => sink.flush()).not.toThrow();
+    expect(errors).toEqual(['log_sink_write_failed']);
+  });
+
+  it('survives a throwing onError on the write-failure path', () => {
+    const d = db();
+    let calls = 0;
+    const sink = new SqliteLogSink({ db: d, flushMs: 10, maxBatch: 50, onError: () => { calls++; throw new Error('onError boom'); } });
+    d.exec('DROP TABLE log_events');
+    sink.write(line('a'));
+    expect(() => sink.flush()).not.toThrow();
+    expect(calls).toBe(1);
+  });
+
+  it('survives a throwing onError on the overflow path and still writes the batch', () => {
+    const d = db();
+    const seen: string[] = [];
+    const sink = new SqliteLogSink({ db: d, flushMs: 60_000, maxBatch: 1, onError: (code) => { seen.push(code); throw new Error('onError boom'); } });
+    for (let i = 0; i < 15; i++) sink.write(line(`e${i}`));
+    expect(() => sink.flush()).not.toThrow();
+    expect(seen).toEqual(['log_sink_overflow']);
+    expect(rows(d)).toHaveLength(10);
+  });
+
   it('drops lines beyond ten batches of backlog and reports the overflow once', async () => {
     const d = db();
     const errors: string[] = [];
