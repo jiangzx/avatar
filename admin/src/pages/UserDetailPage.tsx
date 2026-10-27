@@ -9,6 +9,7 @@ import { characterName } from '../labels.ts';
 import { useViewOptions } from '../layout/ViewOptions.tsx';
 import { href, navigate } from '../router.ts';
 import { CHARACTER_COLORS } from '../theme.ts';
+import { useEscapeClose } from '../useEscapeClose.ts';
 import { errorMessage, useLoad } from '../useLoad.ts';
 
 type CharacterRow = AdminOwnerDetail['characters'][number];
@@ -17,8 +18,8 @@ type DailyRow = AdminOwnerDetail['daily'][number];
 export function UserDetailPage({ oid }: { oid: string }) {
   const api = useApi();
   const { includeMock } = useViewOptions();
-  const { modal, message } = App.useApp();
   const [deleting, setDeleting] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<'ban' | 'unban' | null>(null);
   const { state, reload } = useLoad(() => api.owner(oid, includeMock), [api, oid, includeMock]);
 
   if (state.status === 'loading') return <Spin style={{ display: 'block', margin: '48px 0' }} />;
@@ -26,40 +27,11 @@ export function UserDetailPage({ oid }: { oid: string }) {
   const owner = state.data;
 
   function confirmBan() {
-    modal.confirm({
-      title: '封禁这位用户？',
-      content: '封禁后，这位用户正在进行的通话会立即结束，之后不能开始新通话。数据不会删除，解封后一切恢复。',
-      okText: '封禁',
-      okButtonProps: { danger: true },
-      cancelText: '取消',
-      onOk: async () => {
-        try {
-          await api.banOwner(oid);
-          message.success('已封禁');
-          reload();
-        } catch (error) {
-          message.error(errorMessage(error));
-        }
-      },
-    });
+    setConfirmAction('ban');
   }
 
   function confirmUnban() {
-    modal.confirm({
-      title: '解封这位用户？',
-      content: '解封后，这位用户可以重新开始通话。',
-      okText: '解封',
-      cancelText: '取消',
-      onOk: async () => {
-        try {
-          await api.unbanOwner(oid);
-          message.success('已解封');
-          reload();
-        } catch (error) {
-          message.error(errorMessage(error));
-        }
-      },
-    });
+    setConfirmAction('unban');
   }
 
   return (
@@ -83,7 +55,58 @@ export function UserDetailPage({ oid }: { oid: string }) {
       <CharacterTable rows={owner.characters} />
       <DailyTable rows={owner.daily} />
       <DeleteOwnerModal oid={oid} open={deleting} onClose={() => setDeleting(false)} />
+      <ConfirmOwnerModal
+        action={confirmAction}
+        oid={oid}
+        onClose={() => setConfirmAction(null)}
+        onDone={() => { setConfirmAction(null); reload(); }}
+      />
     </div>
+  );
+}
+
+function ConfirmOwnerModal({ action, oid, onClose, onDone }: {
+  action: 'ban' | 'unban' | null;
+  oid: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const api = useApi();
+  const { message } = App.useApp();
+  const [busy, setBusy] = useState(false);
+  useEscapeClose(action !== null, onClose);
+  const isBan = action === 'ban';
+
+  async function ok(): Promise<void> {
+    if (!action) return;
+    setBusy(true);
+    try {
+      if (isBan) await api.banOwner(oid);
+      else await api.unbanOwner(oid);
+      message.success(isBan ? '已封禁' : '已解封');
+      onDone();
+    } catch (error) {
+      message.error(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={action !== null}
+      title={isBan ? '封禁这位用户？' : '解封这位用户？'}
+      okText={isBan ? '封禁' : '解封'}
+      cancelText="取消"
+      okButtonProps={{ danger: isBan, loading: busy }}
+      onOk={() => void ok()}
+      onCancel={onClose}
+      keyboard
+    >
+      <p>{isBan
+        ? '封禁后，这位用户正在进行的通话会立即结束，之后不能开始新通话。数据不会删除，解封后一切恢复。'
+        : '解封后，这位用户可以重新开始通话。'}</p>
+    </Modal>
   );
 }
 
@@ -168,6 +191,8 @@ function DeleteOwnerModal({ oid, open, onClose }: { oid: string; open: boolean; 
     setTyped('');
     onClose();
   }
+
+  useEscapeClose(open, close);
 
   async function remove() {
     setBusy(true);

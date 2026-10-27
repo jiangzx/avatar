@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Button, Layout, Menu, Switch } from 'antd';
 import { useAuth } from '../auth/AuthContext.tsx';
-import { navigate, useRoute } from '../router.ts';
+import { href, navigate, useRoute } from '../router.ts';
 import { useViewOptions } from './ViewOptions.tsx';
 
 export interface NavItem { path: string; label: string }
@@ -31,7 +31,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             type: 'group' as const,
             key: group.title,
             label: group.title,
-            children: group.items.map((item) => ({ key: item.path, label: item.label })),
+            children: group.items.map((item) => ({ key: item.path, label: <a href={href(item.path)}>{item.label}</a> })),
           }))}
         />
       </Layout.Sider>

@@ -13,6 +13,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Sidebar entries are real links so keyboard users can Tab and press Enter. */
+.ant-menu-title-content a {
+  color: inherit;
+  display: block;
+}
+
 h1,
 h2,
 h3 {
@@ -21,7 +27,7 @@ h3 {
 }
 
 :focus-visible {
-  outline: 2px solid #2f6f68;
+  outline: 2px solid #2f6f68 !important;
   outline-offset: 2px;
 }
 
