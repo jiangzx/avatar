@@ -1251,7 +1251,7 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY protocol/package.json protocol/package.json
 COPY admin/package.json admin/package.json
-RUN npm ci --omit=optional -w admin -w protocol
+RUN npm ci -w admin -w protocol
 COPY protocol protocol
 COPY admin admin
 RUN npm run build -w admin
@@ -1272,6 +1272,8 @@ WORKDIR /app/gateway
 ENV NODE_ENV=production
 CMD ["npm", "run", "start"]
 ```
+
+构建阶段**不能**带 `--omit=optional`：`typescript`、`vite`（rolldown）和 `lightningcss` 的平台二进制是 optional dependencies，省略后 `tsc` 和 `vite build` 在镜像里会因缺少原生绑定失败。`--omit=optional` 只保留在运行阶段（网关运行不需要这些构建工具）。`@types/node` 是 `admin/` 的精确 devDependency，保证只安装 admin workspace 时 `vite.config.ts` 里的 `process.env` 也能通过 typecheck。
 
 网关的 `staticDir` 指向仓库根的 `admin/dist`（P2-T3 在 `index.ts` 里用 `fileURLToPath(new URL('../../admin/dist', import.meta.url))`），镜像里就是 `/app/admin/dist`。
 

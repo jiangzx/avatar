@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY protocol/package.json protocol/package.json
 COPY admin/package.json admin/package.json
-RUN npm ci --omit=optional -w admin -w protocol
+RUN npm ci -w admin -w protocol
 COPY protocol protocol
 COPY admin admin
 RUN npm run build -w admin
