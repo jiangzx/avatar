@@ -1,0 +1,35 @@
+[
+  {
+    "model": "qwen3.8-omni-flash-realtime",
+    "effectiveFrom": 1767196800000,
+    "inputText": 1500000,
+    "inputAudio": 6000000,
+    "outputText": 4500000,
+    "outputAudio": 12000000,
+    "cached": null,
+    "source": "https://help.aliyun.com/zh/model-studio/qwen3-8-omni-flash-realtime",
+    "checkedAt": "2026-10-27"
+  },
+  {
+    "model": "qwen-plus",
+    "effectiveFrom": 1767196800000,
+    "inputText": 800000,
+    "inputAudio": null,
+    "outputText": 2000000,
+    "outputAudio": null,
+    "cached": null,
+    "source": "https://help.aliyun.com/zh/model-studio/model-pricing",
+    "checkedAt": "2026-10-27"
+  },
+  {
+    "model": "qwen-flash",
+    "effectiveFrom": 1767196800000,
+    "inputText": 150000,
+    "inputAudio": null,
+    "outputText": 1500000,
+    "outputAudio": null,
+    "cached": null,
+    "source": "https://help.aliyun.com/zh/model-studio/model-pricing",
+    "checkedAt": "2026-10-27"
+  }
+]
