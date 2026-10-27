@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CharacterId } from '@anyidea/protocol';
+import { ownerShortId } from '../log/ownerId.ts';
 
 export type MemoryConsent = 'unknown' | 'granted' | 'declined';
 
@@ -53,8 +54,8 @@ export interface MemoryStore {
   hasEndedSession(agentId: string): boolean;
   /** Start of the continuous-use window over all agents of the owner; `now` when nothing is continuous. */
   continuousSince(ownerId: string, now: number, gapMs: number): number;
-  recordSessionStart(sessionId: string, agentId: string, now: number): void;
-  recordSessionEnd(sessionId: string, agentId: string, now: number): void;
+  recordSessionStart(sessionId: string, agentId: string, now: number, adapter?: string): void;
+  recordSessionEnd(sessionId: string, agentId: string, now: number, reason?: string): void;
   /** Closes sessions a previous process left open, at the last message time (or started_at). Returns the count. */
   closeOpenSessions(now: number): number;
   listSessions(ownerId: string): SessionRecord[];
@@ -271,18 +272,20 @@ function prepareStatements(db: DatabaseSync) {
     getAgent: p('SELECT id, owner_id, character_id, memory_epoch FROM agents WHERE owner_id = ? AND character_id = ?'),
     agentOwned: p('SELECT 1 AS ok FROM agents WHERE owner_id = ? AND id = ?'),
     listAgentIds: p('SELECT id FROM agents WHERE owner_id = ? ORDER BY created_at, id'),
-    insertSession: p('INSERT INTO sessions (id, agent_id, started_at) VALUES (?, ?, ?)'),
-    endSession: p('UPDATE sessions SET ended_at = ? WHERE id = ? AND agent_id = ? AND ended_at IS NULL'),
+    insertSession: p('INSERT INTO sessions (id, agent_id, started_at, adapter) VALUES (?, ?, ?, ?)'),
+    endSession: p('UPDATE sessions SET ended_at = ?, end_reason = ? WHERE id = ? AND agent_id = ? AND ended_at IS NULL'),
     closeOpenSessions: p(`UPDATE sessions SET ended_at = COALESCE(
       (SELECT MAX(created_at) FROM messages WHERE session_id = sessions.id),
       started_at
-    ) WHERE ended_at IS NULL`),
+    ), end_reason = 'process_restart' WHERE ended_at IS NULL`),
     listSessions: p('SELECT s.id, s.agent_id, s.started_at, s.ended_at FROM sessions s JOIN agents a ON a.id = s.agent_id WHERE a.owner_id = ? ORDER BY s.started_at'),
     hasEndedSession: p('SELECT 1 AS ok FROM sessions WHERE agent_id = ? AND ended_at IS NOT NULL LIMIT 1'),
     ownerSessionsNewestFirst: p(`SELECT s.started_at, s.ended_at FROM sessions s JOIN agents a ON a.id = s.agent_id
       WHERE a.owner_id = ? ORDER BY COALESCE(s.ended_at, ?) DESC, s.rowid DESC`),
     deleteAgentSessions: p('DELETE FROM sessions WHERE agent_id = ?'),
     deleteOwner: p('DELETE FROM owners WHERE id = ?'),
+    // Log lines carry only the short owner id (no foreign key), so they are deleted explicitly.
+    deleteOwnerLogs: p('DELETE FROM log_events WHERE oid = ?'),
     countOwners: p('SELECT count(*) AS n FROM owners'),
     countOwnersSince: p('SELECT count(*) AS n FROM owners WHERE created_at >= ?'),
     orphanOwners: p(`SELECT o.id FROM owners o
@@ -503,12 +506,12 @@ export class SqliteMemoryStore implements MemoryStore {
     return since;
   }
 
-  recordSessionStart(sessionId: string, agentId: string, now: number): void {
-    this.q.insertSession.run(sessionId, agentId, now);
+  recordSessionStart(sessionId: string, agentId: string, now: number, adapter?: string): void {
+    this.q.insertSession.run(sessionId, agentId, now, adapter ?? null);
   }
 
-  recordSessionEnd(sessionId: string, agentId: string, now: number): void {
-    this.q.endSession.run(now, sessionId, agentId);
+  recordSessionEnd(sessionId: string, agentId: string, now: number, reason?: string): void {
+    this.q.endSession.run(now, reason ?? null, sessionId, agentId);
   }
 
   closeOpenSessions(_now: number): number {
@@ -521,7 +524,12 @@ export class SqliteMemoryStore implements MemoryStore {
   }
 
   deleteOwner(ownerId: string): boolean {
-    return this.q.deleteOwner.run(ownerId).changes === 1;
+    // usage_events cascade with the owner row; log_events go by short id in the same transaction.
+    return this.tx(() => {
+      const deleted = this.q.deleteOwner.run(ownerId).changes === 1;
+      if (deleted) this.q.deleteOwnerLogs.run(ownerShortId(ownerId));
+      return deleted;
+    });
   }
 
   countOwners(): number {
@@ -535,7 +543,10 @@ export class SqliteMemoryStore implements MemoryStore {
   deleteOrphanOwners(createdBefore: number, limit: number): number {
     return this.tx(() => {
       const ids = this.q.orphanOwners.all(createdBefore, limit).map((r) => r.id as string);
-      for (const id of ids) this.q.deleteOwner.run(id);
+      for (const id of ids) {
+        this.q.deleteOwner.run(id);
+        this.q.deleteOwnerLogs.run(ownerShortId(id));
+      }
       return ids.length;
     });
   }

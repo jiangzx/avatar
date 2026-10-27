@@ -31,6 +31,7 @@ import { MemoryWorker, withExtraction } from './memory/worker.ts';
 import { SqliteTranscriptWriter } from './memory/writer.ts';
 import { SqlitePriceBook, loadPricingBaseline } from './usage/pricing.ts';
 import { SqliteUsageRecorder } from './usage/recorder.ts';
+import { purgeExpiredUsage } from './usage/retention.ts';
 import { loadI18n } from './i18n/load.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -136,6 +137,7 @@ const registry = store
         orphanCleanupBatch: identityConfig.orphanCleanupBatch,
       },
       continuityGapMs: pacing.restReminder.continuityGapMs,
+      adapterName: config.adapter,
       i18n,
       logger,
     })
@@ -340,6 +342,26 @@ async function expireTranscripts(): Promise<void> {
   }
 }
 
+/** Usage rows older than retention.usageDays (admin.json), in batches like transcripts. */
+async function expireUsage(): Promise<void> {
+  if (!memoryDb) return;
+  const olderThan = Date.now() - adminConfig.retention.usageDays * DAY_MS;
+  const limit = memory.retentionBatch;
+  for (;;) {
+    const started = performance.now();
+    let deleted: number;
+    try {
+      deleted = purgeExpiredUsage(memoryDb, olderThan, limit);
+    } catch {
+      logger.warn('usage_retention_failed', {});
+      return;
+    }
+    logger.info('usage_retention_batch', { deleted, ms: Math.round(performance.now() - started) });
+    if (deleted < limit) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+}
+
 /** Admin trace logs: same daily timer, age from admin.json, batch size from memory.json. */
 async function expireLogs(): Promise<void> {
   if (!memoryDb) return;
@@ -365,6 +387,7 @@ if (registry) {
     registry.cleanupOrphans().catch(() => logger.child({ job: 'orphan_cleanup' }).error('orphan_cleanup_failed'));
     void expireTranscripts().catch(() => logger.child({ job: 'retention' }).error('memory_retention_failed'));
     void expireLogs().catch(() => logger.error('log_retention_failed'));
+    void expireUsage().catch(() => logger.warn('usage_retention_failed', {}));
   };
   void runCleanup();
   setInterval(runCleanup, ORPHAN_CLEANUP_INTERVAL_MS).unref();

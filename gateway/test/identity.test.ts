@@ -140,6 +140,21 @@ describe('DeviceRegistry', () => {
     expect(store.listSessions(ctx.ownerId!)).toEqual([{ id: 's1', agentId: ctx.agentId, startedAt: BASE, endedAt: BASE + 9_000 }]);
   });
 
+  it('stores the adapter and the end reason through the lifecycle', () => {
+    const database = openDatabase(':memory:', { busyTimeoutMs: 1000 });
+    dbs.push(database);
+    const store = new SqliteMemoryStore(database);
+    const registry = new DeviceRegistry({
+      store, roles: fixedRoleCatalog('P', director), characters: shippedCharacters(), now: () => now,
+      continuityGapMs: 600_000, adapterName: 'qwen',
+      limits: { maxOwners: 10, dailyCap: 10, orphanOwnerDays: 7, orphanCleanupBatch: 2 },
+    });
+    const ctx = ctxOf(registry, register(registry));
+    registry.lifecycle.started('s-adapter', ctx);
+    registry.lifecycle.ended('s-adapter', ctx, 'grace_expired');
+    expect(database.prepare('SELECT adapter, end_reason FROM sessions WHERE id = ?').get('s-adapter')).toEqual({ adapter: 'qwen', end_reason: 'grace_expired' });
+  });
+
   it('cleans up only never-connected owners past the cutoff, in batches', async () => {
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const { registry } = setup({ orphanOwnerDays: 7, orphanCleanupBatch: 2 });

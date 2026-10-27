@@ -45,6 +45,8 @@ export interface DeviceRegistryDeps {
   limits: IdentityLimits;
   /** pacing.json restReminder.continuityGapMs: closer sessions count as one continuous stretch. */
   continuityGapMs: number;
+  /** Realtime adapter name stored on each session row (config ADAPTER). */
+  adapterName?: string;
   now?: () => number;
   /** Defaults to instructions.snapshotMaxChars in gateway/config/memory.json. */
   snapshotMaxChars?: number;
@@ -69,10 +71,10 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     this.i18n = deps.i18n ?? DEFAULT_I18N;
     this.lifecycle = {
       started: (sessionId, ctx) => {
-        if (ctx.agentId !== undefined) deps.store.recordSessionStart(sessionId, ctx.agentId, this.now());
+        if (ctx.agentId !== undefined) deps.store.recordSessionStart(sessionId, ctx.agentId, this.now(), deps.adapterName);
       },
-      ended: (sessionId, ctx) => {
-        if (ctx.agentId !== undefined) deps.store.recordSessionEnd(sessionId, ctx.agentId, this.now());
+      ended: (sessionId, ctx, reason) => {
+        if (ctx.agentId !== undefined) deps.store.recordSessionEnd(sessionId, ctx.agentId, this.now(), reason);
       },
     };
   }

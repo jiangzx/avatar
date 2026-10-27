@@ -51,14 +51,19 @@ describe('schema v7', () => {
   it('upgrades a v6 database in place and keeps its rows', () => {
     const db = rawDb();
     expect(migrate(db, [MIGRATIONS[0]!])).toBe(6);
-    const store = new SqliteMemoryStore(db);
-    const seeded = seedOwner(store, 'h-v6', 1_000);
-    store.recordSessionStart('s-v6', seeded.agentId, 2_000);
+    // Seed the v6 shape directly: the store prepares statements that need the v7 columns and tables.
+    const ownerId = 'owner-v6';
+    const deviceId = 'device-v6';
+    const agentId = 'agent-v6';
+    db.prepare('INSERT INTO owners (id, created_at, last_seen_at) VALUES (?, ?, ?)').run(ownerId, 1_000, 1_000);
+    db.prepare('INSERT INTO devices (id, owner_id, token_hash, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)').run(deviceId, ownerId, 'h-v6', 1_000, 1_000);
+    db.prepare('INSERT INTO agents (id, owner_id, character_id, created_at) VALUES (?, ?, ?, ?)').run(agentId, ownerId, 'xiaonuan', 1_000);
+    db.prepare('INSERT INTO sessions (id, agent_id, started_at) VALUES (?, ?, ?)').run('s-v6', agentId, 2_000);
     expect(migrate(db)).toBe(7);
     expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 });
-    expect(new SqliteMemoryStore(db).findDevice('h-v6')).toEqual({ deviceId: seeded.deviceId, ownerId: seeded.ownerId });
+    expect(new SqliteMemoryStore(db).findDevice('h-v6')).toEqual({ deviceId, ownerId });
     expect(db.prepare('SELECT end_reason, adapter FROM sessions WHERE id = ?').get('s-v6')).toEqual({ end_reason: null, adapter: null });
-    expect(db.prepare('SELECT banned_at FROM owners WHERE id = ?').get(seeded.ownerId)).toEqual({ banned_at: null });
+    expect(db.prepare('SELECT banned_at FROM owners WHERE id = ?').get(ownerId)).toEqual({ banned_at: null });
   });
 
   it('cascades usage rows with their owner but keeps system rows and log rows', () => {
