@@ -6,7 +6,8 @@ export const LEGACY_SCHEMA_ERROR = 'memory db predates multi-character schema; d
 
 /**
  * Ordered schema steps. Step i brings PRAGMA user_version to BASELINE_VERSION + i.
- * Append only: never edit a shipped step. Step 0 is the multi-character baseline (spec 技术设计 §4).
+ * Append only: never edit a shipped step. Step 0 is the multi-character baseline (spec 技术设计 §4);
+ * step 1 (v7) adds the admin console and observability tables (admin-console spec, additive only).
  */
 export const MIGRATIONS: readonly string[] = [
   `
@@ -162,6 +163,98 @@ export const MIGRATIONS: readonly string[] = [
   CREATE INDEX memory_changes_owner ON memory_changes (owner_id);
   -- Tiny key/value store for durable maintenance cursors (kana bigram backfill).
   CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+  `,
+  `
+  -- v7: admin console and observability (spec 2026-10-27-admin-console-design.md). Additive only.
+  -- One row per model call. Owner rows cascade; agent/session ids are plain text so usage survives memory clears.
+  CREATE TABLE usage_events (
+    id INTEGER PRIMARY KEY,
+    ts INTEGER NOT NULL,
+    owner_id TEXT REFERENCES owners (id) ON DELETE CASCADE,
+    agent_id TEXT,
+    session_id TEXT,
+    character_id TEXT,
+    kind TEXT NOT NULL,
+    adapter TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_text_tokens INTEGER,
+    input_audio_tokens INTEGER,
+    output_text_tokens INTEGER,
+    output_audio_tokens INTEGER,
+    cached_tokens INTEGER,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    first_audio_ms INTEGER,
+    gen_ms INTEGER,
+    error_code TEXT,
+    estimated INTEGER NOT NULL DEFAULT 0,
+    price_id TEXT,
+    cost_micro_yuan INTEGER
+  );
+  CREATE INDEX usage_events_owner_ts ON usage_events (owner_id, ts);
+  CREATE INDEX usage_events_ts ON usage_events (ts);
+  CREATE INDEX usage_events_session ON usage_events (session_id);
+  -- Admin-added prices. Baseline prices live in gateway/config/pricing.json. Units: micro-yuan per million tokens.
+  CREATE TABLE price_entries (
+    id TEXT PRIMARY KEY,
+    model TEXT NOT NULL,
+    effective_from INTEGER NOT NULL,
+    input_text INTEGER NOT NULL,
+    input_audio INTEGER,
+    output_text INTEGER NOT NULL,
+    output_audio INTEGER,
+    cached INTEGER,
+    source TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    actor TEXT NOT NULL
+  );
+  -- info+ log lines for the admin trace page. oid is ownerShortId(owner id), never the raw id.
+  CREATE TABLE log_events (
+    id INTEGER PRIMARY KEY,
+    ts INTEGER NOT NULL,
+    level TEXT NOT NULL,
+    event TEXT NOT NULL,
+    sid TEXT,
+    oid TEXT,
+    char TEXT,
+    seq INTEGER,
+    job TEXT,
+    fields TEXT NOT NULL DEFAULT '{}'
+  );
+  CREATE INDEX log_events_sid ON log_events (sid, ts);
+  CREATE INDEX log_events_oid ON log_events (oid, ts);
+  CREATE INDEX log_events_ts ON log_events (ts);
+  CREATE TABLE config_versions (
+    id INTEGER PRIMARY KEY,
+    created_at INTEGER NOT NULL,
+    base_version INTEGER,
+    overlay TEXT NOT NULL,
+    note TEXT,
+    actor TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('publish', 'rollback', 'reset'))
+  );
+  CREATE TABLE secrets (
+    name TEXT PRIMARY KEY,
+    ciphertext BLOB NOT NULL,
+    iv BLOB NOT NULL,
+    tag BLOB NOT NULL,
+    last4 TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    actor TEXT NOT NULL
+  );
+  CREATE TABLE admin_audit (
+    id INTEGER PRIMARY KEY,
+    ts INTEGER NOT NULL,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target TEXT,
+    detail TEXT NOT NULL DEFAULT '{}'
+  );
+  CREATE INDEX admin_audit_ts ON admin_audit (ts);
+  ALTER TABLE sessions ADD COLUMN end_reason TEXT;
+  ALTER TABLE sessions ADD COLUMN adapter TEXT;
+  ALTER TABLE owners ADD COLUMN banned_at INTEGER;
   `,
 ];
 

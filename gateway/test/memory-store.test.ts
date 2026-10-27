@@ -51,7 +51,7 @@ describe('openDatabase', () => {
     expect(db.prepare('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'wal' });
     expect(db.prepare('PRAGMA busy_timeout').get()).toEqual({ timeout: 1234 });
     expect(db.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 });
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 });
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: LATEST });
     seedOwner(new SqliteMemoryStore(db), 'h1'); // forces a WAL write
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(statSync(`${path}-wal`).mode & 0o777).toBe(0o600);
@@ -87,10 +87,10 @@ describe('openDatabase', () => {
 });
 
 describe('migrate', () => {
-  it('builds the v6 baseline with per-agent tables and no legacy columns', () => {
+  it('builds the v6 baseline tables (later steps only add)', () => {
     const db = open();
     expect(BASELINE_VERSION).toBe(6);
-    expect(MIGRATIONS).toHaveLength(1);
+    expect(MIGRATIONS).toHaveLength(2);
     const tables = column(db, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name");
     expect(tables).toEqual(expect.arrayContaining([
       'owners', 'devices', 'agents', 'sessions', 'messages', 'messages_fts', 'profile_facts', 'agent_facts',
@@ -98,7 +98,7 @@ describe('migrate', () => {
     ]));
     expect(tables).not.toContain('user_facts');
     const columns = (table: string) => column(db, `SELECT name FROM pragma_table_info('${table}')`);
-    expect(columns('owners')).toEqual(['id', 'created_at', 'last_seen_at', 'memory_consent', 'notified_at', 'memory_epoch']);
+    expect(columns('owners')).toEqual(['id', 'created_at', 'last_seen_at', 'memory_consent', 'notified_at', 'memory_epoch', 'banned_at']);
     expect(columns('agents')).toEqual(['id', 'owner_id', 'character_id', 'created_at', 'memory_epoch']);
     for (const table of ['messages', 'agent_facts', 'pinned_memories', 'relationship_notes', 'episodes', 'followups']) {
       expect(columns(table)).toEqual(expect.arrayContaining(['owner_id', 'agent_id']));
@@ -117,9 +117,9 @@ describe('migrate', () => {
   it('applies steps appended after the baseline in order and is idempotent', () => {
     const db = open();
     const steps = [...MIGRATIONS, 'CREATE TABLE plan_probe (id TEXT PRIMARY KEY) STRICT'];
-    expect(migrate(db, steps)).toBe(7);
-    expect(migrate(db, steps)).toBe(7);
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 });
+    expect(migrate(db, steps)).toBe(8);
+    expect(migrate(db, steps)).toBe(8);
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 });
     expect(count(db, "SELECT count(*) AS n FROM sqlite_master WHERE name = 'plan_probe'")).toBe(1);
   });
 

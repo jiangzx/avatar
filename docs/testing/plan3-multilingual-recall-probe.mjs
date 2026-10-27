@@ -14,7 +14,7 @@
 // Synthetic text may be printed only in this mode.
 //
 // --real-db opens the given SQLite file read-only (no migrations, no PRAGMA journal_mode,
-// no writes). It requires the multi-character baseline (user_version 6); anything older
+// no writes). It requires the multi-character baseline (user_version 6) or its additive v7 upgrade; anything older
 // prints NOT RUN db_schema_incompatible. For the first owner that has messages, it runs the
 // three roadmap zh queries per agent (character), plus read-only ja/en diagnostics through
 // each language's production recall path with no text client (verbatim fallback only).
@@ -416,8 +416,8 @@ async function runRealDb(path) {
     } catch {
       return notRun('db_unreadable');
     }
-    // The multi-character baseline only; older schemas are not migrated.
-    if (version !== 6) return notRun('db_schema_incompatible');
+    // The multi-character baseline and its additive v7 upgrade only; older schemas are not migrated.
+    if (version !== 6 && version !== 7) return notRun('db_schema_incompatible');
 
     let store;
     try {
