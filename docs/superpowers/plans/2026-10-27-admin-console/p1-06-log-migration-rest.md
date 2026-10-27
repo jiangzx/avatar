@@ -90,7 +90,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败的上游错误测试**
+- [x] **Step 1: 写失败的上游错误测试**
 
 新建 `gateway/test/upstream-error.test.ts`：
 
@@ -152,12 +152,12 @@ describe('QwenTextClient upstream_error', () => {
   });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/upstream-error.test.ts test/session-logging.test.ts`
 Expected: FAIL：`qwenErrorRequestId` 不是导出、`UPSTREAM_REQUEST_ID_HEADERS` 未定义、`upstream_error` 没有记录。
 
-- [ ] **Step 3: 适配器事件与 Qwen 请求 id**
+- [x] **Step 3: 适配器事件与 Qwen 请求 id**
 
 `gateway/src/adapters/types.ts`：在 `TokenUsage` 之后加
 
@@ -199,7 +199,7 @@ export function qwenErrorRequestId(event: Json): string | undefined {
     }
 ```
 
-- [ ] **Step 4: 会话 `upstream_error`**
+- [x] **Step 4: 会话 `upstream_error`**
 
 `gateway/src/session/session.ts` 的 error 监听（P1-T5 第 4 步写的版本）改为：
 
@@ -230,7 +230,7 @@ export function qwenErrorRequestId(event: Json): string | undefined {
       assert(!/http_internal_error|memory_retention_failed|orphan_cleanup_failed|upstream_error/.test(logs));
 ```
 
-- [ ] **Step 5: 文本客户端 `upstream_error`**
+- [x] **Step 5: 文本客户端 `upstream_error`**
 
 `gateway/src/memory/textClient.ts`：
 - 文件头加 `import { defaultLogger, type Logger } from '../log/logger.ts';`
@@ -262,12 +262,12 @@ export const UPSTREAM_REQUEST_ID_HEADERS: readonly string[] = ['x-request-id', '
     }
 ```
 
-- [ ] **Step 6: 运行，确认通过**
+- [x] **Step 6: 运行，确认通过**
 
 Run: `npm test -w gateway -- test/upstream-error.test.ts test/session-logging.test.ts`
 Expected: PASS。
 
-- [ ] **Step 7: 写失败的日志扫描测试**
+- [x] **Step 7: 写失败的日志扫描测试**
 
 新建 `gateway/test/log-content-scan.test.ts`：
 
@@ -322,12 +322,12 @@ describe('log calls in gateway/src', () => {
 });
 ```
 
-- [ ] **Step 8: 运行，确认失败**
+- [x] **Step 8: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/log-content-scan.test.ts`
 Expected: FAIL：`no longer import the legacy log module` 列出 server、registry、memoryService、worker、writer、index 等文件；`finds the migrated call sites` 计数不足。
 
-- [ ] **Step 9: 迁移 server**
+- [x] **Step 9: 迁移 server**
 
 `gateway/src/server/server.ts`：
 - 删除 `import { log } from '../log.ts';`，加：
@@ -360,7 +360,7 @@ function loggerOf(opts: GatewayServerOptions): Logger {
   - :360 → `loggerOf(opts).child({ oid: ownerShortId(ownerId) }).info('memory_http', { op: route.kind, ms: Math.round(performance.now() - startedAt) });`
   - `bindConnection` 开头加 `const log = loggerOf(opts).child({ sid: sessionId });`，然后 :424 → `log.warn('ws_error');`，:433 → `log.info('ws_heartbeat_timeout');`，:483 → `log.error('session_begin_failed', { code: errorCodeOf(error) });`
 
-- [ ] **Step 10: 迁移 identity**
+- [x] **Step 10: 迁移 identity**
 
 `gateway/src/identity/registry.ts`：
 - 删除旧 import，加 `import { defaultLogger, type Logger } from '../log/logger.ts';` 和 `import { ownerShortId } from '../log/ownerId.ts';`
@@ -383,7 +383,7 @@ function loggerOf(opts: GatewayServerOptions): Logger {
 
 `gateway/test/identity.test.ts` 里如果有断言 `device_resolved` 行包含 `"character":` 字段，改为断言 `"char":`。
 
-- [ ] **Step 11: 迁移 memory worker 与 writer**
+- [x] **Step 11: 迁移 memory worker 与 writer**
 
 `gateway/src/memory/worker.ts`：
 - 删除旧 import，加 `import { defaultLogger, type Logger } from '../log/logger.ts';` 和 `import { ownerShortId } from '../log/ownerId.ts';`
@@ -414,7 +414,7 @@ function loggerOf(opts: GatewayServerOptions): Logger {
 
 - :69 → `this.logger.child({ sid: input.sessionId, oid: ownerShortId(input.ownerId) }).warn('safety_event', { code: 'degrade' });`
 
-- [ ] **Step 12: 迁移 index 并注入**
+- [x] **Step 12: 迁移 index 并注入**
 
 `gateway/src/index.ts`：
 - 删除 `import { log } from './log.ts';`
@@ -433,7 +433,7 @@ function loggerOf(opts: GatewayServerOptions): Logger {
 Run: `grep -rn "log('" gateway/src | grep -v "\.\(debug\|info\|warn\|error\)("`
 Expected: 无输出。
 
-- [ ] **Step 13: docker 日志轮转**
+- [x] **Step 13: docker 日志轮转**
 
 `docker-compose.gateway.yml` 的 `gateway` 服务里（`security_opt` 之后）加：
 
@@ -450,7 +450,7 @@ Expected: 无输出。
 Run: `docker compose -f docker-compose.gateway.yml config --quiet && echo ok`
 Expected: `ok`。没有 docker 时跳过，并在报告里写明「跳过：执行机器无 docker」。
 
-- [ ] **Step 14: 运行扫描测试和全量回归**
+- [x] **Step 14: 运行扫描测试和全量回归**
 
 Run: `npm test -w gateway -- test/log-content-scan.test.ts`
 Expected: PASS，4 个用例。
@@ -458,7 +458,7 @@ Expected: PASS，4 个用例。
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部通过，typecheck 无输出。stdout 行多了 `level` 和绑定字段导致的精确断言失败，按 P1-T5 第 8 步的规则补上新键并在提交说明里列出。
 
-- [ ] **Step 15: 进程冒烟（Mock，临时库，带注册）**
+- [x] **Step 15: 进程冒烟（Mock，临时库，带注册）**
 
 ```bash
 rm -f /tmp/admin-p1t6.db*
@@ -478,7 +478,7 @@ cd ..
 
 Expected：`grep -c` 输出 `1`；SQL 输出 `[{"event":"gateway_listening","n":null},{"event":"device_registered","n":12}]`；最后一行 `all lines have level`。如果 `/device/register` 需要请求体或其他请求头，按 `gateway/test/identity-http.test.ts` 的写法补齐，并在报告里写实际命令。
 
-- [ ] **Step 16: 提交**
+- [x] **Step 16: 提交**
 
 ```bash
 git add gateway/src/adapters/types.ts gateway/src/adapters/qwen.ts gateway/src/session/session.ts gateway/src/memory/textClient.ts gateway/src/server/server.ts gateway/src/identity/registry.ts gateway/src/identity/memoryService.ts gateway/src/memory/worker.ts gateway/src/memory/writer.ts gateway/src/index.ts docker-compose.gateway.yml docs/testing/plan3-mock-smoke.mjs gateway/test/session-logging.test.ts gateway/test/upstream-error.test.ts gateway/test/log-content-scan.test.ts

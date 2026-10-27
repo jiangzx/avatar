@@ -18,7 +18,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败的 v7 测试**
+- [x] **Step 1: 写失败的 v7 测试**
 
 新建 `gateway/test/schema-v7.test.ts`：
 
@@ -121,12 +121,12 @@ describe('schema v7', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 Run: `npm test -w gateway -- test/schema-v7.test.ts`
 Expected: FAIL。`is the latest version` 报 `expected 6 to be 7`，其余用例报 `no such table: usage_events` 或列不一致。
 
-- [ ] **Step 3: 追加迁移步骤**
+- [x] **Step 3: 追加迁移步骤**
 
 在 `gateway/src/memory/migrations.ts` 中，`MIGRATIONS` 数组第一个模板字符串结束的 `` `, `` 之后、`];` 之前，追加第 2 个元素（内容与总览 C1 逐字一致）：
 
@@ -235,12 +235,12 @@ Expected: FAIL。`is the latest version` 报 `expected 6 to be 7`，其余用例
  */
 ```
 
-- [ ] **Step 4: 运行新测试，确认通过**
+- [x] **Step 4: 运行新测试，确认通过**
 
 Run: `npm test -w gateway -- test/schema-v7.test.ts`
 Expected: PASS，6 个用例全过。
 
-- [ ] **Step 5: 更新现有迁移测试的版本断言**
+- [x] **Step 5: 更新现有迁移测试的版本断言**
 
 `gateway/test/memory-store.test.ts` 有三处写死了 v6 或「只有一步」，改为：
 
@@ -276,7 +276,7 @@ Expected: PASS，6 个用例全过。
     expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 });
 ```
 
-- [ ] **Step 6: 更新召回探针的版本检查**
+- [x] **Step 6: 更新召回探针的版本检查**
 
 `docs/testing/plan3-multilingual-recall-probe.mjs`：
 
@@ -290,12 +290,12 @@ Expected: PASS，6 个用例全过。
 
 （P3-T10 用这个探针读真实库；不改的话 v7 库会被判 `db_schema_incompatible`。）
 
-- [ ] **Step 7: 全量回归**
+- [x] **Step 7: 全量回归**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部通过，typecheck 无输出。如果还有其他测试断言 `user_version` 为 6，按第 5 步同样的方式改成 `LATEST` 或 7，并在提交说明里列出。
 
-- [ ] **Step 8: 用备份库验证真实升级（只在执行机器上有 v6 库时做）**
+- [x] **Step 8: 用备份库验证真实升级（只在执行机器上有 v6 库时做）**
 
 ```bash
 cp "$MEMORY_DB_PATH" "$MEMORY_DB_PATH.bak-v6"
@@ -308,7 +308,7 @@ db.close();"; cd ..
 
 Expected：输出 `{"user_version":7}` 和与升级前相同的 owner 数。只对 `.bak-v6` 副本操作，不碰正式库。没有 v6 库时跳过并在报告里写明「跳过：执行机器无 v6 库」。
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add gateway/src/memory/migrations.ts gateway/test/schema-v7.test.ts gateway/test/memory-store.test.ts docs/testing/plan3-multilingual-recall-probe.mjs

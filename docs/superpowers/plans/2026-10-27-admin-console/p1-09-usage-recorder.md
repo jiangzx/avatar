@@ -60,7 +60,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败的 recorder 测试**
+- [x] **Step 1: 写失败的 recorder 测试**
 
 新建 `gateway/test/usage-recorder.test.ts`：
 
@@ -205,12 +205,12 @@ describe('SqliteUsageRecorder', () => {
 });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/usage-recorder.test.ts`
 Expected: FAIL，`../src/usage/recorder.ts` 不存在。
 
-- [ ] **Step 3: 实现 recorder**
+- [x] **Step 3: 实现 recorder**
 
 新建 `gateway/src/usage/recorder.ts`：
 
@@ -307,12 +307,12 @@ export class SqliteUsageRecorder implements UsageRecorder {
 }
 ```
 
-- [ ] **Step 4: 运行，确认通过**
+- [x] **Step 4: 运行，确认通过**
 
 Run: `npm test -w gateway -- test/usage-recorder.test.ts`
 Expected: PASS（8 个用例）。`'deletes usage rows with their owner'` 依赖 `PRAGMA foreign_keys = ON`（`gateway/src/memory/db.ts:27` 已开启）和 C1 的 `ON DELETE CASCADE`。
 
-- [ ] **Step 5: `admin.json` 加 `usageSink`**
+- [x] **Step 5: `admin.json` 加 `usageSink`**
 
 打开 `gateway/src/log/adminConfig.ts`（P1-T4 建）。在 `AdminConfigSchema` 的对象里、紧跟 `logSink` 那一项之后加一项 `usageSink`，**复用 `logSink` 的同一个子 schema**（P1-T4 里它是 `{ flushMs, maxBatch }` 两个正整数，变量名以文件为准）。例如 P1-T4 写的是 `logSink: SinkSchema,`，就加：
 
@@ -340,7 +340,7 @@ Expected: PASS（8 个用例）。`'deletes usage rows with their owner'` 依赖
 Run: `npm test -w gateway -- <P1-T4 的 admin 配置测试文件>`
 Expected: PASS。
 
-- [ ] **Step 6: `ReplyMetrics` 带上完整用量（先改测试）**
+- [x] **Step 6: `ReplyMetrics` 带上完整用量（先改测试）**
 
 `gateway/test/metrics.test.ts:17-20` 的期望改为：
 
@@ -373,7 +373,7 @@ Expected: FAIL，`finish` 返回值没有 `usage`。
 Run: `npm test -w gateway -- test/metrics.test.ts test/logReport.test.ts test/harness.test.ts`
 Expected: PASS。
 
-- [ ] **Step 7: 写失败的会话用量测试**
+- [x] **Step 7: 写失败的会话用量测试**
 
 在 `gateway/test/session.test.ts` 顶部 import 区加：
 
@@ -432,7 +432,7 @@ import type { UsageRecord, UsageRecorder } from '../src/usage/types.ts';
 Run: `npm test -w gateway -- test/session.test.ts`
 Expected: FAIL：第一个新用例 `rows` 为空；affect 用例 `tags` 为 `[undefined]`。（第二个用例此时会 PASS，这是预期的。）
 
-- [ ] **Step 8: Session 接线**
+- [x] **Step 8: Session 接线**
 
 `gateway/src/session/session.ts`：
 
@@ -531,7 +531,7 @@ import type { UsageAttribution, UsageKind, UsageRecorder } from '../usage/types.
 Run: `npm test -w gateway -- test/session.test.ts`
 Expected: PASS（含全部旧用例）。
 
-- [ ] **Step 9: 记忆抽取带 `UsageTag`（先写测试）**
+- [x] **Step 9: 记忆抽取带 `UsageTag`（先写测试）**
 
 在 `gateway/test/worker.test.ts` 的 `describe('MemoryWorker queue', ...)` 末尾追加：
 
@@ -577,7 +577,7 @@ Expected: FAIL，`tags` 为 `[undefined]`。
 Run: `npm test -w gateway -- test/worker.test.ts`
 Expected: PASS。
 
-- [ ] **Step 10: 写「eval 与脚本不计入」的守护测试**
+- [x] **Step 10: 写「eval 与脚本不计入」的守护测试**
 
 新建 `gateway/test/usage-scope.test.ts`：
 
@@ -616,7 +616,7 @@ describe('usage scope', () => {
 Run: `npm test -w gateway -- test/usage-scope.test.ts`
 Expected: 第一个 PASS；第二个 FAIL（`index.ts` 还没有构造 recorder，`offenders` 为空）。
 
-- [ ] **Step 11: `index.ts` 接线**
+- [x] **Step 11: `index.ts` 接线**
 
 `gateway/src/index.ts`：
 
@@ -682,12 +682,12 @@ const usageSource = config.adapter === 'qwen'
 Run: `npm test -w gateway -- test/usage-scope.test.ts`
 Expected: PASS。
 
-- [ ] **Step 12: 全量回归与类型检查**
+- [x] **Step 12: 全量回归与类型检查**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS。若 harness / eval 相关测试因 `ReplyMetrics.usage` 报类型错误，在其构造的 `ReplyMetrics` 字面量里加 `usage: null`，不改行为。
 
-- [ ] **Step 13: 提交**
+- [x] **Step 13: 提交**
 
 ```bash
 git add gateway/src/usage/recorder.ts gateway/src/log/adminConfig.ts gateway/config/admin.json \

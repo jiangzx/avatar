@@ -59,7 +59,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 新建用量类型文件**
+- [x] **Step 1: 新建用量类型文件**
 
 新建 `gateway/src/usage/types.ts`：
 
@@ -92,7 +92,7 @@ export interface UsageRecorder { record(record: UsageRecord): void; flush(): voi
 export interface UsageTag { kind: UsageKind; attribution: UsageAttribution }
 ```
 
-- [ ] **Step 2: 写失败的 Qwen 解析测试**
+- [x] **Step 2: 写失败的 Qwen 解析测试**
 
 在 `gateway/test/qwen.test.ts` 的 `describe` 块末尾（现有 `'emits speech stop and token usage from server events'` 之后）追加：
 
@@ -129,12 +129,12 @@ export interface UsageTag { kind: UsageKind; attribution: UsageAttribution }
   });
 ```
 
-- [ ] **Step 3: 运行，确认失败**
+- [x] **Step 3: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/qwen.test.ts`
 Expected: FAIL，新测试的期望对象多出 `inputTextTokens` 等字段（实际只有两个总数）。现有 `'emits speech stop and token usage from server events'` 仍 PASS。
 
-- [ ] **Step 4: 扩展 `TokenUsage` 并实现 `parseUsage`**
+- [x] **Step 4: 扩展 `TokenUsage` 并实现 `parseUsage`**
 
 `gateway/src/adapters/types.ts:31-34` 替换为：
 
@@ -182,12 +182,12 @@ function detailsOf(raw: unknown): { text?: number; audio?: number; cached?: numb
 
 注意：`exactOptionalPropertyTypes` 下不能把 `undefined` 赋给可选字段，所以用 `if` 逐个赋值。
 
-- [ ] **Step 5: 运行，确认通过**
+- [x] **Step 5: 运行，确认通过**
 
 Run: `npm test -w gateway -- test/qwen.test.ts`
 Expected: PASS（含原有用量测试，原测试期望 `{ inputTokens: 321, outputTokens: 45 }` 不受影响）。
 
-- [ ] **Step 6: 写失败的 Mock 模拟用量测试**
+- [x] **Step 6: 写失败的 Mock 模拟用量测试**
 
 在 `gateway/test/mock.test.ts` 末尾追加（文件顶部已有 `MockAdapter` 的 import；若没有 `vi` 的 import，在现有 vitest import 里加上）：
 
@@ -222,12 +222,12 @@ describe('MockAdapter synthetic usage', () => {
 });
 ```
 
-- [ ] **Step 7: 运行，确认失败**
+- [x] **Step 7: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/mock.test.ts`
 Expected: FAIL，`seen` 为 `['done']`（还没有 `emitUsage`），并且 typecheck 层面 `emitUsage` 不是已知选项（vitest 不做类型检查，所以表现为断言失败）。
 
-- [ ] **Step 8: 实现 Mock 模拟用量**
+- [x] **Step 8: 实现 Mock 模拟用量**
 
 `gateway/src/adapters/mock.ts` 的 `MockOptions`（:31-44）末尾、`cancelGapMs` 之后加：
 
@@ -282,12 +282,12 @@ import type { AdapterEvents, ProactiveCue, ProactiveRequest, RealtimeAdapter, Se
   }
 ```
 
-- [ ] **Step 9: 运行，确认通过**
+- [x] **Step 9: 运行，确认通过**
 
 Run: `npm test -w gateway -- test/mock.test.ts`
 Expected: PASS。
 
-- [ ] **Step 10: 写失败的文本客户端用量测试**
+- [x] **Step 10: 写失败的文本客户端用量测试**
 
 新建 `gateway/test/usage-parse.test.ts`：
 
@@ -388,12 +388,12 @@ describe('QwenSummarizer usage', () => {
 });
 ```
 
-- [ ] **Step 11: 运行，确认失败**
+- [x] **Step 11: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/usage-parse.test.ts`
 Expected: FAIL，`parseChatUsage`、`withUsageTag` 不存在（import 报错）。
 
-- [ ] **Step 12: 实现文本客户端用量**
+- [x] **Step 12: 实现文本客户端用量**
 
 `gateway/src/memory/textClient.ts` 整文件替换为：
 
@@ -516,7 +516,7 @@ function messageContent(payload: unknown): string | null {
 
 `gateway/src/memory/extract.ts:11` 现在 `export type { TextModelClient } from './textClient.ts';` 保持不变。其他实现 `TextModelClient` 的测试桩（`complete: async (input) => ...`）因为 input 类型只是多了可选字段，不需要改。
 
-- [ ] **Step 13: 实现摘要器用量**
+- [x] **Step 13: 实现摘要器用量**
 
 `gateway/src/session/qwenSummarizer.ts`：
 
@@ -607,17 +607,17 @@ export interface QwenSummarizerOptions {
 
 `extractContent` 函数保持不变。
 
-- [ ] **Step 14: 运行新测试与相关旧测试**
+- [x] **Step 14: 运行新测试与相关旧测试**
 
 Run: `npm test -w gateway -- test/usage-parse.test.ts test/summarizer.test.ts test/extract.test.ts`
 Expected: 全部 PASS。
 
-- [ ] **Step 15: 全量回归与类型检查**
+- [x] **Step 15: 全量回归与类型检查**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS；typecheck 无错误。若有测试桩因 `TextModelClient` 签名报类型错误，只把桩的参数类型改为 `TextCompleteInput`，不改行为。
 
-- [ ] **Step 16: 提交**
+- [x] **Step 16: 提交**
 
 ```bash
 git add gateway/src/usage/types.ts gateway/src/adapters/types.ts gateway/src/adapters/qwen.ts gateway/src/adapters/mock.ts \

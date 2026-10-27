@@ -1,5 +1,14 @@
 # Roadmap
 
+## 后台管理与可观测（2026-10-27 起）
+
+状态：**计划 1（可观测基础）完成；计划 2–4 未开始**。
+- 设计：[spec](../superpowers/specs/2026-10-27-admin-console-design.md)（决策 Q1–Q38）。取代 [config-admin-later](../superpowers/plans/2026-10-18-config-admin-later.md)。
+- 计划：[overview](../superpowers/plans/2026-10-27-admin-console/00-overview.md)，四份计划按 1 → 2 → 3 → 4 顺序执行，subagent-driven-development。
+- 计划 1 交付：注入式 Logger（四级、sid/oid/char/seq 绑定、字段黑名单）、`log_events`（7 天）、`usage_events`（写入时定格费用，180 天）、`pricing.json` 价格基线、`sessions.adapter/end_reason`、删除 owner 连带删除用量与日志；数据库 `user_version=7`（v6 原地升级）。
+- 验收：[记录](../testing/2026-10-27-observability-acceptance.md)。Mock smoke 通过；真实 Qwen smoke 通过（3 条实时回复，成本 0.015111 元）；回归 protocol 2 文件 13 项、gateway 88 文件 1164 项、avatar-core 18 文件 121 项通过，两个 typecheck 与 `generate-character-ids --check` 通过。
+- 下一步：计划 2 的 P2-T1（`p2-01-admin-config.md`）。
+
 ## 多角色与分层记忆（2026-10-26 起）
 
 状态：**Task 1–17 完成，真机验收 P1–P13 用户确认通过；未推送**。

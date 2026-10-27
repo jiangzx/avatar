@@ -43,7 +43,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败的 admin 配置测试**
+- [x] **Step 1: 写失败的 admin 配置测试**
 
 新建 `gateway/test/admin-config.test.ts`：
 
@@ -89,12 +89,12 @@ describe('admin config', () => {
 });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/admin-config.test.ts`
 Expected: FAIL，`Failed to resolve import "../src/log/adminConfig.ts"`。
 
-- [ ] **Step 3: 实现配置文件和 schema**
+- [x] **Step 3: 实现配置文件和 schema**
 
 新建 `gateway/config/admin.json`：
 
@@ -133,12 +133,12 @@ export function loadAdminConfig(path: string): AdminConfig {
 }
 ```
 
-- [ ] **Step 4: 运行，确认通过**
+- [x] **Step 4: 运行，确认通过**
 
 Run: `npm test -w gateway -- test/admin-config.test.ts`
 Expected: PASS，3 个用例。
 
-- [ ] **Step 5: 写失败的 SQLite sink 测试**
+- [x] **Step 5: 写失败的 SQLite sink 测试**
 
 新建 `gateway/test/log-sqlite-sink.test.ts`：
 
@@ -248,12 +248,14 @@ describe('deleteLogsBefore', () => {
 });
 ```
 
-- [ ] **Step 6: 运行，确认失败**
+第 8 个用例覆盖 `BEGIN → write() → close() → COMMIT`：`close()` 在事务中必须把 flush 推迟到事务结束，而不是丢弃队列。
+
+- [x] **Step 6: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/log-sqlite-sink.test.ts`
 Expected: FAIL，`Failed to resolve import "../src/log/sqliteSink.ts"`。
 
-- [ ] **Step 7: 实现 sink**
+- [x] **Step 7: 实现 sink**
 
 新建 `gateway/src/log/sqliteSink.ts`：
 
@@ -354,12 +356,12 @@ export function deleteLogsBefore(db: DatabaseSync, cutoff: number, limit: number
 
 注意：`close()` 只调用 `flush()`，定时器由 `flush()` 自己清理；数据库处于事务中时，`flush()` 会把写入推迟到定时器重试而不是丢弃队列。退出流程里在 `memoryDb.close()` 之前调用，此时没有事务。
 
-- [ ] **Step 8: 运行，确认通过**
+- [x] **Step 8: 运行，确认通过**
 
 Run: `npm test -w gateway -- test/log-sqlite-sink.test.ts`
-Expected: PASS，7 个用例。
+Expected: PASS，8 个用例。
 
-- [ ] **Step 9: index 接线**
+- [x] **Step 9: index 接线**
 
 `gateway/src/index.ts`：
 
@@ -448,12 +450,12 @@ async function expireLogs(): Promise<void> {
 # LOG_LEVEL=info
 ```
 
-- [ ] **Step 10: 类型检查与全量回归**
+- [x] **Step 10: 类型检查与全量回归**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部通过，typecheck 无输出。
 
-- [ ] **Step 11: 进程冒烟（Mock，临时库）**
+- [x] **Step 11: 进程冒烟（Mock，临时库）**
 
 ```bash
 rm -f /tmp/admin-p1t4.db*
@@ -470,7 +472,7 @@ cd ..
 
 Expected：第一条输出 `[{"level":"info","event":"log_sink_ready","fields":"{\"db\":true}"}]`；`grep -c` 输出 `1`。`/tmp/admin-p1t4.log` 里每行都以 `{"t":` 开头。
 
-- [ ] **Step 12: 提交**
+- [x] **Step 12: 提交**
 
 ```bash
 git add gateway/config/admin.json gateway/src/log/adminConfig.ts gateway/src/log/sqliteSink.ts gateway/src/index.ts gateway/.env.example gateway/test/admin-config.test.ts gateway/test/log-sqlite-sink.test.ts

@@ -50,7 +50,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败的 store 测试**
+- [x] **Step 1: 写失败的 store 测试**
 
 新建 `gateway/test/session-columns.test.ts`：
 
@@ -152,12 +152,12 @@ describe('owner deletion and logs', () => {
 
 说明：最后一个用例依赖「从未有 agent 行的 owner 是孤儿」（多角色计划的规则）；`createOwner` 不建 agent，所以它是孤儿。若 `deleteOrphanOwners` 的签名或条件与此不同，按 `gateway/test/identity.test.ts` 里孤儿清理用例的写法调整造数据的方式，断言不变。
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/session-columns.test.ts`
 Expected: FAIL：`adapter`、`end_reason` 为 NULL；`process_restart` 未写；删除 owner 后日志仍在。
 
-- [ ] **Step 3: 实现 store 改动**
+- [x] **Step 3: 实现 store 改动**
 
 `gateway/src/memory/store.ts`：
 
@@ -228,12 +228,12 @@ import { ownerShortId } from '../log/ownerId.ts';
 
 注意 `deleteOwner` 现在用 `this.tx`。若调用方已经在一个 `tx` 里调用 `deleteOwner`（用 `grep -n "deleteOwner(" gateway/src` 检查），嵌套 `BEGIN` 会报错；当前只有 `registry.deleteOwner` 和 dev 路由在事务外调用。
 
-- [ ] **Step 4: 运行，确认通过**
+- [x] **Step 4: 运行，确认通过**
 
 Run: `npm test -w gateway -- test/session-columns.test.ts test/memory-store.test.ts test/identity.test.ts test/identity-http.test.ts`
 Expected: 全部 PASS。
 
-- [ ] **Step 5: 写失败的 registry 测试**
+- [x] **Step 5: 写失败的 registry 测试**
 
 在 `gateway/test/identity.test.ts` 的 `it('records sessions only for owned contexts', ...)` 之后追加：
 
@@ -257,7 +257,7 @@ Expected: 全部 PASS。
 Run: `npm test -w gateway -- test/identity.test.ts`
 Expected: FAIL（typecheck 意义上 `adapterName` 还不存在；vitest 运行时 `adapter`、`end_reason` 为 NULL）。
 
-- [ ] **Step 6: registry 传 adapter 与原因**
+- [x] **Step 6: registry 传 adapter 与原因**
 
 `gateway/src/identity/registry.ts`：
 
@@ -290,7 +290,7 @@ Expected: FAIL（typecheck 意义上 `adapterName` 还不存在；vitest 运行�
 Run: `npm test -w gateway -- test/identity.test.ts`
 Expected: PASS。
 
-- [ ] **Step 7: 写失败的用量保留测试**
+- [x] **Step 7: 写失败的用量保留测试**
 
 新建 `gateway/test/usage-retention.test.ts`：
 
@@ -320,7 +320,7 @@ describe('purgeExpiredUsage', () => {
 Run: `npm test -w gateway -- test/usage-retention.test.ts`
 Expected: FAIL，`../src/usage/retention.ts` 不存在。
 
-- [ ] **Step 8: 实现用量清理**
+- [x] **Step 8: 实现用量清理**
 
 新建 `gateway/src/usage/retention.ts`：
 
@@ -337,7 +337,7 @@ export function purgeExpiredUsage(db: DatabaseSync, olderThan: number, limit: nu
 Run: `npm test -w gateway -- test/usage-retention.test.ts`
 Expected: PASS。
 
-- [ ] **Step 9: 接到每日清理**
+- [x] **Step 9: 接到每日清理**
 
 `gateway/src/index.ts`：
 
@@ -379,12 +379,12 @@ async function expireUsage(): Promise<void> {
 
 4. 确认日志保留：运行 `grep -n "log_events" gateway/src/index.ts gateway/src/log/*.ts`，应能看到 P1-T4 写的按 `retention.logDays` 清理 `log_events` 的代码，并且它也挂在 `runCleanup`（或 P1-T4 自己的定时器）上。**看不到就停下报告**（这是 P1-T4 的交付，不要在本任务里补写）。
 
-- [ ] **Step 10: 全量回归与类型检查**
+- [x] **Step 10: 全量回归与类型检查**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS。
 
-- [ ] **Step 11: 提交**
+- [x] **Step 11: 提交**
 
 ```bash
 git add gateway/src/memory/store.ts gateway/src/identity/registry.ts gateway/src/usage/retention.ts gateway/src/index.ts \

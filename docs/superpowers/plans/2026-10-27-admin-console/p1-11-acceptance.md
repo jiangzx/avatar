@@ -19,7 +19,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写 smoke 脚本**
+- [x] **Step 1: 写 smoke 脚本**
 
 新建 `docs/testing/2026-10-27-observability-smoke.mjs`：
 
@@ -217,7 +217,7 @@ try {
 
 二进制帧头已按 `protocol/src/index.ts:61-81` 核对：第 0 字节是帧类型，第 1–4 字节是大端 `responseSeq`，头长 5 字节，之后是小端 PCM16。播放时长只影响 `playedMs`，不影响断言。
 
-- [ ] **Step 2: 跑 Mock smoke**
+- [x] **Step 2: 跑 Mock smoke**
 
 Run（仓库根目录）: `node --import tsx docs/testing/2026-10-27-observability-smoke.mjs`
 Expected: 最后一行是 `{"mode":"mock","passed":true,"checks":{...}}`，其中 `session` 为 `{"adapter":"mock","end_reason":"client_end"}`、`realtimeRows ≥ 3`、`textRows` 为 `[]`、`contentLeaks: 0`、`exitCode: 0`。
@@ -228,7 +228,7 @@ Expected: 最后一行是 `{"mode":"mock","passed":true,"checks":{...}}`，其�
 - `log oid …` 断言失败 → 某个会话事件没有带 child logger 的绑定，回到 P1-T5 修。
 修好后重跑，直到通过。
 
-- [ ] **Step 3: 跑真实 Qwen smoke（花费约几分钱）**
+- [x] **Step 3: 跑真实 Qwen smoke（花费约几分钱）**
 
 前置：`gateway/.env` 有 `DASHSCOPE_API_KEY`、`QWEN_ENDPOINT`、`QWEN_SUMMARIZER_ENDPOINT`（不要打印文件内容）。
 
@@ -237,7 +237,7 @@ Expected: `{"mode":"qwen","passed":true,...}`，`realtimeCostMicroYuan > 0`；`t
 
 记录 `realtimeRows`、`realtimeCostMicroYuan`（换算成元：÷ 1,000,000）、`textRows`。如果 Key 或网络不可用，按总览「卡住超过 20 分钟」处理：记入 `docs/blockers.md`，验收记录里写「NOT RUN」及原因，继续后续步骤。
 
-- [ ] **Step 4: 全量回归**
+- [x] **Step 4: 全量回归**
 
 Run（仓库根目录，逐条）：
 
@@ -250,7 +250,7 @@ node scripts/generate-character-ids.mjs --check
 
 Expected: 全部通过。记录每条命令的通过数（vitest 末尾的 `Tests  N passed` 和测试文件数）。
 
-- [ ] **Step 5: 写验收记录**
+- [x] **Step 5: 写验收记录**
 
 新建 `docs/testing/2026-10-27-observability-acceptance.md`，内容按下面结构，**数字全部来自 Step 2–4 的真实输出**：
 
@@ -281,7 +281,7 @@ Expected: 全部通过。记录每条命令的通过数（vitest 末尾的 `Test
 - <P1-T8 转写分支若新增 blocker，在此列出编号>
 ```
 
-- [ ] **Step 6: 更新 roadmap**
+- [x] **Step 6: 更新 roadmap**
 
 在 `docs/project/roadmap.md` 最顶部（`# Roadmap` 标题之后、`## 多角色与分层记忆` 之前）插入：
 
@@ -298,11 +298,11 @@ Expected: 全部通过。记录每条命令的通过数（vitest 末尾的 `Test
 
 尖括号内填真实结果。把 `## 多角色与分层记忆` 一节里「下一步」那一行保持原样（它记录的是上一个阶段的推送事项）。
 
-- [ ] **Step 7: 勾选计划步骤**
+- [x] **Step 7: 勾选计划步骤**
 
 把 `docs/superpowers/plans/2026-10-27-admin-console/p1-01` 到 `p1-11` 中已完成的步骤从 `- [ ]` 改为 `- [x]`。没做的步骤保持未勾选，并在验收记录「已知限制」里说明。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add docs/testing/2026-10-27-observability-smoke.mjs docs/testing/2026-10-27-observability-acceptance.md docs/project/roadmap.md \
@@ -319,7 +319,7 @@ git commit -m "docs: record the observability acceptance
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 9: 向用户报告**
+- [x] **Step 9: 向用户报告**
 
 报告内容：Mock 与真实 smoke 的结果 JSON、回归命令与通过数、未完成或跳过的步骤（含 blockers 编号）、`git log --oneline` 中计划 1 的提交列表。**不要推送**；推送前征得用户同意。
 

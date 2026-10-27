@@ -100,7 +100,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败的会话日志测试**
+- [x] **Step 1: 写失败的会话日志测试**
 
 新建 `gateway/test/session-logging.test.ts`：
 
@@ -230,12 +230,12 @@ describe('policy logging', () => {
 });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/session-logging.test.ts`
 Expected: FAIL，`Failed to resolve import "../src/session/logBinding.ts"`。
 
-- [ ] **Step 3: policy 改用注入 logger**
+- [x] **Step 3: policy 改用注入 logger**
 
 `gateway/src/reliability/policy.ts`：
 
@@ -276,7 +276,7 @@ Expected: FAIL，`Failed to resolve import "../src/session/logBinding.ts"`。
 - 第 33 行：`const cap = captureLogger();` 并传 `logger: cap.logger`；原来对 `logs` 的断言改为对 `cap.lines.map((l) => [l.event, l.fields])` 断言（字段内容不变，键 `name`、`code`、`attempt` / `class`、`attempts`）。
 - 第 53–58 行：`const cap = captureLogger();` 两次调用都传 `logger: cap.logger`，断言改为 `expect(cap.lines.map((l) => l.event)).toEqual(['policy_failed', 'policy_ignored']);`
 
-- [ ] **Step 4: 新建 logBinding 并改 Session**
+- [x] **Step 4: 新建 logBinding 并改 Session**
 
 新建 `gateway/src/session/logBinding.ts`：
 
@@ -349,7 +349,7 @@ import { sessionLogBinding } from './logBinding.ts';
 Run: `grep -n "log('" gateway/src/session/session.ts`
 Expected: 无输出。
 
-- [ ] **Step 5: Director、silence、affect、care、turnAccess、pin、ToolContext**
+- [x] **Step 5: Director、silence、affect、care、turnAccess、pin、ToolContext**
 
 `gateway/src/session/director.ts`：
 - 第 5 行换成 `import { defaultLogger, type Logger } from '../log/logger.ts';`
@@ -414,7 +414,7 @@ Expected: 无输出。
 - 第 6 行换成 `import { defaultLogger } from '../../log/logger.ts';`
 - :122 → `(ctx.logger ?? defaultLogger()).info('memory_pinned', { sensitive, count: pinned.length + 1 });`
 
-- [ ] **Step 6: SessionManager**
+- [x] **Step 6: SessionManager**
 
 `gateway/src/session/manager.ts`：
 - 第 3 行换成：
@@ -491,7 +491,7 @@ import { sessionLogBinding } from './logBinding.ts';
 
 - `begin()` 里 `this.notify(() => this.lifecycle?.started(sessionId, current.ctx));` 改为 `this.notify(this.logFor(sessionId, current.ctx), () => this.lifecycle?.started(sessionId, current.ctx));`。用 `grep -n "this.notify(\|flushSession(\|endSession(" gateway/src/session/manager.ts` 找出其余调用点，同样补上 `log` 参数（取当前 entry 的 `this.logFor(sessionId, entry.ctx)`）。
 
-- [ ] **Step 7: index 注入**
+- [x] **Step 7: index 注入**
 
 `gateway/src/index.ts`：
 - `new Session({ … })` 的 deps 对象里（`adapterFactory` 之前）加 `logger,`
@@ -503,7 +503,7 @@ import { sessionLogBinding } from './logBinding.ts';
 );
 ```
 
-- [ ] **Step 8: 更新依赖精确键名的现有测试**
+- [x] **Step 8: 更新依赖精确键名的现有测试**
 
 `gateway/test/session.test.ts:1877`（`logs the slim rebuild without any line or conversation text`）：会话日志现在带绑定和级别。测试用的 dev 上下文没有 `ownerId`，所以没有 `oid`：
 
@@ -511,7 +511,7 @@ import { sessionLogBinding } from './logBinding.ts';
     expect(Object.keys(rebuilds[0]!).sort()).toEqual(['bridge', 'char', 'elapsedMs', 'event', 'level', 'reason', 'sid', 't']);
 ```
 
-- [ ] **Step 9: 运行新测试和全量回归**
+- [x] **Step 9: 运行新测试和全量回归**
 
 Run: `npm test -w gateway -- test/session-logging.test.ts test/policy.test.ts`
 Expected: PASS。
@@ -519,12 +519,12 @@ Expected: PASS。
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部通过，typecheck 无输出。如有其他测试因为 stdout 行多了 `level` / `sid` / `char` 而对精确键名或精确对象断言失败，按第 8 步的方式把新键加进断言（不要放宽为不检查），并在提交说明里列出改了哪些测试。
 
-- [ ] **Step 10: 确认会话区不再用旧 log**
+- [x] **Step 10: 确认会话区不再用旧 log**
 
 Run: `grep -rn "from '../log.ts'\|from '../../log.ts'" gateway/src/session gateway/src/reliability`
 Expected: 无输出。
 
-- [ ] **Step 11: 进程冒烟（Mock，临时库）**
+- [x] **Step 11: 进程冒烟（Mock，临时库）**
 
 ```bash
 rm -f /tmp/admin-p1t5.db*
@@ -540,7 +540,7 @@ cd ..
 
 Expected：`sid=` 后面是一个 UUID；`session_created` 那一行包含 `"level":"info"`、`"sid":"<同一个 UUID>"`、`"char":"xiaonuan"`。（开发模式没有 owner，所以没有 `oid`；带 owner 的绑定由第 1 步的单测覆盖。）如果 `POST /session` 在本地开发模式需要额外请求头，按 `gateway/test/server.test.ts` 里的写法补齐，并在报告里写明实际命令。
 
-- [ ] **Step 12: 提交**
+- [x] **Step 12: 提交**
 
 ```bash
 git add gateway/src/session/logBinding.ts gateway/src/reliability/policy.ts gateway/src/session/session.ts gateway/src/session/director.ts gateway/src/session/silence.ts gateway/src/session/affect.ts gateway/src/session/care.ts gateway/src/session/turnAccess.ts gateway/src/session/tools/registry.ts gateway/src/session/tools/pin.ts gateway/src/session/manager.ts gateway/src/index.ts gateway/test/session-logging.test.ts gateway/test/policy.test.ts gateway/test/session.test.ts

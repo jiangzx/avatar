@@ -30,7 +30,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败的辅助函数测试**
+- [x] **Step 1: 写失败的辅助函数测试**
 
 新建 `gateway/test/usageProbe.test.ts`：
 
@@ -83,12 +83,12 @@ describe('usage probe helpers', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 Run: `npm test -w gateway -- test/usageProbe.test.ts`
 Expected: FAIL，报错 `Failed to resolve import "../scripts/lib/usage-probe.ts"`。
 
-- [ ] **Step 3: 实现辅助函数**
+- [x] **Step 3: 实现辅助函数**
 
 新建 `gateway/scripts/lib/usage-probe.ts`：
 
@@ -156,12 +156,12 @@ export function expectedAudioTokens(seconds: number, perSecond: number): number 
 }
 ```
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [x] **Step 4: 运行测试，确认通过**
 
 Run: `npm test -w gateway -- test/usageProbe.test.ts`
 Expected: PASS，6 个用例全过。
 
-- [ ] **Step 5: 写探针入口**
+- [x] **Step 5: 写探针入口**
 
 新建 `gateway/scripts/probe-admin-usage.ts`：
 
@@ -288,12 +288,12 @@ await textModel(memoryConfig.extractModel ?? 'qwen-plus');
 await textModel(process.env.QWEN_SUMMARIZER_MODEL ?? 'qwen-flash');
 ```
 
-- [ ] **Step 6: 类型检查**
+- [x] **Step 6: 类型检查**
 
 Run: `npm run typecheck -w gateway`
 Expected: 无输出，退出码 0。
 
-- [ ] **Step 7: 提交辅助函数和探针**
+- [x] **Step 7: 提交辅助函数和探针**
 
 ```bash
 git add gateway/scripts/lib/usage-probe.ts gateway/scripts/probe-admin-usage.ts gateway/test/usageProbe.test.ts
@@ -302,7 +302,7 @@ git commit -m "test(gateway): add the admin usage probe
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 8: 生成合成音频**
+- [x] **Step 8: 生成合成音频**
 
 只用合成句子。macOS：
 
@@ -312,7 +312,7 @@ say -v Tingting -o /tmp/probe-16k.wav --data-format=LEI16@16000 "今天天气不
 
 Linux 没有 `say` 时，用任何 TTS 生成同一句话，并转成 16 kHz、单声道、16 位 PCM WAV（例如 `ffmpeg -i in.wav -ar 16000 -ac 1 -sample_fmt s16 /tmp/probe-16k.wav`）。两种都不行就停下，按 AGENTS.md 第 7 条记 blocker。
 
-- [ ] **Step 9: 运行真实探针**
+- [x] **Step 9: 运行真实探针**
 
 Run（cwd: `gateway/`）：
 
@@ -328,7 +328,7 @@ grep -c '天气\|打个招呼' /tmp/admin-usage-probe.jsonl
 
 Expected：`0`。
 
-- [ ] **Step 10: 写结果文档**
+- [x] **Step 10: 写结果文档**
 
 新建 `docs/testing/2026-10-27-admin-usage-probe.md`，按下面模板填写真实值（只填键路径和数字）：
 
@@ -382,7 +382,7 @@ Expected：`0`。
 | A5 | `text_ok.usage` 含 `prompt_tokens` 和 `completion_tokens` 两个数字 | 缺任一个：**停下报告**。P1-T7 的文本 usage 解析无法按计划实现 |
 | realtime details | `realtime_text.usage` 含 `input_tokens_details.text_tokens`、`input_tokens_details.audio_tokens`、`output_tokens_details.text_tokens`、`output_tokens_details.audio_tokens` | 字段名不同：**停下报告**，由协调者更新 P1-T7 的解析代码 |
 
-- [ ] **Step 11: 提交结果文档**
+- [x] **Step 11: 提交结果文档**
 
 ```bash
 git add docs/testing/2026-10-27-admin-usage-probe.md
@@ -391,7 +391,7 @@ git commit -m "docs: record the admin usage probe
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 12: 回归**
+- [x] **Step 12: 回归**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected：全部通过，typecheck 无输出。

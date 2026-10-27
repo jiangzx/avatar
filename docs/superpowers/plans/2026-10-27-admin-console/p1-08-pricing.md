@@ -52,7 +52,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写价格基线文件**
+- [x] **Step 1: 写价格基线文件**
 
 新建 `gateway/config/pricing.json`（`effectiveFrom` = `Date.parse('2026-01-01T00:00:00+08:00')` = `1767196800000`）：
 
@@ -96,7 +96,7 @@
 
 说明：`qwen-plus` 的价格是单次输入 ≤128K、非思考模式；网关的抽取请求远小于 128K，也不开思考，所以只放这一档。
 
-- [ ] **Step 2: 写失败的测试**
+- [x] **Step 2: 写失败的测试**
 
 新建 `gateway/test/pricing.test.ts`：
 
@@ -215,12 +215,12 @@ describe('SqlitePriceBook', () => {
 
 注意：`openDatabase(':memory:', ...)` 会跑 `migrate`，所以 v7 的 `price_entries` 表已存在（依赖 P1-T2）。若 `openDatabase` 的签名与此不同，按 `gateway/test/extract.test.ts:20-24` 的现有写法调整。
 
-- [ ] **Step 3: 运行，确认失败**
+- [x] **Step 3: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/pricing.test.ts`
 Expected: FAIL，`../src/usage/pricing.ts` 不存在。
 
-- [ ] **Step 4: 实现 `pricing.ts`**
+- [x] **Step 4: 实现 `pricing.ts`**
 
 新建 `gateway/src/usage/pricing.ts`：
 
@@ -355,21 +355,21 @@ export class SqlitePriceBook implements PriceBook {
 }
 ```
 
-- [ ] **Step 5: 运行，确认通过**
+- [x] **Step 5: 运行，确认通过**
 
 Run: `npm test -w gateway -- test/pricing.test.ts`
 Expected: PASS（9 个用例）。若 `'prices each detail field…'` 算出 1597：检查是否把 `Math.round` 换成了 `Math.floor`。
 
-- [ ] **Step 6: 按转写模型分支处理**
+- [x] **Step 6: 按转写模型分支处理**
 
 按上文「转写模型分支」表执行。走第二行时，在 `docs/blockers.md` 末尾按现有条目格式追加一条（编号接最后一条），内容写明：现象（转写单独计费、usage 不可见）、影响（后台成本偏低）、证据（探针记录文件路径与行）、下一步（按音频秒数估算或向阿里云确认）。
 
-- [ ] **Step 7: 全量回归与类型检查**
+- [x] **Step 7: 全量回归与类型检查**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add gateway/config/pricing.json gateway/src/usage/pricing.ts gateway/test/pricing.test.ts

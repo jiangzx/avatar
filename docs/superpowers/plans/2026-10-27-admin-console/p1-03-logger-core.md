@@ -49,7 +49,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败的字段防护测试**
+- [x] **Step 1: 写失败的字段防护测试**
 
 新建 `gateway/test/log-field-guard.test.ts`：
 
@@ -98,12 +98,12 @@ describe('guardFields', () => {
 });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/log-field-guard.test.ts`
 Expected: FAIL，`Failed to resolve import "../src/log/fieldGuard.ts"`。
 
-- [ ] **Step 3: 实现字段防护**
+- [x] **Step 3: 实现字段防护**
 
 新建 `gateway/src/log/fieldGuard.ts`：
 
@@ -143,12 +143,12 @@ function acceptable(key: string, value: unknown): boolean {
 
 （`logger.ts` 在第 7 步才创建；这里只有 type-only import，vitest 运行时会擦除它，所以本文件的测试可以先通过；typecheck 在第 11 步统一跑。）
 
-- [ ] **Step 4: 运行，确认通过**
+- [x] **Step 4: 运行，确认通过**
 
 Run: `npm test -w gateway -- test/log-field-guard.test.ts`
 Expected: PASS，7 个用例。
 
-- [ ] **Step 5: 写失败的级别与 logger 测试**
+- [x] **Step 5: 写失败的级别与 logger 测试**
 
 新建 `gateway/test/log-levels.test.ts`：
 
@@ -341,12 +341,12 @@ describe('ownerShortId', () => {
 });
 ```
 
-- [ ] **Step 6: 运行，确认失败**
+- [x] **Step 6: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/log-levels.test.ts test/logger.test.ts`
 Expected: FAIL，`Failed to resolve import "../src/log/levels.ts"` / `"../src/log/logger.ts"`。
 
-- [ ] **Step 7: 实现 logger、levels、ownerId、stdoutSink**
+- [x] **Step 7: 实现 logger、levels、ownerId、stdoutSink**
 
 新建 `gateway/src/log/logger.ts`：
 
@@ -507,12 +507,12 @@ export function stdoutSink(write: (s: string) => void = (s) => { process.stdout.
 }
 ```
 
-- [ ] **Step 8: 运行日志测试，确认通过**
+- [x] **Step 8: 运行日志测试，确认通过**
 
 Run: `npm test -w gateway -- test/logger.test.ts test/log-levels.test.ts test/log-field-guard.test.ts`
 Expected: PASS。
 
-- [ ] **Step 9: 写失败的 config 测试**
+- [x] **Step 9: 写失败的 config 测试**
 
 `gateway/test/config.test.ts`：
 
@@ -534,7 +534,7 @@ Expected: PASS。
 Run: `npm test -w gateway -- test/config.test.ts`
 Expected: FAIL，`logLevel` 为 undefined。
 
-- [ ] **Step 10: 实现 config 字段**
+- [x] **Step 10: 实现 config 字段**
 
 `gateway/src/config.ts`：
 
@@ -561,12 +561,12 @@ Expected: FAIL，`logLevel` 为 undefined。
     "dev": "NODE_ENV=development node --watch --env-file-if-exists=.env --import tsx src/index.ts",
 ```
 
-- [ ] **Step 11: 运行 config 测试和全量回归**
+- [x] **Step 11: 运行 config 测试和全量回归**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部通过，typecheck 无输出。
 
-- [ ] **Step 12: 提交**
+- [x] **Step 12: 提交**
 
 ```bash
 git add gateway/src/log/logger.ts gateway/src/log/levels.ts gateway/src/log/fieldGuard.ts gateway/src/log/ownerId.ts gateway/src/log/stdoutSink.ts gateway/test/helpers/logCapture.ts gateway/test/logger.test.ts gateway/test/log-levels.test.ts gateway/test/log-field-guard.test.ts gateway/src/config.ts gateway/test/config.test.ts gateway/package.json
