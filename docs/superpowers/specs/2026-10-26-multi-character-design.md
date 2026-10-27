@@ -342,7 +342,7 @@ Seeduplex 不支持日语，因此只有 zh/en 两项。
 - `recallPrompt`、`carePrompt`、`affectPrompt` 的 getter 都改成接收 `(characterId, language)`，返回替换后的文本。删掉 `tools/registry.ts:68` 直接读原始文件的默认值，避免把没替换的 `{{char}}` 带进去。
 - `RoleCatalog` 删除 `defaultStyle`、`hasStyle`、styles 相关的 `voiceFor`；`role.json` 删除 `styles`、`defaultStyle`、`voices`。
 - 音色选择改为：`characters.voiceFor(character, adapter, lang)` → 为 null 时用现有的环境变量默认值。删除 `useYoungMaleVoice`、`youngMale*` 配置、`voiceProfile` 分支，以及 `QWEN_VOICE_YOUNG_MALE*` 环境变量。
-- 小凯的卡片沿用 Ryan/Evan，roadmap 记录过「`Evan` 把 `～` 念成横杠」，所以中文必须是 Ryan。
+- 小凯的卡片：2026-10-27 用户试听后选定 `Evan`，zh/ja/en 统一。roadmap 记录过 `Evan` 会把 `～` 念成横杠；这是用户明确接受的已知限制。
 
 ### 4. 数据库新基线
 
@@ -634,7 +634,7 @@ meta(key PK, value)
 - greetingsFirstMeet.zh：
   - 「{name}您好，我是小凯，头一回来陪您，有啥想聊的尽管说。」
   - 「您好{name}，我叫小凯，以后常来陪您说说话。」
-- voices.qwen：zh `Ryan`，ja/en `Evan`
+- voices.qwen：zh/ja/en 均为 `Evan`（2026-10-27 用户选定；已知 `Evan` 会把「～」念成「横杠」）
 
 **小欣 `xiaoxin`（女）**
 - identity.zh：你像一位懂事、踏实、说话慢条斯理的老朋友或老邻居，不是客服，也不是小孩子。你可以表达自己温和的看法和偏好（比如「我挺爱听您讲老话的」），说话平实温和，聊天是两个人之间的来往，不是问卷。

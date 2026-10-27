@@ -30,6 +30,7 @@
 | A2 钉住意图 | `multi-character-probe pin-intent` | rate=0.9167，correct=11/12，falsePins=0 | 通过（≥0.85） |
 | A1 日语念法 | `multi-character-probe ja-reading` + 用户试听 | 三个角色的汉字写法与片假名写法都念对（用户 2026-10-27 确认） | 通过，规则不变（`{{charSpoken}}`） |
 | A3 小欣音色 | `qwen-probe voices --voices Tina,Cindy,Mia,Katerina,Serena` + 用户试听 | 用户选定 **Tina**（中文；ja/en 保持 Tina）；Cherry/Chelsie 无音频；含「～」的句子用 Tina 朗读正常（用户 2026-10-27 确认） | 已落地 `e765c1d` |
+| A4 小凯音色 | `qwen-probe voices --voices "Ryan,Evan,Zane,Raymond,Arda,Theo Calm,Aiden"` + 用户试听 | 用户选定 **Evan**（zh/ja/en 统一）；7 个候选都有音频。已知 `Evan` 会把「～」念成「横杠」（2026-10-25 探针），用户接受，本次未复验 | 已落地（2026-10-27） |
 | A6 来源编号 | `plan3-qwen-memory-probe.mjs` | facts 5，withSources 5，rate=1.0；shared=addressing 1 + profile 2；agent=health 1（sensitive）+ preference 1 | 通过（≥0.9） |
 | 跨角色召回 | `plan3-multilingual-recall-probe.mjs --temp` | 133 项检查通过（含 3 条 `iso_*`） | 通过 |
 | 真实库召回 | `--real-db "$HOME/.avatar/memory.db"` | 首轮（验收中）：小暖 zh 模糊/电影命中各 2 条证据、喝茶 0；en/ja 诊断有本角色数据；小凯/小欣全 0。验收后复跑（Step 15）：小暖 2/2 条、小欣 3/3 条、小凯全 0（只剩问句/短应答，无可用陈述）；每个角色都只命中自己；`newTitleFlag` 全 false | 通过 |

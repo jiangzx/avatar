@@ -13,6 +13,8 @@
 
 **Spec（已批准，约束）：** `docs/superpowers/specs/2026-10-26-multi-character-design.md`。决策 Q1–Q36 见 spec 的「决策记录」。每个任务的实现者先读 spec 的对应章节，再读本总览，最后读自己的任务文件。
 
+> **2026-10-27 后置变更：** 小凯音色由 `Ryan` 改为 `Evan`（zh/ja/en 统一，用户试听选定）。spec 与 roadmap 已同步；Task 5/7 里的 Ryan 期望是当时的执行记录。
+
 ## Global Constraints
 
 - 回复用简体中文；代码注释用英文，简短。界面文案用简体中文，不出现「Duix」。

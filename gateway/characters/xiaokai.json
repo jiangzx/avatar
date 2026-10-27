@@ -20,7 +20,7 @@
     "en": ["Hello {name}, I'm Xiaokai. It's my first time keeping you company. Tell me anything you like.", "Hi {name}, my name is Xiaokai. I'll come by often to chat with you."]
   },
   "voices": {
-    "qwen": { "zh": "Ryan", "ja": "Evan", "en": "Evan" },
+    "qwen": { "zh": "Evan", "ja": "Evan", "en": "Evan" },
     "seeduplex": { "zh": "zh_male_xiaotian_jupiter_bigtts", "en": "en_male_tim_uranus_bigtts" }
   },
   "extensions": {}

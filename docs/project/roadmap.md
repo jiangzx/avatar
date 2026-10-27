@@ -11,6 +11,7 @@
   - 钉住记忆和语音查看记忆；设置页可以查看和删除记忆，删除时连带删除来源原话。
   - AI 身份提示，每 60 分钟提醒休息。
   - Duix 不可用时置灰角色，不悄悄换人。
+- 小凯音色（2026-10-27）：用户试听 7 个男声后选定 `Evan`，zh/ja/en 统一；已知 `Evan` 会把「～」念成「横杠」（2026-10-25 探针），用户明确接受，本次未复验。
 - 不兼容旧数据：旧 `$MEMORY_DB_PATH` 已删除，新库 `user_version=6`；手机卸载重装。
 - 最终回归（2026-10-27）：protocol 13；gateway 72 文件 1061 项；两个 typecheck；`generate-character-ids --check`；`flutter test` 326；`flutter analyze` 无问题。
 - 真实探针：identity 6/6、unknown-name 通过、A2 pin-intent 0.9167（误钉 0）、A1 日文两种写法都被用户确认念对、A3 小欣选定 Tina（`e765c1d`，含「～」正常）、A6 来源编号 5/5（rate=1.0）、跨角色 `--temp` 133 项、真实库召回按角色通过（小暖/小欣命中自己的证据，小凯 0；`newTitleFlag` 全 false）。
