@@ -119,8 +119,9 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   cancelResponse(): void { if (this.connected) this.send({ type: 'response.cancel' }); }
   sendToolResult(callId: string, result: unknown): void {
     if (!this.connected) return;
+    // The session owns the one instructed continuation. A bare response.create here would race it
+    // and cut the first reply mid-playback.
     this.send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: callId, output: JSON.stringify(result) } });
-    this.createResponse();
   }
   /** Interruption notes reach Qwen through session instructions (Session.pushInstructions), never as a user item. */
   injectContextNote(_text: string): void {}

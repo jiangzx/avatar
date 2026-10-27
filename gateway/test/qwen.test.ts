@@ -74,7 +74,7 @@ describe('QwenAdapter', () => {
     a.close();
   });
 
-  it('continues with response.create after a tool result', async () => {
+  it('sends the tool result without starting its own response', async () => {
     const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
     const sent: Array<Record<string, unknown>> = [];
     s.on('connection', (ws) => ws.on('message', (raw) => {
@@ -87,8 +87,12 @@ describe('QwenAdapter', () => {
     a.sendToolResult('call-1', { ok: true });
     await new Promise((resolve) => setTimeout(resolve, 20));
     const tail = sent.slice(1);
-    expect(tail.map((e) => e.type)).toEqual(['conversation.item.create', 'response.create']);
+    // The session drives the single continuation; a bare response.create here would race it.
+    expect(tail.map((e) => e.type)).toEqual(['conversation.item.create']);
     expect(tail[0]?.item).toMatchObject({ type: 'function_call_output', call_id: 'call-1', output: '{"ok":true}' });
+    a.createResponse({ cue: 'toolContinue', instruction: '请直接说下面这句话，不要改写：好', fallbackText: '好' });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sent.slice(1).map((e) => e.type)).toEqual(['conversation.item.create', 'conversation.item.create', 'response.create']);
     a.close();
   });
 
