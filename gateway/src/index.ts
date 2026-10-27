@@ -174,6 +174,7 @@ const manager = new SessionManager(
       slim: pacing.slim,
       push: pacing.push,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
+      pin: { maxPerCharacter: memory.pinMaxPerCharacter, maxChars: memory.pinMaxChars, finalWaitMs: memory.pinFinalWaitMs },
       emotion: i18n.emotion,
       affect,
       languageRules: i18n.language,

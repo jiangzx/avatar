@@ -313,7 +313,7 @@ flutter build apk --debug --dart-define-from-file=dev.json
 （由用户在交付 plan 时确认，确认结果见下方；没有确认的项，执行到对应步骤时停下来询问。）
 - Task 6：沉默规划器规则 8 末尾加「基本情况只当背景」；persona 里说明 `基本情况：` / `用户让你记住：` 两个标签。
 - Task 9 第 0 步：工具轮在 handler 返回后重新读取原回复是否已被取消；失败结果也播 `spokenText`；不开工具轮时清掉 `pendingToolLine` / `pendingToolSpeak`。
-- 确认结果：Task 6 已确认（2026-10-27）。Task 9 第 0 步仍待用户确认。
+- 确认结果：Task 6 已确认（2026-10-27）。Task 9 第 0 步已确认（2026-10-27）。
 
 ## 任务与依赖
 

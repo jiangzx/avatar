@@ -45,6 +45,24 @@ describe('SeeduplexAdapter', () => {
     adapter.close();
   });
 
+  it('commits only the grounded line for a verbatim tool continuation', async () => {
+    const server = new WebSocketServer({ port: 0 }); servers.push(server);
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const port = (server.address() as { port: number }).port;
+    const committed: string[] = [];
+    server.on('connection', (socket) => socket.on('message', (raw) => {
+      const event = JSON.parse(raw.toString()) as { type: string; text?: string };
+      if (event.type === 'session.create') socket.send(JSON.stringify({ type: 'session.created', session: { id: 'fixture' } }));
+      if (event.type === 'speech_text_buffer.commit') committed.push(event.text ?? '');
+    }));
+    const adapter = new SeeduplexAdapter({ apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture-voice' });
+    await adapter.connect(config); await wait();
+    adapter.createResponse({ cue: 'toolContinue', instruction: '请直接说下面这句话，不要改写：好，这个我记住了。', fallbackText: '好，这个我记住了。' });
+    await wait();
+    expect(committed).toEqual(['好，这个我记住了。']);
+    adapter.close();
+  });
+
   it('emits a non-retryable error for malformed upstream JSON', async () => {
     const server = new WebSocketServer({ port: 0 }); servers.push(server);
     await new Promise<void>((resolve) => server.once('listening', resolve));

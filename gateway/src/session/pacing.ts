@@ -64,6 +64,8 @@ const MemoryBudgetSchema = z.object({
     ja: z.number().int().min(1).max(400),
     en: z.number().int().min(1).max(400),
   }).strict(),
+  /** How long pin_memory waits for this turn's user final. Not toolTurnTimeoutMs. */
+  pinFinalWaitMs: z.number().int().min(1000).max(15000),
   /** Items list_memory reads aloud. */
   listMaxItems: z.number().int().min(1).max(20),
   toolTurnTimeoutMs: z.number().int().min(3_000).max(30_000),

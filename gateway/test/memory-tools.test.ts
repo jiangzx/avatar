@@ -14,6 +14,7 @@ import { MemoryWorker } from '../src/memory/worker.ts';
 import { SqliteTranscriptWriter } from '../src/memory/writer.ts';
 import { fixedRoleCatalog } from '../src/roles/catalog.ts';
 import { ActionRouter } from '../src/session/actions.ts';
+import { NO_TURN } from '../src/session/turnAccess.ts';
 import type { SessionContext } from '../src/session/context.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { ConversationLedger, MockSummarizer } from '../src/session/ledger.ts';
@@ -105,6 +106,9 @@ function ctxFor(
     ledger,
     actions: new ActionRouter(),
     now: 50_000,
+    characterId: 'xiaonuan',
+    turn: NO_TURN,
+    memoryGate: () => 'ok' as const,
   };
 }
 
@@ -694,7 +698,7 @@ describe('memory tool registry', () => {
     expect(pendingUserRows(store, a.ownerId, a.agentId)).toEqual([{ role: 'user', text: '我叫王叔' }]);
     expect(ledger.recent).toEqual([{ role: 'user', text: '别记了', ts: 1 }]);
     expect(store.getOwner(a.ownerId)?.memoryConsent).not.toBe('declined');
-    expect(writer.append({ ownerId: a.ownerId, agentId: a.agentId, sessionId: 's1', role: 'user', text: '还在记', now: 60 })).toBe('stored');
+    expect(writer.append({ ownerId: a.ownerId, agentId: a.agentId, sessionId: 's1', role: 'user', text: '还在记', now: 60 }).result).toBe('stored');
 
     const second = await registry.handle(
       'set_memory_consent',
@@ -709,7 +713,7 @@ describe('memory tool registry', () => {
     expect(pendingUserRows(store, a.ownerId, a.agentId)).toEqual([]);
     expect(store.getOwner(a.ownerId)?.memoryConsent).toBe('declined');
     expect(store.getOwner(a.ownerId)?.memoryEpoch).toBe(1);
-    expect(writer.append({ ownerId: a.ownerId, agentId: a.agentId, sessionId: 's1', role: 'user', text: '这句不该留下', now: 70 })).toBe('skipped');
+    expect(writer.append({ ownerId: a.ownerId, agentId: a.agentId, sessionId: 's1', role: 'user', text: '这句不该留下', now: 70 }).result).toBe('skipped');
     expect(counts(db, b.ownerId)).toEqual(beforeB);
     expect(pendingUserRows(store, b.ownerId, b.agentId)).toEqual([{ role: 'user', text: '王叔是邻居' }]);
     expect(store.getOwner(b.ownerId)?.memoryConsent).not.toBe('declined');

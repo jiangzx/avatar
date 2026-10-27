@@ -92,11 +92,14 @@ function registryFor(language) {
 function toolContext(store, ownerId, extra = {}) {
   return {
     ownerId,
+    characterId: 'xiaonuan',
     sessionId: 'probe-session',
     store,
     ledger: new ConversationLedger(),
     actions: new ActionRouter(),
     now: 1,
+    turn: { currentFinal: async () => null, previousFinal: () => null },
+    memoryGate: () => 'ok',
     ...extra,
   };
 }

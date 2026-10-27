@@ -74,5 +74,18 @@
     "newDialogueHeader": "New conversation (only \"User:\" lines are evidence for this batch):",
     "user": "User",
     "separator": ": "
-  }
+  },
+  "pin": {
+    "confirmText": "Okay, I'll remember that.",
+    "emptyText": "Sorry, I didn't catch what to remember. Could you say it again?",
+    "fullText": "I'm already holding on to quite a lot. You can delete a few in Settings, then ask me again.",
+    "tooLongText": "That's a bit long. Could you tell me just the most important part?",
+    "declinedText": "You told me before not to keep notes, so I won't remember this one.",
+    "noticePendingText": "Tell me that again in a little while.",
+    "triggerPrefixes": ["please remember that", "please remember", "remember that", "remember", "don't forget that", "don't forget", "make a note that", "note that", "keep in mind that"],
+    "trailingWords": ["remember that", "don't forget that", "don't forget", "please", "okay", "ok"],
+    "toolDescription": "Call when the user clearly asks you to remember something: what they are saying now, or what they said just before. Pass only target and never paraphrase the content; the gateway uses the user's own words. After calling, say only the line the gateway returns.",
+    "targetDescription": "this=the thing to remember is in this user line; previous=the user wants you to remember what they said just before"
+  },
+  "healthWords": ["blood pressure", "blood sugar", "diabetes", "heart", "stroke", "cancer", "tumor", "chemo", "medicine", "medication", "pill", "pills", "insulin", "hospital", "clinic", "doctor", "surgery", "operation", "checkup", "illness", "sick", "pain", "hurts", "dizzy", "insomnia", "fracture", "arthritis", "knee", "back pain", "allergy", "allergic", "depression", "anxiety", "dementia"]
 }

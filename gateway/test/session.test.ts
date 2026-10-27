@@ -1210,7 +1210,7 @@ describe('Session', () => {
   });
 
   it('writes a user final when it arrives and flushes assistant replies once', async () => {
-    const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
+    const append = vi.fn<TranscriptWriter['append']>(() => ({ result: 'stored' as const }));
     const s = setup({ writer: { append, markNotified: () => {} } }, ownedCtx, 'session-fixed');
     await s.session.start(s.transport);
     await vi.advanceTimersByTimeAsync(1000);
@@ -1239,7 +1239,7 @@ describe('Session', () => {
   });
 
   it('flushes the playback slice of an interrupted reply', async () => {
-    const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
+    const append = vi.fn<TranscriptWriter['append']>(() => ({ result: 'stored' as const }));
     const s = setup({ writer: { append, markNotified: () => {} } }, ownedCtx, 'session-cut');
     await greetAndFinish(s);
     s.session.handleClientMessage({ type: 'debug.userText', text: '随便聊聊' });
@@ -1253,7 +1253,7 @@ describe('Session', () => {
 
   it('marks notified only when the memory-notice seq plays to the end', async () => {
     const markNotified = vi.fn();
-    const writer: TranscriptWriter = { append: () => 'stored', markNotified };
+    const writer: TranscriptWriter = { append: () => ({ result: 'stored' as const }), markNotified };
     const s = setup({ writer }, ownedCtx, 'notice-session', true);
     await greetAndFinish(s);
     expect(markNotified).not.toHaveBeenCalled();
@@ -1271,7 +1271,7 @@ describe('Session', () => {
 
   it('does not mark notified when the memory notice is interrupted', async () => {
     const markNotified = vi.fn();
-    const writer: TranscriptWriter = { append: () => 'stored', markNotified };
+    const writer: TranscriptWriter = { append: () => ({ result: 'stored' as const }), markNotified };
     const s = setup({ writer }, ownedCtx, 'notice-cut', true);
     await greetAndFinish(s);
     await vi.advanceTimersByTimeAsync(1000);
@@ -1282,7 +1282,7 @@ describe('Session', () => {
 
   it('does not mark notified when the notice transcript lacks a keyword', async () => {
     const markNotified = vi.fn();
-    const writer: TranscriptWriter = { append: () => 'stored', markNotified };
+    const writer: TranscriptWriter = { append: () => ({ result: 'stored' as const }), markNotified };
     const s = setup({
       writer,
       adapterFactory: () => new MockAdapter({
@@ -1307,7 +1307,7 @@ describe('Session', () => {
     });
     const s = setup({
       roles,
-      writer: { append: () => 'stored', markNotified },
+      writer: { append: () => ({ result: 'stored' as const }), markNotified },
       noticeKeywordsByLanguage: { zh: ['记着'], ja: ['覚えて'] },
       adapterFactory: () => new MockAdapter({
         script: { ...script, memoryNotice: 'これからは覚えておきますね。' },
@@ -1333,7 +1333,7 @@ describe('Session', () => {
     });
     const s = setup({
       roles,
-      writer: { append: () => 'stored', markNotified },
+      writer: { append: () => ({ result: 'stored' as const }), markNotified },
       noticeKeywordsByLanguage: { en: i18n.memory.en.noticeKeywords },
       adapterFactory: () => new MockAdapter({
         script: { ...script, memoryNotice: noticeText },
@@ -1358,7 +1358,7 @@ describe('Session', () => {
     });
     const s = setup({
       roles,
-      writer: { append: () => 'stored', markNotified },
+      writer: { append: () => ({ result: 'stored' as const }), markNotified },
       noticeKeywordsByLanguage: { zh: ['记着'], en: ['remember'] },
     }, ownedCtx, 'notice-switch', true);
     await greetAndFinish(s);
@@ -1381,7 +1381,7 @@ describe('Session', () => {
     });
     const s = setup({
       roles,
-      writer: { append: () => 'stored', markNotified },
+      writer: { append: () => ({ result: 'stored' as const }), markNotified },
       noticeKeywordsByLanguage: { en: ['remember'] },
       adapterFactory: () => {
         const m = new MockAdapter({
@@ -1407,7 +1407,7 @@ describe('Session', () => {
     const cues: Array<string | undefined> = [];
     const adapters: MockAdapter[] = [];
     const s = setup({
-      writer: { append: () => 'stored', markNotified },
+      writer: { append: () => ({ result: 'stored' as const }), markNotified },
       adapterFactory: () => {
         const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
         adapters.push(m);
@@ -1435,7 +1435,7 @@ describe('Session', () => {
 
   it('does not record a server-VAD reply as the memory notice', async () => {
     const markNotified = vi.fn();
-    const writer: TranscriptWriter = { append: () => 'stored', markNotified };
+    const writer: TranscriptWriter = { append: () => ({ result: 'stored' as const }), markNotified };
     const s = setup({ writer }, ownedCtx, 'notice-reply');
     await greetAndFinish(s);
     for (let i = 0; i < 10; i++) s.session.handleMicAudio(loud());
@@ -1514,7 +1514,7 @@ describe('Session', () => {
   });
 
   it('writes nothing when the writer or the owner is missing', async () => {
-    const append = vi.fn<TranscriptWriter['append']>(() => 'stored');
+    const append = vi.fn<TranscriptWriter['append']>(() => ({ result: 'stored' as const }));
     const noOwner = setup({ writer: { append, markNotified: () => {} } }, undefined, 'session-no-owner');
     await greetAndFinish(noOwner);
     noOwner.session.handleClientMessage({ type: 'debug.userText', text: '我叫老王' });

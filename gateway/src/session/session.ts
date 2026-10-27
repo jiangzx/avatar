@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import {
   AI_SAMPLE_RATE,
   DEFAULT_CHARACTER_ID,
+  LANGUAGES,
   MIC_FRAME_SAMPLES,
   truncateByPlayback,
   type ClientMessage,
@@ -13,6 +15,7 @@ import { classifyAdapterError } from '../adapters/errorClass.ts';
 import type { AdapterFactory, ProactiveRequest, RealtimeAdapter, SessionConfig } from '../adapters/types.ts';
 import type { CharacterRegistry } from '../characters/registry.ts';
 import { log } from '../log.ts';
+import { unique } from '../unique.ts';
 import { memoryViewSource, renderMemoryViews } from '../memory/snapshot.ts';
 import type { MemoryStore } from '../memory/store.ts';
 import type { TextModelClient } from '../memory/textClient.ts';
@@ -36,12 +39,13 @@ import { buildInstructions, historyBudget, type InstructionBudget } from './inst
 import { detectLanguage, explicitLanguage } from './language.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
-import { DEFAULT_TOOL_TURN_TIMEOUT_MS, type PacingConfig } from './pacing.ts';
+import { DEFAULT_TOOL_TURN_TIMEOUT_MS, loadMemoryBudget, type PacingConfig } from './pacing.ts';
 import { PushGate, type PushRequest } from './pushGate.ts';
 import { shouldSpeakBridge, slimClockAction } from './slim.ts';
 import { ToolTurn } from './toolTurn.ts';
 import { createSilencePlanner } from './silence.ts';
 import { timeContext } from './timeContext.ts';
+import { TurnFinals } from './turnAccess.ts';
 import { createToolRegistry, type ToolOutcome, type ToolRegistry } from './tools/registry.ts';
 
 export interface Transport {
@@ -95,6 +99,8 @@ export interface SessionDeps {
   tailGuardMs?: number;
   /** Tool-turn wait. Omitted in tests: DEFAULT_TOOL_TURN_TIMEOUT_MS, same as gateway/config/memory.json. */
   toolTurnTimeoutMs?: number;
+  /** pin_memory limits (gateway/config/memory.json). Omitted in tests: the registry reads that file. */
+  pin?: { maxPerCharacter: number; maxChars: Record<Language, number>; finalWaitMs: number };
   /** Instruction size budget (gateway/config/memory.json); undefined = unbounded (tests). */
   budget?: InstructionBudget;
   /** Per-language instruction budgets; the current language's entry wins over `budget`. */
@@ -166,6 +172,8 @@ const DAY_MS = 24 * 60 * 60_000;
 
 /** Used only when SessionDeps.push is omitted (tests); production reads gateway/config/pacing.json. */
 const DEFAULT_PUSH: PacingConfig['push'] = { minIntervalMs: 0, noResponseAfterMs: 5_000 };
+/** Read once at startup. Tests without deps.pin use pinFinalWaitMs from this file. */
+const MEMORY_DEFAULTS = loadMemoryBudget(fileURLToPath(new URL('../../config/memory.json', import.meta.url)));
 
 export class Session {
   readonly ledger: ConversationLedger;
@@ -261,6 +269,8 @@ export class Session {
   private confirmLine: string | null = null;
   /** User utterance for this turn. Cleared when that reply is finalized. */
   private turnUserText: string | null = null;
+  /** User finals for tools that need the user's own words (pin_memory, spec §6). */
+  private readonly turns = new TurnFinals(() => this.ledger.recent);
   /** Forget/decline is waiting on the owner queue. Origin done during this still counts. */
   private memoryToolWaiting = false;
   /** User finals during a forget/decline turn are not stored. */
@@ -461,6 +471,8 @@ export class Session {
         // A new speaking edge marks a new utterance: late finals of the memory-tool turn
         // arrived before this edge and stay dropped, while this utterance is stored.
         if (speaking) this.dropUserFinals = false;
+        // A new utterance: a tool still waiting for the previous turn's final gets null.
+        if (speaking) this.turns.interrupt();
         // Cancel only a continuation that was already requested. The origin ends on the client path.
         if (speaking && this.toolTurn.active && this.continuationAsked) {
           this.adapter.cancelResponse();
@@ -589,6 +601,7 @@ export class Session {
   end(): void {
     if (this.ended) return;
     this.ended = true;
+    this.turns.interrupt();
     this.clearToolTimer();
     this.clearReplyWatch();
     this.gate.dispose();
@@ -776,10 +789,24 @@ export class Session {
         safety: i18n.safety,
         clipChars: this.deps.recallClipChars ?? 80,
         phraseTimeoutMs: this.deps.recallPhraseTimeoutMs ?? 1_500,
+        pinLimits: this.deps.pin
+          ? { maxPerCharacter: this.deps.pin.maxPerCharacter, maxChars: this.deps.pin.maxChars[language] }
+          : undefined,
+        healthWords: unique(LANGUAGES.flatMap((code) => i18n.memory[code].healthWords)),
+        // Tests without deps.pin use the shipped default from gateway/config/memory.json.
+        turnFinalTimeoutMs: this.deps.pin?.finalWaitMs ?? MEMORY_DEFAULTS.pinFinalWaitMs,
       });
       this.tools.set(language, tools);
     }
     return tools;
+  }
+
+  /** Pin write gate (spec §5): declined, or the one-time notice has not played yet. Fails closed. */
+  private memoryGate(): 'ok' | 'declined' | 'notice_pending' {
+    const ownerId = this.context.ownerId;
+    const owner = ownerId ? this.deps.store?.getOwner(ownerId) : undefined;
+    if (!owner || owner.memoryConsent === 'declined') return 'declined';
+    return owner.notifiedAt == null ? 'notice_pending' : 'ok';
   }
 
   /** Queues fresh instructions for the next push seam. */
@@ -1072,6 +1099,7 @@ export class Session {
     s.text = text;
     if (!this.dropTranscriptSeqs.has(s.seq)) this.ledger.addAssistant(text, Date.now(), interrupted);
     this.turnUserText = null;
+    this.turns.onTurnClosed();
     // Do not session.update here. An instructions refresh in the middle of a barge-in
     // drops the audio the server is still hearing, so the next question never lands.
     this.maybeSummarize();
@@ -1090,23 +1118,29 @@ export class Session {
       this.applyLanguage(nextLanguage);
     }
     if (echo) this.send({ type: 'transcript.user', text, final: true });
-    if (this.dropUserFinals) return;
+    if (this.dropUserFinals) {
+      // Kept out of the ledger and the transcript; a waiting pin may still use the words (spec §6).
+      this.turns.onFinal(text, null, false);
+      return;
+    }
     this.turnUserText = text;
     this.ledger.addUser(text, Date.now());
+    let messageId: string | null = null;
     if (this.writer && this.context.ownerId && this.context.agentId) {
       try {
-        this.writer.append({
+        messageId = this.writer.append({
           ownerId: this.context.ownerId,
           agentId: this.context.agentId,
           sessionId: this.sessionId,
           role: 'user',
           text,
           now: Date.now(),
-        });
+        }).messageId ?? null;
       } catch {
         log('transcript_write_failed', { role: 'user' });
       }
     }
+    this.turns.onFinal(text, messageId, true);
     this.turnsSinceRebuild++;
     this.charsSinceRebuild += text.length;
     const extractor = this.deps.worker;
@@ -1189,6 +1223,7 @@ export class Session {
     const outcome = await this.toolsFor(this.language).handle(name, args, {
       ownerId: this.context.ownerId,
       agentId: this.context.agentId,
+      characterId: this.context.characterId,
       sessionId: this.sessionId,
       store: this.deps.store,
       worker: this.deps.worker instanceof MemoryWorker ? this.deps.worker : undefined,
@@ -1197,6 +1232,8 @@ export class Session {
       actions: this.actions,
       now: Date.now(),
       ...(triggerText ? { triggerText } : {}),
+      turn: this.turns.access(),
+      memoryGate: () => this.memoryGate(),
     });
     this.memoryToolWaiting = false;
     if (a !== this.adapter || this.ended) return;
@@ -1204,19 +1241,32 @@ export class Session {
     a.sendToolResult(callId, toolPayload(outcome));
     if (s) this.metrics.onToolCall(s.seq);
     if (outcome.ok && outcome.action && !cancelled) this.send({ type: 'avatar.action', action: outcome.action, source: 'tool' });
+    // A pin must reach the next reply. Re-render now; the gate pushes at the next seam.
+    if (outcome.ok && outcome.refreshSnapshot) {
+      this.refreshMemorySnapshot();
+      this.pushInstructions();
+    }
+    // The origin may have been cut off while the handler waited. Only the non-slow branch
+    // opens a tool turn here; forget/decline already opened theirs before the wait.
+    const cancelledNow = cancelled || (s ? this.interrupt.isCancelled(s.seq) : false);
+    const continues = slow ? this.toolTurn.active : (Boolean(s) && !cancelledNow) || this.toolTurn.active;
     if (!outcome.ok) {
-      // A failure still continues. It does not speak the success line.
+      // A failure never speaks the success line. A grounded refusal line is still spoken.
+      if (!slow && continues && outcome.spokenText && !this.pendingToolSpeak) {
+        this.pendingToolSpeak = { text: outcome.spokenText, found: false };
+      }
       if (slow) {
         this.maybeContinue();
         return;
       }
-      if (s && !cancelled) {
+      if (s && !cancelledNow) {
         this.beginToolTurn(s);
         this.maybeContinue();
       }
       return;
     }
-    if (slow && !this.toolTurn.active) return;
+    // Lines are kept only when a tool turn will speak them.
+    if (!continues) return;
     if (outcome.confirmText) this.pendingToolLine = outcome.confirmText;
     if (outcome.spokenText && (!this.pendingToolSpeak || (!this.pendingToolSpeak.found && outcome.spokenFound === true))) {
       this.pendingToolSpeak = { text: outcome.spokenText, found: outcome.spokenFound === true };
@@ -1230,7 +1280,7 @@ export class Session {
       this.maybeContinue();
       return;
     }
-    if (s && !cancelled) {
+    if (s && !cancelledNow) {
       this.beginToolTurn(s);
       this.maybeContinue();
     }
@@ -1314,6 +1364,7 @@ export class Session {
     // Keep dropping late finals until the next speaking edge; see the vad handler.
     this.memoryToolWaiting = false;
     this.turnUserText = null;
+    this.turns.onTurnClosed();
     if (this.ended) return;
     // Continuation playback rearms silence later. Timeout and barge-in rearm now.
     this.director.releasePause(!allowSpeech);
@@ -1353,6 +1404,7 @@ export class Session {
       if (reason === 'forget' || reason === 'decline') this.rebuildAgain = reason;
       return;
     }
+    this.turns.interrupt();
     // The old upstream will never answer; the new one is not ready for session.update yet.
     // Must come before releaseToolTurn, whose flush would otherwise send to the closing adapter.
     this.clearReplyWatch();

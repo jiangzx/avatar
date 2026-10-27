@@ -107,6 +107,19 @@ const MemoryFileSchema = z.object({
     user: z.string().min(1),
     separator: z.string().min(1),
   }).strict(),
+  pin: z.object({
+    confirmText: z.string().min(1).max(80),
+    emptyText: z.string().min(1).max(80),
+    fullText: z.string().min(1).max(120),
+    tooLongText: z.string().min(1).max(80),
+    declinedText: z.string().min(1).max(80),
+    noticePendingText: z.string().min(1).max(80),
+    triggerPrefixes: PhraseList,
+    trailingWords: StringList,
+    toolDescription: z.string().min(1),
+    targetDescription: z.string().min(1),
+  }).strict(),
+  healthWords: PhraseList,
 }).strict();
 
 const SafetyFileSchema = z.object({
@@ -262,6 +275,8 @@ function loadMemoryCopy(configRoot: string, language: Language): MemoryCopy {
     },
     addressingPatterns: raw.addressingPatterns.map((source) => compilePattern(source, language, 'addressingPatterns')),
     extractLabels: raw.extractLabels,
+    pin: raw.pin,
+    healthWords: raw.healthWords,
   };
 }
 

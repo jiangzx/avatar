@@ -13,6 +13,7 @@ import {
 import type { ToolContext } from '../src/session/tools/registry.ts';
 import { ActionRouter } from '../src/session/actions.ts';
 import { ConversationLedger } from '../src/session/ledger.ts';
+import { NO_TURN } from '../src/session/turnAccess.ts';
 
 const copy: WeatherCopy = DEFAULT_I18N.memory.zh.weather;
 const config = loadWeatherConfig();
@@ -79,6 +80,9 @@ describe('weather lookup', () => {
       ledger: new ConversationLedger(),
       actions: new ActionRouter(),
       now: 1,
+      characterId: 'xiaonuan',
+      turn: NO_TURN,
+      memoryGate: () => 'ok' as const,
     } satisfies ToolContext;
     await expect(registry.handle('get_weather', {}, ctx)).resolves.toEqual({
       ok: false,

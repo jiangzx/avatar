@@ -17,6 +17,7 @@ import { ConversationLedger, MockSummarizer } from '../src/session/ledger.ts';
 import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
 import { createSilencePlanner } from '../src/session/silence.ts';
 import { createToolRegistry, type ToolContext } from '../src/session/tools/registry.ts';
+import { NO_TURN } from '../src/session/turnAccess.ts';
 
 const i18n = loadI18n(fileURLToPath(new URL('../config', import.meta.url)));
 
@@ -318,7 +319,7 @@ describe('multilingual session', () => {
 
     const markNotified = vi.fn();
     const adapter = new FakeAdapter();
-    const writer: TranscriptWriter = { append: () => 'stored', markNotified };
+    const writer: TranscriptWriter = { append: () => ({ result: 'stored' as const }), markNotified };
     const { session, transport } = makeSession(adapter, roles, ctxFor('ja'), { writer, noticeKeywordsByLanguage: keywords }, true);
     await session.start(transport);
     adapter.done();
@@ -334,7 +335,7 @@ describe('multilingual session', () => {
     const missed = vi.fn();
     const zhOnlyAdapter = new FakeAdapter();
     const zhOnly = makeSession(zhOnlyAdapter, roles, ctxFor('ja'), {
-      writer: { append: () => 'stored', markNotified: missed },
+      writer: { append: () => ({ result: 'stored' as const }), markNotified: missed },
       noticeKeywordsByLanguage: keywords,
     }, true);
     await zhOnly.session.start(zhOnly.transport);
@@ -396,6 +397,9 @@ describe('multilingual session', () => {
 
   const toolCtx = (store: MemoryStore): ToolContext => ({
     ownerId: 'owner-1', agentId: 'agent-1', sessionId: 's1', store, ledger: new ConversationLedger(), actions: new ActionRouter(), now: 1,
+    characterId: 'xiaonuan',
+    turn: NO_TURN,
+    memoryGate: () => 'ok' as const,
   });
     const zh = createToolRegistry({
       language: 'zh',

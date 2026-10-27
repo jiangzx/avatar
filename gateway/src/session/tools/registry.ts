@@ -1,16 +1,24 @@
-import type { ActionName, Language } from '@anyidea/protocol';
+import { fileURLToPath } from 'node:url';
+import { LANGUAGES, type ActionName, type CharacterId, type Language } from '@anyidea/protocol';
 import type { SafetyRules } from '../../config.ts';
+import { DEFAULT_I18N } from '../../i18n/load.ts';
 import type { EvidenceRules, MemoryCopy } from '../../i18n/types.ts';
 import type { MemoryStore } from '../../memory/store.ts';
 import type { TextModelClient } from '../../memory/textClient.ts';
 import type { MemoryWorker } from '../../memory/worker.ts';
+import { unique } from '../../unique.ts';
 import { performActionSpec, type ToolSpec } from '../../adapters/types.ts';
 import { ActionRouter } from '../actions.ts';
 import type { ConversationLedger } from '../ledger.ts';
+import { loadMemoryBudget } from '../pacing.ts';
+import type { TurnAccess } from '../turnAccess.ts';
 import { consentTool } from './consent.ts';
 import { forgetTool } from './forget.ts';
+import { pinTool } from './pin.ts';
 import { recallTool } from './recall.ts';
 import { loadWeatherConfig, weatherTool, type WeatherFetch } from './weather.ts';
+
+export type { TurnAccess } from '../turnAccess.ts';
 
 export interface ToolContext {
   ownerId?: string;
@@ -25,6 +33,12 @@ export interface ToolContext {
   now: number;
   /** User line of this turn, when it has already arrived. Not an older row. */
   triggerText?: string;
+  /** Server-side character of this session; never from tool arguments. */
+  characterId: CharacterId;
+  /** This turn's user finals (pin_memory reads the user's own words, never the model's). */
+  turn: TurnAccess;
+  /** Transcript write gate: declined consent, or the one-time notice has not played yet. */
+  memoryGate(): 'ok' | 'declined' | 'notice_pending';
 }
 
 export interface ToolOutcome {
@@ -38,6 +52,8 @@ export interface ToolOutcome {
   spokenText?: string;
   /** True when spokenText is backed by a memory hit, not an empty-result line. */
   spokenFound?: boolean;
+  /** Session re-renders the snapshot and pinned block, then pushes at the next seam. */
+  refreshSnapshot?: boolean;
 }
 
 export interface ToolHandler {
@@ -60,6 +76,12 @@ export interface ToolRegistryOptions {
   phraseTimeoutMs: number;
   /** Test double. Production uses global fetch. */
   weatherFetch?: WeatherFetch;
+  /** pin_memory limits for this language; omitted = gateway/config/memory.json. */
+  pinLimits?: { maxPerCharacter: number; maxChars: number };
+  /** Union of every language's health words; omitted = the shipped i18n packs. */
+  healthWords?: readonly string[];
+  /** Wait for this turn's user final; omitted = pinFinalWaitMs from gateway/config/memory.json. */
+  turnFinalTimeoutMs?: number;
 }
 
 function performActionTool(options: ToolRegistryOptions): ToolHandler {
@@ -72,7 +94,7 @@ function performActionTool(options: ToolRegistryOptions): ToolHandler {
   };
 }
 
-/** Recall, forget, consent, perform_action, and weather. Unknown names do not throw. */
+/** Recall, forget, pin, consent, perform_action, and weather. Unknown names do not throw. */
 export class ToolRegistry {
   constructor(private readonly tools: readonly ToolHandler[]) {}
 
@@ -90,6 +112,10 @@ export class ToolRegistry {
     }
   }
 }
+
+/** Read-only defaults from the shipped config; production passes the loaded values explicitly. */
+const MEMORY_DEFAULTS = loadMemoryBudget(fileURLToPath(new URL('../../../config/memory.json', import.meta.url)));
+const DEFAULT_HEALTH_WORDS = unique(LANGUAGES.flatMap((language) => DEFAULT_I18N.memory[language].healthWords));
 
 /** The caller passes the rendered recall prompt; raw role files carry {{char}} placeholders. */
 export function createToolRegistry(options: ToolRegistryOptions): ToolRegistry {
@@ -116,6 +142,15 @@ export function createToolRegistry(options: ToolRegistryOptions): ToolRegistry {
     forgetTool(options.memory.forgetConfirmText, {
       toolDescription: options.memory.recall.forgetToolDescription,
       queryDescription: options.memory.recall.forgetQueryDescription,
+    }),
+    pinTool({
+      copy: options.memory.pin,
+      evidence: options.evidence,
+      safety: options.safety,
+      healthWords: options.healthWords ?? DEFAULT_HEALTH_WORDS,
+      maxPerCharacter: options.pinLimits?.maxPerCharacter ?? MEMORY_DEFAULTS.pinMaxPerCharacter,
+      maxChars: options.pinLimits?.maxChars ?? MEMORY_DEFAULTS.pinMaxChars[options.language],
+      turnFinalTimeoutMs: options.turnFinalTimeoutMs ?? MEMORY_DEFAULTS.pinFinalWaitMs,
     }),
     consentTool({
       prompt: options.memory.declineConfirmPrompt,

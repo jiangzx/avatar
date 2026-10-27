@@ -76,6 +76,22 @@ export interface WeatherCopy {
   >;
 }
 
+/** pin_memory copy and word lists (spec 附录 B). */
+export interface PinCopy {
+  confirmText: string;
+  emptyText: string;
+  fullText: string;
+  tooLongText: string;
+  declinedText: string;
+  noticePendingText: string;
+  /** Removed from the start of a "this" line, longest first, repeatedly. */
+  triggerPrefixes: readonly string[];
+  /** Trigger and filler words removed from the end of a "this" line, longest first, repeatedly. */
+  trailingWords: readonly string[];
+  toolDescription: string;
+  targetDescription: string;
+}
+
 /** Everything one language needs for memory and evidence handling. */
 export interface MemoryCopy {
   noticeKeywords: readonly string[];
@@ -88,6 +104,9 @@ export interface MemoryCopy {
   evidence: EvidenceRules;
   addressingPatterns: readonly RegExp[];
   extractLabels: ExtractLabels;
+  pin: PinCopy;
+  /** A pinned line that contains one of these is sensitive (kept out of greeting/proactive views). */
+  healthWords: readonly string[];
 }
 
 /** Substring checks that keep a planned check-in on stage. */

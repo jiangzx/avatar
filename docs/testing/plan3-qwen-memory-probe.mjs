@@ -64,10 +64,10 @@ async function main() {
     const writer = new SqliteTranscriptWriter(store);
     const user = '我姓王，您叫我王叔就好。我喜欢喝茶。';
     const append = (role, text) => writer.append({ ownerId, sessionId, role, text, now: Date.now() });
-    check(append('user', user) === 'skipped', 'probe_notice_gate_failed');
+    check(append('user', user).result === 'skipped', 'probe_notice_gate_failed');
     writer.markNotified(ownerId, Date.now());
-    check(append('user', user) === 'stored', 'probe_user_write_failed');
-    check(append('assistant', '好，王叔。') === 'stored', 'probe_assistant_write_failed');
+    check(append('user', user).result === 'stored', 'probe_user_write_failed');
+    check(append('assistant', '好，王叔。').result === 'stored', 'probe_assistant_write_failed');
     const client = new QwenTextClient({ apiKey: process.env.DASHSCOPE_API_KEY, endpoint, model: memory.extractModel });
     const worker = new MemoryWorker({
       store,

@@ -273,7 +273,7 @@ describe('Plan C memory acceptance', () => {
     sessionDecline.session.handleClientMessage({ type: 'debug.userText', text: '别记了' });
     await vi.advanceTimersByTimeAsync(1_000);
     expect(store.getOwner(ownerId)?.memoryConsent).toBe('declined');
-    expect(writer.append({ ownerId, agentId, sessionId: 'later', role: 'user', text: '这句不该留下', now: now + 1 })).toBe('skipped');
+    expect(writer.append({ ownerId, agentId, sessionId: 'later', role: 'user', text: '这句不该留下', now: now + 1 }).result).toBe('skipped');
     expect(pendingUserRows(store, ownerId, agentId)).toEqual([]);
     expect(opened(registeredB.deviceToken).ctx.memorySnapshot ?? '').not.toContain('王叔');
     gate.end(sessionDecline.tokens.sessionId);

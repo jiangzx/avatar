@@ -130,7 +130,7 @@ describe('SessionManager owner invariant', () => {
   });
 
   it('flushes the previous session before destroying it', () => {
-    const writer = { append: vi.fn<TranscriptWriter['append']>(() => 'stored') };
+    const writer = { append: vi.fn<TranscriptWriter['append']>(() => ({ result: 'stored' })) };
     const made: Array<ReturnType<typeof fakeSession>> = [];
     manager = new SessionManager((ctx, sessionId) => {
       const s = fakeSession();

@@ -17,6 +17,12 @@ function stripDigits(text: string, digitChars: ReadonlySet<string>): string {
   return out;
 }
 
+/** Outcome of one transcript write; messageId is set only when a row was stored. */
+export interface AppendResult {
+  result: 'stored' | 'skipped' | 'rejected';
+  messageId?: string;
+}
+
 /** Persists one transcript turn. Implementations must not log the text. */
 export interface TranscriptWriter {
   append(input: {
@@ -28,7 +34,7 @@ export interface TranscriptWriter {
     text: string;
     now: number;
     interrupted?: boolean;
-  }): 'stored' | 'skipped' | 'rejected';
+  }): AppendResult;
   /** Records that the memory notice finished playing. */
   markNotified(ownerId: string, now: number): void;
 }
@@ -51,19 +57,20 @@ export class SqliteTranscriptWriter implements TranscriptWriter {
     text: string;
     now: number;
     interrupted?: boolean;
-  }): 'stored' | 'skipped' | 'rejected' {
+  }): AppendResult {
     const owner = this.store.getOwner(input.ownerId);
-    if (!owner || owner.notifiedAt == null || owner.memoryConsent === 'declined') return 'skipped';
+    if (!owner || owner.notifiedAt == null || owner.memoryConsent === 'declined') return { result: 'skipped' };
     const verdict = scanText(input.text, this.rules);
-    if (verdict === 'reject') return 'rejected';
+    if (verdict === 'reject') return { result: 'rejected' };
     // Caller already truncated an interrupted reply. Index the redacted text only.
     let text = redact(input.text);
     if (verdict === 'degrade') {
       text = stripDigits(text, this.digitChars);
       log('safety_event', { code: 'degrade' });
     }
+    const messageId = randomUUID();
     this.store.insertMessage({
-      id: randomUUID(),
+      id: messageId,
       sessionId: input.sessionId,
       ownerId: input.ownerId,
       agentId: input.agentId,
@@ -82,7 +89,7 @@ export class SqliteTranscriptWriter implements TranscriptWriter {
         followups: [],
       });
     }
-    return 'stored';
+    return { result: 'stored', messageId };
   }
 
   markNotified(ownerId: string, now: number): void {

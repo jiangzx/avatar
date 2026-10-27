@@ -189,6 +189,7 @@ describe('pacing and budget config', () => {
       instructions: { budgetRatio: 0.4, snapshotMaxChars: 100, summaryMaxChars: 200, minHistoryChars: 100 },
       pinMaxPerCharacter: 0,
       pinMaxChars: { zh: 40, ja: 50, en: 50 },
+      pinFinalWaitMs: 4_000,
       listMaxItems: 5,
       toolTurnTimeoutMs: 15_000,
       recallClipChars: 80,
@@ -221,6 +222,7 @@ describe('affect budget', () => {
     instructions: { budgetRatio: 0.4, snapshotMaxChars: 100, summaryMaxChars: 200, minHistoryChars: 100, ...extra },
     pinMaxPerCharacter: 0,
     pinMaxChars: { zh: 40, ja: 50, en: 50 },
+    pinFinalWaitMs: 4_000,
     listMaxItems: 5,
     toolTurnTimeoutMs: 15_000,
     recallClipChars: 80,
@@ -283,6 +285,7 @@ describe('pinned budget', () => {
   it('ships the Q34 limits and derives the pinned room per language', () => {
     expect(memory.pinMaxPerCharacter).toBe(10);
     expect(memory.pinMaxChars).toEqual({ zh: 40, ja: 50, en: 50 });
+    expect(memory.pinFinalWaitMs).toBe(4000);
     expect(memory.listMaxItems).toBe(5);
     expect(memory.instructions.languageBudgetRatio).toEqual({ zh: 0.49, ja: 0.59, en: 0.9 });
     // 10 × (pin + label + separator + newline)
