@@ -246,7 +246,7 @@ interface Logger {
 }
 ```
 
-- 现有约 80 处 `log(...)` 迁移为注入的 logger，并为每个事件定好级别（`*_failed`、`adapter_error` fatal → error；retryable → warn；生命周期 → info；adapter 事件类型、状态迁移、计时细节 → debug）。
+- 现有约 80 处 `log(...)` 迁移为注入的 logger，并为每个事件定好级别（`*_failed`、`upstream_error` fatal → error；retryable → warn；生命周期 → info；adapter 事件类型、状态迁移、计时细节 → debug）。
 - 输出：stdout 一行一条 JSON（`t, level, event, sid, oid, char, seq, job, ...fields`）；info 及以上同时批量写入 `log_events`。
 - 级别判定：全局级别（env `LOG_LEVEL`，后台可临时改）与按 oid 的覆盖取更详细者；覆盖 30 分钟后自动失效。
 - 内容防护：字段值只能是 string/number/boolean/null；字段名黑名单 `text, transcript, content, reply, utterance, prompt, message, instruction, quote, summary`（大小写不敏感，含前后缀匹配，例如 `replyText`）；字符串最长 120 字符；开发和测试环境违规抛错，生产环境丢字段并记 `log_field_rejected {rejected_event, field}`。测试扫描 `gateway/src` 中所有 logger 调用的字段名。

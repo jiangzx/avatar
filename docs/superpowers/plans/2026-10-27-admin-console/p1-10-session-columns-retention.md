@@ -43,6 +43,7 @@
 | `owner_replaced` | `create()` / `endOwner(..., 'owner_replaced')` | 同一用户开了新会话 |
 | `owner_deleted` | dev 删除路由 / P2-T5 后台删除用户（`endOwner(..., 'owner_deleted')`） | 用户数据被删除 |
 | `owner_banned` | P2-T5 封禁（`endOwner(..., 'owner_banned')`） | 用户被封禁 |
+| `memory_changed` | 记忆 HTTP 路由（记忆寻址设置、单条删除、清空）调用 `endOwner(ownerId, 'memory_changed')` | 记忆变更，结束当前会话，让下一通使用新记忆 |
 | `shutdown` | `SessionManager.shutdown()` | 网关正常关机 |
 | `process_restart` | 启动时 `closeOpenSessions()` | 上一个进程异常退出，会话被补记结束 |
 
