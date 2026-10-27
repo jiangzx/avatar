@@ -1,6 +1,6 @@
 # 计划 1（可观测基础）验收记录
 
-日期：2026-10-28；分支：dev-admin；提交：bb7a550
+日期：2026-10-28；分支：dev-admin；提交：bb7a550（验收运行）、8e25f42（最终审查修复）
 
 ## 探针（P1-T1）
 - 结论摘要与记录文件：docs/testing/2026-10-27-admin-usage-probe.md
@@ -20,6 +20,7 @@
 ## 回归
 - protocol：2 文件 / 13 项；gateway：88 文件 / 1164 项；avatar-core：18 文件 / 121 项；两个 typecheck：通过；generate-character-ids --check：通过（`character ids are up to date`）。
 - 各条命令退出码均为 0；Mock smoke 与真实 Qwen smoke 退出码均为 0。
+- 最终审查修复后重跑（2026-10-28，8e25f42）：gateway 88 文件 / 1172 项通过；`npm run typecheck -w gateway` 通过；Mock smoke 再次通过。
 
 ## 已知限制
 - Seeduplex 不计用量（spec Q9/Q14）。
