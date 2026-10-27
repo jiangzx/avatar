@@ -370,6 +370,22 @@ class FakeGatewayTransport implements GatewayTransport {
   }) async => const GatewayHttpResponse(statusCode: 404, body: null);
 
   @override
+  Future<GatewayHttpResponse> get(Uri uri, {required String appSecret, String? bearer}) async =>
+      const GatewayHttpResponse(statusCode: 404, body: null);
+
+  @override
+  Future<GatewayHttpResponse> put(
+    Uri uri, {
+    required String appSecret,
+    required Map<String, Object?> body,
+    String? bearer,
+  }) async => const GatewayHttpResponse(statusCode: 404, body: null);
+
+  @override
+  Future<GatewayHttpResponse> delete(Uri uri, {required String appSecret, String? bearer}) async =>
+      const GatewayHttpResponse(statusCode: 404, body: null);
+
+  @override
   Future<NativeSocket> openWebSocket(Uri uri) async {
     final socket = FakeSocket();
     sockets.add(socket);

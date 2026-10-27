@@ -33,16 +33,20 @@ void main() {
       seen.add(
         SeenRequest(
           request.method,
-          request.uri.path,
+          request.uri.toString(),
           request.headers.value('x-app-secret'),
           request.headers.value(HttpHeaders.authorizationHeader),
-          jsonDecode(text),
+          text.isEmpty ? null : jsonDecode(text),
         ),
       );
-      request.response
-        ..statusCode = 201
-        ..headers.contentType = ContentType.json
-        ..write('{"ok":true}');
+      if (request.uri.path == '/empty') {
+        request.response.statusCode = 204;
+      } else {
+        request.response
+          ..statusCode = 201
+          ..headers.contentType = ContentType.json
+          ..write('{"ok":true}');
+      }
       await request.response.close();
     });
   });
@@ -89,5 +93,37 @@ void main() {
     expect(seen.single.path, '/agent/style');
     expect(seen.single.authorization, 'Bearer device-token-0123456789');
     expect(seen.single.body, {'style': 'old-friend'});
+  });
+
+  test('get sends the secret and bearer without a body', () async {
+    final res = await transport.get(at('/memory'), appSecret: 'secret-123456789', bearer: 'device-token-0123456789');
+    expect(res.statusCode, 201);
+    expect(res.body, {'ok': true});
+    expect(seen.single.method, 'GET');
+    expect(seen.single.path, '/memory');
+    expect(seen.single.secret, 'secret-123456789');
+    expect(seen.single.authorization, 'Bearer device-token-0123456789');
+    expect(seen.single.body, isNull);
+  });
+
+  test('put sends a JSON body with the bearer', () async {
+    await transport.put(
+      at('/memory/addressing'),
+      appSecret: 'secret-123456789',
+      body: const {'text': '老王'},
+      bearer: 'device-token-0123456789',
+    );
+    expect(seen.single.method, 'PUT');
+    expect(seen.single.body, {'text': '老王'});
+    expect(seen.single.authorization, 'Bearer device-token-0123456789');
+  });
+
+  test('delete keeps the query and reads an empty 204 as a null body', () async {
+    final res = await transport.delete(at('/empty?scope=all'), appSecret: 'secret-123456789', bearer: 'device-token-0123456789');
+    expect(res.statusCode, 204);
+    expect(res.body, isNull);
+    expect(seen.single.method, 'DELETE');
+    expect(seen.single.path, '/empty?scope=all');
+    expect(seen.single.body, isNull);
   });
 }

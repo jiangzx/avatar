@@ -28,4 +28,7 @@ class ThrowingCredentialStore implements CredentialStore {
 
   @override
   Future<void> write(String key, String value) async => throw PlatformException(code: 'keystore_failed');
+
+  @override
+  Future<void> delete(String key) async => throw PlatformException(code: 'keystore_failed');
 }

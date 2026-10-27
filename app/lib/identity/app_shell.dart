@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../avatar_engine/avatar_engine.dart';
 import '../avatar_engine/engine_switch_controller.dart';
 import '../avatar_engine/ui/engine_copy.dart';
+import '../memory/memory_api.dart';
 import '../native_gateway/gateway_client.dart';
 import 'character_availability.dart';
 import 'character_picker_page.dart';
@@ -44,6 +45,7 @@ class AppShell extends StatefulWidget {
     required this.catalog,
     required this.avatarBuilder,
     this.engines,
+    this.memory,
   });
 
   final DeviceIdentity identity;
@@ -52,6 +54,9 @@ class AppShell extends StatefulWidget {
 
   /// Null = 3D only (tests and builds without Duix): Duix characters are hidden.
   final EngineSwitchController? engines;
+
+  /// Settings reads and deletes memory through it; null hides the memory blocks.
+  final MemoryApi? memory;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -68,6 +73,9 @@ class _AppShellState extends State<AppShell> {
 
   /// Part of the page key; a change starts a fresh page and session.
   int _pageEpoch = 0;
+
+  /// A memory write ended the gateway session; keep no chat page under settings until it closes.
+  bool _suspended = false;
 
   @override
   void initState() {
@@ -168,12 +176,25 @@ class _AppShellState extends State<AppShell> {
           onSaveCharacter: _saveFromSettings,
           availabilityOf: _availabilityOf,
           availabilityChanges: widget.engines,
+          memory: widget.memory,
+          onMemoryChanged: _onMemoryChanged,
         ),
       ),
     );
-    if (!mounted || saved == null || saved == _character) return;
+    if (!mounted) return;
     setState(() {
-      _character = saved;
+      if (saved != null && saved != _character) {
+        _character = saved;
+        _pageEpoch++;
+      }
+      _suspended = false; // the new epoch (bumped on the memory change) starts a fresh session
+    });
+  }
+
+  void _onMemoryChanged() {
+    if (!mounted || _suspended) return;
+    setState(() {
+      _suspended = true;
       _pageEpoch++;
     });
   }
@@ -220,18 +241,20 @@ class _AppShellState extends State<AppShell> {
   Widget _home(CharacterOption character) => Stack(
     children: [
       Positioned.fill(
-        child: widget.avatarBuilder(
-          AvatarPageRequest(
-            key: ValueKey('avatar-${character.id}-$_pageEpoch'),
-            identity: widget.identity,
-            character: character,
-            engine: character.engine,
-            onEngineFailure: character.engine == AvatarEngineKind.duix
-                ? (failure) => _onEngineFailure(character, failure)
-                : null,
-            onUnknownCharacter: _onUnknownCharacter,
-          ),
-        ),
+        child: _suspended
+            ? const ColoredBox(color: Color(0xFF10131A))
+            : widget.avatarBuilder(
+                AvatarPageRequest(
+                  key: ValueKey('avatar-${character.id}-$_pageEpoch'),
+                  identity: widget.identity,
+                  character: character,
+                  engine: character.engine,
+                  onEngineFailure: character.engine == AvatarEngineKind.duix
+                      ? (failure) => _onEngineFailure(character, failure)
+                      : null,
+                  onUnknownCharacter: _onUnknownCharacter,
+                ),
+              ),
       ),
       // Bottom-right, clear of the centered mute/end buttons in AvatarOverlay.
       Positioned(

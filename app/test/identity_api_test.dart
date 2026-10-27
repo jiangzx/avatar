@@ -21,6 +21,16 @@ class RecordingTransport implements GatewayTransport {
   }
 
   @override
+  Future<GatewayHttpResponse> get(Uri uri, {required String appSecret, String? bearer}) => throw UnimplementedError();
+
+  @override
+  Future<GatewayHttpResponse> put(Uri uri, {required String appSecret, required Map<String, Object?> body, String? bearer}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<GatewayHttpResponse> delete(Uri uri, {required String appSecret, String? bearer}) => throw UnimplementedError();
+
+  @override
   Future<NativeSocket> openWebSocket(Uri uri) => throw UnimplementedError();
 }
 

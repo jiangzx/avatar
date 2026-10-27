@@ -31,6 +31,14 @@ abstract interface class GatewayTransport {
     required String bearer,
     required Map<String, Object?> body,
   });
+  Future<GatewayHttpResponse> get(Uri uri, {required String appSecret, String? bearer});
+  Future<GatewayHttpResponse> put(
+    Uri uri, {
+    required String appSecret,
+    required Map<String, Object?> body,
+    String? bearer,
+  });
+  Future<GatewayHttpResponse> delete(Uri uri, {required String appSecret, String? bearer});
   Future<NativeSocket> openWebSocket(Uri uri);
 }
 
@@ -53,11 +61,27 @@ class IoGatewayTransport implements GatewayTransport {
     required Map<String, Object?> body,
   }) => _send('PATCH', uri, appSecret: appSecret, body: body, bearer: bearer);
 
+  @override
+  Future<GatewayHttpResponse> get(Uri uri, {required String appSecret, String? bearer}) =>
+      _send('GET', uri, appSecret: appSecret, bearer: bearer);
+
+  @override
+  Future<GatewayHttpResponse> put(
+    Uri uri, {
+    required String appSecret,
+    required Map<String, Object?> body,
+    String? bearer,
+  }) => _send('PUT', uri, appSecret: appSecret, body: body, bearer: bearer);
+
+  @override
+  Future<GatewayHttpResponse> delete(Uri uri, {required String appSecret, String? bearer}) =>
+      _send('DELETE', uri, appSecret: appSecret, bearer: bearer);
+
   Future<GatewayHttpResponse> _send(
     String method,
     Uri uri, {
     required String appSecret,
-    required Map<String, Object?> body,
+    Map<String, Object?>? body,
     String? bearer,
   }) async {
     final client = HttpClient();
@@ -65,12 +89,14 @@ class IoGatewayTransport implements GatewayTransport {
       final request = await client
           .openUrl(method, uri)
           .timeout(AppConfig.gatewayRequestTimeout);
-      request.headers.contentType = ContentType.json;
       request.headers.set('x-app-secret', appSecret);
       if (bearer != null) {
         request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $bearer');
       }
-      request.add(utf8.encode(jsonEncode(body)));
+      if (body != null) {
+        request.headers.contentType = ContentType.json;
+        request.add(utf8.encode(jsonEncode(body)));
+      }
       final response = await request.close().timeout(
         AppConfig.gatewayRequestTimeout,
       );

@@ -18,6 +18,7 @@ import 'identity/characters.dart';
 import 'identity/device_identity.dart';
 import 'identity/identity_api.dart';
 import 'identity/secure_credential_store.dart';
+import 'memory/memory_api.dart';
 import 'native_gateway/transports.dart';
 import 'spike/duix_probe_spike.dart';
 import 'spike/native_audio_spike.dart';
@@ -96,6 +97,12 @@ class _HomeState extends State<_Home> {
       transport: const IoGatewayTransport(),
     ),
   );
+  late final _memory = MemoryApi(
+    baseUri: Uri.parse(AppConfig.gatewayUrl),
+    appSecret: AppConfig.appSecret,
+    transport: const IoGatewayTransport(),
+    identity: _identity,
+  );
   final _bridge = MethodChannelDuixBridge();
   final _handoff = EngineHandoff();
   late final _engines = EngineSwitchController(
@@ -129,6 +136,7 @@ class _HomeState extends State<_Home> {
     identity: _identity,
     catalog: widget.catalog,
     engines: _engines,
+    memory: _memory,
     avatarBuilder: (request) => AvatarPage(
       key: request.key,
       engineFactory: () => _engineFor(request),

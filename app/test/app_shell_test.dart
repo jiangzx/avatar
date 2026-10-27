@@ -10,12 +10,14 @@ import 'package:avatar_app/identity/character_picker_page.dart';
 import 'package:avatar_app/identity/credential_store.dart';
 import 'package:avatar_app/identity/device_identity.dart';
 import 'package:avatar_app/identity/identity_api.dart';
+import 'package:avatar_app/memory/memory_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/character_fixture.dart';
 import 'support/duix_fakes.dart';
 import 'support/identity_fakes.dart';
+import 'support/memory_fakes.dart';
 
 const tokenKey = DeviceIdentity.tokenKey;
 const characterKey = DeviceIdentity.characterKey;
@@ -23,11 +25,12 @@ const characterKey = DeviceIdentity.characterKey;
 final catalog = loadTestCharacterCatalog();
 AvatarPageRequest? lastRequest;
 
-Widget app(DeviceIdentity identity, {EngineSwitchController? engines}) => MaterialApp(
+Widget app(DeviceIdentity identity, {EngineSwitchController? engines, MemoryApi? memory}) => MaterialApp(
   home: AppShell(
     identity: identity,
     catalog: catalog,
     engines: engines,
+    memory: memory,
     avatarBuilder: (request) {
       lastRequest = request;
       return Scaffold(
@@ -306,6 +309,41 @@ void main() {
     await tester.tap(find.byKey(const Key('character-confirm')));
     await tester.pumpAndSettle();
     expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+  });
+
+  testWidgets('a memory change stops the chat under settings and restarts it on return', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaoxin'));
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    final transport = FakeMemoryTransport();
+    await tester.pumpWidget(app(identity, memory: testMemoryApi(transport, identity)));
+    await tester.pumpAndSettle();
+    expect(pageKey(), 'avatar-xiaoxin-0');
+    await tester.tap(find.byKey(const Key('settings')));
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-xiaoxin', skipOffstage: false), findsOneWidget);
+    await tester.scrollUntilVisible(find.byKey(const Key('delete-p1')), 200);
+    await tester.tap(find.byKey(const Key('delete-p1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('memory-confirm-ok')));
+    await tester.pumpAndSettle();
+    expect(transport.bearers.first, 'device-token-0123456789');
+    expect(find.text('AVATAR-xiaoxin', skipOffstage: false), findsNothing);
+    await tester.tap(find.byKey(const Key('companion-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+    expect(pageKey(), 'avatar-xiaoxin-1');
+  });
+
+  testWidgets('settings without a memory change keeps the same chat page', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaoxin'));
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    await tester.pumpWidget(app(identity, memory: testMemoryApi(FakeMemoryTransport(), identity)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('companion-cancel')));
+    await tester.pumpAndSettle();
+    expect(pageKey(), 'avatar-xiaoxin-0');
   });
 }
 

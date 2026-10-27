@@ -3,32 +3,51 @@ import 'package:flutter/material.dart';
 import '../avatar_engine.dart';
 import 'engine_copy.dart';
 
-/// Switching ends the current chat, so it always asks first. True = switch now.
-Future<bool> confirmEngineSwitch(BuildContext context, AvatarEngineKind target) async {
-  final ok = await showDialog<bool>(
+/// Large two-button confirm (title 24 sp, body and buttons 20 sp, 60 dp buttons). True = [ok].
+Future<bool> confirmLarge(
+  BuildContext context, {
+  String? title,
+  required String body,
+  required String cancel,
+  required String ok,
+  Key cancelKey = const Key('confirm-cancel'),
+  Key okKey = const Key('confirm-ok'),
+}) async {
+  final result = await showDialog<bool>(
     context: context,
     builder: (dialog) => AlertDialog(
-      title: Text(confirmTitle(target), style: const TextStyle(fontSize: 24)),
-      content: const Text(confirmBody, style: TextStyle(fontSize: 20)),
+      title: title == null ? null : Text(title, style: const TextStyle(fontSize: 24)),
+      content: Text(body, style: const TextStyle(fontSize: 20)),
       actions: [
         SizedBox(
           height: 60,
           child: TextButton(
-            key: const Key('engine-confirm-cancel'),
+            key: cancelKey,
             onPressed: () => Navigator.of(dialog).pop(false),
-            child: const Text(confirmCancel, style: TextStyle(fontSize: 20)),
+            child: Text(cancel, style: const TextStyle(fontSize: 20)),
           ),
         ),
         SizedBox(
           height: 60,
           child: FilledButton(
-            key: const Key('engine-confirm-ok'),
+            key: okKey,
             onPressed: () => Navigator.of(dialog).pop(true),
-            child: const Text(confirmOk, style: TextStyle(fontSize: 20)),
+            child: Text(ok, style: const TextStyle(fontSize: 20)),
           ),
         ),
       ],
     ),
   );
-  return ok ?? false;
+  return result ?? false;
 }
+
+/// Switching ends the current chat, so it always asks first. True = switch now.
+Future<bool> confirmEngineSwitch(BuildContext context, AvatarEngineKind target) => confirmLarge(
+  context,
+  title: confirmTitle(target),
+  body: confirmBody,
+  cancel: confirmCancel,
+  ok: confirmOk,
+  cancelKey: const Key('engine-confirm-cancel'),
+  okKey: const Key('engine-confirm-ok'),
+);

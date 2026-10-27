@@ -14,4 +14,7 @@ class SecureCredentialStore implements CredentialStore {
 
   @override
   Future<void> write(String key, String value) => _storage.write(key: key, value: value);
+
+  @override
+  Future<void> delete(String key) => _storage.delete(key: key);
 }
