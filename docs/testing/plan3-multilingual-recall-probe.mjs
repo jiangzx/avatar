@@ -14,13 +14,14 @@
 // Synthetic text may be printed only in this mode.
 //
 // --real-db opens the given SQLite file read-only (no migrations, no PRAGMA journal_mode,
-// no writes), picks the first owner that has messages, and runs the three roadmap zh queries
-// plus read-only ja/en diagnostics through each language's production recall path with no
-// text client (verbatim fallback only). The ja/en rows are diagnostics, not assertions: a
-// zh-only database may legitimately return no hits.
-// A pre-M2 database has no `meta` table, which the current SqliteMemoryStore prepares
-// against; in that case the probe uses a read-only fallback store with the same SELECTs.
-// It prints exactly one JSON object per query and never prints stored or spoken text:
+// no writes). It requires the multi-character baseline (user_version 6); anything older
+// prints NOT RUN db_schema_incompatible. For the first owner that has messages, it runs the
+// three roadmap zh queries per agent (character), plus read-only ja/en diagnostics through
+// each language's production recall path with no text client (verbatim fallback only).
+// The ja/en rows are diagnostics, not assertions: a zh-only database may legitimately
+// return no hits. It prints exactly one JSON object per query and never prints stored or
+// spoken text:
+//   character      character whose agent-scoped history was queried
 //   language       registry language used for the query
 //   query          query that was run
 //   hits           the grounded-hit boolean (the tool's spokenFound)
@@ -31,10 +32,10 @@
 //                  Structurally false in --real-db because no text client is passed; it is
 //                  exercised in --temp with the fake phrasing client and kept here for
 //                  field compatibility.
-// If the database is missing, unreadable, lacks the tables recall needs, or the read-only
-// WAL open fails, it prints "NOT RUN <short_reason_code>" once and exits 0 (codes:
+// If the database is missing, unreadable, predates the multi-character baseline, or the
+// read-only WAL open fails, it prints "NOT RUN <short_reason_code>" once and exits 0 (codes:
 // db_path_missing, db_missing, db_open_failed, db_unreadable, db_schema_incompatible,
-// db_no_owner). NOT RUN is not a pass.
+// db_no_owner, db_no_agent). NOT RUN is not a pass.
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -120,42 +121,8 @@ function newTitleFlag(spokenText, sourceLines) {
   return false;
 }
 
-function insert(store, ownerId, sessionId, id, role, text, now) {
-  store.insertMessage({ id, sessionId, ownerId, role, text, bigrams: bigrams(text), now });
-}
-
-/**
- * Read-only fallback for pre-M2 databases: the current SqliteMemoryStore prepares
- * statements against the `meta` table (kana backfill cursor), which older files lack.
- * These are the same SELECTs the store uses for recall; nothing is migrated or written.
- */
-function readOnlyStore(db) {
-  const recent = db.prepare(`SELECT m.text AS text FROM messages m
-    JOIN sessions s ON s.id = m.session_id
-    WHERE m.owner_id = ? AND m.role = 'user' AND m.excluded = 0 AND s.ended_at IS NOT NULL
-    ORDER BY m.created_at DESC, m.rowid DESC
-    LIMIT ?`);
-  const search = db.prepare(`SELECT m.text AS text FROM messages_fts
-    JOIN messages m ON m.rowid = messages_fts.rowid
-    WHERE messages_fts MATCH ? AND m.owner_id = ? AND m.role = 'user' AND m.excluded = 0
-    ORDER BY bm25(messages_fts)
-    LIMIT ?`);
-  const searchLike = db.prepare(`SELECT text FROM messages
-    WHERE owner_id = ? AND role = 'user' AND excluded = 0 AND text LIKE ? ESCAPE '\\'
-    ORDER BY created_at DESC, rowid DESC
-    LIMIT ?`);
-  const texts = (statement, ...args) => statement.all(...args).map((row) => ({ text: row.text }));
-  return {
-    recentUserMessages: (ownerId, limit) => texts(recent, ownerId, limit),
-    searchMessages: (ownerId, match, limit) => {
-      try {
-        return texts(search, match, ownerId, limit);
-      } catch {
-        return [];
-      }
-    },
-    searchMessagesLike: (ownerId, pattern, limit) => texts(searchLike, ownerId, pattern, limit),
-  };
+function insert(store, ownerId, agentId, sessionId, id, role, text, now) {
+  store.insertMessage({ id, sessionId, ownerId, agentId, role, text, bigrams: bigrams(text), now });
 }
 
 async function runTemp() {
@@ -167,58 +134,55 @@ async function runTemp() {
   };
   try {
     const store = new SqliteMemoryStore(db);
-    const { ownerId, agentId } = store.createOwner({
-      tokenHash: 'probe-temp', roleId: 'elder-companion', styleId: 'grandchild', now: 1,
-    });
+    const { ownerId } = store.createOwner({ tokenHash: 'probe-temp', now: 1 });
+    const agentId = store.ensureAgent(ownerId, 'xiaonuan', 1).id;
 
     // Ended session: the only statement the vague-recall path may surface is the newest one.
     store.recordSessionStart('probe-ended', agentId, 2);
-    insert(store, ownerId, 'probe-ended', 'zh-newest', 'user', '我最近在看老电影。', 2_000);
-    insert(store, ownerId, 'probe-ended', 'zh-question', 'user', '我说过喜欢喝茶吗？', 2_100);
-    insert(store, ownerId, 'probe-ended', 'zh-assistant', 'assistant', '嗯，您最近在看老电影。', 2_200);
+    insert(store, ownerId, agentId, 'probe-ended', 'zh-newest', 'user', '我最近在看老电影。', 2_000);
+    insert(store, ownerId, agentId, 'probe-ended', 'zh-question', 'user', '我说过喜欢喝茶吗？', 2_100);
+    insert(store, ownerId, agentId, 'probe-ended', 'zh-assistant', 'assistant', '嗯，您最近在看老电影。', 2_200);
     store.recordSessionEnd('probe-ended', agentId, 2_300);
 
     // Active session: FTS still sees these, but vague recall (recent user messages) must not.
     store.recordSessionStart('probe-active', agentId, 2_400);
-    insert(store, ownerId, 'probe-active', 'ja-yoga', 'user', '私は毎朝ヨガをしています。', 2_500);
-    insert(store, ownerId, 'probe-active', 'ja-question', 'user', 'お茶が好きだと言いましたか', 2_600);
-    insert(store, ownerId, 'probe-active', 'en-movies', 'user', 'I like watching old movies.', 2_700);
-    insert(store, ownerId, 'probe-active', 'en-question', 'user', 'Did I say I like tea?', 2_800);
-    insert(store, ownerId, 'probe-active', 'zh-active', 'user', '这是还没结束的会话里的句子。', 2_900);
+    insert(store, ownerId, agentId, 'probe-active', 'ja-yoga', 'user', '私は毎朝ヨガをしています。', 2_500);
+    insert(store, ownerId, agentId, 'probe-active', 'ja-question', 'user', 'お茶が好きだと言いましたか', 2_600);
+    insert(store, ownerId, agentId, 'probe-active', 'en-movies', 'user', 'I like watching old movies.', 2_700);
+    insert(store, ownerId, agentId, 'probe-active', 'en-question', 'user', 'Did I say I like tea?', 2_800);
+    insert(store, ownerId, agentId, 'probe-active', 'zh-active', 'user', '这是还没结束的会话里的句子。', 2_900);
 
     // Separate owner: a said-frame query must not match statements sharing only the frame words.
-    const frame = store.createOwner({
-      tokenHash: 'probe-frame', roleId: 'elder-companion', styleId: 'grandchild', now: 3,
-    });
+    const frameOwner = store.createOwner({ tokenHash: 'probe-frame', now: 3 });
+    const frame = { ownerId: frameOwner.ownerId, agentId: store.ensureAgent(frameOwner.ownerId, 'xiaonuan', 3).id };
     store.recordSessionStart('probe-frame-session', frame.agentId, 3_001);
-    insert(store, frame.ownerId, 'probe-frame-session', 'zh-frame-unrelated', 'user', '我说今天有点累。', 3_100);
-    insert(store, frame.ownerId, 'probe-frame-session', 'ja-frame-unrelated', 'user', '私は昨日映画を見ました。', 3_200);
-    insert(store, frame.ownerId, 'probe-frame-session', 'en-frame-unrelated', 'user', 'I said I was tired.', 3_300);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'zh-frame-unrelated', 'user', '我说今天有点累。', 3_100);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'ja-frame-unrelated', 'user', '私は昨日映画を見ました。', 3_200);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'en-frame-unrelated', 'user', 'I said I was tired.', 3_300);
     // Denials and whole-utterance light acks must never become grounded history.
-    insert(store, frame.ownerId, 'probe-frame-session', 'zh-denial', 'user', '我没说过喜欢喝茶。', 3_350);
-    insert(store, frame.ownerId, 'probe-frame-session', 'ja-denial', 'user', 'お茶が好きなんて言ってない。', 3_360);
-    insert(store, frame.ownerId, 'probe-frame-session', 'en-denial', 'user', "I didn't say I like tea.", 3_370);
-    insert(store, frame.ownerId, 'probe-frame-session', 'zh-ack', 'user', '好的', 3_380);
-    insert(store, frame.ownerId, 'probe-frame-session', 'ja-ack', 'user', 'はい', 3_390);
-    insert(store, frame.ownerId, 'probe-frame-session', 'en-ack', 'user', 'Okay', 3_400);
-    const frameCtx = () => toolContext(store, frame.ownerId);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'zh-denial', 'user', '我没说过喜欢喝茶。', 3_350);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'ja-denial', 'user', 'お茶が好きなんて言ってない。', 3_360);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'en-denial', 'user', "I didn't say I like tea.", 3_370);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'zh-ack', 'user', '好的', 3_380);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'ja-ack', 'user', 'はい', 3_390);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'en-ack', 'user', 'Okay', 3_400);
+    const frameCtx = () => toolContext(store, frame.ownerId, { agentId: frame.agentId });
 
     // Separate owner: en vague recall must use ended-session statements only.
-    const vagueOwner = store.createOwner({
-      tokenHash: 'probe-vague', roleId: 'elder-companion', styleId: 'grandchild', now: 4,
-    });
+    const vagueRow = store.createOwner({ tokenHash: 'probe-vague', now: 4 });
+    const vagueOwner = { ownerId: vagueRow.ownerId, agentId: store.ensureAgent(vagueRow.ownerId, 'xiaonuan', 4).id };
     store.recordSessionStart('probe-vague-session', vagueOwner.agentId, 4_001);
-    insert(store, vagueOwner.ownerId, 'probe-vague-session', 'en-vague-recent', 'user', 'I like watching old movies.', 4_100);
-    insert(store, vagueOwner.ownerId, 'probe-vague-session', 'en-vague-park', 'user', 'I went to the park yesterday.', 4_150);
+    insert(store, vagueOwner.ownerId, vagueOwner.agentId, 'probe-vague-session', 'en-vague-recent', 'user', 'I like watching old movies.', 4_100);
+    insert(store, vagueOwner.ownerId, vagueOwner.agentId, 'probe-vague-session', 'en-vague-park', 'user', 'I went to the park yesterday.', 4_150);
     store.recordSessionEnd('probe-vague-session', vagueOwner.agentId, 4_200);
     store.recordSessionStart('probe-vague-active', vagueOwner.agentId, 4_300);
-    insert(store, vagueOwner.ownerId, 'probe-vague-active', 'en-vague-active', 'user', 'This is still the active session.', 4_400);
-    const vagueCtx = () => toolContext(store, vagueOwner.ownerId);
+    insert(store, vagueOwner.ownerId, vagueOwner.agentId, 'probe-vague-active', 'en-vague-active', 'user', 'This is still the active session.', 4_400);
+    const vagueCtx = () => toolContext(store, vagueOwner.ownerId, { agentId: vagueOwner.agentId });
 
     const ja = registryFor('ja');
     const zh = registryFor('zh');
     const en = registryFor('en');
-    const ctx = () => toolContext(store, ownerId);
+    const ctx = () => toolContext(store, ownerId, { agentId });
 
     // ja: kana-only statement is recallable by a katakana query.
     const yoga = await ja.handle('recall_memory', { query: 'ヨガ' }, ctx());
@@ -259,7 +223,7 @@ async function runTemp() {
     const dropped = await zh.handle(
       'recall_memory',
       { query: '老电影' },
-      toolContext(store, ownerId, { triggerText: '我最近在看老电影。' }),
+      toolContext(store, ownerId, { agentId, triggerText: '我最近在看老电影。' }),
     );
     check(dropped.spokenFound === false && historyLines(dropped, 'zh').length === 0, 'same_utterance_dropped');
 
@@ -298,10 +262,10 @@ async function runTemp() {
       check(ackHit.spokenFound === false, `${row.language}_ack_not_grounded`);
     }
 
-    insert(store, frame.ownerId, 'probe-frame-session', 'zh-frame-content', 'user', '我喜欢喝茶。', 3_450);
-    insert(store, frame.ownerId, 'probe-frame-session', 'zh-movie-content', 'user', '我最近在看老电影。', 3_455);
-    insert(store, frame.ownerId, 'probe-frame-session', 'ja-frame-content', 'user', '私はお茶が好きです。', 3_460);
-    insert(store, frame.ownerId, 'probe-frame-session', 'en-frame-content', 'user', 'I like tea.', 3_470);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'zh-frame-content', 'user', '我喜欢喝茶。', 3_450);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'zh-movie-content', 'user', '我最近在看老电影。', 3_455);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'ja-frame-content', 'user', '私はお茶が好きです。', 3_460);
+    insert(store, frame.ownerId, frame.agentId, 'probe-frame-session', 'en-frame-content', 'user', 'I like tea.', 3_470);
     const zhFrameHit = await zh.handle('recall_memory', { query: zhFrame }, frameCtx());
     check(zhFrameHit.spokenFound === true, 'zh_frame_content');
     check(historyLines(zhFrameHit, 'zh').includes('我喜欢喝茶。'), 'zh_frame_content_line');
@@ -385,6 +349,7 @@ async function runTemp() {
 
     // en phrasing: whole-word tokens are enough for the grounded gate.
     const phrasedEn = await en.handle('recall_memory', { query: 'movies' }, toolContext(store, ownerId, {
+      agentId,
       textClient: { complete: async () => JSON.stringify({ text: 'You like watching old movies a lot.' }) },
     }));
     check(phrasedEn.spokenFound === true, 'en_phrase_control');
@@ -394,6 +359,7 @@ async function runTemp() {
     let phrased = 0;
     const inventing = registryFor('zh');
     const titled = await inventing.handle('recall_memory', { query: '老电影' }, toolContext(store, ownerId, {
+      agentId,
       textClient: {
         complete: async () => {
           phrased += 1;
@@ -405,6 +371,20 @@ async function runTemp() {
     check(titled.spokenFound === true, 'title_control');
     check(titled.spokenText === `${i18n.memory.zh.recall.foundPrefix}我最近在看老电影。`, 'title_verbatim_fallback');
     check(!titled.spokenText.includes('《') && !titled.spokenText.includes('庐山恋'), 'title_not_spoken');
+
+    // Cross-character isolation: xiaokai must not recall xiaonuan's statements.
+    const iso = store.createOwner({ tokenHash: 'probe-iso', now: 4 });
+    const nuan = store.ensureAgent(iso.ownerId, 'xiaonuan', 4);
+    const kai = store.ensureAgent(iso.ownerId, 'xiaokai', 4);
+    store.recordSessionStart('iso-nuan', nuan.id, 4_001);
+    insert(store, iso.ownerId, nuan.id, 'iso-nuan', 'iso-tea', 'user', '我最喜欢喝茉莉花茶。', 4_100);
+    store.recordSessionEnd('iso-nuan', nuan.id, 4_200);
+    const recallAsKai = await zh.handle('recall_memory', { query: '我说过喜欢喝茶吗' }, toolContext(store, iso.ownerId, { agentId: kai.id, characterId: 'xiaokai' }));
+    check(recallAsKai.spokenFound !== true, 'iso_kai_must_not_find_nuan');
+    const recallAsNuan = await zh.handle('recall_memory', { query: '我说过喜欢喝茶吗' }, toolContext(store, iso.ownerId, { agentId: nuan.id, characterId: 'xiaonuan' }));
+    check(recallAsNuan.spokenFound === true, 'iso_nuan_finds_own');
+    const vagueAsKai = await zh.handle('recall_memory', { query: '上次聊到哪儿了' }, toolContext(store, iso.ownerId, { agentId: kai.id, characterId: 'xiaokai' }));
+    check(vagueAsKai.spokenFound !== true, 'iso_kai_vague_empty');
 
     console.log(JSON.stringify({ mode: 'temp', checks, ok: true }));
   } finally {
@@ -430,6 +410,22 @@ async function runRealDb(path) {
   }
 
   try {
+    let version;
+    try {
+      version = db.prepare('PRAGMA user_version').get()?.user_version;
+    } catch {
+      return notRun('db_unreadable');
+    }
+    // The multi-character baseline only; older schemas are not migrated.
+    if (version !== 6) return notRun('db_schema_incompatible');
+
+    let store;
+    try {
+      store = new SqliteMemoryStore(db); // constructor only prepares statements
+    } catch {
+      return notRun('db_schema_incompatible');
+    }
+
     let ownerId;
     try {
       const row = db.prepare('SELECT owner_id FROM messages ORDER BY rowid LIMIT 1').get();
@@ -439,29 +435,20 @@ async function runRealDb(path) {
     }
     if (!ownerId) return notRun('db_no_owner');
 
-    let store;
-    try {
-      store = new SqliteMemoryStore(db); // constructor only prepares statements
-    } catch {
-      // Pre-M2 schema (no `meta` table): use the read-only SELECT fallback. Never migrate.
-      try {
-        store = readOnlyStore(db);
-      } catch {
-        return notRun('db_schema_incompatible');
-      }
-    }
-
-    await runQueries(store, ownerId);
+    const agents = store.listAgents(ownerId);
+    if (agents.length === 0) return notRun('db_no_agent');
+    for (const agent of agents) await runQueries(store, ownerId, agent);
   } finally {
     if (db.isOpen) db.close();
   }
 }
 
-async function runQueries(store, ownerId) {
+async function runQueries(store, ownerId, agent) {
   for (const { language, query } of REAL_DB_QUERIES) {
-    const outcome = await registryFor(language).handle('recall_memory', { query }, toolContext(store, ownerId));
+    const outcome = await registryFor(language).handle('recall_memory', { query }, toolContext(store, ownerId, { agentId: agent.id, characterId: agent.characterId }));
     const lines = historyLines(outcome, language);
     console.log(JSON.stringify({
+      character: agent.characterId,
       language,
       query,
       hits: outcome.spokenFound === true,
