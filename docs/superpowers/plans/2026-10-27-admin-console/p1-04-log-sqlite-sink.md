@@ -468,7 +468,7 @@ grep -c '"event":"log_sink_ready"' /tmp/admin-p1t4.log
 cd ..
 ```
 
-Expected：第一条输出 `[{"level":"info","event":"log_sink_ready","fields":"{\"db\":true,\"level\":\"info\"}"}]`；`grep -c` 输出 `1`。`/tmp/admin-p1t4.log` 里每行都以 `{"t":` 开头。
+Expected：第一条输出 `[{"level":"info","event":"log_sink_ready","fields":"{\"db\":true}"}]`；`grep -c` 输出 `1`。`/tmp/admin-p1t4.log` 里每行都以 `{"t":` 开头。
 
 - [ ] **Step 12: 提交**
 

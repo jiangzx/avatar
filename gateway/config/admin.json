@@ -1,0 +1,4 @@
+{
+  "retention": { "usageDays": 180, "logDays": 7, "auditDays": 365 },
+  "logSink": { "flushMs": 1000, "maxBatch": 200 }
+}

@@ -8,6 +8,11 @@ import { loadCharacterRegistry } from './characters/registry.ts';
 import { loadRoleCatalog } from './roles/fileCatalog.ts';
 import { missingRoleLanguages } from './roles/catalog.ts';
 import { log } from './log.ts';
+import { loadAdminConfig } from './log/adminConfig.ts';
+import { createLogLevelControl } from './log/levels.ts';
+import { createLogger } from './log/logger.ts';
+import { SqliteLogSink, deleteLogsBefore } from './log/sqliteSink.ts';
+import { stdoutSink } from './log/stdoutSink.ts';
 import { loadAffectConfig } from './session/affect.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets } from './session/pacing.ts';
 import { checkAffectBudgets } from './session/affectRender.ts';
@@ -29,6 +34,23 @@ import { loadI18n } from './i18n/load.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
+const adminConfig = loadAdminConfig(`${root}config/admin.json`);
+// Device identity (Plan B). MEMORY_DB_PATH unset = dev mode: no registration, no memory, bearers rejected.
+const identityConfig = loadIdentityConfig(process.env, fileURLToPath(new URL('../..', import.meta.url)));
+const memoryDb = identityConfig.memoryDbPath ? openDatabase(identityConfig.memoryDbPath, { busyTimeoutMs: identityConfig.busyTimeoutMs }) : null;
+// One level control and one root logger per process; children carry sid/oid/char/seq/job.
+const levels = createLogLevelControl(config.logLevel);
+const stdout = stdoutSink();
+const logSink = memoryDb
+  ? new SqliteLogSink({
+      db: memoryDb,
+      flushMs: adminConfig.logSink.flushMs,
+      maxBatch: adminConfig.logSink.maxBatch,
+      onError: (code) => stdout.write({ t: Date.now(), level: 'error', event: code, binding: {}, fields: {} }),
+    })
+  : null;
+const logger = createLogger({ sinks: logSink ? [stdout, logSink] : [stdout], levels, strict: config.logStrict });
+logger.info('log_sink_ready', { db: logSink !== null, level: config.logLevel });
 // Character cards (gateway/characters/): the id set must equal protocol CHARACTER_IDS, or startup fails.
 const characters = loadCharacterRegistry(`${root}characters`, LANGUAGES);
 log('characters_loaded', { count: characters.ids().length });
@@ -82,9 +104,6 @@ log('safety_rules', {
 const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) log('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
-// Device identity (Plan B). MEMORY_DB_PATH unset = dev mode: no registration, no memory, bearers rejected.
-const identityConfig = loadIdentityConfig(process.env, fileURLToPath(new URL('../..', import.meta.url)));
-const memoryDb = identityConfig.memoryDbPath ? openDatabase(identityConfig.memoryDbPath, { busyTimeoutMs: identityConfig.busyTimeoutMs }) : null;
 const store = memoryDb ? new SqliteMemoryStore(memoryDb) : null;
 if (store) {
   // This process is the only gateway for the DB: any row still open belongs to a dead process.
@@ -234,6 +253,7 @@ const shutdown = () => {
       if (worker) await worker.drain(memory.extractDrainMs ?? 8_000);
     } finally {
       try {
+        logSink?.close();
         if (memoryDb?.isOpen) memoryDb.close();
       } catch {
         log('memory_db_close_failed', {});
@@ -290,12 +310,31 @@ async function expireTranscripts(): Promise<void> {
   }
 }
 
+/** Admin trace logs: same daily timer, age from admin.json, batch size from memory.json. */
+async function expireLogs(): Promise<void> {
+  if (!memoryDb) return;
+  const cutoff = Date.now() - adminConfig.retention.logDays * DAY_MS;
+  for (;;) {
+    let deleted: number;
+    try {
+      deleted = deleteLogsBefore(memoryDb, cutoff, memory.retentionBatch);
+    } catch {
+      logger.error('log_retention_failed');
+      return;
+    }
+    if (deleted > 0) logger.info('log_retention_batch', { deleted });
+    if (deleted < memory.retentionBatch) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+}
+
 // Orphan owners (registered, never connected, older than ORPHAN_OWNER_DAYS): at startup, then daily.
 // Message retention uses that same timer. Facts and notes are not deleted by age.
 if (registry) {
   const runCleanup = () => {
     registry.cleanupOrphans().catch(() => log('orphan_cleanup_failed', {}));
     void expireTranscripts().catch(() => log('memory_retention_failed', {}));
+    void expireLogs().catch(() => logger.error('log_retention_failed'));
   };
   void runCleanup();
   setInterval(runCleanup, ORPHAN_CLEANUP_INTERVAL_MS).unref();
