@@ -60,7 +60,8 @@ describe('character registry', () => {
     expect(LANGUAGES.map((l) => r.voiceFor('xiaonuan', 'qwen', l))).toEqual(['longanlingxin', 'Tina', 'Tina']);
     // Chinese must be Ryan: Evan reads ～ as a dash (roadmap, probe 2026-10-25).
     expect(LANGUAGES.map((l) => r.voiceFor('xiaokai', 'qwen', l))).toEqual(['Ryan', 'Evan', 'Evan']);
-    expect(LANGUAGES.map((l) => r.voiceFor('xiaoxin', 'qwen', l))).toEqual(['longanlingxin', 'Tina', 'Tina']);
+    // Xiaoxin has her own Chinese voice (probe 2026-10-27, A3): Tina, distinct from Xiaonuan's longanlingxin.
+    expect(LANGUAGES.map((l) => r.voiceFor('xiaoxin', 'qwen', l))).toEqual(['Tina', 'Tina', 'Tina']);
     expect(r.voiceFor('xiaokai', 'seeduplex', 'zh')).toBe('zh_male_xiaotian_jupiter_bigtts');
     expect(r.voiceFor('xiaokai', 'seeduplex', 'en')).toBe('en_male_tim_uranus_bigtts');
     // Seeduplex has no Japanese; null in the card means the adapter default.
