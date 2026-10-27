@@ -18,6 +18,14 @@ describe('multi-character probe verdicts', () => {
     expect(claimsPastConversation('听说您老家在山东，那儿的煎饼好吃。', ['上次', '之前您说', '您跟我说过'])).toBe(false);
   });
 
+  it('does not treat a missing-record sentence as a claim', () => {
+    const markers = ['上次', '之前您说', '您跟我说过'];
+    expect(claimsPastConversation('我这边暂时找不到上次的聊天记录，您想接着聊什么都可以。', markers)).toBe(false);
+    expect(claimsPastConversation('我不记得上次聊过什么了。咱们说点别的吧。', markers)).toBe(false);
+    // The denial must not hide a real claim in another sentence.
+    expect(claimsPastConversation('找不到之前的记录了。上次您跟我说过老家在山东。', markers)).toBe(true);
+  });
+
   it('computes the pin intent verdict', () => {
     const v = pinIntentVerdict([
       { expect: 'this', got: 'this' },

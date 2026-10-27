@@ -5,9 +5,15 @@ export function mentionsOnlyOwnName(reply: string, own: string, others: readonly
   return reply.includes(own) && !others.some((name) => reply.includes(name));
 }
 
+/** Sentences that deny or report a missing record never claim a past conversation. */
+const DENIALS = ['找不到', '没有', '不记得', '记不得', '没聊过', '没说过'];
+
 /** True when the reply claims a past conversation with this character. */
 export function claimsPastConversation(reply: string, markers: readonly string[]): boolean {
-  return markers.some((marker) => reply.includes(marker));
+  return reply
+    .split(/[。！？!?；;\n]+/u)
+    .filter((sentence) => sentence.trim().length > 0)
+    .some((sentence) => !DENIALS.some((denial) => sentence.includes(denial)) && markers.some((marker) => sentence.includes(marker)));
 }
 
 export type PinTarget = 'this' | 'previous';
