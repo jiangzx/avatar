@@ -5,30 +5,34 @@ import 'package:avatar_app/avatar_engine/engine_switch_controller.dart';
 import 'package:avatar_app/duix/duix_bridge.dart';
 import 'package:avatar_app/duix/duix_crash_guard.dart';
 import 'package:avatar_app/identity/app_shell.dart';
+import 'package:avatar_app/identity/character_engine_prefs.dart';
+import 'package:avatar_app/identity/character_picker_page.dart';
 import 'package:avatar_app/identity/credential_store.dart';
 import 'package:avatar_app/identity/device_identity.dart';
 import 'package:avatar_app/identity/identity_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/character_fixture.dart';
 import 'support/duix_fakes.dart';
 import 'support/identity_fakes.dart';
 
 const tokenKey = DeviceIdentity.tokenKey;
-const styleKey = DeviceIdentity.styleKey;
-const avatarKey = DeviceIdentity.avatarKey;
+const characterKey = DeviceIdentity.characterKey;
 
+final catalog = loadTestCharacterCatalog();
 AvatarPageRequest? lastRequest;
 
 Widget app(DeviceIdentity identity, {EngineSwitchController? engines}) => MaterialApp(
   home: AppShell(
     identity: identity,
+    catalog: catalog,
     engines: engines,
     avatarBuilder: (request) {
       lastRequest = request;
       return Scaffold(
         key: request.key,
-        body: Text(request.engine == AvatarEngineKind.duix ? 'DUIX-${request.avatarId}' : 'AVATAR-${request.avatarId}'),
+        body: Text(request.engine == AvatarEngineKind.duix ? 'DUIX-${request.character.id}' : 'AVATAR-${request.character.id}'),
       );
     },
   ),
@@ -36,7 +40,7 @@ Widget app(DeviceIdentity identity, {EngineSwitchController? engines}) => Materi
 
 EngineSwitchController engines(MemoryCredentialStore store, FakeDuixBridge bridge, {bool config = true}) =>
     EngineSwitchController(
-      prefs: DeviceIdentity(store: store, backend: FakeBackend()),
+      prefs: CharacterEnginePrefs(identity: DeviceIdentity(store: store, backend: FakeBackend()), catalog: catalog),
       bridge: bridge,
       guard: DuixCrashGuard(store),
       loadConfig: () async => config ? loadTestDuixConfig() : null,
@@ -44,341 +48,216 @@ EngineSwitchController engines(MemoryCredentialStore store, FakeDuixBridge bridg
       diag: (_) {},
     );
 
-Map<String, String> returning() => {tokenKey: 'device-token-0123456789', styleKey: 'grandchild', avatarKey: 'default'};
+Map<String, String> returning(String character) => {tokenKey: 'device-token-0123456789', characterKey: character};
+
+Finder checkIn(String id) =>
+    find.descendant(of: find.byKey(Key('character-$id')), matching: find.byIcon(Icons.check_circle));
 
 /// Cards can extend under the bottom buttons. Tap inside the visible top of the card.
-Future<void> tapCard(WidgetTester tester, Key key) async {
-  final finder = find.byKey(key);
+Future<void> tapCard(WidgetTester tester, String id) async {
+  final finder = find.byKey(Key('character-$id'));
   await tester.scrollUntilVisible(finder, 160);
   await tester.tapAt(tester.getTopLeft(finder) + const Offset(32, 24));
   await tester.pump();
 }
 
 void main() {
-  testWidgets(
-    'first launch: pick a style, then open Lily',
-    (tester) async {
-      final store = MemoryCredentialStore();
-      final backend = FakeBackend();
-      final identity = DeviceIdentity(store: store, backend: backend);
-      await tester.pumpWidget(app(identity, engines: engines(store, FakeDuixBridge())));
-      await tester.pumpAndSettle();
-      expect(find.text('选一位陪您聊天的伙伴'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('style-old-friend')));
-      await tester.tap(find.byKey(const Key('style-confirm')));
-      await tester.pumpAndSettle();
-      expect(find.text('DUIX-lily'), findsOneWidget);
-      expect(backend.registered, ['old-friend']);
-      expect(store.values[styleKey], 'old-friend');
-      expect(store.values.containsKey(avatarKey), isFalse);
-    },
-  );
-
-  testWidgets('a retired avatar opens Lily', (tester) async {
-    final backend = FakeBackend();
-    final store = MemoryCredentialStore({
-      tokenKey: 't-0123456789abcdef',
-      styleKey: 'grandchild',
-      avatarKey: 'cute-boy',
-    });
-    await tester.pumpWidget(app(
-      DeviceIdentity(store: store, backend: backend),
-      engines: engines(store, FakeDuixBridge()),
-    ));
-    await tester.pumpAndSettle();
-    expect(find.text('DUIX-lily'), findsOneWidget);
-    expect(find.byKey(const Key('settings')), findsOneWidget);
-    expect(backend.registered, isEmpty);
-  });
-
-  testWidgets('a returning user with no saved avatar opens Lily', (tester) async {
-    final store = MemoryCredentialStore({
-      tokenKey: 't-0123456789abcdef',
-      styleKey: 'grandchild',
-    });
-    await tester.pumpWidget(app(
-      DeviceIdentity(store: store, backend: FakeBackend()),
-      engines: engines(store, FakeDuixBridge()),
-    ));
-    await tester.pumpAndSettle();
-    expect(find.text('DUIX-lily'), findsOneWidget);
-  });
-
-  testWidgets('registration failure keeps the style picker and explains why', (
-    tester,
-  ) async {
+  testWidgets('first launch: 小暖 is highlighted; confirming registers and opens 小暖', (tester) async {
     final store = MemoryCredentialStore();
-    await tester.pumpWidget(
-      app(
-        DeviceIdentity(
-          store: store,
-          backend: FakeBackend(registerResults: [const RegisterFailed(503)]),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('style-confirm')));
-    await tester.pumpAndSettle();
-    expect(find.text('现在注册的人太多了，请稍后再试'), findsOneWidget);
-    expect(find.text('AVATAR-default'), findsNothing);
-    expect(store.values, isEmpty);
-  });
-
-  testWidgets(
-    'a gateway without identity still lets the user choose an avatar',
-    (tester) async {
-      final store = MemoryCredentialStore();
-      await tester.pumpWidget(
-        app(
-          DeviceIdentity(
-            store: store,
-            backend: FakeBackend(
-              registerResults: [const RegisterUnavailable()],
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('style-confirm')));
-      await tester.pumpAndSettle();
-      expect(find.text('AVATAR-default'), findsOneWidget);
-      expect(store.values, {styleKey: 'grandchild'});
-    },
-  );
-
-  testWidgets('settings changes style and character and restarts the chat', (
-    tester,
-  ) async {
-    final store = MemoryCredentialStore({
-      tokenKey: 'device-token-0123456789',
-      styleKey: 'old-friend',
-      avatarKey: 'default',
-    });
     final backend = FakeBackend();
     final identity = DeviceIdentity(store: store, backend: backend);
     await tester.pumpWidget(app(identity, engines: engines(store, FakeDuixBridge())));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('settings')));
+    expect(find.text('选一位陪您聊天的伙伴'), findsOneWidget);
+    expect(checkIn('xiaonuan'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('character-confirm')));
     await tester.pumpAndSettle();
-    expect(find.text('聊天伙伴设置'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('style-old-friend')),
-        matching: find.byIcon(Icons.check_circle),
-      ),
-      findsOneWidget,
-    );
-    await tester.tap(find.byKey(const Key('style-grandchild')));
-    await tapCard(tester, const Key('avatar-lily'));
-    await tester.tap(find.byKey(const Key('companion-confirm')));
-    await tester.pumpAndSettle();
-    expect(find.text('DUIX-lily'), findsOneWidget);
-    expect(find.text('已换好，下次聊天时生效'), findsNothing);
-    expect(backend.patched, [('device-token-0123456789', 'grandchild')]);
-    expect(store.values[styleKey], 'grandchild');
-    expect(store.values[avatarKey], 'lily');
+    expect(find.text('DUIX-xiaonuan'), findsOneWidget);
+    expect(backend.registerCalls, 1);
+    expect(store.values, {tokenKey: 'device-token-0123456789', characterKey: 'xiaonuan'});
   });
 
-  testWidgets('choosing Kai keeps the realistic engine and restarts on Kai', (tester) async {
-    final store = MemoryCredentialStore({
-      tokenKey: 'device-token-0123456789',
-      styleKey: 'grandchild',
-      avatarKey: 'lily',
-    });
+  testWidgets('first launch: picking 小欣 opens the 3D page', (tester) async {
+    final store = MemoryCredentialStore();
     final identity = DeviceIdentity(store: store, backend: FakeBackend());
     await tester.pumpWidget(app(identity, engines: engines(store, FakeDuixBridge())));
     await tester.pumpAndSettle();
-    expect(find.text('DUIX-lily'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('settings')));
+    await tapCard(tester, 'xiaoxin');
+    await tester.tap(find.byKey(const Key('character-confirm')));
     await tester.pumpAndSettle();
-    await tapCard(tester, const Key('avatar-kai'));
-    await tester.tap(find.byKey(const Key('companion-confirm')));
-    await tester.pumpAndSettle();
-    expect(find.text('DUIX-kai'), findsOneWidget);
-    expect(store.values[avatarKey], 'kai');
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+    expect(store.values[characterKey], 'xiaoxin');
   });
 
-  testWidgets(
-    'settings keeps the page when the gateway rejects a style change',
-    (tester) async {
-      final store = MemoryCredentialStore({
-        tokenKey: 'device-token-0123456789',
-        styleKey: 'old-friend',
-        avatarKey: 'default',
-      });
-      await tester.pumpWidget(
-        app(
-          DeviceIdentity(
-            store: store,
-            backend: FakeBackend(patchStatuses: [400]),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('settings')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('style-grandchild')));
-      await tester.tap(find.byKey(const Key('companion-confirm')));
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('这个伙伴暂时不可用，请换一个'), 300);
-      expect(find.text('这个伙伴暂时不可用，请换一个'), findsOneWidget);
-      expect(store.values[styleKey], 'old-friend');
-      await tester.tap(find.byKey(const Key('companion-cancel')));
-      await tester.pumpAndSettle();
-      expect(find.text('AVATAR-default'), findsOneWidget);
-      expect(find.text('已换好，下次聊天时生效'), findsNothing);
-    },
-  );
+  testWidgets('a saved id that is not a character shows the picker again', (tester) async {
+    final store = MemoryCredentialStore({tokenKey: 't-0123456789abcdef', characterKey: 'lily'});
+    final backend = FakeBackend();
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: backend), engines: engines(store, FakeDuixBridge())));
+    await tester.pumpAndSettle();
+    expect(find.text('选一位陪您聊天的伙伴'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('character-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.text('DUIX-xiaonuan'), findsOneWidget);
+    expect(backend.registerCalls, 0); // the token is kept
+  });
 
-  testWidgets(
-    'first launch: a second tap while registering sends no second request',
-    (tester) async {
-      final backend = GatedBackend();
-      await tester.pumpWidget(
-        app(DeviceIdentity(store: MemoryCredentialStore(), backend: backend)),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('style-confirm')));
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('style-confirm')));
-      await tester.tap(find.byKey(const Key('style-old-friend')));
-      await tester.pump();
-      expect(backend.registerCalls, 1);
-      backend.release();
-      await tester.pumpAndSettle();
-      expect(find.text('AVATAR-default'), findsOneWidget);
-      expect(backend.registerCalls, 1);
-    },
-  );
+  testWidgets('registration failure keeps the picker and explains why', (tester) async {
+    final store = MemoryCredentialStore();
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: FakeBackend(registerResults: [const RegisterFailed(503)]))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('character-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.text('现在注册的人太多了，请稍后再试'), findsOneWidget);
+    expect(find.textContaining('AVATAR-'), findsNothing);
+    expect(store.values, isEmpty);
+  });
 
-  testWidgets('settings: a second tap while saving sends no second request', (
-    tester,
-  ) async {
-    final store = MemoryCredentialStore({
-      tokenKey: 'device-token-0123456789',
-      styleKey: 'old-friend',
-      avatarKey: 'default',
-    });
+  testWidgets('a gateway without identity still lets the user choose', (tester) async {
+    final store = MemoryCredentialStore();
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: FakeBackend(registerResults: [const RegisterUnavailable()]))));
+    await tester.pumpAndSettle();
+    await tapCard(tester, 'xiaoxin');
+    await tester.tap(find.byKey(const Key('character-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+    expect(store.values, {characterKey: 'xiaoxin'});
+  });
+
+  testWidgets('first launch: a second tap while registering sends no second request', (tester) async {
     final backend = GatedBackend();
-    await tester.pumpWidget(
-      app(DeviceIdentity(store: store, backend: backend)),
-    );
+    await tester.pumpWidget(app(DeviceIdentity(store: MemoryCredentialStore(), backend: backend)));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('settings')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('style-grandchild')));
-    await tester.tap(find.byKey(const Key('companion-confirm')));
+    await tapCard(tester, 'xiaoxin');
+    await tester.tap(find.byKey(const Key('character-confirm')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('companion-confirm')));
-    await tester.tap(find.byKey(const Key('style-old-friend')));
-    await tester.tap(find.byKey(const Key('companion-cancel')));
+    await tester.tap(find.byKey(const Key('character-confirm')));
     await tester.pump();
-    expect(backend.patchCalls, 1);
-    expect(find.text('聊天伙伴设置'), findsOneWidget);
+    expect(backend.registerCalls, 1);
     backend.release();
     await tester.pumpAndSettle();
-    expect(find.text('AVATAR-default'), findsOneWidget);
-    expect(backend.patchCalls, 1);
-    expect(store.values[styleKey], 'grandchild');
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+    expect(backend.registerCalls, 1);
   });
 
-  testWidgets('no Duix config: no switch, 3D page', (tester) async {
-    final store = MemoryCredentialStore(returning());
-    final identity = DeviceIdentity(store: store, backend: FakeBackend());
-    await tester.pumpWidget(app(identity, engines: engines(store, FakeDuixBridge(), config: false)));
+  testWidgets('the page key carries the engine, character and epoch, never a style', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaoxin'));
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: FakeBackend())));
     await tester.pumpAndSettle();
-    expect(find.text('AVATAR-default'), findsOneWidget);
-    expect(find.byKey(const Key('engine-switch')), findsNothing);
+    expect((lastRequest!.key as ValueKey<String>).value, 'avatar-webview-xiaoxin-0');
   });
 
-  testWidgets('settings switches to Lily and rebuilds the page', (tester) async {
-    final store = MemoryCredentialStore(returning());
+  testWidgets('settings switches from 小欣 to 小暖 and rebuilds the page', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaoxin'));
     final identity = DeviceIdentity(store: store, backend: FakeBackend());
     await tester.pumpWidget(app(identity, engines: engines(store, FakeDuixBridge())));
     await tester.pumpAndSettle();
-    expect(find.text('AVATAR-default'), findsOneWidget);
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
     expect(find.byKey(const Key('engine-switch')), findsNothing);
     await tester.tap(find.byKey(const Key('settings')));
     await tester.pumpAndSettle();
-    await tapCard(tester, const Key('avatar-lily'));
+    expect(find.text('聊天伙伴设置'), findsOneWidget);
+    await tapCard(tester, 'xiaonuan');
     await tester.tap(find.byKey(const Key('companion-confirm')));
     await tester.pumpAndSettle();
-    expect(find.text('DUIX-lily'), findsOneWidget);
-    expect(store.values[avatarKey], 'lily');
+    expect(find.text('DUIX-xiaonuan'), findsOneWidget);
+    expect(store.values[characterKey], 'xiaonuan');
   });
 
-  testWidgets('an unsupported phone keeps 小柔 and explains why', (tester) async {
-    final store = MemoryCredentialStore(returning());
+  testWidgets('choosing 小凯 keeps the realistic engine and restarts on 小凯', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaonuan'));
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    await tester.pumpWidget(app(identity, engines: engines(store, FakeDuixBridge())));
+    await tester.pumpAndSettle();
+    expect(find.text('DUIX-xiaonuan'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settings')));
+    await tester.pumpAndSettle();
+    await tapCard(tester, 'xiaokai');
+    await tester.tap(find.byKey(const Key('companion-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.text('DUIX-xiaokai'), findsOneWidget);
+    expect(store.values[characterKey], 'xiaokai');
+  });
+
+  testWidgets('settings refuses a Duix character on an unsupported phone', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaoxin'));
     final identity = DeviceIdentity(store: store, backend: FakeBackend());
     final bridge = FakeDuixBridge(support: const DuixSupport(supported: false, reason: 'low_memory'));
     await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('settings')));
     await tester.pumpAndSettle();
-    await tapCard(tester, const Key('avatar-lily'));
+    await tapCard(tester, 'xiaonuan');
     await tester.tap(find.byKey(const Key('companion-confirm')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('这台手机暂时用不了真人形象（需要 64 位、8GB 以上内存的手机）'),
-      200,
-    );
     expect(find.text('这台手机暂时用不了真人形象（需要 64 位、8GB 以上内存的手机）'), findsOneWidget);
-    expect(store.values[avatarKey], 'default');
+    expect(store.values[characterKey], 'xiaoxin');
     await tester.tap(find.byKey(const Key('companion-cancel')));
     await tester.pumpAndSettle();
-    expect(find.text('AVATAR-default'), findsOneWidget);
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
   });
 
-  testWidgets('a Duix failure falls back to 小柔 with a notice', (tester) async {
-    final store = MemoryCredentialStore({...returning(), avatarKey: 'lily'});
-    final identity = DeviceIdentity(store: store, backend: FakeBackend());
-    final bridge = FakeDuixBridge(installed: {'gj_dh_res': true, 'lily': true});
-    await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
+  testWidgets('no Duix config: no switch, 3D page', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaoxin'));
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: FakeBackend()), engines: engines(store, FakeDuixBridge(), config: false)));
     await tester.pumpAndSettle();
-    expect(find.text('DUIX-lily'), findsOneWidget);
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+    expect(find.byKey(const Key('engine-switch')), findsNothing);
+  });
+
+  // Temporary (Task 14 replaces): the old fallback stays, but the saved character is never rewritten.
+  testWidgets('a Duix failure falls back for this session and keeps the saved character', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaonuan'));
+    final bridge = FakeDuixBridge(installed: {'gj_dh_res': true, 'lily': true});
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: FakeBackend()), engines: engines(store, bridge)));
+    await tester.pumpAndSettle();
+    expect(find.text('DUIX-xiaonuan'), findsOneWidget);
     lastRequest!.onEngineFailure!(const AvatarEngineFailure('duix_prepare_timeout'));
     await tester.pumpAndSettle();
-    expect(find.text('AVATAR-default'), findsOneWidget);
-    expect(find.text('真人形象没能打开，先用 3D 形象陪您聊'), findsOneWidget);
-    expect(store.values[avatarKey], 'lily');
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+    expect(store.values[characterKey], 'xiaonuan');
   });
 
-  testWidgets('a crash loop is announced at launch', (tester) async {
+  // Temporary (Task 14 replaces).
+  testWidgets('a crash loop runs 3D this launch and keeps the saved character', (tester) async {
     final store = MemoryCredentialStore({
-      ...returning(),
-      avatarKey: 'lily',
+      ...returning('xiaonuan'),
       DuixCrashGuard.inflightKey: '1',
       DuixCrashGuard.countKey: '1',
     });
-    final identity = DeviceIdentity(store: store, backend: FakeBackend());
     final bridge = FakeDuixBridge(installed: {'gj_dh_res': true, 'lily': true});
-    await tester.pumpWidget(app(identity, engines: engines(store, bridge)));
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: FakeBackend()), engines: engines(store, bridge)));
     await tester.pumpAndSettle();
-    expect(find.text('AVATAR-default'), findsOneWidget);
-    expect(find.text('真人形象上次出了问题，先换回 3D 形象'), findsOneWidget);
-    expect(store.values[avatarKey], 'default');
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+    expect(store.values[characterKey], 'xiaonuan');
+  });
+
+  testWidgets('an unknown character answer from the gateway returns to the picker', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaoxin'));
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: FakeBackend())));
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+    lastRequest!.onUnknownCharacter!();
+    await tester.pumpAndSettle();
+    expect(find.text(unknownCharacterText), findsOneWidget);
+    expect(find.text('AVATAR-xiaoxin'), findsNothing);
+    await tapCard(tester, 'xiaoxin');
+    await tester.tap(find.byKey(const Key('character-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
   });
 }
 
-/// Backend whose requests stay in flight until release().
+/// Backend whose registration stays in flight until release().
 class GatedBackend implements IdentityBackend {
   final _gate = Completer<void>();
   var registerCalls = 0;
-  var patchCalls = 0;
 
   void release() => _gate.complete();
 
   @override
-  Future<RegisterResult> register({String? style}) async {
+  Future<RegisterResult> register() async {
     registerCalls++;
     await _gate.future;
     return const RegisterOk('device-token-0123456789');
-  }
-
-  @override
-  Future<int> patchStyle({required String token, required String style}) async {
-    patchCalls++;
-    await _gate.future;
-    return 200;
   }
 }

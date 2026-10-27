@@ -24,14 +24,14 @@ void main() {
     expect(pcm16FromBytes(ByteData.sublistView(bytes)), [1, -1, -32768]);
   });
 
-  test('loads the clips of one style and logs missing ones', () async {
+  test('loads the clips of one character and logs missing ones', () async {
     final cfg = testThinking();
     final lines = <String>[];
     final bundle = _MapBundle({
-      'assets/filler/grandchild/think-1.pcm': Uint8List(4800),
-      'assets/filler/grandchild/wait-1.pcm': Uint8List(4800),
+      'assets/filler/xiaonuan/think-1.pcm': Uint8List(4800),
+      'assets/filler/xiaonuan/wait-1.pcm': Uint8List(4800),
     });
-    final clips = await loadFillerClips(bundle, cfg, 'grandchild', diag: lines.add);
+    final clips = await loadFillerClips(bundle, cfg, 'xiaonuan', diag: lines.add);
     expect(clips.keys, ['think-1', 'wait-1']);
     expect(clips['think-1']!.length, 2400);
     expect(lines, ['anyidea.diag event=filler_clip_missing id=think-2']);

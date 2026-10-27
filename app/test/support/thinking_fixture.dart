@@ -11,8 +11,8 @@ Map<String, Object?> thinkingMap({List<String> evidence = const ['transcript']})
       'fillerEvidence': evidence,
       'nod': {'firstAfterMs': 1500, 'everyMs': 4000},
       'audio': {'chunkMs': 20, 'maxBufferedMs': 100, 'fadeMs': 40, 'gain': 1.0, 'pumpMs': 10},
-      'defaultStyle': 'grandchild',
-      'styles': ['grandchild', 'old-friend'],
+      'defaultCharacter': 'xiaonuan',
+      'characters': ['xiaonuan', 'xiaokai', 'xiaoxin'],
       'clips': {
         'thinking': [
           {'id': 'think-1', 'text': '嗯，我想想。'},

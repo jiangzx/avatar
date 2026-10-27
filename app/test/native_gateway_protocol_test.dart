@@ -42,4 +42,18 @@ void main() {
     });
     expect((const SessionStart().toJson()['clientInfo'] as Map), {'platform': 'android', 'audioPath': 'B'});
   });
+
+  test('response.start accepts reminder and reads unknown kinds as reply', () {
+    final reminder = parseServerMessage({'type': 'response.start', 'responseSeq': 4, 'kind': 'reminder'});
+    expect((reminder! as ResponseStart).kind, 'reminder');
+    final unknown = parseServerMessage({'type': 'response.start', 'responseSeq': 5, 'kind': 'celebration'});
+    expect((unknown! as ResponseStart).kind, 'reply');
+    expect(parseServerMessage({'type': 'response.start', 'responseSeq': 5}), isNull);
+    expect(parseServerMessage({'type': 'response.start', 'kind': 'reply'}), isNull);
+  });
+
+  test('session.start never carries a voice profile', () {
+    final info = const SessionStart(language: 'zh').toJson()['clientInfo'] as Map;
+    expect(info.keys, isNot(contains('voiceProfile')));
+  });
 }

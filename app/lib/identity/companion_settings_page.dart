@@ -1,67 +1,53 @@
 import 'package:flutter/material.dart';
 
+import 'character_picker_page.dart';
 import 'characters.dart';
-import 'companion_picker.dart';
 import 'device_identity.dart';
-import 'style_picker_page.dart';
-import 'styles.dart';
 
-class CompanionSelection {
-  const CompanionSelection({required this.style, required this.avatar});
-
-  final String style;
-  final String avatar;
-}
-
+/// Settings. Pops with the newly saved character id, or null when nothing changed.
 class CompanionSettingsPage extends StatefulWidget {
   const CompanionSettingsPage({
     super.key,
-    required this.currentStyle,
-    required this.currentAvatar,
-    required this.onSaveStyle,
-    required this.onSaveAvatar,
+    required this.options,
+    required this.currentCharacter,
+    required this.onSaveCharacter,
   });
 
-  final String currentStyle;
-  final String currentAvatar;
-  final Future<IdentityResult> Function(String style) onSaveStyle;
-  final Future<IdentityResult> Function(String avatar) onSaveAvatar;
+  final List<CharacterOption> options;
+  final String currentCharacter;
+  final Future<IdentityResult> Function(String id) onSaveCharacter;
 
   @override
   State<CompanionSettingsPage> createState() => _CompanionSettingsPageState();
 }
 
 class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
-  late String _style = widget.currentStyle;
-  late String _avatar = activeCharacter(widget.currentAvatar);
+  late String _selected = widget.currentCharacter;
   bool _busy = false;
   String? _error;
 
   Future<void> _save() async {
-    if (_busy) return;
+    if (_busy || _selected == widget.currentCharacter) return;
     setState(() {
       _busy = true;
       _error = null;
     });
-    if (_style != widget.currentStyle) {
-      final result = await widget.onSaveStyle(_style);
-      if (result case IdentityFailed(:final reason)) {
-        if (mounted) setState(() { _busy = false; _error = identityErrorText(reason); });
-        return;
-      }
+    final result = await widget.onSaveCharacter(_selected);
+    if (!mounted) return;
+    switch (result) {
+      case IdentityOk():
+        Navigator.of(context).pop(_selected);
+      case IdentityFailed(:final reason):
+        setState(() {
+          _busy = false;
+          _error = identityErrorText(reason);
+        });
     }
-    if (_avatar != widget.currentAvatar) {
-      final result = await widget.onSaveAvatar(_avatar);
-      if (result case IdentityFailed(:final reason)) {
-        if (mounted) setState(() { _busy = false; _error = identityErrorText(reason); });
-        return;
-      }
-    }
-    if (mounted) Navigator.of(context).pop(CompanionSelection(style: _style, avatar: _avatar));
   }
 
   @override
   Widget build(BuildContext context) {
+    final error = _error;
     return Scaffold(
       backgroundColor: const Color(0xFF10131A),
       body: SafeArea(
@@ -75,47 +61,31 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
               Expanded(
                 child: ListView(
                   children: [
-                    const Text('聊天风格', style: TextStyle(color: Colors.tealAccent, fontSize: 19, fontWeight: FontWeight.bold)),
+                    const Text('选择陪伴角色', style: TextStyle(color: Colors.tealAccent, fontSize: 19, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
-                    for (final option in styleOptions)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: SelectionCard(
-                          option: option,
-                          selected: option.id == _style,
-                          keyPrefix: 'style',
-                          onTap: _busy ? null : () => setState(() => _style = option.id),
-                        ),
-                      ),
-                    const SizedBox(height: 12),
-                    const Text('形象', style: TextStyle(color: Colors.tealAccent, fontSize: 19, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
-                    for (final option in characterOptions)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: SelectionCard(
-                          option: option,
-                          selected: option.id == _avatar,
-                          keyPrefix: 'avatar',
-                          onTap: _busy ? null : () => setState(() => _avatar = option.id),
-                        ),
-                      ),
+                    CharacterCardList(
+                      options: widget.options,
+                      selected: _selected,
+                      enabled: !_busy,
+                      gap: 12,
+                      onSelect: (id) => setState(() => _selected = id),
+                    ),
                   ],
                 ),
               ),
-              if (_error != null)
+              if (error != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(_error!, style: const TextStyle(color: Colors.amberAccent, fontSize: 18)),
+                  child: Text(error, style: const TextStyle(color: Colors.amberAccent, fontSize: 18)),
                 ),
               SizedBox(
                 height: 64,
                 child: FilledButton(
                   key: const Key('companion-confirm'),
-                  onPressed: _busy ? null : _save,
+                  onPressed: _busy || _selected == widget.currentCharacter ? null : _save,
                   child: _busy
                       ? const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3))
-                      : const Text('保存', style: TextStyle(fontSize: 22)),
+                      : const Text('换成这位伙伴', style: TextStyle(fontSize: 22)),
                 ),
               ),
               const SizedBox(height: 12),

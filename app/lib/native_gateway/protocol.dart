@@ -32,14 +32,11 @@ sealed class ClientMessage {
 }
 
 class SessionStart extends ClientMessage {
-  const SessionStart({this.platform = 'android', this.audioPath = 'B', this.language, this.voiceProfile});
+  const SessionStart({this.platform = 'android', this.audioPath = 'B', this.language});
 
   final String platform;
   final String audioPath;
   final String? language;
-
-  /// `young-male` when the chosen character is Kai. Omitted otherwise.
-  final String? voiceProfile;
 
   @override
   Map<String, Object> toJson() => {
@@ -48,7 +45,6 @@ class SessionStart extends ClientMessage {
           'platform': platform,
           'audioPath': audioPath,
           'language': ?language,
-          'voiceProfile': ?voiceProfile,
         },
       };
 }
@@ -217,7 +213,9 @@ ServerMessage? parseServerMessage(Object? raw) {
       return phase is String && {'refreshing', 'ready'}.contains(phase) ? Presence(phase) : null;
     case 'response.start':
       final kind = raw['kind'];
-      return responseSeq == null || kind is! String || !{'reply', 'greeting', 'followup'}.contains(kind) ? null : ResponseStart(responseSeq, kind);
+      if (responseSeq == null || kind is! String) return null;
+      // Unknown kinds read as a plain reply (spec §1: backward compatible).
+      return ResponseStart(responseSeq, _responseKinds.contains(kind) ? kind : 'reply');
     case 'response.end':
       return responseSeq == null ? null : ResponseEnd(responseSeq);
     case 'response.cancelled':
@@ -280,6 +278,8 @@ DecodedAudioFrame? decodeAudioFrame(Uint8List bytes) {
   }
   return DecodedAudioFrame(kind: kind, responseSeq: responseSeq, pcm: pcm);
 }
+
+const _responseKinds = {'reply', 'greeting', 'followup', 'reminder'};
 
 int? _positiveInt(Object? value) => value is int && value > 0 ? value : null;
 int? _nonNegativeInt(Object? value) => value is int && value >= 0 ? value : null;

@@ -7,44 +7,49 @@ import '../avatar_engine/engine_switch_controller.dart';
 import '../avatar_engine/ui/engine_copy.dart';
 import '../duix/duix_installer.dart';
 import '../native_gateway/gateway_client.dart';
+import 'character_picker_page.dart';
 import 'characters.dart';
 import 'companion_settings_page.dart';
 import 'device_identity.dart';
-import 'style_picker_page.dart';
-import 'styles.dart';
 
 /// What the shell asks the avatar builder for. A new [key] means a fresh page and session.
 class AvatarPageRequest {
   const AvatarPageRequest({
     required this.key,
     required this.identity,
-    required this.avatarId,
+    required this.character,
     required this.engine,
     this.onEngineFailure,
+    this.onUnknownCharacter,
   });
 
   final Key key;
   final DeviceTokenProvider identity;
-  final String avatarId;
+  final CharacterOption character;
   final AvatarEngineKind engine;
 
-  /// Set for Duix pages: a failure falls back to the 3D avatar for this session.
+  /// Set for Duix pages.
   final void Function(AvatarEngineFailure failure)? onEngineFailure;
+
+  /// POST /session answered 400: the gateway does not know this character.
+  final VoidCallback? onUnknownCharacter;
 }
 
-/// First launch: style picker + registration. Afterwards: the avatar with a settings button on top.
+/// First launch: character picker + registration. Afterwards: the chat with a settings button on top.
 class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
     required this.identity,
+    required this.catalog,
     required this.avatarBuilder,
     this.engines,
   });
 
   final DeviceIdentity identity;
+  final CharacterCatalog catalog;
   final Widget Function(AvatarPageRequest request) avatarBuilder;
 
-  /// Null = 3D only (tests and builds without the engine switch).
+  /// Null = 3D only (tests and builds without Duix).
   final EngineSwitchController? engines;
 
   @override
@@ -53,8 +58,10 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   bool _loading = true;
-  String? _style;
-  String? _avatar;
+  String? _character;
+
+  /// Set when the saved character cannot continue; the picker shows this reason.
+  String? _pickerReason;
   bool _busy = false;
   String? _error;
 
@@ -93,84 +100,105 @@ class _AppShellState extends State<AppShell> {
   static SnackBar _snack(String text) => SnackBar(content: Text(text, style: const TextStyle(fontSize: 18)));
 
   Future<void> _load() async {
-    String? style;
-    String? avatar;
+    String? character;
     String? error;
     try {
-      style = await widget.identity.savedStyle();
-      avatar = await widget.identity.savedAvatar();
+      character = await widget.identity.savedCharacter();
     } on Exception {
       error = identityErrorText('storage');
     }
     await widget.engines?.load(); // never throws: failures read as "Duix hidden or unsupported"
     if (!mounted) return;
     setState(() {
-      _style = style;
-      _avatar = avatar;
+      _character = character;
       _error = error;
       _loading = false;
     });
   }
 
-  Future<void> _chooseFirst(String style) async {
+  /// Picker confirm. First launch registers; later picks only save locally.
+  Future<void> _pick(String id) async {
+    if (_busy) return;
+    final first = _character == null;
     setState(() {
       _busy = true;
       _error = null;
     });
-    final result = await widget.identity.chooseFirstStyle(style);
+    final result = first ? await widget.identity.chooseFirstCharacter(id) : await widget.identity.changeCharacter(id);
     if (!mounted) return;
-    setState(() {
-      _busy = false;
-      switch (result) {
-        case IdentityOk():
-          _style = style;
-        case IdentityFailed(:final reason):
+    switch (result) {
+      case IdentityOk():
+        setState(() {
+          _busy = false;
+          _character = id;
+          _pickerReason = null;
+        });
+        await _followEngine(id);
+      case IdentityFailed(:final reason):
+        setState(() {
+          _busy = false;
           _error = identityErrorText(reason);
-      }
-    });
+        });
+    }
+  }
+
+  /// Temporary until Task 14: the session engine follows the chosen character.
+  Future<void> _followEngine(String id) async {
+    final engines = widget.engines;
+    final option = widget.catalog.byId(id);
+    if (engines == null || option == null || option.engine == engines.sessionEngine) return;
+    await engines.choose(option.engine);
+    if (mounted && option.engine == AvatarEngineKind.duix && engines.sessionEngine != AvatarEngineKind.duix) {
+      final state = engines.installer?.state;
+      final code = state is InstallFailed ? state.code : null;
+      ScaffoldMessenger.of(context).showSnackBar(_snack(unsupportedText(
+        code == 'abi_unsupported' || code == 'low_memory' || code == 'storage_unavailable' ? code : null,
+      )));
+    }
+  }
+
+  Future<IdentityResult> _saveFromSettings(String id) async {
+    final option = widget.catalog.byId(id);
+    final engines = widget.engines;
+    if (option != null &&
+        option.engine == AvatarEngineKind.duix &&
+        (engines == null || engines.availability == DuixAvailability.unsupported)) {
+      return IdentityFailed(engines?.unsupportedReason ?? 'duix_unsupported');
+    }
+    return widget.identity.changeCharacter(id);
   }
 
   Future<void> _openSettings() async {
-    final current = _style;
+    final current = _character;
     if (current == null) return;
-    final saved = await Navigator.of(context).push<CompanionSelection>(
+    final saved = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (_) => CompanionSettingsPage(
-          currentStyle: current,
-          currentAvatar: activeCharacter(_avatar),
-          onSaveStyle: widget.identity.changeStyle,
-          onSaveAvatar: (next) async {
-            final engines = widget.engines;
-            if (engineForCharacter(next) == AvatarEngineKind.duix &&
-                (engines == null || engines.availability == DuixAvailability.unsupported)) {
-              return IdentityFailed(engines?.unsupportedReason ?? 'duix_unsupported');
-            }
-            return widget.identity.changeAvatar(next);
-          },
+          options: widget.catalog.options,
+          currentCharacter: current,
+          onSaveCharacter: _saveFromSettings,
         ),
       ),
     );
-    if (!mounted || saved == null) return;
-    final styleChanged = saved.style != _style;
-    final avatarChanged = saved.avatar != activeCharacter(_avatar);
-    if (!styleChanged && !avatarChanged) return;
-    setState(() {
-      _style = saved.style;
-      _avatar = saved.avatar;
-    });
-    final engines = widget.engines;
-    final target = engineForCharacter(saved.avatar);
-    if (engines != null && target != engines.sessionEngine) {
-      await engines.choose(target);
-      if (mounted && target == AvatarEngineKind.duix && engines.sessionEngine != AvatarEngineKind.duix) {
-        final state = engines.installer?.state;
-        final code = state is InstallFailed ? state.code : null;
-        ScaffoldMessenger.of(context).showSnackBar(_snack(unsupportedText(
-          code == 'abi_unsupported' || code == 'low_memory' || code == 'storage_unavailable' ? code : null,
-        )));
-      }
-    }
+    if (!mounted || saved == null || saved == _character) return;
+    setState(() => _character = saved);
+    await _followEngine(saved);
   }
+
+  void _onUnknownCharacter() {
+    if (!mounted) return;
+    setState(() => _pickerReason = unknownCharacterText);
+  }
+
+  Widget _picker(String initial, String? reason) => CharacterPickerPage(
+    title: '选一位陪您聊天的伙伴',
+    confirmLabel: '就选这个',
+    options: widget.catalog.options,
+    initial: initial,
+    busy: _busy,
+    error: _error ?? reason,
+    onConfirm: _pick,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -180,16 +208,10 @@ class _AppShellState extends State<AppShell> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
-    if (_style == null) {
-      return StylePickerPage(
-        title: '选一位陪您聊天的伙伴',
-        confirmLabel: '就选这个',
-        initial: defaultStyleId,
-        busy: _busy,
-        error: _error,
-        onConfirm: _chooseFirst,
-      );
-    }
+    final character = _character;
+    if (character == null) return _picker(widget.catalog.defaultId, null);
+    final reason = _pickerReason;
+    if (reason != null) return _picker(character, reason);
     final engines = widget.engines;
     if (engines == null) return _home(AvatarEngineKind.webview, 0, null);
     return ListenableBuilder(
@@ -199,20 +221,22 @@ class _AppShellState extends State<AppShell> {
   }
 
   Widget _home(AvatarEngineKind engine, int epoch, EngineSwitchController? engines) {
-    final saved = activeCharacter(_avatar);
-    final shown = engine == AvatarEngineKind.duix && engineForCharacter(saved) == AvatarEngineKind.duix
+    final saved = widget.catalog.byId(_character!)!;
+    // Temporary until Task 14: a Duix character on a 3D session shows the first 3D character.
+    final shown = saved.engine == engine
         ? saved
-        : characterXiaorou;
+        : widget.catalog.options.firstWhere((o) => o.engine == engine, orElse: () => saved);
     return Stack(
       children: [
         Positioned.fill(
           child: widget.avatarBuilder(
             AvatarPageRequest(
-              key: ValueKey('avatar-${engine.name}-$shown-${_style ?? ''}-$epoch'),
+              key: ValueKey('avatar-${engine.name}-${shown.id}-$epoch'),
               identity: widget.identity,
-              avatarId: shown,
+              character: shown,
               engine: engine,
               onEngineFailure: engine == AvatarEngineKind.duix ? engines?.reportDuixFailure : null,
+              onUnknownCharacter: _onUnknownCharacter,
             ),
           ),
         ),

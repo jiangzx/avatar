@@ -13,17 +13,17 @@ Int16List pcm16FromBytes(ByteData data) {
   return out;
 }
 
-/// Loads one style's filler clips; a missing clip is logged and skipped (that filler stays silent).
+/// Loads one character's filler clips; a missing clip is logged and skipped (that filler stays silent).
 Future<Map<String, Int16List>> loadFillerClips(
   AssetBundle bundle,
   ThinkingConfig cfg,
-  String style, {
+  String characterId, {
   DiagSink diag = logcatDiagSink,
 }) async {
   final out = <String, Int16List>{};
   for (final clip in cfg.allClips) {
     try {
-      out[clip.id] = pcm16FromBytes(await bundle.load(cfg.clipAsset(style, clip.id)));
+      out[clip.id] = pcm16FromBytes(await bundle.load(cfg.clipAsset(characterId, clip.id)));
     } catch (_) {
       diag(formatDiag('filler_clip_missing', {'id': clip.id}));
     }

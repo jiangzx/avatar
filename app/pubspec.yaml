@@ -67,5 +67,6 @@ flutter:
     - assets/web/animations/
     - assets/web/spike/
     - assets/config/
-    - assets/filler/grandchild/
-    - assets/filler/old-friend/
+    - assets/filler/xiaonuan/
+    - assets/filler/xiaokai/
+    - assets/filler/xiaoxin/

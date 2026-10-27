@@ -25,10 +25,7 @@ class RegisterFailed extends RegisterResult {
 }
 
 abstract interface class IdentityBackend {
-  Future<RegisterResult> register({String? style});
-
-  /// Returns the HTTP status of PATCH /agent/style.
-  Future<int> patchStyle({required String token, required String style});
+  Future<RegisterResult> register();
 }
 
 final _tokenShape = RegExp(r'^[A-Za-z0-9_-]{16,128}$');
@@ -49,11 +46,10 @@ class IdentityApi implements IdentityBackend {
   final Duration requestTimeout;
 
   @override
-  Future<RegisterResult> register({String? style}) async {
+  Future<RegisterResult> register() async {
     final response = await transport
         .post(_uri('/device/register'), appSecret: appSecret, body: {
           'clientInfo': {'platform': platform},
-          'style': ?style,
         })
         .timeout(requestTimeout);
     if (response.statusCode == 404) return const RegisterUnavailable();
@@ -62,14 +58,6 @@ class IdentityApi implements IdentityBackend {
     final token = body is Map ? body['deviceToken'] : null;
     if (token is! String || !_tokenShape.hasMatch(token)) return const RegisterFailed(502);
     return RegisterOk(token);
-  }
-
-  @override
-  Future<int> patchStyle({required String token, required String style}) async {
-    final response = await transport
-        .patch(_uri('/agent/style'), appSecret: appSecret, bearer: token, body: {'style': style})
-        .timeout(requestTimeout);
-    return response.statusCode;
   }
 
   Uri _uri(String path) => baseUri.replace(path: path, query: null, queryParameters: null);

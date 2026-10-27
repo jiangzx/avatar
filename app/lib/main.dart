@@ -7,11 +7,14 @@ import 'avatar_engine/engine_switch_controller.dart';
 import 'avatar_engine/webview_engine.dart';
 import 'avatar_page.dart';
 import 'config.dart';
+import 'diag_log.dart';
 import 'duix/duix_bridge.dart';
 import 'duix/duix_config.dart';
 import 'duix/duix_crash_guard.dart';
 import 'duix/duix_engine.dart';
 import 'identity/app_shell.dart';
+import 'identity/avatars.dart';
+import 'identity/character_engine_prefs.dart';
 import 'identity/characters.dart';
 import 'identity/device_identity.dart';
 import 'identity/identity_api.dart';
@@ -25,15 +28,28 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  runApp(const AvatarApp());
+  runApp(AvatarApp(catalog: await _loadCatalog()));
+}
+
+/// Null when assets/config/characters.json is missing or invalid; the app shows a config error.
+Future<CharacterCatalog?> _loadCatalog() async {
+  try {
+    return await loadCharacterCatalog(rootBundle);
+  } catch (_) {
+    logcatDiagSink(formatDiag('characters_config_invalid', {}));
+    return null;
+  }
 }
 
 class AvatarApp extends StatelessWidget {
-  const AvatarApp({super.key});
+  const AvatarApp({super.key, required this.catalog});
+
+  final CharacterCatalog? catalog;
 
   @override
   Widget build(BuildContext context) {
-    final problem = AppConfig.validate();
+    final catalog = this.catalog;
+    final problem = AppConfig.validate() ?? (catalog == null ? 'characters.json' : null);
     return MaterialApp(
       title: '智伴',
       debugShowCheckedModeBanner: false,
@@ -46,8 +62,8 @@ class AvatarApp extends StatelessWidget {
         'secure_storage' => const SecureStorageSpikePage(),
         'duix_probe' => const DuixProbeSpikePage(),
         _ =>
-          problem == null
-              ? const _Home()
+          catalog != null && problem == null
+              ? _Home(catalog: catalog)
               : Scaffold(
                   body: Center(
                     child: Text(
@@ -63,7 +79,9 @@ class AvatarApp extends StatelessWidget {
 
 /// Owns the single DeviceIdentity for the app's lifetime.
 class _Home extends StatefulWidget {
-  const _Home();
+  const _Home({required this.catalog});
+
+  final CharacterCatalog catalog;
 
   @override
   State<_Home> createState() => _HomeState();
@@ -81,8 +99,9 @@ class _HomeState extends State<_Home> {
   );
   final _bridge = MethodChannelDuixBridge();
   final _handoff = EngineHandoff();
+  // Task 14 removes CharacterEnginePrefs together with EnginePrefs.
   late final _engines = EngineSwitchController(
-    prefs: _identity,
+    prefs: CharacterEnginePrefs(identity: _identity, catalog: widget.catalog),
     bridge: _bridge,
     guard: DuixCrashGuard(_store),
     loadConfig: () async => DuixConfig.parse(await rootBundle.loadString(DuixConfig.assetPath)),
@@ -102,24 +121,25 @@ class _HomeState extends State<_Home> {
         bridge: _bridge,
         config: config,
         guard: DuixCrashGuard(_store),
-        modelId: request.avatarId,
+        modelId: request.character.duixModel,
       );
     }
-    return WebViewAvatarEngine(avatarId: request.avatarId);
+    return WebViewAvatarEngine(avatarId: request.character.webviewAvatar ?? defaultAvatarId);
   }
 
   @override
   Widget build(BuildContext context) => AppShell(
     identity: _identity,
+    catalog: widget.catalog,
     engines: _engines,
     avatarBuilder: (request) => AvatarPage(
       key: request.key,
       engineFactory: () => _engineFor(request),
       identity: request.identity,
-      savedStyle: _identity.savedStyle,
-      characterId: request.avatarId,
-      displayName: characterTitle(request.avatarId),
+      characterId: request.character.id,
+      displayName: request.character.title,
       onEngineFailure: request.onEngineFailure,
+      onUnknownCharacter: request.onUnknownCharacter,
       handoff: _handoff,
     ),
   );

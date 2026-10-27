@@ -1,11 +1,10 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 
-import '../avatar_engine/avatar_engine.dart';
 import '../native_gateway/gateway_client.dart';
+import 'characters.dart';
 import 'credential_store.dart';
 import 'identity_api.dart';
-import 'characters.dart';
 
 sealed class IdentityResult {
   const IdentityResult();
@@ -18,35 +17,34 @@ class IdentityOk extends IdentityResult {
 class IdentityFailed extends IdentityResult {
   const IdentityFailed(this.reason);
 
-  /// One of `network`, `storage`, `http_<status>`.
+  /// One of `network`, `storage`, `invalid_character`, `http_<status>`, or a Duix reason code.
   final String reason;
 }
 
-/// Device credential and locally chosen style. The token leaves this class only as a bearer header.
-class DeviceIdentity implements DeviceTokenProvider, EnginePrefs {
+/// Device credential and the locally chosen character. The token leaves this class only as a bearer header.
+class DeviceIdentity implements DeviceTokenProvider {
   DeviceIdentity({required this.store, required this.backend});
 
   static const tokenKey = 'device_token';
-  static const styleKey = 'style_id';
-  static const avatarKey = 'avatar_id';
-  static const engineKey = 'avatar_engine';
+  static const characterKey = 'character_id';
 
   final CredentialStore store;
   final IdentityBackend backend;
 
-  /// Null = first launch (show the style picker).
-  Future<String?> savedStyle() => store.read(styleKey);
-
-  /// Null = the existing install has not chosen an avatar yet.
-  Future<String?> savedAvatar() => store.read(avatarKey);
+  /// Null = first launch, or a saved id that is no longer a character (show the picker).
+  Future<String?> savedCharacter() async {
+    final id = await store.read(characterKey);
+    return id != null && isCharacterId(id) ? id : null;
+  }
 
   @override
   Future<String?> token() => store.read(tokenKey);
 
-  /// First launch: register with the chosen style unless a token exists, then remember the style.
-  Future<IdentityResult> chooseFirstStyle(String style) => _guard(() async {
+  /// First launch: register unless a token exists, then remember the character.
+  Future<IdentityResult> chooseFirstCharacter(String id) => _guard(() async {
+    if (!isCharacterId(id)) return const IdentityFailed('invalid_character');
     if (await store.read(tokenKey) == null) {
-      final result = await backend.register(style: style);
+      final result = await backend.register();
       switch (result) {
         case RegisterOk(:final deviceToken):
           await store.write(tokenKey, deviceToken);
@@ -56,7 +54,14 @@ class DeviceIdentity implements DeviceTokenProvider, EnginePrefs {
           return IdentityFailed('http_$statusCode');
       }
     }
-    await store.write(styleKey, style);
+    await store.write(characterKey, id);
+    return const IdentityOk();
+  });
+
+  /// Local only: the next POST /session carries the new character.
+  Future<IdentityResult> changeCharacter(String id) => _guard(() async {
+    if (!isCharacterId(id)) return const IdentityFailed('invalid_character');
+    await store.write(characterKey, id);
     return const IdentityOk();
   });
 
@@ -65,7 +70,7 @@ class DeviceIdentity implements DeviceTokenProvider, EnginePrefs {
   Future<String?> renew() async {
     // Never throws: callers fall back to no bearer on any failure.
     try {
-      final result = await backend.register(style: await store.read(styleKey));
+      final result = await backend.register();
       if (result is! RegisterOk) return null;
       await store.write(tokenKey, result.deviceToken);
       // Anonymous diagnostic: this phone is now a new owner; old memories no longer attach.
@@ -74,55 +79,6 @@ class DeviceIdentity implements DeviceTokenProvider, EnginePrefs {
     } catch (_) {
       debugPrint('device_renew_failed');
       return null;
-    }
-  }
-
-  /// PATCH the agent style (next session), then remember it locally for filler clips.
-  Future<IdentityResult> changeStyle(String style) => _guard(() async {
-    final current = await store.read(tokenKey);
-    if (current != null) {
-      var status = await backend.patchStyle(token: current, style: style);
-      if (status == 401) {
-        final renewed = await renew();
-        if (renewed == null) return const IdentityFailed('http_401');
-        status = await backend.patchStyle(token: renewed, style: style);
-      }
-      if (status < 200 || status >= 300) return IdentityFailed('http_$status');
-    }
-    await store.write(styleKey, style);
-    return const IdentityOk();
-  });
-
-  /// Character id is local-only. Lily, Kai, and 小柔 are the choices.
-  Future<IdentityResult> changeAvatar(String avatarId) => _guard(() async {
-    if (!isCharacterId(avatarId)) return const IdentityFailed('invalid_avatar');
-    await store.write(avatarKey, avatarId);
-    return const IdentityOk();
-  });
-
-  /// The character decides the renderer. A missing id is Lily. Storage trouble reads as 3D.
-  @override
-  Future<AvatarEngineKind> savedEngine() async {
-    try {
-      return engineForCharacter(activeCharacter(await store.read(avatarKey)));
-    } on Exception {
-      return AvatarEngineKind.webview;
-    }
-  }
-
-  @override
-  Future<bool> saveEngine(AvatarEngineKind engine) async {
-    try {
-      final saved = await store.read(avatarKey);
-      final keepDuix = saved != null && isCharacterId(saved) && engineForCharacter(saved) == AvatarEngineKind.duix;
-      if (engine == AvatarEngineKind.webview) {
-        await store.write(avatarKey, characterXiaorou);
-      } else if (!keepDuix) {
-        await store.write(avatarKey, characterLily);
-      }
-      return true;
-    } on Exception {
-      return false;
     }
   }
 

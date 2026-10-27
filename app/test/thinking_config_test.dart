@@ -12,13 +12,14 @@ Map<String, Object?> shipped() =>
 void main() {
   test('parses the shipped config within the spec limits', () {
     final c = ThinkingConfig.parse(File(ThinkingConfig.assetPath).readAsStringSync());
-    expect(c.defaultStyle, 'grandchild');
+    expect(c.defaultCharacter, 'xiaonuan');
+    expect(c.characters, ['xiaonuan', 'xiaokai', 'xiaoxin']);
     expect(c.audio.chunkMs, lessThanOrEqualTo(40));
     expect(c.audio.maxBufferedMs, lessThanOrEqualTo(100));
     expect(c.audio.fadeMs, lessThanOrEqualTo(100));
     expect(c.thinkingSilenceMs + c.tickMs, lessThanOrEqualTo(500));
     expect(c.fillersEnabled, isFalse);
-    expect(c.clipAsset('grandchild', 'think-1'), 'assets/filler/grandchild/think-1.pcm');
+    expect(c.clipAsset('xiaonuan', 'think-1'), 'assets/filler/xiaonuan/think-1.pcm');
   });
 
   test('accepts the test fixture', () {
@@ -31,8 +32,8 @@ void main() {
     expect(() => ThinkingConfig.fromMap(m), throwsFormatException);
   });
 
-  test('rejects a default style that is not listed', () {
-    final m = shipped()..['defaultStyle'] = 'pirate';
+  test('rejects a default character that is not listed', () {
+    final m = shipped()..['defaultCharacter'] = 'pirate';
     expect(() => ThinkingConfig.fromMap(m), throwsFormatException);
   });
 

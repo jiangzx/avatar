@@ -27,20 +27,14 @@ class RecordingTransport implements GatewayTransport {
 void main() {
   IdentityApi api(RecordingTransport t) => IdentityApi(baseUri: Uri.parse('http://gw.test'), appSecret: 'secret-123456789', transport: t);
 
-  test('register posts client info and style with the app secret', () async {
+  test('register posts only client info with the app secret', () async {
     final t = RecordingTransport(const GatewayHttpResponse(statusCode: 200, body: {'deviceToken': 'device-token-0123456789'}));
-    final result = await api(t).register(style: 'old-friend');
+    final result = await api(t).register();
     expect(result, isA<RegisterOk>().having((r) => r.deviceToken, 'deviceToken', 'device-token-0123456789'));
     expect(t.calls.single, {
       'method': 'POST', 'path': '/device/register', 'secret': 'secret-123456789', 'bearer': null,
-      'body': {'clientInfo': {'platform': 'android'}, 'style': 'old-friend'},
+      'body': {'clientInfo': {'platform': 'android'}},
     });
-  });
-
-  test('register omits the style when none is given', () async {
-    final t = RecordingTransport(const GatewayHttpResponse(statusCode: 200, body: {'deviceToken': 'device-token-0123456789'}));
-    await api(t).register();
-    expect(t.calls.single['body'], {'clientInfo': {'platform': 'android'}});
   });
 
   test('maps 404 to unavailable, other errors and malformed tokens to failures', () async {
@@ -50,14 +44,5 @@ void main() {
     expect(await api(t).register(), isA<RegisterFailed>().having((r) => r.statusCode, 'statusCode', 503));
     t.response = const GatewayHttpResponse(statusCode: 200, body: {'deviceToken': 'bad token!'});
     expect(await api(t).register(), isA<RegisterFailed>().having((r) => r.statusCode, 'statusCode', 502));
-  });
-
-  test('patchStyle sends PATCH /agent/style with the bearer and returns the status', () async {
-    final t = RecordingTransport(const GatewayHttpResponse(statusCode: 200, body: {'style': 'grandchild'}));
-    expect(await api(t).patchStyle(token: 'device-token-0123456789', style: 'grandchild'), 200);
-    expect(t.calls.single, {
-      'method': 'PATCH', 'path': '/agent/style', 'secret': 'secret-123456789', 'bearer': 'device-token-0123456789',
-      'body': {'style': 'grandchild'},
-    });
   });
 }

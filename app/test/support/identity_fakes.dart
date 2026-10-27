@@ -4,30 +4,21 @@ import 'package:avatar_app/identity/credential_store.dart';
 import 'package:avatar_app/identity/identity_api.dart';
 import 'package:flutter/services.dart';
 
-/// Scripted backend. Each queue's last value repeats.
+/// Scripted backend. The last queued result repeats.
 class FakeBackend implements IdentityBackend {
-  FakeBackend({List<RegisterResult>? registerResults, List<int>? patchStatuses})
-    : _register = Queue.of(registerResults ?? const [RegisterOk('device-token-0123456789')]),
-      _patch = Queue.of(patchStatuses ?? const [200]);
+  FakeBackend({List<RegisterResult>? registerResults})
+    : _register = Queue.of(registerResults ?? const [RegisterOk('device-token-0123456789')]);
 
   final Queue<RegisterResult> _register;
-  final Queue<int> _patch;
-  final registered = <String?>[];
-  final patched = <(String, String)>[];
+  int registerCalls = 0;
   Exception? throwOnRegister;
 
   @override
-  Future<RegisterResult> register({String? style}) async {
+  Future<RegisterResult> register() async {
     final error = throwOnRegister;
     if (error != null) throw error;
-    registered.add(style);
+    registerCalls++;
     return _register.length > 1 ? _register.removeFirst() : _register.first;
-  }
-
-  @override
-  Future<int> patchStyle({required String token, required String style}) async {
-    patched.add((token, style));
-    return _patch.length > 1 ? _patch.removeFirst() : _patch.first;
   }
 }
 

@@ -10,7 +10,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'avatar_engine/avatar_engine.dart';
 import 'avatar_engine/legacy_web_session.dart';
 import 'avatar_engine/presence_chip.dart';
-import 'identity/characters.dart';
 import 'config.dart';
 import 'diag_log.dart';
 import 'metrics.dart';
@@ -54,9 +53,9 @@ String _errorLabel(String code) => switch (code) {
   _ => '出错了：$code',
 };
 
-/// Filler clips follow the agent's saved style; unknown or missing styles use the config default.
-String fillerStyle(ThinkingConfig cfg, String? saved) =>
-    saved != null && cfg.styles.contains(saved) ? saved : cfg.defaultStyle;
+/// Filler clips follow the character; unknown or missing ids use the config default.
+String fillerCharacter(ThinkingConfig cfg, String? characterId) =>
+    characterId != null && cfg.characters.contains(characterId) ? characterId : cfg.defaultCharacter;
 
 /// Platform hooks the page needs; widget tests replace them.
 class AvatarPagePlatform {
@@ -72,10 +71,10 @@ class AvatarPage extends StatefulWidget {
     super.key,
     required this.engineFactory,
     this.identity,
-    this.savedStyle,
     this.onEngineFailure,
+    this.onUnknownCharacter,
     this.characterId,
-    this.displayName,
+    this.displayName = '',
     this.handoff,
     this.platform = const AvatarPagePlatform(),
   });
@@ -85,16 +84,18 @@ class AvatarPage extends StatefulWidget {
 
   /// Device bearer source for POST /session; null = dev mode (APP_SECRET only).
   final DeviceTokenProvider? identity;
-  final Future<String?> Function()? savedStyle;
 
   /// Set when another engine can take over; otherwise a failure shows the retry error.
   final void Function(AvatarEngineFailure failure)? onEngineFailure;
 
-  /// Saved character. Kai asks the gateway for the young male voice.
+  /// POST /session answered 400 (unknown character). Null shows the usual error.
+  final VoidCallback? onUnknownCharacter;
+
+  /// Chosen character: sent on POST /session and picks the filler clips. Null = gateway default (dev).
   final String? characterId;
 
-  /// Corner label. Null follows the engine (Lily or 小柔).
-  final String? displayName;
+  /// Corner label: the character title from assets/config/characters.json.
+  final String displayName;
 
   /// When set, this page waits for the previous page to stop its session and release its engine.
   final EngineHandoff? handoff;
@@ -217,24 +218,9 @@ class _AvatarPageState extends State<AvatarPage> {
     if (token < 0) return;
     _startingSession = true;
     final thinking = await _loadThinking();
-    String? saved;
-    try {
-      saved = await widget.savedStyle?.call();
-    } on Exception catch (e) {
-      logcatDiagSink(
-        formatDiag('saved_style_read_failed', {
-          'type': e.runtimeType.toString(),
-        }),
-      );
-      saved = null; // storage failure: fall back to the config default
-    }
     final clips = thinking == null
         ? const <String, Int16List>{}
-        : await loadFillerClips(
-            rootBundle,
-            thinking,
-            fillerStyle(thinking, saved),
-          );
+        : await loadFillerClips(rootBundle, thinking, fillerCharacter(thinking, widget.characterId));
     if (!mounted || !_sessionGuard.isCurrent(token)) {
       _startingSession = false;
       return; // ended or restarted while loading
@@ -249,7 +235,7 @@ class _AvatarPageState extends State<AvatarPage> {
         events: _UnwiredGatewayEvents(),
         audioPath: AppConfig.audioPath,
         language: _deviceLanguage(),
-        voiceProfile: characterUsesYoungMaleVoice(widget.characterId) ? youngMaleVoiceProfile : null,
+        characterId: widget.characterId,
         identity: widget.identity,
       ),
       emit: _onNativeEvent,
@@ -322,6 +308,11 @@ class _AvatarPageState extends State<AvatarPage> {
       case UiMetric(:final name, :final ms):
         setState(() => _metrics.add(name, ms.toDouble()));
       case UiError(:final code):
+        final unknown = widget.onUnknownCharacter;
+        if (code == 'gateway_http_400' && unknown != null) {
+          unknown(); // the only 400 of POST /session is unknown_character
+          return;
+        }
         setState(() => _error = _errorLabel(code));
       case UiResponseStart() ||
           UiResponseEnd() ||
@@ -472,7 +463,7 @@ class _AvatarPageState extends State<AvatarPage> {
             status: _status,
             error: _error,
             muted: _muted,
-            name: widget.displayName ?? characterNameForEngine(_engine.kind),
+            name: widget.displayName,
             onMute: _toggleMute,
             onEnd: _end,
             onRetry: _retry,

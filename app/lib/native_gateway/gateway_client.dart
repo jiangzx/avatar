@@ -45,7 +45,7 @@ class NativeGatewayClient implements GatewayClientLike {
     this.platform = 'android',
     this.audioPath = 'B',
     this.language,
-    this.voiceProfile,
+    this.characterId,
     this.maxResume = const Duration(seconds: 55),
     this.reconnectBase = const Duration(milliseconds: 500),
     this.reconnectMax = const Duration(seconds: 4),
@@ -62,7 +62,8 @@ class NativeGatewayClient implements GatewayClientLike {
   final String platform;
   final String audioPath;
   final String? language;
-  final String? voiceProfile;
+  /// Sent as {"character": id} on POST /session; null lets the gateway use its default.
+  final String? characterId;
   final Duration maxResume;
   final Duration reconnectBase;
   final Duration reconnectMax;
@@ -143,17 +144,19 @@ class NativeGatewayClient implements GatewayClientLike {
     await _open(resume: false);
   }
 
+  Map<String, Object?> get _sessionBody => {'character': ?characterId};
+
   /// POST /session with the device bearer; after a 401, one retry with the renewed (or no) bearer.
   Future<SessionTokens> _createSession() async {
     final provider = identity;
     final bearer = await provider?.token();
     try {
-      return await _post('/session', const {}, bearer: bearer);
+      return await _post('/session', _sessionBody, bearer: bearer);
     } on GatewayHttpException catch (error) {
       if (provider == null || bearer == null || error.statusCode != 401) {
         rethrow;
       }
-      return _post('/session', const {}, bearer: await provider.renew());
+      return _post('/session', _sessionBody, bearer: await provider.renew());
     }
   }
 
@@ -181,7 +184,7 @@ class NativeGatewayClient implements GatewayClientLike {
     if (resume) {
       send(SessionResume(tokens.sessionId));
     } else {
-      send(SessionStart(platform: platform, audioPath: audioPath, language: language, voiceProfile: voiceProfile));
+      send(SessionStart(platform: platform, audioPath: audioPath, language: language));
       _startSent = true;
     }
     _readyTimer?.cancel();

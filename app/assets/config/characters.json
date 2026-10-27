@@ -1,0 +1,7 @@
+{
+  "characters": [
+    { "id": "xiaonuan", "title": "小暖", "subtitle": "贴心懂事的孙女，说话亲近暖和", "engine": "duix", "duixModel": "lily" },
+    { "id": "xiaokai", "title": "小凯", "subtitle": "阳光精神的孙子，爱听老故事", "engine": "duix", "duixModel": "kai" },
+    { "id": "xiaoxin", "title": "小欣", "subtitle": "温和踏实的老朋友，说话慢条斯理", "engine": "webview", "webviewAvatar": "default" }
+  ]
+}

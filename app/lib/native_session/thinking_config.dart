@@ -37,8 +37,8 @@ class ThinkingConfig {
     required this.nodFirstAfterMs,
     required this.nodEveryMs,
     required this.audio,
-    required this.defaultStyle,
-    required this.styles,
+    required this.defaultCharacter,
+    required this.characters,
     required this.thinkingClips,
     required this.longWaitClips,
   });
@@ -57,14 +57,15 @@ class ThinkingConfig {
   final int nodFirstAfterMs;
   final int nodEveryMs;
   final FillerAudioConfig audio;
-  final String defaultStyle;
-  final List<String> styles;
+  /// Filler clips live per character: `assets/filler/<characterId>/`.
+  final String defaultCharacter;
+  final List<String> characters;
   final List<FillerClip> thinkingClips;
   final List<FillerClip> longWaitClips;
 
   List<FillerClip> get allClips => [...thinkingClips, ...longWaitClips];
 
-  String clipAsset(String style, String clipId) => 'assets/filler/$style/$clipId.pcm';
+  String clipAsset(String characterId, String clipId) => 'assets/filler/$characterId/$clipId.pcm';
 
   static ThinkingConfig parse(String source) {
     final Object? raw;
@@ -92,10 +93,10 @@ class ThinkingConfig {
       throw const FormatException('filler_chunk_plus_fade_exceeds_buffer');
     }
     if (audio.pumpMs > audio.chunkMs) throw const FormatException('filler_pump_slower_than_chunk');
-    final styles = _strings(m, 'styles', _isId);
-    final defaultStyle = m['defaultStyle'];
-    if (defaultStyle is! String || !styles.contains(defaultStyle)) {
-      throw const FormatException('default_style_not_listed');
+    final characters = _strings(m, 'characters', _isId);
+    final defaultCharacter = m['defaultCharacter'];
+    if (defaultCharacter is! String || !characters.contains(defaultCharacter)) {
+      throw const FormatException('default_character_not_listed');
     }
     final cfg = ThinkingConfig(
       fillersEnabled: m['fillersEnabled'] == true,
@@ -109,8 +110,8 @@ class ThinkingConfig {
       nodFirstAfterMs: _int(nod, 'firstAfterMs', 500, 10000),
       nodEveryMs: _int(nod, 'everyMs', 1000, 20000),
       audio: audio,
-      defaultStyle: defaultStyle,
-      styles: styles,
+      defaultCharacter: defaultCharacter,
+      characters: characters,
       thinkingClips: _clips(clips, 'thinking'),
       longWaitClips: _clips(clips, 'longWait'),
     );

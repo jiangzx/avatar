@@ -253,6 +253,44 @@ void main() {
     expect(transport.postedPaths, ['/session', '/session/resume']);
     expect(transport.postedBearers, ['device-token-0123456789']);
   });
+
+  test('POST /session carries the chosen character; session.start has no voice profile', () async {
+    final transport = FakeGatewayTransport(tokens: firstTokens);
+    await NativeGatewayClient(
+      baseUri: Uri.parse('http://gw.test'),
+      appSecret: 'secret-123456789',
+      transport: transport,
+      events: RecordingGatewayEvents(),
+      reconnectBase: Duration.zero,
+      language: 'zh',
+      characterId: 'xiaokai',
+    ).start();
+    expect(transport.postedBodies.single, {'character': 'xiaokai'});
+    expect(transport.lastSocket.jsonMessages.single['clientInfo'], {'platform': 'android', 'audioPath': 'B', 'language': 'zh'});
+  });
+
+  test('without a character the session body stays empty', () async {
+    final transport = FakeGatewayTransport(tokens: firstTokens);
+    await client(transport, null).start();
+    expect(transport.postedBodies.single, isEmpty);
+  });
+
+  test('the retry after a renewed token keeps the character', () async {
+    final transport = FakeGatewayTransport(tokens: firstTokens, rejectedBearers: {'old-token-0123456789'});
+    await NativeGatewayClient(
+      baseUri: Uri.parse('http://gw.test'),
+      appSecret: 'secret-123456789',
+      transport: transport,
+      events: RecordingGatewayEvents(),
+      reconnectBase: Duration.zero,
+      characterId: 'xiaonuan',
+      identity: FakeTokenProvider('old-token-0123456789', renewed: 'new-token-0123456789'),
+    ).start();
+    expect(transport.postedBodies, [
+      {'character': 'xiaonuan'},
+      {'character': 'xiaonuan'},
+    ]);
+  });
 }
 
 class RecordingGatewayEvents implements GatewayClientEvents {
@@ -284,6 +322,7 @@ class FakeGatewayTransport implements GatewayTransport {
   /// POST /session answers 401 for these bearers (null = no bearer).
   final Set<String?> rejectedBearers;
   final postedPaths = <String>[];
+  final postedBodies = <Map<String, Object?>>[];
   final postedBearers = <String?>[];
   final sockets = <FakeSocket>[];
   bool hangPosts = false;
@@ -303,6 +342,7 @@ class FakeGatewayTransport implements GatewayTransport {
   }) async {
     if (hangPosts) return Completer<GatewayHttpResponse>().future;
     postedPaths.add(uri.path);
+    if (uri.path == '/session') postedBodies.add(body);
     if (uri.path == '/session') {
       postedBearers.add(bearer);
       if (rejectedBearers.contains(bearer) || failFresh) {
