@@ -35,7 +35,7 @@ class CompanionSettingsPage extends StatefulWidget {
   /// Null hides the memory blocks (dev builds and tests without a gateway).
   final MemoryApi? memory;
 
-  /// Called after every successful memory write; the shell restarts the chat.
+  /// Called after every memory write attempt; the shell restarts the chat.
   final VoidCallback? onMemoryChanged;
 
   @override

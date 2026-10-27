@@ -345,6 +345,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(pageKey(), 'avatar-xiaoxin-0');
   });
+
+  testWidgets('a write finishing as settings closes does not blank the chat', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaoxin'));
+    final identity = DeviceIdentity(store: store, backend: FakeBackend());
+    final transport = FakeMemoryTransport()..writeGate = Completer<void>();
+    await tester.pumpWidget(app(identity, memory: testMemoryApi(transport, identity)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('delete-p1')), 200);
+    await tester.tap(find.byKey(const Key('delete-p1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('memory-confirm-ok')));
+    await tester.pumpAndSettle(); // the delete is in flight, held by the gate
+    expect(transport.calls.last, 'DELETE /memory/items/p1');
+    await tester.tap(find.byKey(const Key('companion-cancel')));
+    await tester.pump(); // the route starts closing; Navigator.push already completed
+    transport.writeGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+  });
 }
 
 /// Backend whose registration stays in flight until release().

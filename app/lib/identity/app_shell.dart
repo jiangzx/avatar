@@ -77,6 +77,10 @@ class _AppShellState extends State<AppShell> {
   /// A memory write ended the gateway session; keep no chat page under settings until it closes.
   bool _suspended = false;
 
+  /// True between pushing the settings route and its pop starting. The route's Future resolves
+  /// at pop start, while the settings page stays mounted for the close animation.
+  bool _settingsOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -168,6 +172,7 @@ class _AppShellState extends State<AppShell> {
   Future<void> _openSettings() async {
     final current = _character;
     if (current == null) return;
+    _settingsOpen = true;
     final saved = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (_) => CompanionSettingsPage(
@@ -181,6 +186,8 @@ class _AppShellState extends State<AppShell> {
         ),
       ),
     );
+    // The push Future completes when the pop starts, not when the close animation ends.
+    _settingsOpen = false;
     if (!mounted) return;
     setState(() {
       if (saved != null && saved != _character) {
@@ -192,7 +199,9 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _onMemoryChanged() {
-    if (!mounted || _suspended) return;
+    // A write that lands while the settings route closes must not strand the chat: the last
+    // epoch (or the current page) stays and the gateway client reconnects by itself.
+    if (!mounted || !_settingsOpen || _suspended) return;
     setState(() {
       _suspended = true;
       _pageEpoch++;

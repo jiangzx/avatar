@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -42,6 +43,9 @@ class FakeMemoryTransport implements GatewayTransport {
   /// Answered first, in order, instead of the normal behaviour.
   final statuses = <int>[];
   bool throwNetwork = false;
+
+  /// When set, write requests (non-GET) wait for it before answering.
+  Completer<void>? writeGate;
 
   Map<String, Object?> get _profile => overview['profile']! as Map<String, Object?>;
   List<Map<String, Object?>> get _characters => (overview['characters']! as List).cast<Map<String, Object?>>();
@@ -97,6 +101,8 @@ class FakeMemoryTransport implements GatewayTransport {
     calls.add('$method ${uri.path}${uri.hasQuery ? '?${uri.query}' : ''}');
     bearers.add(bearer);
     if (body != null) bodies.add(body);
+    final gate = writeGate;
+    if (method != 'GET' && gate != null) await gate.future;
     if (statuses.isNotEmpty) {
       return GatewayHttpResponse(statusCode: statuses.removeAt(0), body: const {'error': 'scripted'});
     }
