@@ -49,9 +49,23 @@ describe('createLogger', () => {
     logger.child({ sid: 's1' }).info('affect', { text: '腰疼', ms: 2 });
     expect(lines.map((l) => [l.level, l.event, l.fields])).toEqual([
       ['info', 'affect', { ms: 2 }],
-      ['warn', 'log_field_rejected', { event: 'affect', field: 'text' }],
+      ['warn', 'log_field_rejected', { rejected_event: 'affect', field: 'text' }],
     ]);
     expect(JSON.stringify(lines)).not.toContain('腰疼');
+  });
+
+  it('keeps log_field_rejected as the top-level event on stdout', () => {
+    const out: string[] = [];
+    const logger = createLogger({
+      sinks: [stdoutSink((s) => { out.push(s); })],
+      levels: createLogLevelControl('info'),
+      strict: false,
+    });
+    logger.info('affect', { text: '腰疼' });
+    expect(out).toHaveLength(2);
+    const rejected = JSON.parse(out[1]!) as Record<string, unknown>;
+    expect(rejected).toMatchObject({ level: 'warn', event: 'log_field_rejected', rejected_event: 'affect', field: 'text' });
+    expect(JSON.stringify(out)).not.toContain('腰疼');
   });
 
   it('keeps going when a sink throws', () => {

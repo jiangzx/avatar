@@ -31,7 +31,7 @@
 
 ## 设计要点
 
-- **严格模式**：`strict=true` 时字段违规直接抛 `Error('log_field_rejected:<event>:<field>')`；`strict=false` 时丢弃该字段，并额外写一行 `warn log_field_rejected { event, field }`（`field` 为逗号分隔的字段名）。`loadConfig` 里 `logStrict = NODE_ENV === 'test' || NODE_ENV === 'development'`：vitest 自动设 `NODE_ENV=test`；`npm run dev` 在本任务改为设 `development`；Docker 镜像已有 `ENV NODE_ENV=production`（`Dockerfile.gateway:13`），所以生产是宽松模式。`defaultLogger()` 永远严格，只给测试和脚本用；生产代码路径全部由 `index.ts` 注入（P1-T4 起）。
+- **严格模式**：`strict=true` 时字段违规直接抛 `Error('log_field_rejected:<event>:<field>')`；`strict=false` 时丢弃该字段，并额外写一行 `warn log_field_rejected { rejected_event, field }`（`rejected_event` 为原事件名，`field` 为逗号分隔的字段名；不占用保留键 `event`）。`loadConfig` 里 `logStrict = NODE_ENV === 'test' || NODE_ENV === 'development'`：vitest 自动设 `NODE_ENV=test`；`npm run dev` 在本任务改为设 `development`；Docker 镜像已有 `ENV NODE_ENV=production`（`Dockerfile.gateway:13`），所以生产是宽松模式。`defaultLogger()` 永远严格，只给测试和脚本用；生产代码路径全部由 `index.ts` 注入（P1-T4 起）。
 - **例外清单**（现有日志里名字含黑名单词、但值是数字或布尔的字段，逐个核对过）：
 
 | 字段 | 出处 | 值类型 |
@@ -278,9 +278,23 @@ describe('createLogger', () => {
     logger.child({ sid: 's1' }).info('affect', { text: '腰疼', ms: 2 });
     expect(lines.map((l) => [l.level, l.event, l.fields])).toEqual([
       ['info', 'affect', { ms: 2 }],
-      ['warn', 'log_field_rejected', { event: 'affect', field: 'text' }],
+      ['warn', 'log_field_rejected', { rejected_event: 'affect', field: 'text' }],
     ]);
     expect(JSON.stringify(lines)).not.toContain('腰疼');
+  });
+
+  it('keeps log_field_rejected as the top-level event on stdout', () => {
+    const out: string[] = [];
+    const logger = createLogger({
+      sinks: [stdoutSink((s) => { out.push(s); })],
+      levels: createLogLevelControl('info'),
+      strict: false,
+    });
+    logger.info('affect', { text: '腰疼' });
+    expect(out).toHaveLength(2);
+    const rejected = JSON.parse(out[1]!) as Record<string, unknown>;
+    expect(rejected).toMatchObject({ level: 'warn', event: 'log_field_rejected', rejected_event: 'affect', field: 'text' });
+    expect(JSON.stringify(out)).not.toContain('腰疼');
   });
 
   it('keeps going when a sink throws', () => {
@@ -390,7 +404,7 @@ function bind(options: LoggerOptions, binding: LogBinding): Logger {
     const t = now();
     write({ t, level, event: name, binding, fields: guarded.fields });
     if (guarded.rejected.length > 0) {
-      write({ t, level: 'warn', event: 'log_field_rejected', binding, fields: { event: name, field: guarded.rejected.join(',') } });
+      write({ t, level: 'warn', event: 'log_field_rejected', binding, fields: { rejected_event: name, field: guarded.rejected.join(',') } });
     }
   };
   return {

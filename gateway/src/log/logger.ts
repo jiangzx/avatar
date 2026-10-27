@@ -51,7 +51,7 @@ function bind(options: LoggerOptions, binding: LogBinding): Logger {
     const t = now();
     write({ t, level, event: name, binding, fields: guarded.fields });
     if (guarded.rejected.length > 0) {
-      write({ t, level: 'warn', event: 'log_field_rejected', binding, fields: { event: name, field: guarded.rejected.join(',') } });
+      write({ t, level: 'warn', event: 'log_field_rejected', binding, fields: { rejected_event: name, field: guarded.rejected.join(',') } });
     }
   };
   return {
