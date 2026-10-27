@@ -42,6 +42,7 @@ const MemoryFileSchema = z.object({
   forgetConfirmText: z.string().min(1),
   declineConfirmPrompt: z.string().min(1),
   declineConfirmedText: z.string().min(1),
+  restReminderText: z.string().min(1).max(160),
   recall: z.object({
     emptyText: z.string().min(1),
     foundPrefix: z.string().min(1),
@@ -266,6 +267,7 @@ function loadMemoryCopy(configRoot: string, language: Language): MemoryCopy {
     forgetConfirmText: raw.forgetConfirmText,
     declineConfirmPrompt: raw.declineConfirmPrompt,
     declineConfirmedText: raw.declineConfirmedText,
+    restReminderText: raw.restReminderText,
     recall: {
       ...raw.recall,
       recentQueryExactPatterns: raw.recall.recentQueryExactPatterns ?? [],

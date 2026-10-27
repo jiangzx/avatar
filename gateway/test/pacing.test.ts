@@ -109,6 +109,7 @@ describe('pacing and budget config', () => {
       output: { maxTokens: null },
       policies: { summarize: { timeoutMs: 15_000, retries: 1, backoffMs: 1000, maxBackoffMs: 4000 } },
       push: { minIntervalMs: 1_000, noResponseAfterMs: 5_000 },
+      restReminder: { firstAfterMs: 3_600_000, everyMs: 3_600_000, continuityGapMs: 600_000 },
     };
     writeFileSync(join(dir, 'pacing.json'), JSON.stringify(base));
     expect(() => loadPacing(join(dir, 'pacing.json'))).toThrow();
@@ -137,6 +138,7 @@ describe('pacing and budget config', () => {
       output: { maxTokens: null },
       policies: { summarize: { timeoutMs: 15_000, retries: 1, backoffMs: 1000, maxBackoffMs: 4000 } },
       push: { minIntervalMs: 1_000, noResponseAfterMs: 5_000 },
+      restReminder: { firstAfterMs: 3_600_000, everyMs: 3_600_000, continuityGapMs: 600_000 },
     };
     writeFileSync(join(dir, 'pacing.json'), JSON.stringify({
       ...base,
@@ -184,7 +186,7 @@ describe('pacing and budget config', () => {
       bridgeAfterMs: 400,
       bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。', en: 'Let me think about where we were.' },
     };
-    const pacing: PacingConfig = { rebuild: { contextChars: 2000, triggerRatio: 1, afterTurns: 30 }, tailGuardMs: 400, output: { maxTokens: null }, policies: { summarize: { timeoutMs: 1000, retries: 0, backoffMs: 0, maxBackoffMs: 0 } }, slim, push: { minIntervalMs: 1_000, noResponseAfterMs: 5_000 } };
+    const pacing: PacingConfig = { rebuild: { contextChars: 2000, triggerRatio: 1, afterTurns: 30 }, tailGuardMs: 400, output: { maxTokens: null }, policies: { summarize: { timeoutMs: 1000, retries: 0, backoffMs: 0, maxBackoffMs: 0 } }, slim, push: { minIntervalMs: 1_000, noResponseAfterMs: 5_000 }, restReminder: { firstAfterMs: 3_600_000, everyMs: 3_600_000, continuityGapMs: 600_000 } };
     const memory: MemoryBudgetConfig = {
       instructions: { budgetRatio: 0.4, snapshotMaxChars: 100, summaryMaxChars: 200, minHistoryChars: 100 },
       pinMaxPerCharacter: 0,
@@ -217,6 +219,7 @@ describe('affect budget', () => {
       bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。', en: 'Let me think about where we were.' },
     },
     push: { minIntervalMs: 1000, noResponseAfterMs: 5000 },
+    restReminder: { firstAfterMs: 3_600_000, everyMs: 3_600_000, continuityGapMs: 600_000 },
   };
   const memoryWith = (extra: Partial<MemoryBudgetConfig['instructions']> = {}): MemoryBudgetConfig => ({
     instructions: { budgetRatio: 0.4, snapshotMaxChars: 100, summaryMaxChars: 200, minHistoryChars: 100, ...extra },

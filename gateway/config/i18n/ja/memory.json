@@ -3,6 +3,7 @@
   "forgetConfirmText": "わかりました。このことは覚えないようにしますね。",
   "declineConfirmPrompt": "では、これからのお話は覚えないようにして、今までの記録も全部消します。本当にいいですか？",
   "declineConfirmedText": "はい、全部消しました。",
+  "restReminderText": "もう1時間おしゃべりしましたね。少し立って体を動かしたり、お水を飲んだりしませんか？ここで待っていますね。",
   "recall": {
     "emptyText": "前の記録は見つかりませんでした。何かお話ししますか？",
     "foundPrefix": "前にこんなお話を聞きました：",

@@ -42,6 +42,8 @@ export interface DeviceRegistryDeps {
   /** Character cards: role pack and default language per character. */
   characters: CharacterRegistry;
   limits: IdentityLimits;
+  /** pacing.json restReminder.continuityGapMs: closer sessions count as one continuous stretch. */
+  continuityGapMs: number;
   now?: () => number;
   /** Defaults to instructions.snapshotMaxChars in gateway/config/memory.json. */
   snapshotMaxChars?: number;
@@ -107,6 +109,8 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
       characterId,
       language,
       firstMeet: !store.hasEndedSession(agent.id),
+      // Per phone, across characters: sessions less than continuityGapMs apart are one stretch.
+      continuousSince: store.continuousSince(device.ownerId, now, this.deps.continuityGapMs),
     };
     // Read the store, not the live Session. The server flushes the previous owner before this resolve is used.
     // User-grounded only. Episodes, notes, extracted sensitive facts, and assistant lines stay out.

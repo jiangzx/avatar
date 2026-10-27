@@ -119,6 +119,8 @@ export interface MemoryCopy {
   list: ListCopy;
   /** A pinned line that contains one of these is sensitive (kept out of greeting/proactive views). */
   healthWords: readonly string[];
+  /** Spoken verbatim by the current character after continuous use (spec 附录 B). */
+  restReminderText: string;
 }
 
 /** Substring checks that keep a planned check-in on stage. */

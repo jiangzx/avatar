@@ -132,6 +132,8 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
       memoryNotice: s.memoryNotice ?? s.followup,
       // The bridge line is not scripted: the session passes the configured line.
       contextBridge: request?.fallbackText ?? s.followup,
+      // Not scripted either: the session passes the configured reminder line.
+      restReminder: request?.fallbackText ?? s.followup,
     };
     const text = request ? byCue[request.cue] : this.createCount === 0 ? s.greeting : s.followup;
     this.createCount++;

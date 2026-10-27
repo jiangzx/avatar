@@ -3,6 +3,7 @@
   "forgetConfirmText": "好，这件事我不记着了。",
   "declineConfirmPrompt": "那我以后就不记着咱们聊的事了，以前的也都删掉，确定吗？",
   "declineConfirmedText": "好，都清掉了。",
+  "restReminderText": "咱们聊了一个钟头了，要不要起来活动活动、喝口水？我在这儿等您。",
   "recall": {
     "emptyText": "我这边暂时找不到上次的记录，您想接着说点什么？",
     "foundPrefix": "我这边记着，您之前说过：",

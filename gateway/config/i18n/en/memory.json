@@ -3,6 +3,7 @@
   "forgetConfirmText": "Okay, I won't remember that.",
   "declineConfirmPrompt": "Then I'll stop remembering our conversations and delete what's already saved. Is that okay?",
   "declineConfirmedText": "Done. I've deleted all of it.",
+  "restReminderText": "We've been chatting for an hour. How about getting up to stretch and having a sip of water? I'll be right here.",
   "recall": {
     "emptyText": "I couldn't find anything from before. Would you like to tell me something?",
     "foundPrefix": "I remember you said: ",

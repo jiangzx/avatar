@@ -50,6 +50,8 @@ export interface DirectorDeps {
   safeGreeting?(): string | null;
   /** Once per quiet stretch, when silence reaches the rest step. */
   onQuietRest?(): void;
+  /** Rest reminder line in the current language; absent = reminders off. */
+  restReminderRequest?(): ProactiveRequest;
 }
 
 type SilenceStep = 'context' | 'check' | 'leave' | 'checkin' | 'rest';
@@ -127,14 +129,20 @@ export class Director {
   private hasMemory = false;
   /** The user cut in. Do not resume the script until their reply has finished. */
   private bargeIn = false;
-  /** Silence step whose playback is in flight, or the memory notice. */
-  private pending: SilenceStep | 'notice' | 'repair' | 'resume' | null = null;
+  /** Silence step whose playback is in flight, the memory notice, or the rest reminder. */
+  private pending: SilenceStep | 'notice' | 'repair' | 'resume' | 'reminder' | null = null;
   /** Still owe the one-time memory notice in this session. */
   private noticePending: boolean;
   /** The notice was cut off. Say it again at the next idle moment. */
   private noticeRetry = false;
   /** The rest step already enqueued extraction for this quiet stretch. */
   private restNoticed = false;
+  /** The rest clock reached a boundary and the line has not been spoken yet. */
+  private reminderOwed = false;
+  /** Fallback text of the reminder in flight; the assistant's last line if no transcript arrives. */
+  private reminderText = '';
+  /** Silence step whose timer is armed; an owed reminder takes that slot when it fires. */
+  private armedStep: SilenceStep | null = null;
   private readonly configFor: (language: Language) => DirectorConfig;
 
   constructor(
@@ -257,6 +265,8 @@ export class Director {
   /** The line was cut off. A real barge-in waits for the reply; a false cut repeats the step. */
   onAssistantInterrupted(): void {
     this.aiBusy = false;
+    // A reminder the user cut off still counts as given; never replay it.
+    if (this.pending === 'reminder') this.pending = null;
     if (this.pending === 'notice') {
       this.pending = null;
       this.noticeRetry = true;
@@ -305,6 +315,23 @@ export class Director {
     if (this.pending === 'notice') this.pending = null;
   }
 
+  /** Rest clock boundary (spec: AI 提示与休息提醒). Speak now if idle, else take the next silence slot. */
+  onRestReminderDue(): void {
+    if (!this.deps.restReminderRequest) return;
+    this.reminderOwed = true;
+    if (this.reminderBlocked() || this.aiBusy || this.pending !== null || this.bargeIn) return;
+    if (this.armedStep !== null) return; // fire() speaks it in that step's place
+    this.speakReminder(); // idle, or a planner call in flight: take the slot now
+  }
+
+  /** The session refused the request (a reply was live): owe it again and retry at the next slot. */
+  onReminderMissed(): void {
+    if (this.pending !== 'reminder') return;
+    this.pending = null;
+    this.reminderOwed = true;
+    this.armReminderSlot();
+  }
+
   onAiTurnEnded(assistantText?: string): void {
     this.aiBusy = false;
     const openingJustFinished = !this.opened;
@@ -315,15 +342,30 @@ export class Director {
       // A requested notice is not finished just because this turn stopped.
       if (this.noticePending) this.noticeRetry = true;
       if (this.pending === 'notice') this.pending = null;
+      if (this.pending === 'reminder') this.pending = null;
       return;
     }
     const done = this.pending;
     this.pending = null;
+    if (done === 'reminder') {
+      // Counts as the assistant's last line, but it is not a ladder step: not in previousTexts.
+      this.lastAnswer = assistantText?.trim() || this.reminderText;
+      if (this.noticePending && this.noticeRetry) {
+        this.requestMemoryNotice();
+        return;
+      }
+      if (this.quiet || this.left) return;
+      this.next = 'context';
+      this.arm();
+      return;
+    }
     if (done === null && assistantText !== undefined) this.lastAnswer = assistantText;
     if (this.noticePending && (this.noticeRetry || openingJustFinished || done === 'notice')) {
       this.requestMemoryNotice();
       return;
     }
+    // An owed reminder takes the next silence slot, even when the ladder itself is quiet.
+    if (this.armReminderSlot()) return;
     if (this.quiet || this.left) return;
     if (done === 'repair' || (done === 'resume' && this.hadContent) || this.silentStretch) {
       this.waitQuietly();
@@ -476,13 +518,21 @@ export class Director {
   /** Starts the timer for the current silence step. Each delay begins when the previous line has finished. */
   private arm(): void {
     this.clear();
+    if (this.armReminderSlot()) return;
     if (this.blocked() || this.left) return;
     const step = this.next;
+    this.armedStep = step;
     this.timer = setTimeout(() => this.fire(step), this.delayFor(step));
   }
 
   private fire(step: SilenceStep): void {
     this.timer = null;
+    this.armedStep = null;
+    // An owed rest reminder is said in this step's place.
+    if (this.reminderOwed && !this.reminderBlocked()) {
+      this.speakReminder();
+      return;
+    }
     if (this.blocked() || this.left) return;
     if (step === 'rest' && !this.restNoticed) {
       this.restNoticed = true;
@@ -727,6 +777,32 @@ export class Director {
     return this.stopped || this.quiet || this.muted || this.paused || this.userSpeaking;
   }
 
+  /** Quiet and left do not hold a reminder back; these do. */
+  private reminderBlocked(): boolean {
+    return this.stopped || this.muted || this.paused || this.userSpeaking || !this.opened;
+  }
+
+  private speakReminder(): void {
+    const request = this.deps.restReminderRequest?.();
+    if (!request) return;
+    this.clear(); // aborts a planner call or the armed step: the reminder takes that slot
+    this.reminderOwed = false;
+    this.pending = 'reminder';
+    this.reminderText = request.fallbackText;
+    this.deps.requestResponse('reminder', request);
+  }
+
+  /** Arms the next silence slot for an owed reminder. A stopped ladder waits the context delay. */
+  private armReminderSlot(): boolean {
+    if (!this.reminderOwed || this.reminderBlocked()) return false;
+    this.clear();
+    const step = this.next;
+    const wait = this.quiet || this.left || step === 'rest' ? this.delayFor('context') : this.delayFor(step);
+    this.armedStep = step;
+    this.timer = setTimeout(() => this.fire(step), wait);
+    return true;
+  }
+
   /** The Director's own cues. `contextBridge` is spoken by the session, not the Director. */
   private request(cue: DirectorCue): ProactiveRequest {
     const c = this.cfg;
@@ -752,6 +828,7 @@ export class Director {
   private clear(): void {
     this.decision?.abort();
     this.decision = null;
+    this.armedStep = null;
     if (!this.timer) return;
     clearTimeout(this.timer);
     this.timer = null;

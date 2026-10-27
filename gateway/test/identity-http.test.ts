@@ -45,7 +45,7 @@ async function boot(opts: BootOptions = {}) {
   const roles = fixedRoleCatalog('P', director);
   db = openDatabase(':memory:', { busyTimeoutMs: 1000 });
   const store = new SqliteMemoryStore(db);
-  const registry = new DeviceRegistry({ store, roles, characters: shippedCharacters(), limits: { maxOwners: 100, dailyCap: 100, orphanOwnerDays: 7, orphanCleanupBatch: 100, ...opts.limits } });
+  const registry = new DeviceRegistry({ store, roles, characters: shippedCharacters(), continuityGapMs: 600_000, limits: { maxOwners: 100, dailyCap: 100, orphanOwnerDays: 7, orphanCleanupBatch: 100, ...opts.limits } });
   const contexts: SessionContext[] = [];
   manager = new SessionManager((ctx) => {
     contexts.push(ctx);

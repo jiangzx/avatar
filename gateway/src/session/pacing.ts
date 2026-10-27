@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { PROMPT_LABELS, type PromptLabels } from '../roles/labels.ts';
 import { historyBudget, type InstructionBudget } from './instructions.ts';
 import type { LedgerOptions } from './ledger.ts';
+import { RestReminderSchema } from './restReminder.ts';
 
 const PolicySchema = z.object({
   timeoutMs: z.number().int().min(100).max(120_000),
@@ -38,6 +39,8 @@ const PacingSchema = z.object({
     minIntervalMs: z.number().int().min(0).max(10_000),
     noResponseAfterMs: z.number().int().min(1_000).max(30_000),
   }).strict(),
+  /** Rest reminder (spec: AI 提示与休息提醒); everyMs >= firstAfterMs / 2 is checked by the schema. */
+  restReminder: RestReminderSchema,
 }).strict();
 
 /** Fallback when a test omits SessionDeps.toolTurnTimeoutMs. Same value as gateway/config/memory.json. */

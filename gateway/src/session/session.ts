@@ -38,6 +38,7 @@ import { InterruptCoordinator } from './interrupt.ts';
 import { buildInstructions, historyBudget, type InstructionBudget } from './instructions.ts';
 import { detectLanguage, explicitLanguage } from './language.ts';
 import { ConversationLedger, DEFAULT_LEDGER_OPTIONS, type LedgerOptions, type Summarizer } from './ledger.ts';
+import { RestReminderClock, type RestReminderConfig } from './restReminder.ts';
 import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.ts';
 import { DEFAULT_TOOL_TURN_TIMEOUT_MS, loadMemoryBudget, type PacingConfig } from './pacing.ts';
 import { PushGate, type PushRequest } from './pushGate.ts';
@@ -125,6 +126,8 @@ export interface SessionDeps {
   slim?: PacingConfig['slim'];
   /** Push seam pacing (gateway/config/pacing.json push). Omitted in tests: DEFAULT_PUSH. */
   push?: PacingConfig['push'];
+  /** Rest reminder thresholds (gateway/config/pacing.json restReminder). Omitted = reminders off (tests). */
+  restReminder?: RestReminderConfig;
   /** Clock for tests; production uses Date.now. */
   now?: () => number;
   /** Emotion lexicon (gateway/config/emotion.json); undefined = no avatar.emotion messages. */
@@ -233,6 +236,8 @@ export class Session {
   private slimDueAt = 0;
   private slimDeferredSince: number | null = null;
   private slimTimer: NodeJS.Timeout | null = null;
+  /** Rest reminder clock; started with the session, stopped in end() like the slim clock. */
+  private restClock: RestReminderClock | null = null;
   /** Local VAD speaking state; part of the slim seam. */
   private userSpeaking = false;
   private readonly rebuildMicBuffer: Int16Array[] = [];
@@ -341,6 +346,7 @@ export class Session {
       (language) => this.directorConfig(language),
       {
         requestResponse: (kind, request) => this.requestResponse(kind, request),
+        restReminderRequest: () => this.restReminderRequest(),
         firstMeetGreeting: () => this.firstMeetGreeting(),
         ...(deps.textClient && hasSilencePlanner ? {
           planProactiveLine: (context, signal) => this.planProactiveLine(context, signal),
@@ -403,6 +409,7 @@ export class Session {
       return;
     }
     this.director.onSessionStart(this.openingHasMemory());
+    this.startRestReminder();
     this.armSlimInterval();
   }
 
@@ -608,6 +615,8 @@ export class Session {
     this.clearReplyWatch();
     this.gate.dispose();
     this.stopSlimClock();
+    this.restClock?.stop();
+    this.restClock = null;
     if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
     this.rebuildTimer = null;
     this.rebuildMicBuffer.length = 0;
@@ -878,6 +887,7 @@ export class Session {
     // Tool turns speak only through maybeContinue.
     if (this.toolTurn.active || this.ended || this.interrupt.active !== null || this.modelGenerating) {
       if (request.cue === 'memoryNotice') this.director.onNoticeMissed();
+      if (request.cue === 'restReminder') this.director.onReminderMissed();
       return;
     }
     if (request.cue === 'memoryNotice') {
@@ -1524,6 +1534,29 @@ export class Session {
     if (!slim?.enabled) return;
     this.slimDeferredSince = null;
     this.armSlimClock(this.now() + slim.intervalMs);
+  }
+
+  /** Continuous use is per phone (spec §5); a dev session without one starts its own stretch. */
+  private startRestReminder(): void {
+    const cfg = this.deps.restReminder;
+    if (!cfg || this.ended) return;
+    this.restClock = new RestReminderClock(this.context.continuousSince ?? this.now(), cfg, {
+      now: () => this.now(),
+      setTimer: (fn, ms) => {
+        const timer = setTimeout(fn, ms);
+        timer.unref?.();
+        return timer;
+      },
+      clearTimer: (handle) => clearTimeout(handle as NodeJS.Timeout),
+      onDue: () => this.director.onRestReminderDue(),
+    });
+    this.restClock.start();
+  }
+
+  /** The configured line, spoken verbatim: no readable example, no negation (pitfall #3). */
+  private restReminderRequest(): ProactiveRequest {
+    const text = this.i18n.memory[this.language].restReminderText;
+    return { cue: 'restReminder', instruction: `请直接说下面这句话，不要改写：${text}`, fallbackText: text };
   }
 
   private stopSlimClock(): void {

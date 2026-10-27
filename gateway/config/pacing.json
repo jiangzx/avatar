@@ -16,5 +16,6 @@
       "en": "Let me think about where we were."
     }
   },
-  "push": { "minIntervalMs": 1000, "noResponseAfterMs": 5000 }
+  "push": { "minIntervalMs": 1000, "noResponseAfterMs": 5000 },
+  "restReminder": { "firstAfterMs": 3600000, "everyMs": 3600000, "continuityGapMs": 600000 }
 }

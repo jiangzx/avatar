@@ -105,6 +105,7 @@ const registry = store
         orphanOwnerDays: identityConfig.orphanOwnerDays,
         orphanCleanupBatch: identityConfig.orphanCleanupBatch,
       },
+      continuityGapMs: pacing.restReminder.continuityGapMs,
       i18n,
     })
   : null;
@@ -175,6 +176,7 @@ const manager = new SessionManager(
       tailGuardMs: pacing.tailGuardMs,
       slim: pacing.slim,
       push: pacing.push,
+      restReminder: pacing.restReminder,
       toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
       pin: { maxPerCharacter: memory.pinMaxPerCharacter, maxChars: memory.pinMaxChars, finalWaitMs: memory.pinFinalWaitMs },
       listMaxItems: memory.listMaxItems,

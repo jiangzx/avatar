@@ -116,7 +116,7 @@ describe('Plan C memory acceptance', () => {
     };
     const queued = new MemoryWorker({ store, client, systemPrompt: '陈述。', maxTokens: 80, policy });
     worker = queued;
-    const registry = new DeviceRegistry({ store, roles, characters: shippedCharacters(), limits, now: () => now });
+    const registry = new DeviceRegistry({ store, roles, characters: shippedCharacters(), continuityGapMs: 600_000, limits, now: () => now });
     const requests: ProactiveRequest[] = [];
     const instructions: string[] = [];
     let noticeSeq: number | null = null;

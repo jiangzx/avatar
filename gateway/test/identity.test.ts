@@ -26,6 +26,7 @@ function setup(limits: Partial<IdentityLimits> = {}, roles: RoleCatalog = fixedR
   const store = new SqliteMemoryStore(database);
   const registry = new DeviceRegistry({
     store, roles, characters: shippedCharacters(), now: () => now,
+    continuityGapMs: 600_000,
     limits: { maxOwners: 10, dailyCap: 10, orphanOwnerDays: 7, orphanCleanupBatch: 2, ...limits },
   });
   return { db: database, store, registry };
