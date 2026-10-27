@@ -96,13 +96,12 @@ function LogFilters({ query }: { query: URLSearchParams }) {
       <Input id="filter-oid" value={oid} onChange={(e) => setOid(e.target.value)} style={{ width: 160 }} autoComplete="off" />
       <label htmlFor="filter-event">事件</label>
       <Input id="filter-event" value={event} onChange={(e) => setEvent(e.target.value)} style={{ width: 180 }} autoComplete="off" />
+      <label htmlFor="filter-level">级别</label>
       <Select
+        id="filter-level"
         value={level}
         onChange={setLevel}
-        style={{ width: 140 }}
-        aria-label="级别"
-        // The trigger is self-describing next to the plain level text in the table.
-        labelRender={({ label, value }) => (value ? `级别：${String(label)}` : label)}
+        style={{ width: 120 }}
         options={[{ label: '全部级别', value: '' }, ...LEVELS.map((l) => ({ label: levelLabel(l), value: l }))]}
       />
       <Button htmlType="submit">筛选</Button>
@@ -115,10 +114,11 @@ function LogList({ query, now }: { query: URLSearchParams; now: () => number }) 
   const oid = query.get('oid') ?? undefined;
   const event = query.get('event') ?? undefined;
   const levelParam = query.get('level');
-  const level = LEVELS.find((l) => l === levelParam);
+  // The gateway uses a minimum level and defaults to info; all levels must ask for debug or newer rows disappear.
+  const level = LEVELS.find((l) => l === levelParam) ?? 'debug';
   const from = rangeStart(parseRange(query), now());
   const paged = usePaged(
-    (cursor) => api.logs({ ...(oid ? { oid } : {}), ...(event ? { event } : {}), ...(level ? { level } : {}), from, cursor }),
+    (cursor) => api.logs({ ...(oid ? { oid } : {}), ...(event ? { event } : {}), level, from, cursor }),
     [api, oid, event, level, from],
   );
   return (

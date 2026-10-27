@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AdminLogRow } from '@anyidea/protocol';
 import { rangeStart } from '../src/format.ts';
@@ -52,12 +52,23 @@ describe('TracePage logs', () => {
   it('passes the address filters to the API and shows plain level names', async () => {
     const { fetch, calls } = fakeFetch({ 'GET /admin/api/logs': { items: [log(1)], nextCursor: null } });
     renderWithProviders(<TracePage sid={undefined} query={new URLSearchParams('level=error&oid=3f9a1c2b4d5e')} />, fetch);
-    expect(await screen.findByText('错误')).toBeTruthy();
+    const table = await screen.findByRole('table');
+    expect(await within(table).findByText('错误')).toBeTruthy();
+    const filterSelect = screen.getByLabelText('级别').closest('.ant-select') as HTMLElement;
+    expect(within(filterSelect).getByText('错误')).toBeTruthy();
     const call = calls.find((c) => c.url.pathname === '/admin/api/logs')!;
     expect(call.url.searchParams.get('level')).toBe('error');
     expect(call.url.searchParams.get('oid')).toBe('3f9a1c2b4d5e');
     expect(screen.getByRole('link', { name: '查看经过' }).getAttribute('href')).toBe(`#/trace/${SID}`);
     expect(screen.getByText('10月27日 14:02:32')).toBeTruthy();
+  });
+
+  it('asks for every level when 全部级别 is the active filter', async () => {
+    const { fetch, calls } = fakeFetch({ 'GET /admin/api/logs': { items: [], nextCursor: null } });
+    renderWithProviders(<TracePage sid={undefined} query={new URLSearchParams()} />, fetch);
+    await screen.findByText('这个时间段没有日志，试试放宽时间范围。');
+    const call = calls.find((c) => c.url.pathname === '/admin/api/logs')!;
+    expect(call.url.searchParams.get('level')).toBe('debug');
   });
 
   it('widens the log window when the address asks for the past 7 days', async () => {

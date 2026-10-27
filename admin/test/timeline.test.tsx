@@ -95,4 +95,29 @@ describe('Timeline', () => {
     expect(details.length).toBe(6);
     expect(screen.getByText('reason：client_end')).toBeTruthy();
   });
+
+  it('names the merged gateway rows and reads first_audio_ms for usage', () => {
+    // P2-T4 merges log_events with usage rows: response_start, reply_metrics and usage_recorded.
+    const t: AdminTimeline = {
+      ...timeline(),
+      items: [
+        { ts: START + 1_000, level: 'info', event: 'response_start', seq: 1, fields: { kind: 'reply' } },
+        { ts: START + 2_000, level: 'info', event: 'reply_metrics', seq: 1, fields: { speech_to_first_audio_ms: 1100 } },
+        { ts: START + 3_000, level: 'info', event: 'usage_recorded', seq: null, fields: { kind: 'realtime_reply', first_audio_ms: 2600, cost_micro_yuan: 1200 } },
+        { ts: START + 4_000, level: 'info', event: 'response_start', seq: null, fields: { kind: 'greeting' } },
+        { ts: START + 5_000, level: 'info', event: 'session_destroyed', seq: null, fields: { reason: 'client_end' } },
+      ],
+    };
+    render(<Timeline timeline={t} />);
+    expect(screen.getByText('第 1 次回复开始')).toBeTruthy();
+    expect(screen.getByText('开始回复')).toBeTruthy();
+    expect(screen.getByText('记录用量')).toBeTruthy();
+    expect(screen.getByText('第 1 次回复')).toBeTruthy();
+    const usageRow = screen.getByText('记录用量').closest('li') as HTMLElement;
+    const bar = within(usageRow).getByTestId('latency-bar');
+    // Scale is the 2.6 s usage row (above the 2 s alert line), so it spans the full bar.
+    expect(bar.style.width).toBe('240px');
+    expect(bar.getAttribute('data-tone')).toBe('danger');
+    expect(within(usageRow).getByText('首音 2.6 秒')).toBeTruthy();
+  });
 });

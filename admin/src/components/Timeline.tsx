@@ -26,8 +26,10 @@ function num(value: unknown): number | null {
 }
 
 function firstAudioMs(item: AdminTimelineItem): number | null {
-  if (item.event !== 'reply_metrics') return null;
-  return num(item.fields.speech_to_first_audio_ms) ?? num(item.fields.vad_to_first_audio_ms);
+  const metrics = num(item.fields.speech_to_first_audio_ms) ?? num(item.fields.vad_to_first_audio_ms);
+  if (item.event === 'reply_metrics') return metrics;
+  if (item.event === 'usage_recorded') return metrics ?? num(item.fields.first_audio_ms);
+  return null;
 }
 
 export function timelineLabel(item: AdminTimelineItem): string {
@@ -37,6 +39,13 @@ export function timelineLabel(item: AdminTimelineItem): string {
       return '开始通话';
     case 'session_destroyed':
       return '结束通话';
+    case 'response_start': {
+      // P2-T4 merges these into the timeline; the seq lives on the log row, not in fields.
+      const seq = item.seq ?? num(item.fields.seq);
+      return seq === null ? '开始回复' : `第 ${seq} 次回复开始`;
+    }
+    case 'usage_recorded':
+      return '记录用量';
     case 'reply_metrics': {
       const seq = item.seq ?? num(item.fields.seq);
       return seq === null ? '回复' : `第 ${seq} 次回复`;
