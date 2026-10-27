@@ -1,3 +1,14 @@
+FROM node:24-bookworm-slim AS admin-build
+
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY protocol/package.json protocol/package.json
+COPY admin/package.json admin/package.json
+RUN npm ci --omit=optional -w admin -w protocol
+COPY protocol protocol
+COPY admin admin
+RUN npm run build -w admin
+
 FROM node:24-bookworm-slim
 
 WORKDIR /app
@@ -8,6 +19,7 @@ RUN npm ci --omit=optional
 
 COPY protocol protocol
 COPY gateway gateway
+COPY --from=admin-build /app/admin/dist admin/dist
 
 WORKDIR /app/gateway
 ENV NODE_ENV=production

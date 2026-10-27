@@ -66,6 +66,7 @@
 | 64 | 2026-10-27 | Task 13/16 已知缺口 | 旧的 `AUDIO_MODE=web` 路径（WebView 自己发 `POST /session {}`）总是使用默认角色小暖，也不会弹休息提醒 toast | 新原生路径 P1–P13 已通过；Web 路径未改 | 只有继续使用该路径时才影响多角色与提醒 | 若仍需 web 路径，另开任务接线 | 未解除（仅 web 路径） |
 | 65 | 2026-10-27 | Task 15 固有行为 | 记忆接口遇到 401 会重新注册设备，新 owner 看不到旧 owner 的记忆 | 复用 `renew` 的既有行为；P13 清除后不重新注册，符合预期 | 设备令牌失效时用户会觉得记忆丢了 | 设计令牌续期或 owner 迁移方案 | 未解除 |
 | 66 | 2026-10-27 | 手机验收 P10 | 改称呼为张大爷后切到小凯，开场字幕含「张」，但播出的第一个字「张」没听到（一次） | 网关该次回复 6 字、生成 470 ms；App `accepted_ms=1840/played_ms=1840`、无丢块；原生播放器播前已排队。同模板复现的 34 字开场前 600 ms RMS 正常（首字在 50–200 ms） | 暂无法复现，可能是一次性起播吃字 | 再现时录屏并保留 `duix_playback_*` 事件，再定位 | 观察 |
+| 67 | 2026-10-28 | A2 HarmonyOS Sans 许可 | 计划里的 HarmonyOS Sans SC 自托管需要把官方 TTF 转成 WOFF2；许可是否允许自托管与格式转换不清楚 | 许可原文出自华为官方 HarmonyOS Sans 下载包内的 `LICENSE_Fonts`（© 2021 Huawei Device Co., Ltd.），OpenHarmony `resources` / `global_system_resources` 的 `LICENSE_Fonts` 镜像同文。条款：允许随软件使用、复制、合并、嵌入、打包、分发、销售**未修改**的副本，须显著告知并保留版权与许可；**禁止修改**；禁止单独分发字体文件；许可可撤销，违约即终止。TTF→WOFF2 转换（及子集化）属于修改或至少不明确，且字体嵌入标志为 no subsetting。按 spec「不清楚 → 分支 B」处理。字体包未下载：华为下载页在本机网络策略下无法直接打开，条款经官方华为开发者论坛与 OpenHarmony `LICENSE_Fonts` 镜像交叉核对 | 界面使用系统字体回退栈（`PingFang SC`、`Noto Sans SC`、`Microsoft YaHei`），不随包分发 HarmonyOS Sans，也不从 CDN 加载 | 华为书面确认可转换/子集化且满足署名要求时再切分支 A | 已按 spec 回退，不阻塞 |
 
 ## 2026-10-13 Plan 1.1 更新
 

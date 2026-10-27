@@ -1,7 +1,7 @@
 {
   "name": "anyidea",
   "private": true,
-  "workspaces": ["protocol", "gateway", "avatar-core"],
+  "workspaces": ["protocol", "gateway", "avatar-core", "admin"],
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
