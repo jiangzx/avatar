@@ -14,6 +14,9 @@ String identityErrorText(String reason) => switch (reason) {
   'abi_unsupported' || 'low_memory' || 'storage_unavailable' || 'duix_unsupported' => unsupportedText(
     reason == 'duix_unsupported' ? null : reason,
   ),
+  'no_space' => downloadFailed('no_space'),
+  'prepare_failed' => prepareFailedText,
+  'crash_disabled' => crashDisabledText,
   'http_429' || 'http_503' => '现在注册的人太多了，请稍后再试',
   _ => '出错了（$reason），请稍后再试',
 };
@@ -69,6 +72,15 @@ class CharacterCardList extends StatelessWidget {
             selected: option.id == selected,
             keyPrefix: 'character',
             onTap: enabled && canPick(availability) ? () => onSelect(option.id) : null,
+            disabled: !canPick(availability),
+            note: switch (availability) {
+              Available() || Hidden() => null,
+              Checking() => checkingText,
+              Preparing(:final fraction) => preparingText(fraction),
+              Unavailable(:final reason) || PrepareFailed(:final reason) => reason,
+            },
+            noteColor: availability is PrepareFailed ? Colors.amberAccent : Colors.tealAccent,
+            working: availability is Checking || availability is Preparing,
           ),
         ),
       );

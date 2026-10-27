@@ -80,12 +80,3 @@ abstract interface class AvatarEngine {
   void onSessionEvent(NativeUiEvent event);
   Future<void> dispose();
 }
-
-/// Where the chosen engine is remembered (DeviceIdentity in the app).
-abstract interface class EnginePrefs {
-  /// Never throws; storage trouble reads as the 3D avatar.
-  Future<AvatarEngineKind> savedEngine();
-
-  /// False when the choice could not be stored.
-  Future<bool> saveEngine(AvatarEngineKind engine);
-}

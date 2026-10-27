@@ -1,3 +1,6 @@
+import 'package:avatar_app/avatar_engine/avatar_engine.dart';
+import 'package:avatar_app/identity/character_availability.dart';
+import 'package:avatar_app/identity/characters.dart';
 import 'package:avatar_app/identity/companion_settings_page.dart';
 import 'package:avatar_app/identity/device_identity.dart';
 import 'package:flutter/material.dart';
@@ -23,7 +26,11 @@ class Popped {
   String? value;
 }
 
-Widget host(Popped popped, Future<IdentityResult> Function(String id) onSave) => MaterialApp(
+Widget host(
+  Popped popped,
+  Future<IdentityResult> Function(String id) onSave, {
+  CharacterAvailability Function(CharacterOption option) availabilityOf = everyCharacterAvailable,
+}) => MaterialApp(
   home: Builder(
     builder: (context) => Scaffold(
       body: TextButton(
@@ -34,6 +41,7 @@ Widget host(Popped popped, Future<IdentityResult> Function(String id) onSave) =>
                 options: catalog.options,
                 currentCharacter: 'xiaoxin',
                 onSaveCharacter: onSave,
+                availabilityOf: availabilityOf,
               ),
             ),
           );
@@ -97,5 +105,28 @@ void main() {
     expect(find.text('手机保存身份信息失败，请重试'), findsOneWidget);
     expect(find.byKey(const Key('companion-confirm')), findsOneWidget);
     expect(popped.done, isFalse);
+  });
+
+  testWidgets('settings greys characters that cannot run and keeps them unpickable', (tester) async {
+    final saved = <String>[];
+    await tester.pumpWidget(host(
+      Popped(),
+      (id) async {
+        saved.add(id);
+        return const IdentityOk();
+      },
+      availabilityOf: (o) => o.engine == AvatarEngineKind.duix ? const Unavailable('这台手机暂时用不了真人形象') : const Available(),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: find.byKey(const Key('character-xiaonuan')), matching: find.byIcon(Icons.lock)),
+      findsOneWidget,
+    );
+    await tapCard(tester, 'xiaonuan');
+    expect(checkIn('xiaoxin'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('companion-confirm')));
+    await tester.pump();
+    expect(saved, isEmpty);
   });
 }

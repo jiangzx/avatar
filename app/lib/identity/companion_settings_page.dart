@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'character_availability.dart';
 import 'character_picker_page.dart';
 import 'characters.dart';
 import 'device_identity.dart';
@@ -11,11 +12,17 @@ class CompanionSettingsPage extends StatefulWidget {
     required this.options,
     required this.currentCharacter,
     required this.onSaveCharacter,
+    this.availabilityOf = everyCharacterAvailable,
+    this.availabilityChanges,
   });
 
   final List<CharacterOption> options;
   final String currentCharacter;
   final Future<IdentityResult> Function(String id) onSaveCharacter;
+  final CharacterAvailability Function(CharacterOption option) availabilityOf;
+
+  /// Rebuilds the cards while a model is being prepared (the EngineSwitchController).
+  final Listenable? availabilityChanges;
 
   @override
   State<CompanionSettingsPage> createState() => _CompanionSettingsPageState();
@@ -25,6 +32,19 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
   late String _selected = widget.currentCharacter;
   bool _busy = false;
   String? _error;
+
+  Widget _cards() {
+    Widget list() => CharacterCardList(
+      options: widget.options,
+      selected: _selected,
+      availabilityOf: widget.availabilityOf,
+      enabled: !_busy,
+      gap: 12,
+      onSelect: (id) => setState(() => _selected = id),
+    );
+    final changes = widget.availabilityChanges;
+    return changes == null ? list() : ListenableBuilder(listenable: changes, builder: (_, _) => list());
+  }
 
   Future<void> _save() async {
     if (_busy || _selected == widget.currentCharacter) return;
@@ -63,13 +83,7 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
                   children: [
                     const Text('选择陪伴角色', style: TextStyle(color: Colors.tealAccent, fontSize: 19, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
-                    CharacterCardList(
-                      options: widget.options,
-                      selected: _selected,
-                      enabled: !_busy,
-                      gap: 12,
-                      onSelect: (id) => setState(() => _selected = id),
-                    ),
+                    _cards(),
                   ],
                 ),
               ),

@@ -15,8 +15,7 @@ String unsupportedText(String? reason) => switch (reason) {
   _ => '这个版本暂时用不了真人形象',
 };
 
-const fallbackText = '真人形象没能打开，先用 3D 形象陪您聊';
-const crashDisabledText = '真人形象上次出了问题，先换回 3D 形象';
+const crashDisabledText = '形象上次没能正常打开，这次先用不了';
 const duixReadyText = '真人形象准备好了';
 const duixReadyAction = '现在换';
 
@@ -32,3 +31,11 @@ const downloadRetry = '重试';
 String downloadFailed(String code) => code == 'no_space' ? '手机存储空间不够，请清理后重试' : '下载没成功，请检查网络后重试';
 const readySwitchNow = '现在换（会重新开始聊天）';
 const readyLater = '稍后';
+
+// Per-character availability (spec「Duix 不可用」). Never says "Duix".
+const prepareFailedText = '形象准备没成功，请重试';
+const checkingText = '正在检查这台手机…';
+String preparingText(double? fraction) =>
+    fraction == null ? '正在准备形象…' : '正在准备形象 ${(fraction * 100).round()}%';
+String duixFailedText(String name) => '$name这次没能打开，请重新选一位伙伴';
+String savedUnavailableText(String name) => '$name暂时来不了，请重新选一位伙伴';

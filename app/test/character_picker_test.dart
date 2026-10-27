@@ -1,4 +1,5 @@
 import 'package:avatar_app/avatar_engine/avatar_engine.dart';
+import 'package:avatar_app/avatar_engine/ui/engine_copy.dart';
 import 'package:avatar_app/identity/character_availability.dart';
 import 'package:avatar_app/identity/character_picker_page.dart';
 import 'package:avatar_app/identity/characters.dart';
@@ -123,5 +124,65 @@ void main() {
     expect(identityErrorText('low_memory'), '这台手机暂时用不了真人形象（需要 64 位、8GB 以上内存的手机）');
     expect(identityErrorText('http_500'), '出错了（http_500），请稍后再试');
     expect(unknownCharacterText, '这位伙伴暂时联系不上，请重新选一位');
+  });
+
+  testWidgets('locked cards are greyed with a lock and a readable reason', (tester) async {
+    await tester.pumpWidget(picker(onConfirm: (_) {}, availabilityOf: noDuix));
+    expect(
+      find.descendant(of: find.byKey(const Key('character-xiaonuan')), matching: find.byIcon(Icons.lock)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: find.byKey(const Key('character-xiaoxin')), matching: find.byIcon(Icons.lock)),
+      findsNothing,
+    );
+    final reason = tester.widget<Text>(find.byKey(const Key('character-xiaonuan-note')));
+    expect(reason.data, '这台手机暂时用不了真人形象');
+    expect(reason.style!.fontSize, greaterThanOrEqualTo(18));
+    final title = tester.widget<Text>(
+      find.descendant(of: find.byKey(const Key('character-xiaonuan')), matching: find.text('小暖')),
+    );
+    expect(title.style!.color, Colors.white38);
+    expect(tester.getSize(find.byKey(const Key('character-xiaonuan'))).height, greaterThanOrEqualTo(60));
+  });
+
+  testWidgets('a failed copy stays pickable with an amber retry reason', (tester) async {
+    await tester.pumpWidget(picker(
+      onConfirm: (_) {},
+      availabilityOf: (o) => o.engine == AvatarEngineKind.duix ? const PrepareFailed(prepareFailedText) : const Available(),
+    ));
+    expect(checkIn('xiaonuan'), findsOneWidget);
+    final reason = tester.widget<Text>(find.byKey(const Key('character-xiaonuan-note')));
+    expect(reason.data, '形象准备没成功，请重试');
+    expect(reason.style!.color, Colors.amberAccent);
+    expect(
+      find.descendant(of: find.byKey(const Key('character-xiaonuan')), matching: find.byIcon(Icons.lock)),
+      findsNothing,
+    );
+  });
+
+  testWidgets('preparing shows progress; checking shows loading and cannot be picked', (tester) async {
+    await tester.pumpWidget(picker(
+      onConfirm: (_) {},
+      availabilityOf: (o) => switch (o.id) {
+        'xiaonuan' => const Preparing(0.42),
+        'xiaokai' => const Checking(),
+        _ => const Available(),
+      },
+    ));
+    expect(find.text('正在准备形象 42%'), findsOneWidget);
+    expect(find.text(checkingText), findsOneWidget);
+    expect(
+      find.descendant(of: find.byKey(const Key('character-xiaokai')), matching: find.byIcon(Icons.lock)),
+      findsOneWidget,
+    );
+    await tapCard(tester, 'xiaokai');
+    expect(checkIn('xiaonuan'), findsOneWidget);
+  });
+
+  test('Duix reason codes map to the spec copy', () {
+    expect(identityErrorText('no_space'), '手机存储空间不够，请清理后重试');
+    expect(identityErrorText('prepare_failed'), '形象准备没成功，请重试');
+    expect(identityErrorText('crash_disabled'), crashDisabledText);
   });
 }

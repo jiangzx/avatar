@@ -5,17 +5,17 @@ import '../duix/duix_bridge.dart';
 import '../duix/duix_config.dart';
 import '../duix/duix_crash_guard.dart';
 import '../duix/duix_installer.dart';
+import '../identity/character_availability.dart';
+import '../identity/characters.dart';
 import 'avatar_engine.dart';
+import 'ui/engine_copy.dart';
 
 enum DuixAvailability { checking, hidden, unsupported, needsDownload, downloading, ready }
 
-/// One-shot messages for the shell to show as snack bars.
-enum EngineNotice { fallback, crashDisabled, duixReady }
-
-/// Which engine the home page runs and whether Duix can be offered (spec §5.3).
+/// Whether each character can run on this phone (spec「Duix 不可用」).
+/// It never switches characters and never writes the saved character: the shell shows the reason.
 class EngineSwitchController extends ChangeNotifier {
   EngineSwitchController({
-    required this.prefs,
     required this.bridge,
     required this.guard,
     required this.loadConfig,
@@ -23,7 +23,6 @@ class EngineSwitchController extends ChangeNotifier {
     this.diag = logcatDiagSink,
   });
 
-  final EnginePrefs prefs;
   final DuixBridge bridge;
   final DuixCrashGuard guard;
   final bool debugBuild;
@@ -32,25 +31,18 @@ class EngineSwitchController extends ChangeNotifier {
 
   DuixConfig? _config;
   DuixInstaller? _installer;
-  AvatarEngineKind _saved = AvatarEngineKind.webview;
-  AvatarEngineKind? _override;
   DuixAvailability _gate = DuixAvailability.checking;
   bool _installable = false;
+  bool _crashDisabled = false;
   String? _unsupportedReason;
-  EngineNotice? _notice;
-  int _pageEpoch = 0;
-  bool _wasReady = false;
+  Future<void>? _preparing;
 
   DuixConfig? get config => _config;
   DuixInstaller? get installer => _installer;
-  AvatarEngineKind get savedEngine => _saved;
-
-  /// The engine this session actually runs: the saved choice unless a fallback overrides it.
-  AvatarEngineKind get sessionEngine => _override ?? _saved;
-
-  /// Part of the page key; a change rebuilds the page with a fresh session.
-  int get pageEpoch => _pageEpoch;
   String? get unsupportedReason => _unsupportedReason;
+
+  /// Crash-loop protection turned Duix off for this launch.
+  bool get crashDisabled => _crashDisabled;
 
   DuixAvailability get availability {
     if (!_installable) return _gate;
@@ -61,19 +53,28 @@ class EngineSwitchController extends ChangeNotifier {
     };
   }
 
-  double? get downloadFraction => switch (_installer?.state) {
-    InstallDownloading(:final fraction) => fraction,
-    _ => null,
-  };
-
-  EngineNotice? takeNotice() {
-    final notice = _notice;
-    _notice = null;
-    return notice;
+  CharacterAvailability availabilityFor(CharacterOption option) {
+    if (option.engine != AvatarEngineKind.duix) return const Available();
+    if (_crashDisabled) return const Unavailable(crashDisabledText);
+    switch (availability) {
+      case DuixAvailability.checking:
+        return const Checking();
+      case DuixAvailability.hidden:
+        return const Hidden();
+      case DuixAvailability.unsupported:
+        return Unavailable(unsupportedText(_unsupportedReason));
+      case DuixAvailability.needsDownload || DuixAvailability.downloading || DuixAvailability.ready:
+        break;
+    }
+    return switch (_installer?.state) {
+      InstallPreparing() => const Preparing(null),
+      InstallDownloading(:final fraction) => Preparing(fraction),
+      InstallFailed(:final code) => PrepareFailed(code == 'no_space' ? downloadFailed('no_space') : prepareFailedText),
+      InstallReady() || InstallIdle() || null => const Available(),
+    };
   }
 
   Future<void> load() async {
-    _saved = await prefs.savedEngine();
     DuixConfig? cfg;
     try {
       cfg = await loadConfig();
@@ -82,28 +83,20 @@ class EngineSwitchController extends ChangeNotifier {
     }
     _config = cfg;
     if (cfg == null || !cfg.enabled || (cfg.debugOnly && !debugBuild)) {
-      _hide(DuixAvailability.hidden);
+      _setGate(DuixAvailability.hidden);
       return;
     }
     if (await guard.checkAtLaunch(maxUncleanExits: cfg.maxUncleanExits)) {
-      if (_saved == AvatarEngineKind.duix) {
-        if (await prefs.saveEngine(AvatarEngineKind.webview)) {
-          await guard.acknowledgeDisable();
-          _saved = AvatarEngineKind.webview;
-          _notice = EngineNotice.crashDisabled;
-          diag(formatDiag('duix_crash_disabled', {}));
-        } else {
-          _override = AvatarEngineKind.webview; // this launch stays on 3D; the count remains for the next one
-          diag(formatDiag('engine_save_failed', {'engine': AvatarEngineKind.webview.name}));
-        }
-      } else {
-        await guard.acknowledgeDisable();
-      }
+      // Do not even probe: the native library may be what keeps crashing.
+      _crashDisabled = true;
+      diag(formatDiag('duix_crash_disabled', {}));
+      _setGate(DuixAvailability.unsupported);
+      return;
     }
     final support = await bridge.probe(minTotalMemMb: cfg.minTotalMemMb);
     if (!support.supported) {
       _unsupportedReason = support.reason;
-      _hide(DuixAvailability.unsupported);
+      _setGate(DuixAvailability.unsupported);
       return;
     }
     final installer = DuixInstaller(bridge: bridge, config: cfg, diag: diag);
@@ -111,48 +104,47 @@ class EngineSwitchController extends ChangeNotifier {
     installer.addListener(_onInstaller);
     _installer = installer;
     _installable = true;
-    _wasReady = installer.state is InstallReady;
-    if (_saved == AvatarEngineKind.duix && !_wasReady) _override = AvatarEngineKind.webview;
     notifyListeners();
   }
 
-  /// Persists [kind] and rebuilds the page with it; call after the user confirmed.
-  Future<void> choose(AvatarEngineKind kind) async {
-    if (kind == AvatarEngineKind.duix && availability != DuixAvailability.ready) {
-      _wasReady = true;
-      await _installer?.start();
-      _wasReady = _installer?.state is InstallReady;
-      if (availability != DuixAvailability.ready) return;
+  /// Copies the bundled models when [option] needs them. Null = ready to run; otherwise a reason code
+  /// for identityErrorText. Concurrent calls share one copy.
+  Future<String?> prepare(CharacterOption option) async {
+    if (option.engine != AvatarEngineKind.duix) return null;
+    switch (availabilityFor(option)) {
+      case Unavailable() || Hidden() || Checking():
+        return _crashDisabled ? 'crash_disabled' : _unsupportedReason ?? 'duix_unsupported';
+      case Available() || Preparing() || PrepareFailed():
+        break;
     }
-    if (!await prefs.saveEngine(kind)) diag(formatDiag('engine_save_failed', {'engine': kind.name}));
-    _saved = kind;
-    _override = null;
-    _pageEpoch++;
-    notifyListeners();
+    final installer = _installer;
+    if (installer == null) return 'duix_unsupported';
+    if (installer.state is! InstallReady) {
+      await (_preparing ??= installer.start().whenComplete(() => _preparing = null));
+    }
+    return switch (installer.state) {
+      InstallReady() => null,
+      InstallFailed(code: 'no_space') => 'no_space',
+      _ => 'prepare_failed',
+    };
   }
 
-  /// The Duix page failed: this session continues on 3D; the saved choice stays.
+  /// The user picked a character after the crash notice: the next launch may offer Duix again.
+  Future<void> acknowledgeCrash() async {
+    if (_crashDisabled) await guard.acknowledgeDisable();
+  }
+
+  /// A Duix page failed while running. Only logged here; the shell shows the picker with the reason.
   void reportDuixFailure(AvatarEngineFailure failure) {
-    if (sessionEngine != AvatarEngineKind.duix) return;
-    _override = AvatarEngineKind.webview;
-    _pageEpoch++;
-    _notice = EngineNotice.fallback;
-    diag(formatDiag('duix_fallback', {'code': failure.code}));
-    notifyListeners();
+    diag(formatDiag('duix_failed', {'code': failure.code}));
   }
 
-  void _hide(DuixAvailability gate) {
+  void _setGate(DuixAvailability gate) {
     _gate = gate;
-    if (_saved == AvatarEngineKind.duix) _override = AvatarEngineKind.webview;
     notifyListeners();
   }
 
-  void _onInstaller() {
-    final ready = _installer?.state is InstallReady;
-    if (ready && !_wasReady) _notice = EngineNotice.duixReady;
-    _wasReady = ready;
-    notifyListeners();
-  }
+  void _onInstaller() => notifyListeners();
 
   @override
   void dispose() {

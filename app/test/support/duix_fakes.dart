@@ -30,6 +30,9 @@ class FakeDuixBridge implements DuixBridge {
   DuixBridgeError? stopError;
   DuixPrepared prepared = const DuixPrepared(width: 540, height: 960, motions: []);
   Completer<void>? installGate;
+
+  /// When set, ensureBundled waits for it (a copy in progress).
+  Completer<void>? bundleGate;
   DuixStopped stopResult = const DuixStopped(seq: 0, playedMs: 0);
   final _events = StreamController<DuixEvent>.broadcast(sync: true);
 
@@ -63,6 +66,8 @@ class FakeDuixBridge implements DuixBridge {
   @override
   Future<void> ensureBundled() async {
     calls.add('ensureBundled');
+    final gate = bundleGate;
+    if (gate != null) await gate.future;
     final error = bundleError;
     if (error != null) throw error;
     installed['gj_dh_res'] = true;

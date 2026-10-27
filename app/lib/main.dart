@@ -14,7 +14,6 @@ import 'duix/duix_crash_guard.dart';
 import 'duix/duix_engine.dart';
 import 'identity/app_shell.dart';
 import 'identity/avatars.dart';
-import 'identity/character_engine_prefs.dart';
 import 'identity/characters.dart';
 import 'identity/device_identity.dart';
 import 'identity/identity_api.dart';
@@ -99,9 +98,7 @@ class _HomeState extends State<_Home> {
   );
   final _bridge = MethodChannelDuixBridge();
   final _handoff = EngineHandoff();
-  // Task 14 removes CharacterEnginePrefs together with EnginePrefs.
   late final _engines = EngineSwitchController(
-    prefs: CharacterEnginePrefs(identity: _identity, catalog: widget.catalog),
     bridge: _bridge,
     guard: DuixCrashGuard(_store),
     loadConfig: () async => DuixConfig.parse(await rootBundle.loadString(DuixConfig.assetPath)),
