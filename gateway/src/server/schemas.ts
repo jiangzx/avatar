@@ -42,3 +42,24 @@ export const SessionCreateSchema = z.object({ character: z.enum(CHARACTER_IDS).o
 
 /** DELETE /dev/owner/:id. */
 export const OwnerIdSchema = z.uuid();
+
+/** Settings addressing (spec §7): 1–20 characters after trim, counted as code points. */
+export const ADDRESSING_MAX_CHARS = 20;
+
+/** PUT /memory/addressing. */
+export const AddressingRequestSchema = z.object({
+  text: z.string().max(200).refine((text) => {
+    const length = [...text.trim()].length;
+    return length >= 1 && length <= ADDRESSING_MAX_CHARS;
+  }),
+}).strict();
+
+/** DELETE /memory/items/:id. */
+export const MemoryItemIdSchema = z.uuid();
+
+/** DELETE /memory?scope=...; character only with scope=character, and only a registered id. */
+export const MemoryClearQuerySchema = z.discriminatedUnion('scope', [
+  z.object({ scope: z.literal('profile') }).strict(),
+  z.object({ scope: z.literal('character'), character: z.enum(CHARACTER_IDS) }).strict(),
+  z.object({ scope: z.literal('all') }).strict(),
+]);

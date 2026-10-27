@@ -214,7 +214,7 @@ describe('bearer sessions', () => {
     const { base } = await boot();
     const res = await fetch(`${base}/session`, { method: 'OPTIONS', headers: { origin: 'http://127.0.0.1:39123' } });
     expect(res.status).toBe(204);
-    expect(res.headers.get('access-control-allow-methods')).toBe('POST, PATCH, DELETE, OPTIONS');
+    expect(res.headers.get('access-control-allow-methods')).toBe('GET, POST, PUT, PATCH, DELETE, OPTIONS');
     expect(res.headers.get('access-control-allow-headers')).toBe('content-type, x-app-secret, authorization');
   });
 });

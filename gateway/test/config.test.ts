@@ -341,6 +341,7 @@ describe('identity config', () => {
   it('defaults to dev mode with conservative limits', () => {
     expect(loadIdentityConfig(base, repoRoot)).toEqual({
       busyTimeoutMs: 5000, maxOwners: 100, registerDailyCap: 20, registerRateLimitMax: 5, registerRateLimitWindowMs: 3_600_000,
+      memoryRateLimitMax: 60, memoryRateLimitWindowMs: 60_000,
       orphanOwnerDays: 7, orphanCleanupBatch: 200, enableDevEndpoints: false,
     });
   });

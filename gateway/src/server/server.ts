@@ -2,12 +2,22 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import { DEFAULT_CHARACTER_ID, FRAME_AI, FRAME_MIC, MIC_FRAME_SAMPLES, decodeAudioFrame, encodeAudioFrame } from '@anyidea/protocol';
 import type { IdentityService } from '../identity/registry.ts';
+import type { MemoryService } from '../identity/memoryService.ts';
 import { log } from '../log.ts';
 import type { ContextResolver } from '../session/context.ts';
 import type { SessionManager } from '../session/manager.ts';
 import type { Transport } from '../session/session.ts';
 import { safeEqual } from '../session/tokens.ts';
-import { OwnerIdSchema, RegisterRequestSchema, ResumeRequestSchema, SessionCreateSchema, parseClientMessage } from './schemas.ts';
+import {
+  AddressingRequestSchema,
+  MemoryClearQuerySchema,
+  MemoryItemIdSchema,
+  OwnerIdSchema,
+  RegisterRequestSchema,
+  ResumeRequestSchema,
+  SessionCreateSchema,
+  parseClientMessage,
+} from './schemas.ts';
 
 export interface GatewayServerOptions {
   manager: SessionManager;
@@ -32,6 +42,10 @@ export interface GatewayServerOptions {
   trustProxy?: boolean;
   /** Set only when ENABLE_DEV_ENDPOINTS=1; DELETE /dev/owner/:id must carry it in x-dev-token. */
   devToken?: string;
+  /** Settings memory routes (spec §7). Absent = identity disabled: those routes answer 404. */
+  memory?: MemoryService;
+  /** Separate bucket for the memory routes (MEMORY_RATE_LIMIT_*). */
+  memoryRateLimit?: { max: number; windowMs: number };
 }
 
 const BEARER = /^Bearer ([A-Za-z0-9_-]{16,128})$/;
@@ -48,6 +62,7 @@ export function createGatewayServer(opts: GatewayServerOptions): Server {
     session: opts.sessionRateLimit ? new RateLimiter(opts.sessionRateLimit) : null,
     register: opts.registerRateLimit ? new RateLimiter(opts.registerRateLimit) : null,
     resume: opts.resumeRateLimit ? new RateLimiter(opts.resumeRateLimit) : null,
+    memory: opts.memoryRateLimit ? new RateLimiter(opts.memoryRateLimit) : null,
   };
   const server = createServer((req, res) => {
     handleHttp(req, res, opts, limiters).catch(() => {
@@ -91,20 +106,34 @@ interface Limiters {
   session: RateLimiter | null;
   register: RateLimiter | null;
   resume: RateLimiter | null;
+  memory: RateLimiter | null;
 }
 
 type Route =
   | { kind: 'session' }
   | { kind: 'resume' }
   | { kind: 'register'; identity: IdentityService }
-  | { kind: 'deleteOwner'; identity: IdentityService; devToken: string; ownerId: string };
+  | { kind: 'deleteOwner'; identity: IdentityService; devToken: string; ownerId: string }
+  | { kind: 'memoryOverview'; memory: MemoryService }
+  | { kind: 'memoryAddressing'; memory: MemoryService }
+  | { kind: 'memoryItem'; memory: MemoryService; itemId: string }
+  | { kind: 'memoryClear'; memory: MemoryService; query: URLSearchParams };
 
 const DEV_OWNER_PATH = /^\/dev\/owner\/([^/]+)$/;
+const MEMORY_ITEM_PATH = /^\/memory\/items\/([^/]+)$/;
 
 /** Unknown, disabled (identity off) and dev-only (dev endpoints off) routes all resolve to null → 404. */
-function matchRoute(method: string | undefined, path: string, opts: GatewayServerOptions): Route | null {
+function matchRoute(method: string | undefined, path: string, opts: GatewayServerOptions, query: URLSearchParams): Route | null {
   if (method === 'POST' && path === '/session') return { kind: 'session' };
   if (method === 'POST' && path === '/session/resume') return { kind: 'resume' };
+  const memory = opts.memory;
+  if (memory) {
+    if (method === 'GET' && path === '/memory') return { kind: 'memoryOverview', memory };
+    if (method === 'PUT' && path === '/memory/addressing') return { kind: 'memoryAddressing', memory };
+    if (method === 'DELETE' && path === '/memory') return { kind: 'memoryClear', memory, query };
+    const item = MEMORY_ITEM_PATH.exec(path);
+    if (method === 'DELETE' && item) return { kind: 'memoryItem', memory, itemId: item[1]! };
+  }
   const identity = opts.identity;
   if (!identity) return null;
   if (method === 'POST' && path === '/device/register') return { kind: 'register', identity };
@@ -119,10 +148,11 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Headers', 'content-type, x-app-secret, authorization');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   }
   res.setHeader('Cache-Control', 'no-store');
-  const path = new URL(req.url ?? '/', 'http://localhost').pathname;
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const path = url.pathname;
   if (req.method === 'OPTIONS') {
     res.writeHead(204).end();
     return;
@@ -131,7 +161,7 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
     json(res, 200, { ok: true });
     return;
   }
-  const route = matchRoute(req.method, path, opts);
+  const route = matchRoute(req.method, path, opts, url.searchParams);
   if (!route) {
     json(res, 404, { error: 'not_found' });
     return;
@@ -157,6 +187,12 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse, opts: Gatew
       return;
     case 'deleteOwner':
       deleteOwner(req, res, opts.manager, route);
+      return;
+    case 'memoryOverview':
+    case 'memoryAddressing':
+    case 'memoryItem':
+    case 'memoryClear':
+      await handleMemory(req, res, opts, limiters.memory, route);
       return;
   }
 }
@@ -251,6 +287,77 @@ function deleteOwner(req: IncomingMessage, res: ServerResponse, manager: Session
     json(res, 404, { error: 'owner_not_found' });
     return;
   }
+  res.writeHead(204).end();
+}
+
+type MemoryRoute = Extract<Route, { kind: 'memoryOverview' | 'memoryAddressing' | 'memoryItem' | 'memoryClear' }>;
+
+/** Spec §7: owner only from the bearer; validate, then end the owner's live session before any write. */
+async function handleMemory(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions, limiter: RateLimiter | null, route: MemoryRoute): Promise<void> {
+  if (limiter && !limiter.allow(clientAddress(req, opts.trustProxy))) {
+    json(res, 429, { error: 'rate_limited' });
+    return;
+  }
+  const bearer = bearerToken(req);
+  const ownerId = typeof bearer === 'string' ? route.memory.ownerOf(bearer) : undefined;
+  if (!ownerId) {
+    json(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  const startedAt = performance.now();
+  switch (route.kind) {
+    case 'memoryOverview': {
+      const overview = route.memory.overview(ownerId);
+      const count = (overview.profile.addressing ? 1 : 0) + overview.profile.items.length
+        + overview.characters.reduce((sum, group) => sum + group.pinned.length + group.facts.length, 0);
+      log('memory_http', { op: 'overview', count, ms: Math.round(performance.now() - startedAt) });
+      json(res, 200, overview);
+      return;
+    }
+    case 'memoryAddressing': {
+      const parsed = AddressingRequestSchema.safeParse(await readJson(req, 1024));
+      if (!parsed.success) {
+        json(res, 400, { error: 'bad_request' });
+        return;
+      }
+      opts.manager.endOwner(ownerId, 'memory_changed');
+      const result = route.memory.setAddressing(ownerId, parsed.data.text);
+      if (result === 'declined') {
+        json(res, 409, { error: 'memory_declined' });
+        return;
+      }
+      if (result === 'rejected') {
+        json(res, 400, { error: 'rejected' });
+        return;
+      }
+      break;
+    }
+    case 'memoryItem': {
+      const id = MemoryItemIdSchema.safeParse(route.itemId);
+      if (!id.success) {
+        json(res, 400, { error: 'bad_request' });
+        return;
+      }
+      opts.manager.endOwner(ownerId, 'memory_changed');
+      // Missing and foreign ids are the same 404 (BOLA).
+      if (!route.memory.deleteItem(ownerId, id.data)) {
+        json(res, 404, { error: 'not_found' });
+        return;
+      }
+      break;
+    }
+    case 'memoryClear': {
+      const parsed = MemoryClearQuerySchema.safeParse(Object.fromEntries(route.query));
+      if (!parsed.success) {
+        json(res, 400, { error: 'bad_request' });
+        return;
+      }
+      opts.manager.endOwner(ownerId, 'memory_changed');
+      route.memory.clear(ownerId, parsed.data.scope, parsed.data.scope === 'character' ? parsed.data.character : undefined);
+      break;
+    }
+  }
+  log('memory_http', { op: route.kind, ms: Math.round(performance.now() - startedAt) });
   res.writeHead(204).end();
 }
 

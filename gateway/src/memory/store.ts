@@ -138,6 +138,14 @@ export interface MemoryStore {
   closeCareFollowup(ownerId: string, id: string, now: number): void;
   /** Daily retention: clears quotes created before `olderThan`. Returns rows changed. */
   clearStaleCareQuotes(ownerId: string, olderThan: number): number;
+  /** Agent rows of one owner, one per character met. */
+  listAgents(ownerId: string): AgentRecord[];
+  /** Ids of this owner's live messages whose FTS tokens all match; agentId null = any agent of the owner. */
+  matchMessageIds(ownerId: string, agentId: string | null, match: string, limit: number): string[];
+  /** Content-free audit row for a settings change (diff is always empty). */
+  recordMemoryChange(row: { ownerId: string; agentId: string | null; table: string; rowId: string; op: string; now: number }): void;
+  /** Empties audit diffs that may quote deleted content. An empty filter means every row of the owner. */
+  scrubChangeDiffs(ownerId: string, filter: { rowId?: string; agentId?: string; table?: string }): void;
 }
 
 export interface PendingMessage {
@@ -404,6 +412,18 @@ function prepareStatements(db: DatabaseSync) {
     deleteAgentChanges: p('DELETE FROM memory_changes WHERE owner_id = ? AND agent_id = ?'),
     deleteProfileChanges: p(`DELETE FROM memory_changes WHERE owner_id = ? AND table_name = 'profile_facts'`),
     deleteAllChanges: p('DELETE FROM memory_changes WHERE owner_id = ?'),
+
+    // Settings page (spec §7)
+    listAgents: p('SELECT id, owner_id, character_id, memory_epoch FROM agents WHERE owner_id = ? ORDER BY created_at, id'),
+    matchMessageIds: p(`SELECT m.id AS id FROM messages_fts
+      JOIN messages m ON m.rowid = messages_fts.rowid
+      WHERE messages_fts MATCH ? AND m.owner_id = ? AND (? IS NULL OR m.agent_id = ?) AND m.excluded = 0
+      LIMIT ?`),
+    insertSettingsChange: p(`INSERT INTO memory_changes (id, owner_id, agent_id, table_name, row_id, op, diff, actor, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, '', 'settings', ?)`),
+    scrubChangeDiffs: p(`UPDATE memory_changes SET diff = ''
+      WHERE owner_id = ? AND diff != ''
+        AND (? IS NULL OR row_id = ?) AND (? IS NULL OR agent_id = ?) AND (? IS NULL OR table_name = ?)`),
   };
 }
 
@@ -713,6 +733,30 @@ export class SqliteMemoryStore implements MemoryStore {
       }
       return deleted;
     });
+  }
+
+  listAgents(ownerId: string): AgentRecord[] {
+    return this.q.listAgents.all(ownerId).map(toAgent);
+  }
+
+  matchMessageIds(ownerId: string, agentId: string | null, match: string, limit: number): string[] {
+    try {
+      return this.q.matchMessageIds.all(match, ownerId, agentId, agentId, limit).map((row) => row.id as string);
+    } catch {
+      // A malformed FTS expression matches nothing, like matchRowids.
+      return [];
+    }
+  }
+
+  recordMemoryChange(row: { ownerId: string; agentId: string | null; table: string; rowId: string; op: string; now: number }): void {
+    this.q.insertSettingsChange.run(randomUUID(), row.ownerId, row.agentId, row.table, row.rowId, row.op, row.now);
+  }
+
+  scrubChangeDiffs(ownerId: string, filter: { rowId?: string; agentId?: string; table?: string }): void {
+    const rowId = filter.rowId ?? null;
+    const agentId = filter.agentId ?? null;
+    const table = filter.table ?? null;
+    this.q.scrubChangeDiffs.run(ownerId, rowId, rowId, agentId, agentId, table, table);
   }
 
   clearAgentMemory(ownerId: string, agentId: string): void {

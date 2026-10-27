@@ -272,6 +272,9 @@ export interface IdentityConfig {
   registerDailyCap: number;
   registerRateLimitMax: number;
   registerRateLimitWindowMs: number;
+  /** Memory routes bucket (spec §7: MEMORY_RATE_LIMIT, default 60 per 60 s). */
+  memoryRateLimitMax: number;
+  memoryRateLimitWindowMs: number;
   /** Owners that registered but never started a session are deleted after this many days. */
   orphanOwnerDays: number;
   orphanCleanupBatch: number;
@@ -289,6 +292,8 @@ const IdentityEnvSchema = z.object({
   REGISTER_DAILY_CAP: envInt(1, 10_000, 20),
   REGISTER_RATE_LIMIT_MAX: envInt(1, 1_000, 5),
   REGISTER_RATE_LIMIT_WINDOW_MS: envInt(1_000, 24 * 3_600_000, 3_600_000),
+  MEMORY_RATE_LIMIT_MAX: envInt(1, 1_000, 60),
+  MEMORY_RATE_LIMIT_WINDOW_MS: envInt(1_000, 3_600_000, 60_000),
   ORPHAN_OWNER_DAYS: envInt(1, 365, 7),
   ORPHAN_CLEANUP_BATCH: envInt(1, 10_000, 200),
   ENABLE_DEV_ENDPOINTS: z.enum(['0', '1']).default('0'),
@@ -323,6 +328,8 @@ export function loadIdentityConfig(env: Record<string, string | undefined>, repo
     registerDailyCap: e.REGISTER_DAILY_CAP,
     registerRateLimitMax: e.REGISTER_RATE_LIMIT_MAX,
     registerRateLimitWindowMs: e.REGISTER_RATE_LIMIT_WINDOW_MS,
+    memoryRateLimitMax: e.MEMORY_RATE_LIMIT_MAX,
+    memoryRateLimitWindowMs: e.MEMORY_RATE_LIMIT_WINDOW_MS,
     orphanOwnerDays: e.ORPHAN_OWNER_DAYS,
     orphanCleanupBatch: e.ORPHAN_CLEANUP_BATCH,
     enableDevEndpoints,

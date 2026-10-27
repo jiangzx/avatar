@@ -2,21 +2,16 @@
 import { z } from 'zod';
 import type { SafetyRules } from '../../config.ts';
 import { fillerWords, vagueKey } from '../../i18n/text.ts';
-import { bigrams } from '../../memory/bigram.ts';
 import { isMemoryEvidence } from '../../memory/evidence.ts';
+import { ftsMatch } from '../../memory/fts.ts';
 import { grounded, parsePhrase, sameUtterance } from '../../memory/grounding.ts';
 import { scanText } from '../../memory/scan.ts';
 import type { TextModelClient } from '../../memory/textClient.ts';
 import type { ToolContext, ToolHandler, ToolOutcome } from './registry.ts';
 
-const RecallSchema = z.object({ query: z.string().min(1).max(2_000) }).strict();
+export { ftsMatch };
 
-/** FTS expression for the same tokens `bigrams` stored. Null when the query has none. */
-export function ftsMatch(text: string, match: 'any' | 'all' = 'any'): string | null {
-  const tokens = bigrams(text).split(' ').filter((token) => token.length > 0);
-  if (tokens.length === 0) return null;
-  return tokens.map((token) => `"${token.replaceAll('"', '""')}"`).join(match === 'all' ? ' AND ' : ' OR ');
-}
+const RecallSchema = z.object({ query: z.string().min(1).max(2_000) }).strict();
 
 function stripInvisible(text: string, codePoints: readonly number[]): string {
   const banned = new Set(codePoints);

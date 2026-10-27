@@ -18,6 +18,7 @@ import { SessionManager } from './session/manager.ts';
 import { Session } from './session/session.ts';
 import { createGatewayServer } from './server/server.ts';
 import { DeviceRegistry, ORPHAN_CLEANUP_INTERVAL_MS } from './identity/registry.ts';
+import { createMemoryService } from './identity/memoryService.ts';
 import { backfillKanaBigrams } from './memory/backfill.ts';
 import { openDatabase } from './memory/db.ts';
 import { SqliteMemoryStore } from './memory/store.ts';
@@ -108,6 +109,7 @@ const registry = store
     })
   : null;
 log('identity_mode', { enabled: registry !== null, devEndpoints: identityConfig.enableDevEndpoints });
+const memoryService = store ? createMemoryService({ store, safety: i18n.safety }) : undefined;
 const writer = store ? new SqliteTranscriptWriter(store, i18n.safety) : undefined;
 const textClient = config.qwenApiKey && config.summarizerEndpoint
   ? new QwenTextClient({
@@ -199,6 +201,8 @@ const server = createGatewayServer({
   contextResolver: registry ?? devContextResolver(roles, characters),
   identity: registry ?? undefined,
   registerRateLimit: { max: identityConfig.registerRateLimitMax, windowMs: identityConfig.registerRateLimitWindowMs },
+  ...(memoryService ? { memory: memoryService } : {}),
+  memoryRateLimit: { max: identityConfig.memoryRateLimitMax, windowMs: identityConfig.memoryRateLimitWindowMs },
   devToken: identityConfig.devToken,
   allowedOrigin: makeOriginCheck(config.devOrigins),
   allowDebugText: config.allowDebugText,
