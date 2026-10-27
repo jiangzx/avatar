@@ -28,9 +28,17 @@ export interface ProactiveRequest {
   fallbackText: string;
 }
 
+/** Token counts for one model call. Detail fields are present only when the provider reports them. */
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  inputTextTokens?: number;
+  inputAudioTokens?: number;
+  outputTextTokens?: number;
+  outputAudioTokens?: number;
+  cachedTokens?: number;
+  /** True when the counts are synthetic or derived, not provider-reported. */
+  estimated?: boolean;
 }
 
 /** Upstream ids for support tickets. Never carries upstream messages (they may echo content). */

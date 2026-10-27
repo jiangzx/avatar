@@ -201,7 +201,24 @@ function decode(value: unknown): Int16Array | null { if (typeof value !== 'strin
 function parseUsage(raw: unknown): TokenUsage | null {
   if (!raw || typeof raw !== 'object') return null;
   const u = raw as Json;
-  return typeof u.input_tokens === 'number' && typeof u.output_tokens === 'number' ? { inputTokens: u.input_tokens, outputTokens: u.output_tokens } : null;
+  if (typeof u.input_tokens !== 'number' || typeof u.output_tokens !== 'number') return null;
+  const usage: TokenUsage = { inputTokens: u.input_tokens, outputTokens: u.output_tokens };
+  // Qwen documents input_tokens_details; the OpenAI spelling is accepted too.
+  const input = detailsOf(u.input_tokens_details ?? u.input_token_details);
+  const output = detailsOf(u.output_tokens_details ?? u.output_token_details);
+  if (input.text !== undefined) usage.inputTextTokens = input.text;
+  if (input.audio !== undefined) usage.inputAudioTokens = input.audio;
+  if (input.cached !== undefined) usage.cachedTokens = input.cached;
+  if (output.text !== undefined) usage.outputTextTokens = output.text;
+  if (output.audio !== undefined) usage.outputAudioTokens = output.audio;
+  return usage;
+}
+
+function detailsOf(raw: unknown): { text?: number; audio?: number; cached?: number } {
+  if (!raw || typeof raw !== 'object') return {};
+  const d = raw as Json;
+  const pick = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
+  return { text: pick(d.text_tokens), audio: pick(d.audio_tokens), cached: pick(d.cached_tokens) };
 }
 
 /** The only id path a Qwen error event carries (P1-T1 probe A4). Never reads the message. */

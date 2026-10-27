@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
 import { AI_SAMPLE_RATE, MIC_SAMPLE_RATE } from '@anyidea/protocol';
 import { rmsInt16 } from '../audio.ts';
-import type { AdapterEvents, ProactiveCue, ProactiveRequest, RealtimeAdapter, SessionConfig } from './types.ts';
+import type { AdapterEvents, ProactiveCue, ProactiveRequest, RealtimeAdapter, SessionConfig, TokenUsage } from './types.ts';
 
 export interface MockTurn {
   /** If set, `sendUserText` picks this turn when the text contains it. */
@@ -41,6 +41,8 @@ export interface MockOptions {
   paceFactor?: number;
   /** Silence before the next reply after a started response is cancelled. TUNABLE. */
   cancelGapMs?: number;
+  /** Emit a synthetic, estimated responseUsage before responseDone (admin pipeline without a model key). */
+  emitUsage?: boolean;
 }
 
 /** Keeps a cancelled reply from flowing straight into the next clip. TUNABLE. */
@@ -200,6 +202,7 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
       if (this.active !== handle) return;
       if (i >= chunks) {
         this.active = null;
+        if (this.opts.emitUsage) this.emit('responseUsage', handle.id, this.syntheticUsage(text, totalMs));
         this.emit('responseDone', handle.id);
         return;
       }
@@ -213,6 +216,21 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
       handle.timer = setTimeout(tick, chunkMs / pace);
     };
     tick();
+  }
+
+  /** Deterministic fake counts: ~2 instruction chars per token, 1 token per reply char, 12.5 audio tokens per second. */
+  private syntheticUsage(text: string, totalMs: number): TokenUsage {
+    const inputTextTokens = Math.ceil(this.instructions.length / 2);
+    const outputTextTokens = text.length;
+    const outputAudioTokens = Math.round((totalMs / 1000) * 12.5);
+    return {
+      inputTokens: inputTextTokens,
+      outputTokens: outputTextTokens + outputAudioTokens,
+      inputTextTokens,
+      outputTextTokens,
+      outputAudioTokens,
+      estimated: true,
+    };
   }
 
   private cancelActive(): void {

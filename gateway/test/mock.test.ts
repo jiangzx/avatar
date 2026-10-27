@@ -180,3 +180,32 @@ describe('withCharacterName', () => {
     expect(script.greeting).toBe('我是{{char}}');
   });
 });
+
+describe('MockAdapter synthetic usage', () => {
+  const script = { greeting: '你好呀', followup: '还在吗', fallbackReply: '我在听', turns: [] };
+
+  it('emits estimated usage before responseDone only when enabled', async () => {
+    vi.useFakeTimers();
+    try {
+      const on = new MockAdapter({ script, replyDelayMs: 10, charMs: 100, chunkMs: 100, paceFactor: 1, emitUsage: true });
+      const off = new MockAdapter({ script, replyDelayMs: 10, charMs: 100, chunkMs: 100, paceFactor: 1 });
+      const seen: string[] = [];
+      const usages: unknown[] = [];
+      on.on('responseUsage', (_id, usage) => { seen.push('usage'); usages.push(usage); });
+      on.on('responseDone', () => seen.push('done'));
+      let offUsage = 0;
+      off.on('responseUsage', () => offUsage++);
+      await on.connect({ instructions: '1234567890', tools: [] });
+      await off.connect({ instructions: '1234567890', tools: [] });
+      on.createResponse();
+      off.createResponse();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(seen).toEqual(['usage', 'done']);
+      // '你好呀' = 3 chars → 300 ms of audio at charMs 100 → round(0.3 * 12.5) = 4 audio tokens.
+      expect(usages).toEqual([{ inputTokens: 5, outputTokens: 7, inputTextTokens: 5, outputTextTokens: 3, outputAudioTokens: 4, estimated: true }]);
+      expect(offUsage).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -1,5 +1,8 @@
 import type { Language } from '@anyidea/protocol';
+import type { TokenUsage } from '../adapters/types.ts';
+import { parseChatUsage } from '../memory/textClient.ts';
 import { PROMPT_LABELS } from '../roles/labels.ts';
+import type { UsageRecorder, UsageTag } from '../usage/types.ts';
 import type { LedgerEntry, Summarizer } from './ledger.ts';
 
 export interface QwenSummarizerOptions {
@@ -7,6 +10,9 @@ export interface QwenSummarizerOptions {
   endpoint: string;
   model: string;
   timeoutMs?: number;
+  /** Usage sink and the session it bills; both are needed to record. */
+  recorder?: UsageRecorder;
+  tag?: UsageTag;
 }
 
 const SYSTEM_PROMPTS: Record<Language, string> = {
@@ -16,7 +22,7 @@ const SYSTEM_PROMPTS: Record<Language, string> = {
 };
 
 export class QwenSummarizer implements Summarizer {
-  private readonly opts: Required<QwenSummarizerOptions>;
+  private readonly opts: QwenSummarizerOptions & { timeoutMs: number };
 
   constructor(options: QwenSummarizerOptions) {
     if (!options.apiKey) throw new Error('DASHSCOPE_API_KEY is required');
@@ -36,36 +42,52 @@ export class QwenSummarizer implements Summarizer {
     ].filter(Boolean).join('\n');
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs);
+    const started = Date.now();
     try {
-      let response: Response;
-      try {
-        response = await fetch(this.opts.endpoint, {
-          method: 'POST',
-          headers: { authorization: `Bearer ${this.opts.apiKey}`, 'content-type': 'application/json' },
-          body: JSON.stringify({
-            model: this.opts.model,
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPTS[language] },
-              { role: 'user', content: transcript },
-            ],
-            temperature: 0,
-            max_tokens: 600,
-          }),
-          signal: controller.signal,
-        });
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') throw new Error('summarizer_timeout');
-        throw new Error('summarizer_network_error');
-      }
-      if (!response.ok) throw new Error(`summarizer_http_${response.status}`);
-      let payload: unknown;
-      try { payload = await response.json(); } catch { throw new Error('summarizer_invalid_json'); }
-      const content = extractContent(payload);
-      if (!content) throw new Error('summarizer_invalid_response');
+      const { content, usage } = await this.request(language, transcript, controller.signal);
+      this.record(usage, Date.now() - started, null);
       return content;
+    } catch (error) {
+      this.record(null, Date.now() - started, error instanceof Error ? error.message : 'summarizer_unknown');
+      throw error;
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private record(usage: TokenUsage | null, genMs: number, errorCode: string | null): void {
+    const { recorder, tag } = this.opts;
+    if (!recorder || !tag) return;
+    recorder.record({ kind: tag.kind, adapter: 'text', model: this.opts.model, usage, attribution: tag.attribution, genMs, errorCode });
+  }
+
+  private async request(language: Language, transcript: string, signal: AbortSignal): Promise<{ content: string; usage: TokenUsage | null }> {
+    let response: Response;
+    try {
+      response = await fetch(this.opts.endpoint, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${this.opts.apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: this.opts.model,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPTS[language] },
+            { role: 'user', content: transcript },
+          ],
+          temperature: 0,
+          max_tokens: 600,
+        }),
+        signal,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw new Error('summarizer_timeout');
+      throw new Error('summarizer_network_error');
+    }
+    if (!response.ok) throw new Error(`summarizer_http_${response.status}`);
+    let payload: unknown;
+    try { payload = await response.json(); } catch { throw new Error('summarizer_invalid_json'); }
+    const content = extractContent(payload);
+    if (!content) throw new Error('summarizer_invalid_response');
+    return { content, usage: parseChatUsage(payload) };
   }
 }
 

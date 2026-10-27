@@ -287,4 +287,35 @@ describe('QwenAdapter', () => {
     expect(seen).toEqual(['stopped', ['r1', { inputTokens: 321, outputTokens: 45 }]]);
     a.close();
   });
+
+  it('splits realtime usage into text and audio tokens', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s); await new Promise<void>((r) => s.once('listening', r)); const port = (s.address() as { port: number }).port;
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString()) as { type: string };
+      if (e.type !== 'session.update') return;
+      ws.send(JSON.stringify({ type: 'session.updated' }));
+      ws.send(JSON.stringify({ type: 'response.created', response: { id: 'r1' } }));
+      ws.send(JSON.stringify({ type: 'response.done', response: { id: 'r1', status: 'completed', usage: {
+        input_tokens: 300, output_tokens: 90,
+        input_tokens_details: { text_tokens: 260, audio_tokens: 40, cached_tokens: 0 },
+        output_tokens_details: { text_tokens: 15, audio_tokens: 75 },
+      } } }));
+      ws.send(JSON.stringify({ type: 'response.created', response: { id: 'r2' } }));
+      ws.send(JSON.stringify({ type: 'response.done', response: { id: 'r2', status: 'completed', usage: {
+        input_tokens: 10, output_tokens: 5,
+        input_token_details: { text_tokens: 8, audio_tokens: 2 },
+        output_token_details: { text_tokens: 1, audio_tokens: 4 },
+      } } }));
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture' });
+    const seen: unknown[] = [];
+    a.on('responseUsage', (id, usage) => seen.push([id, usage]));
+    await a.connect({ instructions: 'fixture', tools: [] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(seen).toEqual([
+      ['r1', { inputTokens: 300, outputTokens: 90, inputTextTokens: 260, inputAudioTokens: 40, cachedTokens: 0, outputTextTokens: 15, outputAudioTokens: 75 }],
+      ['r2', { inputTokens: 10, outputTokens: 5, inputTextTokens: 8, inputAudioTokens: 2, outputTextTokens: 1, outputAudioTokens: 4 }],
+    ]);
+    a.close();
+  });
 });
