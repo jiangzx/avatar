@@ -14,6 +14,7 @@ function fakeSession() {
     attachTransport: vi.fn(),
     detachTransport: vi.fn(),
     flush: vi.fn(),
+    notifyEnd: vi.fn(),
     setInitialLanguage: vi.fn(),
   };
 }
@@ -190,6 +191,35 @@ describe('SessionManager owner invariant', () => {
     expect(m.endOwner('o1', 'owner_deleted')).toBe(0);
     expect(m.size).toBe(1);
     expect(events).toContain('ended:o1:owner_deleted');
+  });
+
+  it('endOwner with a notice tells the client first and drops the socket after the delay', async () => {
+    const { manager: m, made, events } = setup();
+    const t = m.create(owned('o1'));
+    const claim = m.claim(t.connectToken)!;
+    const terminate = vi.fn();
+    expect(m.attachSocket(t.sessionId, claim.connId, terminate)).toBe(true);
+    expect(await m.begin(t.sessionId, claim.connId, 'start', transport)).toBe(true);
+    expect(m.endOwner('o1', 'owner_banned', { code: 'owner_banned', closeDelayMs: 250 })).toBe(1);
+    const session = made[0]!;
+    expect(session.notifyEnd).toHaveBeenCalledWith('owner_banned');
+    expect(session.notifyEnd.mock.invocationCallOrder[0]).toBeLessThan(session.flush.mock.invocationCallOrder[0]!);
+    expect(events).toContain('ended:o1:owner_banned');
+    expect(terminate).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(250); // this file already runs on fake timers (beforeEach)
+    expect(terminate).toHaveBeenCalledOnce();
+  });
+
+  it('endOwner without a notice terminates at once and sends nothing', async () => {
+    const { manager: m, made } = setup();
+    const t = m.create(owned('o1'));
+    const claim = m.claim(t.connectToken)!;
+    const terminate = vi.fn();
+    m.attachSocket(t.sessionId, claim.connId, terminate);
+    await m.begin(t.sessionId, claim.connId, 'start', transport);
+    m.endOwner('o1', 'owner_deleted');
+    expect(made[0]!.notifyEnd).not.toHaveBeenCalled();
+    expect(terminate).toHaveBeenCalledOnce();
   });
 });
 

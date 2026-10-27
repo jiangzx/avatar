@@ -70,15 +70,29 @@ export class SessionManager {
     return this.tokens.issue(sessionId);
   }
 
-  /** Ends every session of one owner and drops its socket. Returns how many were ended. */
-  endOwner(ownerId: string, reason: string): number {
+  /**
+   * Ends every session of one owner and drops its socket. Returns how many were ended.
+   * With a notice, the client gets an error message first and the socket is dropped after
+   * closeDelayMs, because ws.terminate() can discard a message that was just written.
+   */
+  endOwner(ownerId: string, reason: string, notice?: { code: string; closeDelayMs: number }): number {
     let ended = 0;
     for (const [sessionId, entry] of [...this.sessions]) {
       if (entry.ctx.ownerId !== ownerId) continue;
       const terminate = entry.terminate;
+      if (notice) {
+        try {
+          entry.session.notifyEnd(notice.code);
+        } catch {
+          // A failed notice must not keep the session alive; the app also gets 403 on reconnect.
+        }
+      }
       this.flushSession(entry, this.logFor(sessionId, entry.ctx));
       this.destroy(sessionId, reason);
-      terminate?.(); // the socket's close event then finds no entry and is ignored
+      if (terminate) {
+        if (notice && notice.closeDelayMs > 0) setTimeout(terminate, notice.closeDelayMs).unref();
+        else terminate(); // the socket's close event then finds no entry and is ignored
+      }
       ended++;
     }
     return ended;

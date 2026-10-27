@@ -50,6 +50,8 @@ export interface GatewayServerOptions {
   memoryRateLimit?: { max: number; windowMs: number };
   /** Root logger. Omitted in tests: the stdout default. */
   logger?: Logger;
+  /** Admin ban check (spec Q32). Absent = no bans (dev mode). */
+  ownerBanned?: (ownerId: string) => boolean;
 }
 
 const BEARER = /^Bearer ([A-Za-z0-9_-]{16,128})$/;
@@ -222,6 +224,12 @@ async function createSession(req: IncomingMessage, res: ServerResponse, opts: Ga
   const resolved = bearer === null ? null : opts.contextResolver.resolve(bearer, characterId);
   if (!resolved?.ok) {
     json(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  // Memory routes stay open for a banned owner; only new sessions are refused.
+  if (resolved.ctx.ownerId !== undefined && opts.ownerBanned?.(resolved.ctx.ownerId)) {
+    loggerOf(opts).info('session_rejected', { reason: 'owner_banned' });
+    json(res, 403, { error: 'owner_banned' });
     return;
   }
   // create() flushes the previous owner, but only after this function returns a context.

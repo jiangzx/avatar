@@ -264,6 +264,7 @@ const server = createGatewayServer({
   resumeRateLimit: { max: config.resumeRateLimitMax, windowMs: config.resumeRateLimitWindowMs },
   trustProxy: config.trustProxy,
   logger,
+  ...(store ? { ownerBanned: (ownerId: string) => store.isOwnerBanned(ownerId) } : {}),
 });
 
 server.listen(config.port, '0.0.0.0', () => logger.info('gateway_listening', { port: config.port, adapter: config.adapter }));

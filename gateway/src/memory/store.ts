@@ -61,6 +61,10 @@ export interface MemoryStore {
   listSessions(ownerId: string): SessionRecord[];
   /** Cascades to devices, agents, sessions and every memory table. */
   deleteOwner(ownerId: string): boolean;
+  /** Admin ban flag (spec Q32). */
+  isOwnerBanned(ownerId: string): boolean;
+  /** Sets (keeping the first ban time) or clears banned_at. False when the owner does not exist. */
+  setOwnerBanned(ownerId: string, bannedAt: number | null): boolean;
   countOwners(): number;
   countOwnersCreatedSince(since: number): number;
   /** Deletes up to `limit` owners created before the cutoff that have no agent row at all. */
@@ -268,6 +272,9 @@ function prepareStatements(db: DatabaseSync) {
     touchDevice: p('UPDATE devices SET last_seen_at = ? WHERE id = ? AND owner_id = ?'),
     touchOwner: p('UPDATE owners SET last_seen_at = ? WHERE id = ?'),
     getOwner: p('SELECT * FROM owners WHERE id = ?'),
+    ownerBanned: p('SELECT banned_at FROM owners WHERE id = ?'),
+    banOwner: p('UPDATE owners SET banned_at = COALESCE(banned_at, ?) WHERE id = ?'),
+    unbanOwner: p('UPDATE owners SET banned_at = NULL WHERE id = ?'),
     insertAgent: p('INSERT INTO agents (id, owner_id, character_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (owner_id, character_id) DO NOTHING'),
     getAgent: p('SELECT id, owner_id, character_id, memory_epoch FROM agents WHERE owner_id = ? AND character_id = ?'),
     agentOwned: p('SELECT 1 AS ok FROM agents WHERE owner_id = ? AND id = ?'),
@@ -534,6 +541,16 @@ export class SqliteMemoryStore implements MemoryStore {
 
   countOwners(): number {
     return (this.q.countOwners.get() as { n: number }).n;
+  }
+
+  isOwnerBanned(ownerId: string): boolean {
+    const row = this.q.ownerBanned.get(ownerId) as { banned_at: number | null } | undefined;
+    return row !== undefined && row.banned_at !== null;
+  }
+
+  setOwnerBanned(ownerId: string, bannedAt: number | null): boolean {
+    const result = bannedAt === null ? this.q.unbanOwner.run(ownerId) : this.q.banOwner.run(bannedAt, ownerId);
+    return Number(result.changes) === 1;
   }
 
   countOwnersCreatedSince(since: number): number {

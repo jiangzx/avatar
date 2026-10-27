@@ -66,6 +66,7 @@ async function boot(opts: BootOptions = {}) {
     registerRateLimit: opts.registerRateLimit,
     sessionRateLimit: opts.sessionRateLimit,
     devToken: opts.devToken,
+    ownerBanned: identityOn ? (ownerId: string) => store.isOwnerBanned(ownerId) : undefined,
   });
   await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
   const { port } = server.address() as AddressInfo;
@@ -242,4 +243,18 @@ describe('dev owner deletion', () => {
     expect((await call(base, 'POST', '/session', { bearer: b })).status).toBe(200);
     expect(await call(base, 'DELETE', path, { devToken: DEV_TOKEN })).toEqual({ status: 404, json: { error: 'owner_not_found' } });
   });
+});
+
+describe('banned owners', () => {
+  it('get 403 owner_banned on POST /session until unbanned', async () => {
+    const { base, store } = await boot();
+    const token = await register(base);
+    expect((await call(base, 'POST', '/session', { bearer: token })).status).toBe(200);
+    const ownerId = store.findDevice(hashToken(token))!.ownerId;
+    store.setOwnerBanned(ownerId, Date.now());
+    expect(await call(base, 'POST', '/session', { bearer: token })).toEqual({ status: 403, json: { error: 'owner_banned' } });
+    store.setOwnerBanned(ownerId, null);
+    expect((await call(base, 'POST', '/session', { bearer: token })).status).toBe(200);
+  });
+
 });

@@ -161,6 +161,15 @@ describe('Session context', () => {
     expect(session.currentLanguage).toBe('zh');
     session.end();
   });
+
+  it('notifyEnd sends a non-retryable error to the attached client', () => {
+    const { session, sent, transport } = setup();
+    session.notifyEnd('owner_banned'); // no transport yet: nothing to send, no throw
+    session.attachTransport(transport);
+    session.notifyEnd('owner_banned');
+    expect(sent).toContainEqual({ type: 'error', code: 'owner_banned', retryable: false });
+    session.end();
+  });
 });
 
 const ownedCtx: SessionContext = {

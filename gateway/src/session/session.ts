@@ -593,6 +593,11 @@ export class Session {
     }
   }
 
+  /** Tells the client why the session is ending (e.g. owner_banned) before the socket goes. */
+  notifyEnd(code: string): void {
+    this.send({ type: 'error', code, retryable: false });
+  }
+
   /** Writes finalized assistant replies that are not yet stored. User finals are not flushed here. */
   flush(): void {
     const { ownerId, agentId } = this.context;

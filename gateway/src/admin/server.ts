@@ -12,6 +12,8 @@ import { applySecurityHeaders, readJsonBody, sameOrigin, sendError } from './htt
 import { LoginGuard } from './loginGuard.ts';
 import { AdminQueries } from './queries.ts';
 import { authRoutes } from './routes/auth.ts';
+import { logLevelRoutes } from './routes/logLevel.ts';
+import { ownerRoutes } from './routes/owners.ts';
 import { readRoutes } from './routes/read.ts';
 import type { AdminRoute, AdminServices, RouteContext } from './routes/types.ts';
 import { AdminSessionStore, csrfMatches, type AdminSession } from './sessions.ts';
@@ -43,8 +45,7 @@ export function createAdminServer(deps: AdminDeps): Server {
     queries: new AdminQueries(deps.db, now),
     now,
   };
-  // Later tasks append their route groups here.
-  const routes: readonly AdminRoute[] = [...authRoutes(), ...readRoutes()];
+  const routes: readonly AdminRoute[] = [...authRoutes(), ...readRoutes(), ...ownerRoutes(), ...logLevelRoutes()];
   return createServer((req, res) => {
     handle(req, res, deps, services, routes).catch(() => {
       deps.logger.error('admin_http_error', { route: 'unmatched' });
