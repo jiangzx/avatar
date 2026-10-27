@@ -276,7 +276,7 @@ if (!adminEnv.enabled) {
 } else if (!memoryDb || !store || !prices) {
   logger.info('admin_disabled', { reason: 'memory_db_unset' });
 } else {
-  adminServer = createAdminServer({
+  const admin = createAdminServer({
     db: memoryDb,
     store,
     manager,
@@ -288,7 +288,18 @@ if (!adminEnv.enabled) {
     adapterName: config.adapter,
     staticDir: resolve(root, '..', 'admin', 'dist'),
   });
-  adminServer.listen(adminEnv.port, '127.0.0.1', () => logger.info('admin_listening', { port: adminEnv.port }));
+  adminServer = admin;
+  // A busy admin port must not take the voice gateway down (no dead air for the phone).
+  admin.on('error', () => {
+    logger.error('admin_listen_failed', {});
+    adminServer = null;
+    try {
+      admin.close();
+    } catch {
+      // The failed listen may have no handle left to close.
+    }
+  });
+  admin.listen(adminEnv.port, '127.0.0.1', () => logger.info('admin_listening', { port: adminEnv.port }));
 }
 
 let stopping = false;
