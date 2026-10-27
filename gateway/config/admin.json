@@ -1,5 +1,10 @@
 {
   "retention": { "usageDays": 180, "logDays": 7, "auditDays": 365 },
   "logSink": { "flushMs": 1000, "maxBatch": 200 },
-  "usageSink": { "flushMs": 1000, "maxBatch": 100 }
+  "usageSink": { "flushMs": 1000, "maxBatch": 100 },
+  "session": { "idleMs": 1800000, "absoluteMs": 43200000 },
+  "login": { "maxFailures": 5, "windowMs": 900000, "lockMs": 900000 },
+  "alerts": { "errorRate1h": 0.1, "firstAudioP95Ms": 2000, "minSamples": 5 },
+  "logLevelOverrideMs": 1800000,
+  "banCloseDelayMs": 250
 }

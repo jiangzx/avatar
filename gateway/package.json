@@ -6,7 +6,8 @@
     "dev": "NODE_ENV=development node --watch --env-file-if-exists=.env --import tsx src/index.ts",
     "start": "node --env-file-if-exists=.env --import tsx src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "admin:hash-password": "node --import tsx scripts/admin-hash-password.ts"
   },
   "dependencies": {
     "@anyidea/protocol": "*",

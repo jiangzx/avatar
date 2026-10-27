@@ -2,6 +2,7 @@ import type { CharacterId } from './characters.ts';
 
 export { CHARACTER_IDS, DEFAULT_CHARACTER_ID, isCharacterId, type CharacterId } from './characters.ts';
 export type { MemoryClearScope, MemoryFactItem, MemoryItem, MemoryOverview, MemoryPinnedItem } from './memoryApi.ts';
+export type * from './adminApi.ts';
 
 export const FRAME_MIC = 0x01;
 export const FRAME_AI = 0x02;
