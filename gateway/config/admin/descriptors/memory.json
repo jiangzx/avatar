@@ -1,0 +1,38 @@
+{
+  "scene": "memory",
+  "title": "记忆",
+  "intro": "AI 每次聊天带着多少记忆、老人的原话保存多久。后台看不到记忆内容。",
+  "order": 3,
+  "items": [
+    {
+      "key": "memory:instructions.snapshotMaxChars",
+      "label": "每次带进聊天的记忆有多长",
+      "purpose": "每通电话开始时，AI 会带上一段关于老人的记忆（称呼、喜好、上次聊的事），最长这么多字。",
+      "impact": { "characters": "all", "stage": "记忆", "effective": "next_session" },
+      "control": "number", "unit": "char", "storageUnit": "char", "min": 200, "max": 600, "step": 50,
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "调短后 AI 记得的事变少，老人可能觉得它忘了上次聊的。"
+    },
+    {
+      "key": "memory:listMaxItems",
+      "label": "问「你都记得我什么」时说几条",
+      "purpose": "老人问 AI 记得他什么时，AI 最多念这么多条。",
+      "impact": { "characters": "all", "stage": "记忆", "effective": "next_session" },
+      "control": "number", "unit": "count", "storageUnit": "count", "min": 1, "max": 10, "step": 1,
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "memory:retentionDays",
+      "label": "老人的原话保存多少天",
+      "purpose": "聊天时老人说过的原话保存这么多天，AI 靠它回忆「上次聊到哪」。",
+      "impact": { "characters": "all", "stage": "记忆", "effective": "next_session" },
+      "control": "number", "unit": "day", "storageUnit": "day", "min": 7, "max": 365, "step": 1,
+      "complianceNote": null, "risk": "high",
+      "riskNote": "调短后，更早的原话会在当晚自动清理中删除，删除后找不回来。"
+    }
+  ],
+  "readonly": [
+    { "label": "钉住记忆的上限", "purpose": "老人可以让每个角色专门记住最多 10 件事。", "note": "暂不能在这里改：调小会让已经钉住的内容放不下。" },
+    { "label": "查看和删除记忆", "purpose": "老人在手机设置里可以自己查看、删除每个角色记得的事。", "note": "后台只显示条数，不显示内容。" }
+  ]
+}

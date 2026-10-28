@@ -1,0 +1,74 @@
+{
+  "scene": "characters",
+  "title": "角色",
+  "intro": "三个角色各自的性格、开场白和声音，以及三人共用的人设。",
+  "order": 4,
+  "items": [
+    {
+      "key": "character:{char}.enabled",
+      "label": "启用这个角色",
+      "purpose": "关掉后，老人在手机上选不了这个角色，会看到「暂时休息中」。",
+      "impact": { "characters": "each", "stage": "选择角色", "effective": "next_session" },
+      "control": "switch",
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "正在聊的不受影响；至少要留一个角色开着。"
+    },
+    {
+      "key": "character:{char}.identity.{lang}",
+      "label": "性格描述",
+      "purpose": "这个角色和老人是什么关系、说话什么味道。AI 会照着这段说话。",
+      "impact": { "characters": "each", "stage": "说话方式", "effective": "next_session" },
+      "control": "textarea", "maxChars": { "zh": 200, "ja": 300, "en": 400 },
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "写得太夸张 AI 会变得做作；不要写其他角色的名字。"
+    },
+    {
+      "key": "character:{char}.greetingNoName.{lang}",
+      "label": "不知道称呼时的开场白",
+      "purpose": "还不知道怎么称呼老人时，AI 用这句自我介绍并问称呼。",
+      "impact": { "characters": "each", "stage": "开场", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 40, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "character:{char}.greetingsFirstMeet.{lang}",
+      "label": "第一次知道称呼时的开场白",
+      "purpose": "老人在别的角色那里说过称呼、第一次见这个角色时，AI 从这几句里挑一句打招呼。",
+      "impact": { "characters": "each", "stage": "开场", "effective": "next_session" },
+      "control": "list", "minItems": 1, "maxItems": 5, "itemMaxChars": { "zh": 40, "ja": 50, "en": 100 },
+      "requiredTokens": ["{name}"],
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "character:{char}.voices.qwen.{lang}",
+      "label": "声音",
+      "purpose": "这个角色说话用的声音。",
+      "impact": { "characters": "each", "stage": "声音", "effective": "next_session" },
+      "control": "select", "options": "voices.{lang}",
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "换了声音，老人可能一下子认不出是谁。"
+    },
+    {
+      "key": "role:elder-companion/{lang}/persona",
+      "label": "三个角色共用的人设",
+      "purpose": "AI 陪老人聊天的总体要求：怎么说话、什么不能说。三个角色都用这段。",
+      "impact": { "characters": "all", "stage": "说话方式", "effective": "next_session" },
+      "control": "textarea", "maxChars": { "zh": 1600, "ja": 2000, "en": 3500 }, "placeholders": "auto",
+      "complianceNote": null, "risk": "high",
+      "riskNote": "改坏了 AI 可能说错话。安全底线在别处，不会被这里改掉。"
+    },
+    {
+      "key": "role:elder-companion/{lang}/director.greetingNameTexts",
+      "label": "知道称呼后的开场白",
+      "purpose": "已经知道怎么称呼老人时，AI 从这几句里挑一句开场。",
+      "impact": { "characters": "all", "stage": "开场", "effective": "next_session" },
+      "control": "list", "minItems": 1, "maxItems": 5, "itemMaxChars": { "zh": 30, "ja": 50, "en": 100 },
+      "requiredTokens": ["{name}"],
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "不要写「上次您说……」这类具体的事，AI 会把没聊过的事说成聊过。"
+    }
+  ],
+  "readonly": [
+    { "label": "角色的名字", "purpose": "小暖、小凯、小欣的名字和读音。", "note": "名字和手机上的形象绑定，不能在这里改。" }
+  ]
+}

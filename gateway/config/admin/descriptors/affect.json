@@ -1,0 +1,55 @@
+{
+  "scene": "affect",
+  "title": "情绪与关怀",
+  "intro": "AI 怎么察觉老人的心情、什么时候放慢陪伴、开场要不要关心老人前几天说过的事。",
+  "order": 2,
+  "items": [
+    {
+      "key": "affect:enabled",
+      "label": "感受情绪与关怀开场",
+      "purpose": "打开后，AI 会留意老人的心情；开场时会关心老人前几天说过的烦心事。",
+      "impact": { "characters": "all", "stage": "情绪与开场", "effective": "next_session" },
+      "control": "switch",
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "关掉后，AI 不再察觉老人情绪低落，也不会在开场关心老人前几天说过的事。"
+    },
+    {
+      "key": "affect:lowIntensity",
+      "label": "多难过才算情绪低落",
+      "purpose": "数字越小越敏感：1 表示老人有一点难过 AI 就放慢、多陪伴；3 表示很难过时才这样做。",
+      "impact": { "characters": "all", "stage": "情绪识别", "effective": "next_session" },
+      "control": "number", "unit": "level", "storageUnit": "level", "min": 1, "max": 3, "step": 1,
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "调到 3 时，老人有些难过 AI 也会照常找新话题。"
+    },
+    {
+      "key": "affect:care.maxAgeDays",
+      "label": "关怀开场最多提起几天前的事",
+      "purpose": "开场时，AI 只会关心老人这几天内说过的事，太久以前的不再提。",
+      "impact": { "characters": "all", "stage": "关怀开场", "effective": "next_session" },
+      "control": "number", "unit": "day", "storageUnit": "day", "min": 1, "max": 14, "step": 1,
+      "complianceNote": null, "risk": "high",
+      "riskNote": "这也决定这些原话保存多久；调小后，更早的会在当晚清理中删除，删除后找不回来。"
+    },
+    {
+      "key": "affect:exhausted.shortStreakTrigger",
+      "label": "连着几次只答一两个字就换话题",
+      "purpose": "老人连着这么多次只回「嗯」「好」，AI 就知道这个话题聊不下去了，换一个。",
+      "impact": { "characters": "all", "stage": "话题", "effective": "next_session" },
+      "control": "number", "unit": "count", "storageUnit": "count", "min": 2, "max": 6, "step": 1,
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "太小会频繁换话题，老人可能跟不上。"
+    },
+    {
+      "key": "emotion:revertAfterMs",
+      "label": "形象表情保持多久",
+      "purpose": "AI 说到开心或难过的话时，手机上的形象换成对应表情，保持这么久再恢复。",
+      "impact": { "characters": "all", "stage": "形象表情", "effective": "next_session" },
+      "control": "number", "unit": "second", "storageUnit": "ms", "min": 2, "max": 20, "step": 1,
+      "complianceNote": null, "risk": "low", "riskNote": null
+    }
+  ],
+  "readonly": [
+    { "label": "危机时的处理", "purpose": "老人流露出轻生等危险念头时，AI 不起新话题，只陪着并劝他联系家人。", "note": "安全规则由开发人员维护，这里不能改。" }
+  ]
+}

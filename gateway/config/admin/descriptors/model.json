@@ -1,0 +1,56 @@
+{
+  "scene": "model",
+  "title": "模型与 Key",
+  "intro": "通话和整理记忆用哪个通义千问模型、连哪个地址。Key 在本页下方单独管理。",
+  "order": 6,
+  "items": [
+    {
+      "key": "model:qwen.realtimeModel",
+      "label": "通话用的模型",
+      "purpose": "老人和 AI 实时语音聊天用的模型。",
+      "impact": { "characters": "all", "stage": "通话", "effective": "next_session" },
+      "control": "select", "options": "realtimeModels",
+      "complianceNote": null, "risk": "high",
+      "riskNote": "选错或没开通，所有新通话都会连不上。"
+    },
+    {
+      "key": "model:qwen.realtimeEndpoint",
+      "label": "通话服务地址",
+      "purpose": "实时语音服务的地址，来自阿里云百炼控制台。",
+      "impact": { "characters": "all", "stage": "通话", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 300, "ja": 300, "en": 300 }, "pattern": "wss_url",
+      "complianceNote": null, "risk": "high",
+      "riskNote": "地址填错，所有新通话都会连不上。"
+    },
+    {
+      "key": "memory:extractModel",
+      "label": "整理记忆用的模型",
+      "purpose": "通话后整理老人说过的事、开场关怀和主动接话时用的文本模型。",
+      "impact": { "characters": "all", "stage": "记忆与接话", "effective": "next_session" },
+      "control": "select", "options": "textModels",
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "换成更便宜的模型，记忆可能整理得不准，主动接话也可能变生硬。"
+    },
+    {
+      "key": "model:qwen.summarizerModel",
+      "label": "总结聊天用的模型",
+      "purpose": "一通电话聊得很长时，用它把前面的内容压缩成摘要。",
+      "impact": { "characters": "all", "stage": "长对话", "effective": "next_session" },
+      "control": "select", "options": "textModels",
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "model:qwen.textEndpoint",
+      "label": "文本服务地址",
+      "purpose": "整理记忆和总结聊天用的服务地址，来自阿里云百炼控制台。",
+      "impact": { "characters": "all", "stage": "记忆与接话", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 300, "ja": 300, "en": 300 }, "pattern": "https_url",
+      "complianceNote": null, "risk": "high",
+      "riskNote": "地址填错，记忆整理和主动接话都会失败（通话本身不受影响）。"
+    }
+  ],
+  "readonly": [
+    { "label": "模型厂商", "purpose": "通话和整理记忆都用阿里云百炼（通义千问）。", "note": "本后台不支持切换到其他厂商。" },
+    { "label": "运行参数", "purpose": "同时通话上限、限流、会话超时等。", "note": "由部署时的环境变量决定，改了要重启。" }
+  ]
+}

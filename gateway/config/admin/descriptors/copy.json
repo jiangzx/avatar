@@ -1,0 +1,70 @@
+{
+  "scene": "copy",
+  "title": "文案",
+  "intro": "AI 在固定场合说的原话。三种语言分开改。",
+  "order": 5,
+  "items": [
+    {
+      "key": "i18n:{lang}/memory.restReminderText",
+      "label": "提醒休息时说的话",
+      "purpose": "连续聊久了，AI 用这句提醒老人起来活动、喝口水。",
+      "impact": { "characters": "all", "stage": "休息提醒", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 60, "ja": 90, "en": 160 },
+      "complianceNote": null, "risk": "low",
+      "riskNote": "里面提到的时长要和「对话节奏」里的提醒时间一致。"
+    },
+    {
+      "key": "i18n:{lang}/memory.forgetConfirmText",
+      "label": "老人说「忘掉」后的回答",
+      "purpose": "老人让 AI 别记某件事，AI 删掉后用这句回答。",
+      "impact": { "characters": "all", "stage": "记忆", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 30, "ja": 50, "en": 100 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "i18n:{lang}/memory.recall.emptyText",
+      "label": "想不起上次聊什么时说的话",
+      "purpose": "老人问上次聊过什么、AI 又找不到记录时，用这句如实说找不到。",
+      "impact": { "characters": "all", "stage": "回忆", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 40, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "不要写成「您上次说过……」；找不到记录时 AI 只能如实承认。"
+    },
+    {
+      "key": "i18n:{lang}/memory.pin.confirmText",
+      "label": "记住一件事后的回答",
+      "purpose": "老人让 AI 专门记住一件事，记好后用这句回答。",
+      "impact": { "characters": "all", "stage": "记忆", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 30, "ja": 50, "en": 100 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "i18n:{lang}/memory.pin.fullText",
+      "label": "钉住的事太多时说的话",
+      "purpose": "专门记住的事已经满了，AI 用这句请老人先去设置里删掉一些。",
+      "impact": { "characters": "all", "stage": "记忆", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 40, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "i18n:{lang}/memory.weather.unavailableText",
+      "label": "天气查不到时说的话",
+      "purpose": "老人问天气、AI 一时查不到时用这句。",
+      "impact": { "characters": "all", "stage": "天气", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 30, "ja": 50, "en": 100 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/{lang}/director.resumeText",
+      "label": "网络断了又连上时说的话",
+      "purpose": "通话中网络断开又连上后，AI 用这句接上刚才的话。",
+      "impact": { "characters": "all", "stage": "断线恢复", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 30, "ja": 50, "en": 100 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    }
+  ],
+  "readonly": [
+    { "label": "没听清时的回答", "purpose": "咳嗽或杂音打断 AI 时，AI 只说「没听清，您再说一遍。」", "note": "这句固定不变，改了容易让 AI 接错话。" },
+    { "label": "记忆告知和安全提示", "purpose": "第一次告诉老人「聊过的事会记着」，以及危机时劝老人联系家人的话。", "note": "和合规有关，由开发人员维护。" }
+  ]
+}

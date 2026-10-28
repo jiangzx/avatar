@@ -1,0 +1,135 @@
+{
+  "scene": "pacing",
+  "title": "对话节奏",
+  "intro": "老人不说话时，AI 什么时候开口、实在想不出话时说什么。改完下一通电话生效。",
+  "order": 1,
+  "items": [
+    {
+      "key": "role:elder-companion/*/director.contextAfterMs",
+      "label": "老人停下后多久接第一句",
+      "purpose": "老人说完话安静下来，AI 等这么久，再顺着刚才的话轻轻接一句。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "number", "unit": "second", "storageUnit": "ms", "min": 3, "max": 20, "step": 1,
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "太短像在催老人，太长老人会以为 AI 走神了。"
+    },
+    {
+      "key": "role:elder-companion/*/director.checkAfterMs",
+      "label": "第二句再等多久",
+      "purpose": "第一句说完老人还没开口，AI 再等这么久，换个角度问个小问题。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "number", "unit": "second", "storageUnit": "ms", "min": 4, "max": 30, "step": 1,
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "太短会连着追问，老人可能觉得被催。"
+    },
+    {
+      "key": "role:elder-companion/*/director.leaveAfterMs",
+      "label": "第三句再等多久",
+      "purpose": "第二句之后老人仍没开口，AI 再等这么久，留个话头、给老人一点空间。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "number", "unit": "second", "storageUnit": "ms", "min": 5, "max": 60, "step": 1,
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "太短会连着追问，老人可能觉得被催。"
+    },
+    {
+      "key": "role:elder-companion/*/director.checkinAfterMs",
+      "label": "问「还在听吗」前再等多久",
+      "purpose": "第三句之后老人仍没开口，AI 再等这么久，轻声问一句还在不在听。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "number", "unit": "second", "storageUnit": "ms", "min": 5, "max": 60, "step": 1,
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "太短会显得不耐烦。"
+    },
+    {
+      "key": "role:elder-companion/*/director.restAfterMs",
+      "label": "最后一句前再等多久",
+      "purpose": "问过「还在听吗」老人还是没回，AI 再等这么久，说一句让老人放心歇着，之后不再主动说话。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "number", "unit": "minute", "storageUnit": "ms", "min": 1, "max": 10, "step": 1,
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/{lang}/director.contextText",
+      "label": "第一句的备用话",
+      "purpose": "AI 平时会根据刚才聊的内容自己想一句；只有想不出来（比如网络慢）时，才说这句。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 40, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/{lang}/director.checkContextText",
+      "label": "第二句的备用话",
+      "purpose": "AI 想不出第二句时说这句。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 40, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/{lang}/director.leaveText",
+      "label": "第三句的备用话",
+      "purpose": "AI 想不出第三句时说这句。这句是给老人空间，不要问问题。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 40, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/{lang}/director.checkinText",
+      "label": "问「还在听吗」的备用话",
+      "purpose": "AI 想不出怎么问时说这句。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 30, "ja": 60, "en": 80 }, "rule": "checkin",
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "这句必须问老人还在不在听，并说随时可以接着聊，否则不能保存。"
+    },
+    {
+      "key": "role:elder-companion/{lang}/director.restText",
+      "label": "最后一句的备用话",
+      "purpose": "AI 想不出最后一句时说这句。说完 AI 就不再主动说话，不要问问题。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 40, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/{lang}/director.presenceText",
+      "label": "实在没话时的「我在」",
+      "purpose": "还没聊起来、AI 又想不出话时，只轻轻说这一句，让老人知道它还在。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "text", "maxChars": { "zh": 10, "ja": 16, "en": 24 },
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "这句很短是有意的；改成长句会让老人觉得 AI 在敷衍。"
+    },
+    {
+      "key": "role:elder-companion/{lang}/director.lightPhrases",
+      "label": "算作轻声答应的词",
+      "purpose": "老人只说这些词时，AI 当他还在听，不当成开了新话题。",
+      "impact": { "characters": "all", "stage": "沉默接话", "effective": "next_session" },
+      "control": "list", "minItems": 1, "maxItems": 30, "itemMaxChars": { "zh": 6, "ja": 8, "en": 16 },
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "别加「吃饭」「医院」这类有内容的词，否则 AI 会忽略老人真正想说的事。"
+    },
+    {
+      "key": "pacing:restReminder.firstAfterMs",
+      "label": "连续聊多久提醒休息",
+      "purpose": "老人连续聊到这么久，AI 会温和地提醒他起来活动、喝口水。",
+      "impact": { "characters": "all", "stage": "休息提醒", "effective": "next_session" },
+      "control": "number", "unit": "minute", "storageUnit": "ms", "min": 10, "max": 120, "step": 5,
+      "complianceNote": "监管要求连续使用不超过 2 小时就要提醒，所以最多 120 分钟。",
+      "risk": "low",
+      "riskNote": "提醒的话里写着「一个钟头」，改了时间记得到「文案」里一起改。"
+    },
+    {
+      "key": "pacing:restReminder.everyMs",
+      "label": "之后每隔多久再提醒",
+      "purpose": "第一次提醒之后老人还在聊，每隔这么久再提醒一次。",
+      "impact": { "characters": "all", "stage": "休息提醒", "effective": "next_session" },
+      "control": "number", "unit": "minute", "storageUnit": "ms", "min": 30, "max": 120, "step": 5,
+      "complianceNote": "监管要求连续使用不超过 2 小时就要提醒，所以最多 120 分钟。",
+      "risk": "low",
+      "riskNote": "不能短于「连续聊多久提醒休息」的一半。"
+    }
+  ],
+  "readonly": [
+    { "label": "沉默接话的顺序", "purpose": "老人一直不说话时，AI 依次说：三句接话、问一句还在不在听、几分钟后一句收尾，然后不再主动说话。", "note": "顺序固定，这里只能改等待时间和备用话。" },
+    { "label": "每一句说什么", "purpose": "每一句由 AI 根据刚才聊的内容和记得的事自己想，不会照念备用话。", "note": "怎么想由开发人员维护的提示词决定，这里不能改。" }
+  ]
+}
