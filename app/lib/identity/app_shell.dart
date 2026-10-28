@@ -27,6 +27,7 @@ class AvatarPageRequest {
     this.onEngineFailure,
     this.onUnknownCharacter,
     this.onSessionRejected,
+    this.onDiagCode,
   });
 
   final Key key;
@@ -42,6 +43,9 @@ class AvatarPageRequest {
 
   /// POST /session or the live session was refused (owner_banned / character_disabled).
   final void Function(SessionRejection rejection)? onSessionRejected;
+
+  /// The chat page reports the diag code of each ready session.
+  final ValueChanged<String>? onDiagCode;
 }
 
 /// First launch: character picker + registration. Afterwards: the saved character's chat.
@@ -101,6 +105,9 @@ class _AppShellState extends State<AppShell> {
 
   /// The gateway refused this owner; show the notice instead of the chat.
   bool _banned = false;
+
+  /// Latest diag code from the chat page, read when settings opens.
+  String? _diagCode;
 
   @override
   void initState() {
@@ -210,6 +217,8 @@ class _AppShellState extends State<AppShell> {
           availabilityChanges: widget.engines,
           memory: widget.memory,
           onMemoryChanged: _onMemoryChanged,
+          diagCode: _diagCode,
+          companion: widget.companion,
         ),
       ),
     );
@@ -306,6 +315,7 @@ class _AppShellState extends State<AppShell> {
                       : null,
                   onUnknownCharacter: _onUnknownCharacter,
                   onSessionRejected: (rejection) => unawaited(_onSessionRejected(character, rejection)),
+                  onDiagCode: (code) => _diagCode = code,
                 ),
               ),
       ),

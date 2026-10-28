@@ -212,7 +212,9 @@ class NativeGatewayClient implements GatewayClientLike {
       } on FormatException {
         return;
       }
-      final message = parseServerMessage(raw);
+      final parsed = parseServerMessage(raw);
+      // diagId comes from POST /session only; attach it so the page can show the diag code.
+      final message = parsed is SessionReady ? SessionReady(parsed.sessionId, diagId: _tokens?.diagId) : parsed;
       if (message == null) return;
       if (message is SessionReady || message is SessionResumed) {
         _sessionStarted = true;

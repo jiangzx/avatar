@@ -227,7 +227,9 @@ class NativeSessionController implements GatewayClientEvents {
   Future<void> _handleMessage(ServerMessage message) async {
     if (_ended) return;
     switch (message) {
-      case SessionReady():
+      case SessionReady(:final sessionId, :final diagId):
+        diag(formatDiag('session_ready', {'sid': sessionId, 'diag': diagId ?? 'none'}));
+        emit(UiDiag(diagCodeKey, diagCodeFor(sessionId, diagId)));
         _modelReconnecting = false;
         _seqFloor = 0;
         _activeSeq = null;

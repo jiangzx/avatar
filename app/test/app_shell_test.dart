@@ -418,6 +418,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
   });
+
+  testWidgets('settings offers the latest diag code from the chat page', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaoxin'));
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: FakeBackend())));
+    await tester.pumpAndSettle();
+    lastRequest!.onDiagCode!('s-1-3f9a1c0b2d4e');
+    lastRequest!.onDiagCode!('s-2-3f9a1c0b2d4e');
+    await tester.tap(find.byKey(const Key('settings')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('copy-diag')), 200);
+    expect(find.text('s-2-3f9a1c0b2d4e'), findsOneWidget);
+  });
 }
 
 /// Backend whose registration stays in flight until release().

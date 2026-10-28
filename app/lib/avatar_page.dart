@@ -77,6 +77,7 @@ class AvatarPage extends StatefulWidget {
     this.onEngineFailure,
     this.onUnknownCharacter,
     this.onSessionRejected,
+    this.onDiagCode,
     this.characterId,
     this.displayName = '',
     this.companion,
@@ -98,6 +99,9 @@ class AvatarPage extends StatefulWidget {
 
   /// POST /session or the live session was refused (owner_banned / character_disabled). Null shows the usual error.
   final void Function(SessionRejection rejection)? onSessionRejected;
+
+  /// Receives `<sessionId>-<diagId>` each time a session is ready (settings copies it).
+  final ValueChanged<String>? onDiagCode;
 
   /// Chosen character: sent on POST /session and picks the filler clips. Null = gateway default (dev).
   final String? characterId;
@@ -304,6 +308,7 @@ class _AvatarPageState extends State<AvatarPage> {
   void _onNativeEvent(NativeUiEvent event) {
     if (!mounted) return;
     if (event is UiDiag) {
+      if (event.key == diagCodeKey) widget.onDiagCode?.call(event.value);
       setState(() => _diag[event.key] = event.value);
       return;
     }

@@ -4,5 +4,7 @@
   "ownerBannedText": "服务暂时不可用，请联系家人",
   "characterDisabledNote": "暂时休息中",
   "characterDisabledReason": "{name}暂时休息中，请先选一位别的伙伴",
-  "characterDisabledHoldMs": 86400000
+  "characterDisabledHoldMs": 86400000,
+  "diagCopyLabel": "复制诊断编号",
+  "diagCopiedText": "已复制诊断编号"
 }

@@ -372,6 +372,24 @@ void main() {
     expect(events.statuses.last, isNot(GatewayStatus.closed));
     await c.close();
   });
+
+  test('session.ready is forwarded with the diagId from POST /session', () async {
+    final transport = FakeGatewayTransport(tokens: firstTokens.withDiagId('3f9a1c0b2d4e'));
+    final events = RecordingGatewayEvents();
+    final c = NativeGatewayClient(
+      baseUri: Uri.parse('http://gw.test'),
+      appSecret: 'secret-123456789',
+      transport: transport,
+      events: events,
+      reconnectBase: Duration.zero,
+    );
+    await c.start();
+    transport.lastSocket.emitText('{"type":"session.ready","sessionId":"first","diagId":"spoofed"}');
+    await Future<void>.delayed(Duration.zero);
+    final ready = events.messages.whereType<SessionReady>().single;
+    expect(ready.sessionId, 'first');
+    expect(ready.diagId, '3f9a1c0b2d4e'); // only POST /session is trusted for diagId
+  });
 }
 
 class RecordingGatewayEvents implements GatewayClientEvents {

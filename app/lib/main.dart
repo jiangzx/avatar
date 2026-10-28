@@ -166,6 +166,7 @@ class _HomeState extends State<_Home> {
       onEngineFailure: request.onEngineFailure,
       onUnknownCharacter: request.onUnknownCharacter,
       onSessionRejected: request.onSessionRejected,
+      onDiagCode: request.onDiagCode,
       handoff: _handoff,
     ),
   );

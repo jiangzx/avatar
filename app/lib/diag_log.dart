@@ -17,3 +17,9 @@ String formatDiag(String event, Map<String, Object> fields) {
   });
   return parts.join(' ');
 }
+
+/// UiDiag key that carries the diag code to the page.
+const diagCodeKey = 'diag_code';
+
+/// What the user reads out or pastes: `<sessionId>-<diagId>`, or the session id alone.
+String diagCodeFor(String sessionId, String? diagId) => diagId == null ? sessionId : '$sessionId-$diagId';

@@ -721,6 +721,29 @@ void main() {
     await pumpEvents();
     expect(f.events.whereType<UiError>().map((e) => e.code), contains('owner_banned'));
   });
+
+  test('session.ready logs the session id and publishes the diag code', () async {
+    final lines = <String>[];
+    final f = SessionFakes();
+    final c = f.controller(diag: lines.add);
+    await c.start();
+    f.client.emit(const SessionReady('5b7c2a10-1111-4222-8333-944455556666', diagId: '3f9a1c0b2d4e'));
+    await pumpEvents();
+    expect(lines, contains('anyidea.diag event=session_ready sid=5b7c2a10-1111-4222-8333-944455556666 diag=3f9a1c0b2d4e'));
+    final codes = f.events.whereType<UiDiag>().where((e) => e.key == diagCodeKey).map((e) => e.value);
+    expect(codes, ['5b7c2a10-1111-4222-8333-944455556666-3f9a1c0b2d4e']);
+  });
+
+  test('without a diagId the log says none and the code is the session id', () async {
+    final lines = <String>[];
+    final f = SessionFakes();
+    final c = f.controller(diag: lines.add);
+    await c.start();
+    f.client.emit(const SessionReady('s-1'));
+    await pumpEvents();
+    expect(lines, contains('anyidea.diag event=session_ready sid=s-1 diag=none'));
+    expect(f.events.whereType<UiDiag>().where((e) => e.key == diagCodeKey).single.value, 's-1');
+  });
 }
 
 class SessionFakes {

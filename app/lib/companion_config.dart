@@ -11,6 +11,8 @@ class CompanionConfig {
     required this.characterDisabledNote,
     required this.characterDisabledReason,
     required this.characterDisabledHoldMs,
+    required this.diagCopyLabel,
+    required this.diagCopiedText,
   });
 
   static const assetPath = 'assets/config/companion.json';
@@ -21,6 +23,8 @@ class CompanionConfig {
     'characterDisabledNote',
     'characterDisabledReason',
     'characterDisabledHoldMs',
+    'diagCopyLabel',
+    'diagCopiedText',
   };
 
   /// Always-on notice on the chat page (spec「AI 提示」).
@@ -40,6 +44,12 @@ class CompanionConfig {
 
   /// How long a disabled character stays greyed on this phone.
   final int characterDisabledHoldMs;
+
+  /// Settings button that copies the diag code (spec Q30).
+  final String diagCopyLabel;
+
+  /// Snack bar after copying.
+  final String diagCopiedText;
 
   Duration get restToast => Duration(milliseconds: restToastMs);
   Duration get characterDisabledHold => Duration(milliseconds: characterDisabledHoldMs);
@@ -72,6 +82,8 @@ class CompanionConfig {
       characterDisabledNote: _text(raw, 'characterDisabledNote', 12),
       characterDisabledReason: reason,
       characterDisabledHoldMs: hold,
+      diagCopyLabel: _text(raw, 'diagCopyLabel', 12),
+      diagCopiedText: _text(raw, 'diagCopiedText', 12),
     );
   }
 

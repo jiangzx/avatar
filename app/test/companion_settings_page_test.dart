@@ -3,22 +3,26 @@ import 'package:avatar_app/identity/device_identity.dart';
 import 'package:avatar_app/memory/memory_api.dart';
 import 'package:avatar_app/memory/memory_copy.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/character_fixture.dart';
+import 'support/companion_fixture.dart';
 import 'support/memory_fakes.dart';
 
 final catalog = loadTestCharacterCatalog();
 
 MemoryApi api(FakeMemoryTransport transport) => testMemoryApi(transport, FakeTokens('device-token-0123456789'));
 
-Widget page({MemoryApi? memory, VoidCallback? onMemoryChanged}) => MaterialApp(
+Widget page({MemoryApi? memory, VoidCallback? onMemoryChanged, String? diagCode}) => MaterialApp(
   home: CompanionSettingsPage(
     options: catalog.options,
     currentCharacter: 'xiaoxin',
     onSaveCharacter: (_) async => const IdentityOk(),
     memory: memory,
     onMemoryChanged: onMemoryChanged,
+    diagCode: diagCode,
+    companion: loadTestCompanionConfig(),
   ),
 );
 
@@ -209,5 +213,25 @@ void main() {
     expect(find.text('选择陪伴角色'), findsOneWidget);
     expect(find.text('我的资料'), findsNothing);
     expect(find.text('清除全部记忆'), findsNothing);
+  });
+
+  testWidgets('copies the diag code and says so', (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await open(tester, page(diagCode: 's-1-3f9a1c0b2d4e'));
+    expect(find.text('s-1-3f9a1c0b2d4e'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('copy-diag')));
+    await tester.pump();
+    expect(copied, 's-1-3f9a1c0b2d4e');
+    expect(find.text('已复制诊断编号'), findsOneWidget);
+  });
+
+  testWidgets('hides the copy button before any session was ready', (tester) async {
+    await open(tester, page());
+    expect(find.byKey(const Key('copy-diag')), findsNothing);
   });
 }

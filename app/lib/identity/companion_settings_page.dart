@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../avatar_engine/ui/engine_confirm_dialog.dart';
+import '../companion_config.dart';
 import '../memory/memory_api.dart';
 import '../memory/memory_copy.dart';
 import 'character_availability.dart';
@@ -22,6 +24,8 @@ class CompanionSettingsPage extends StatefulWidget {
     this.availabilityChanges,
     this.memory,
     this.onMemoryChanged,
+    this.diagCode,
+    this.companion,
   });
 
   final List<CharacterOption> options;
@@ -37,6 +41,12 @@ class CompanionSettingsPage extends StatefulWidget {
 
   /// Called after every memory write attempt; the shell restarts the chat.
   final VoidCallback? onMemoryChanged;
+
+  /// Latest `<sessionId>-<diagId>` from the chat page; null hides the copy button.
+  final String? diagCode;
+
+  /// Copy for the diag button; null hides it.
+  final CompanionConfig? companion;
 
   @override
   State<CompanionSettingsPage> createState() => _CompanionSettingsPageState();
@@ -176,6 +186,7 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
                     _header('选择陪伴角色'),
                     _cards(),
                     ..._memoryBlocks(),
+                    ..._diagBlock(),
                   ],
                 ),
               ),
@@ -212,6 +223,32 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
         ),
       ),
     );
+  }
+
+  List<Widget> _diagBlock() {
+    final code = widget.diagCode;
+    final copy = widget.companion;
+    if (code == null || copy == null) return const [];
+    return [
+      const SizedBox(height: 24),
+      SizedBox(
+        height: 56,
+        child: OutlinedButton(
+          key: const Key('copy-diag'),
+          onPressed: () => unawaited(_copyDiag(code, copy.diagCopiedText)),
+          child: Text(copy.diagCopyLabel, style: const TextStyle(fontSize: 20)),
+        ),
+      ),
+      const SizedBox(height: 8),
+      // Shown so a family member can read it out over the phone.
+      Text(code, key: const Key('diag-code'), style: const TextStyle(color: Colors.white54, fontSize: 14)),
+    ];
+  }
+
+  Future<void> _copyDiag(String code, String done) async {
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(done, style: const TextStyle(fontSize: 18))));
   }
 
   Widget _cards() {

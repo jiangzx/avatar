@@ -15,4 +15,12 @@ void main() {
       'anyidea.diag event=x text=invalid spaced=invalid',
     );
   });
+
+  test('diag code joins the session id and the owner short id', () {
+    expect(diagCodeFor('5b7c2a10-1111-4222-8333-944455556666', '3f9a1c0b2d4e'),
+        '5b7c2a10-1111-4222-8333-944455556666-3f9a1c0b2d4e');
+    expect(diagCodeFor('s-1', null), 's-1');
+    expect(formatDiag('session_ready', {'sid': '5b7c2a10-1111-4222-8333-944455556666', 'diag': '3f9a1c0b2d4e'}),
+        'anyidea.diag event=session_ready sid=5b7c2a10-1111-4222-8333-944455556666 diag=3f9a1c0b2d4e');
+  });
 }

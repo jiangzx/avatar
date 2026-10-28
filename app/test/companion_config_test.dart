@@ -17,6 +17,8 @@ void main() {
     expect(c.characterDisabledNote, '暂时休息中');
     expect(c.disabledReasonFor('小暖'), '小暖暂时休息中，请先选一位别的伙伴');
     expect(c.characterDisabledHold, const Duration(hours: 24));
+    expect(c.diagCopyLabel, '复制诊断编号');
+    expect(c.diagCopiedText, '已复制诊断编号');
   });
 
   test('rejects a blank or long caption, a bad duration, unknown keys and non-JSON', () {
@@ -38,5 +40,7 @@ void main() {
     expect(() => CompanionConfig.parse(jsonEncode({...shipped(), 'characterDisabledHoldMs': 604800001})), throwsFormatException);
     final missing = shipped()..remove('ownerBannedText');
     expect(() => CompanionConfig.parse(jsonEncode(missing)), throwsFormatException);
+    expect(() => CompanionConfig.parse(jsonEncode({...shipped(), 'diagCopyLabel': ''})), throwsFormatException);
+    expect(() => CompanionConfig.parse(jsonEncode({...shipped(), 'diagCopiedText': '一' * 13})), throwsFormatException);
   });
 }

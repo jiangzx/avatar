@@ -138,9 +138,12 @@ sealed class ServerMessage {
 }
 
 class SessionReady extends ServerMessage {
-  const SessionReady(this.sessionId);
+  const SessionReady(this.sessionId, {this.diagId});
 
   final String sessionId;
+
+  /// Owner short id from POST /session; the client fills it in, never the socket message.
+  final String? diagId;
 }
 
 class SessionResumed extends ServerMessage {
