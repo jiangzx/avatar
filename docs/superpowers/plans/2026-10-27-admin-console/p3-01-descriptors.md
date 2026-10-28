@@ -1139,7 +1139,7 @@ function passesCheckin(text: string, rules: SilenceRules): boolean {
       "label": "记住一件事后的回答",
       "purpose": "老人让 AI 专门记住一件事，记好后用这句回答。",
       "impact": { "characters": "all", "stage": "记忆", "effective": "next_session" },
-      "control": "text", "maxChars": { "zh": 30, "ja": 50, "en": 100 },
+      "control": "text", "maxChars": { "zh": 30, "ja": 50, "en": 80 },
       "complianceNote": null, "risk": "low", "riskNote": null
     },
     {
