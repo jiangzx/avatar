@@ -18,7 +18,7 @@
       "label": "性格描述",
       "purpose": "这个角色和老人是什么关系、说话什么味道。AI 会照着这段说话。",
       "impact": { "characters": "each", "stage": "说话方式", "effective": "next_session" },
-      "control": "textarea", "maxChars": { "zh": 200, "ja": 300, "en": 400 },
+      "control": "textarea", "maxChars": { "zh": 140, "ja": 180, "en": 340 },
       "complianceNote": null, "risk": "medium",
       "riskNote": "写得太夸张 AI 会变得做作；不要写其他角色的名字。"
     },
@@ -53,7 +53,7 @@
       "label": "三个角色共用的人设",
       "purpose": "AI 陪老人聊天的总体要求：怎么说话、什么不能说。三个角色都用这段。",
       "impact": { "characters": "all", "stage": "说话方式", "effective": "next_session" },
-      "control": "textarea", "maxChars": { "zh": 1600, "ja": 2000, "en": 3500 }, "placeholders": "auto",
+      "control": "textarea", "maxChars": { "zh": 1200, "ja": 1480, "en": 2400 }, "placeholders": "auto",
       "complianceNote": null, "risk": "high",
       "riskNote": "改坏了 AI 可能说错话。安全底线在别处，不会被这里改掉。"
     },
