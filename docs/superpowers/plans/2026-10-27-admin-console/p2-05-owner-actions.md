@@ -66,7 +66,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败的 store 测试**
+- [x] **Step 1: 写失败的 store 测试**
 
 新建 `gateway/test/store-ban.test.ts`：
 
@@ -93,7 +93,7 @@ describe('owner ban flag', () => {
 });
 ```
 
-- [ ] **Step 2: 写失败的 App 端口测试**
+- [x] **Step 2: 写失败的 App 端口测试**
 
 在 `gateway/test/identity-http.test.ts` 的 `boot()` 中，给 `createGatewayServer({...})` 的参数追加一行（保持其他参数不变）：
 
@@ -121,7 +121,7 @@ describe('banned owners', () => {
 
 记忆路由对被封用户不设限，这一点由 Step 7 的实现位置保证（检查只在 `createSession` 里），不额外加测试。
 
-- [ ] **Step 3: 写失败的后台动作测试**
+- [x] **Step 3: 写失败的后台动作测试**
 
 新建 `gateway/test/admin-owner-actions.test.ts`：
 
@@ -233,7 +233,7 @@ describe('delete', () => {
 });
 ```
 
-- [ ] **Step 4: 写失败的日志级别测试**
+- [x] **Step 4: 写失败的日志级别测试**
 
 新建 `gateway/test/admin-log-level.test.ts`：
 
@@ -301,7 +301,7 @@ describe('log level', () => {
 });
 ```
 
-- [ ] **Step 4b: 写失败的封禁通知测试**
+- [x] **Step 4b: 写失败的封禁通知测试**
 
 在 `gateway/test/manager.test.ts` 里：`fakeSession()` 返回的对象加一项 `notifyEnd: vi.fn(),`；`describe('SessionManager', ...)` 中 `'endOwner ends every session of that owner and returns the count'` 之后追加：
 
@@ -349,12 +349,12 @@ describe('log level', () => {
   });
 ```
 
-- [ ] **Step 5: 跑测试确认失败**
+- [x] **Step 5: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/store-ban.test.ts test/identity-http.test.ts test/admin-owner-actions.test.ts test/admin-log-level.test.ts test/manager.test.ts test/session.test.ts`
 Expected: FAIL：`session.notifyEnd is not a function`（session、manager 新增项），`store.isOwnerBanned is not a function`、`Cannot find module '../src/admin/ownerActions.ts'`，`banned owners` 一项失败（403 断言拿到 200）。
 
-- [ ] **Step 6: store 增加封禁方法**
+- [x] **Step 6: store 增加封禁方法**
 
 在 `gateway/src/memory/store.ts` 的 `MemoryStore` 接口里，`deleteOwner` 声明之后加：
 
@@ -387,7 +387,7 @@ Expected: FAIL：`session.notifyEnd is not a function`（session、manager 新�
   }
 ```
 
-- [ ] **Step 7: App 端口返回 403**
+- [x] **Step 7: App 端口返回 403**
 
 在 `gateway/src/server/server.ts` 的 `GatewayServerOptions` 接口末尾加：
 
@@ -413,7 +413,7 @@ Expected: FAIL：`session.notifyEnd is not a function`（session、manager 新�
   ...(store ? { ownerBanned: (ownerId: string) => store.isOwnerBanned(ownerId) } : {}),
 ```
 
-- [ ] **Step 8: 实现 `ownerActions.ts`**
+- [x] **Step 8: 实现 `ownerActions.ts`**
 
 ```ts
 import type { DatabaseSync } from 'node:sqlite';
@@ -437,7 +437,7 @@ export function scheduleLogPurge(db: DatabaseSync, oid: string, delayMs: number,
 }
 ```
 
-- [ ] **Step 8b: 会话通知与延迟断开**
+- [x] **Step 8b: 会话通知与延迟断开**
 
 在 `gateway/src/session/session.ts` 的 `flush(): void {` 方法之前加：
 
@@ -480,7 +480,7 @@ export function scheduleLogPurge(db: DatabaseSync, oid: string, delayMs: number,
   }
 ```
 
-- [ ] **Step 9: 实现 `routes/owners.ts`**
+- [x] **Step 9: 实现 `routes/owners.ts`**
 
 ```ts
 import { z } from 'zod';
@@ -552,7 +552,7 @@ export function ownerRoutes(): AdminRoute[] {
 }
 ```
 
-- [ ] **Step 10: 实现 `routes/logLevel.ts`**
+- [x] **Step 10: 实现 `routes/logLevel.ts`**
 
 ```ts
 import type { AdminLogLevelState } from '@anyidea/protocol';
@@ -605,7 +605,7 @@ export function logLevelRoutes(): AdminRoute[] {
 }
 ```
 
-- [ ] **Step 11: 挂路由**
+- [x] **Step 11: 挂路由**
 
 `gateway/src/admin/server.ts`：import `ownerRoutes`（`./routes/owners.ts`）和 `logLevelRoutes`（`./routes/logLevel.ts`），`routes` 改为：
 
@@ -613,12 +613,12 @@ export function logLevelRoutes(): AdminRoute[] {
   const routes: readonly AdminRoute[] = [...authRoutes(), ...readRoutes(), ...ownerRoutes(), ...logLevelRoutes()];
 ```
 
-- [ ] **Step 12: 跑测试确认通过**
+- [x] **Step 12: 跑测试确认通过**
 
 Run: `npm test -w gateway -- test/store-ban.test.ts test/identity-http.test.ts test/admin-owner-actions.test.ts test/admin-log-level.test.ts test/manager.test.ts test/session.test.ts`
 Expected: PASS。`a buffered usage row of the deleted owner does not break the recorder` 若失败，停下报告（见设计说明「用量缓冲」），其余项必须通过。
 
-- [ ] **Step 13: 手动冒烟（Mock + 后台）**
+- [x] **Step 13: 手动冒烟（Mock + 后台）**
 
 按 P2-T3 Step 12 的方式启动网关（Mock、`ADMIN_PORT=8788`、临时 `MEMORY_DB_PATH`）。然后：
 
@@ -636,12 +636,12 @@ curl -s -X POST $APP/session -H "x-app-secret: $S" -H "authorization: Bearer $TO
 
 Expected：`200`、`204`、`{"error":"owner_banned"}`；网关 stdout 有 `"event":"session_rejected"` 且 `"reason":"owner_banned"`，没有任何 token 或密码。跑完停进程、删除临时库。
 
-- [ ] **Step 14: 全量回归**
+- [x] **Step 14: 全量回归**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部通过。
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 git add gateway/src/memory/store.ts gateway/src/admin/ownerActions.ts gateway/src/admin/routes/owners.ts gateway/src/admin/routes/logLevel.ts \

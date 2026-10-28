@@ -56,7 +56,7 @@ npm test -w admin && npm run typecheck -w admin
 
 ## Steps
 
-- [ ] **Step 1: 写失败的诊断编号与格式化测试**
+- [x] **Step 1: 写失败的诊断编号与格式化测试**
 
 新建 `admin/test/diag.test.ts`：
 
@@ -95,7 +95,7 @@ describe('parseDiagInput', () => {
   });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 ```bash
 npm test -w admin -- test/diag.test.ts test/format.test.ts
@@ -103,7 +103,7 @@ npm test -w admin -- test/diag.test.ts test/format.test.ts
 
 预期：FAIL，找不到 `../src/diag.ts`；`formatTimeOfDay` 不是导出。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 新建 `admin/src/diag.ts`：
 
@@ -142,7 +142,7 @@ export function formatTimeOfDay(ts: number, withSeconds = false): string {
 }
 ```
 
-- [ ] **Step 4: 运行，确认通过**
+- [x] **Step 4: 运行，确认通过**
 
 ```bash
 npm test -w admin -- test/diag.test.ts test/format.test.ts
@@ -150,7 +150,7 @@ npm test -w admin -- test/diag.test.ts test/format.test.ts
 
 预期：PASS（diag 3、format 9）。
 
-- [ ] **Step 5: 写失败的时间线测试**
+- [x] **Step 5: 写失败的时间线测试**
 
 新建 `admin/test/timeline.test.tsx`：
 
@@ -255,7 +255,7 @@ describe('Timeline', () => {
 });
 ```
 
-- [ ] **Step 6: 运行，确认失败**
+- [x] **Step 6: 运行，确认失败**
 
 ```bash
 npm test -w admin -- test/timeline.test.tsx
@@ -263,7 +263,7 @@ npm test -w admin -- test/timeline.test.tsx
 
 预期：FAIL，找不到 `../src/components/Timeline.tsx`。
 
-- [ ] **Step 7: 实现标签与时间线**
+- [x] **Step 7: 实现标签与时间线**
 
 在 `admin/src/labels.ts` 末尾追加：
 
@@ -464,7 +464,7 @@ export function Timeline({ timeline }: { timeline: TimelineData }) {
 
 `首音 {formatSeconds(ms)}` 渲染出 `首音 3.4 秒`，测试按完整文本查找；横条没有文字，不影响 `textContent`。
 
-- [ ] **Step 8: 运行，确认通过**
+- [x] **Step 8: 运行，确认通过**
 
 ```bash
 npm test -w admin -- test/timeline.test.tsx
@@ -472,7 +472,7 @@ npm test -w admin -- test/timeline.test.tsx
 
 预期：PASS（8）。
 
-- [ ] **Step 9: 写失败的排查页、日志级别、审计页测试**
+- [x] **Step 9: 写失败的排查页、日志级别、审计页测试**
 
 新建 `admin/test/trace.test.tsx`：
 
@@ -678,7 +678,7 @@ describe('AuditPage', () => {
 
 审计里的旧值→新值是配置项的数值和开关（spec「后台 HTTP API」审计说明），提示词只记「已修改」和字数，所以这里原样显示不会带出内容。
 
-- [ ] **Step 10: 运行，确认失败**
+- [x] **Step 10: 运行，确认失败**
 
 ```bash
 npm test -w admin -- test/trace.test.tsx test/log-level.test.tsx test/audit.test.tsx
@@ -686,7 +686,7 @@ npm test -w admin -- test/trace.test.tsx test/log-level.test.tsx test/audit.test
 
 预期：FAIL，找不到 `TracePage.tsx`、`LogLevelControl.tsx`、`AuditPage.tsx`。
 
-- [ ] **Step 11: 实现日志级别控件**
+- [x] **Step 11: 实现日志级别控件**
 
 新建 `admin/src/components/LogLevelControl.tsx`：
 
@@ -801,7 +801,7 @@ export function LogLevelControl() {
 
 `<li>` 内 `{...} {levelLabel(...)}，到 {...} 恢复` 渲染出 `用户 3f9a1c2b4d5e 详细，到 14:32 恢复`，测试用正则匹配整段文本。
 
-- [ ] **Step 12: 实现排查页与审计页**
+- [x] **Step 12: 实现排查页与审计页**
 
 新建 `admin/src/pages/TracePage.tsx`：
 
@@ -1028,7 +1028,7 @@ export function AuditPage({ now = Date.now }: { now?: () => number }) {
 
 审计默认看近 7 天（登录、配置这类操作不是每天都有）。
 
-- [ ] **Step 13: 接上路由**
+- [x] **Step 13: 接上路由**
 
 把 `admin/src/routes.tsx` 改为：
 
@@ -1060,7 +1060,7 @@ export function PageRoutes() {
 }
 ```
 
-- [ ] **Step 14: 全量测试、typecheck、构建**
+- [x] **Step 14: 全量测试、typecheck、构建**
 
 ```bash
 npm test -w admin
@@ -1070,14 +1070,14 @@ npm run build -w admin
 
 预期：全部 PASS（53 + diag 3、format 新增 1、timeline 8、trace 7、log-level 4、audit 3，共 79）；typecheck 无输出；build 成功。
 
-- [ ] **Step 15: 自查**
+- [x] **Step 15: 自查**
 
 在提交说明里写「已对照」：
 - 时间线只有慢于提醒线的横条和 `error` 级别的条目是朱砂色；
 - 任何地方都没有显示字段以外的内容（时间线和日志表只渲染 `fields` 的键值，后端已保证不含对话内容）；
 - 搜索框、筛选、日志级别控件都能只用键盘完成（Tab 到输入框，回车提交）。
 
-- [ ] **Step 16: 提交**
+- [x] **Step 16: 提交**
 
 ```bash
 git add admin/src/diag.ts admin/src/components/Timeline.tsx admin/src/components/LogLevelControl.tsx admin/src/pages/TracePage.tsx admin/src/pages/AuditPage.tsx admin/src/format.ts admin/src/labels.ts admin/src/styles.css admin/src/routes.tsx admin/test/diag.test.ts admin/test/timeline.test.tsx admin/test/trace.test.tsx admin/test/log-level.test.tsx admin/test/audit.test.tsx admin/test/format.test.ts

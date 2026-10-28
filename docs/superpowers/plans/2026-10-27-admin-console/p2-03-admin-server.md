@@ -78,7 +78,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写测试启动器**
+- [x] **Step 1: 写测试启动器**
 
 新建 `gateway/test/support/admin.ts`：
 
@@ -187,7 +187,7 @@ export async function bootAdmin(opts: BootAdminOptions = {}): Promise<AdminHarne
 }
 ```
 
-- [ ] **Step 2: 写失败的服务测试**
+- [x] **Step 2: 写失败的服务测试**
 
 新建 `gateway/test/admin-server.test.ts`：
 
@@ -318,7 +318,7 @@ describe('admin server', () => {
 });
 ```
 
-- [ ] **Step 3: 写失败的静态与审计测试**
+- [x] **Step 3: 写失败的静态与审计测试**
 
 新建 `gateway/test/admin-static.test.ts`：
 
@@ -435,12 +435,12 @@ describe('AdminAudit', () => {
 });
 ```
 
-- [ ] **Step 4: 跑测试确认失败**
+- [x] **Step 4: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/admin-server.test.ts test/admin-static.test.ts test/admin-audit.test.ts`
 Expected: FAIL，`Cannot find module '../../src/admin/server.ts'`、`'../src/admin/audit.ts'`。
 
-- [ ] **Step 5: 实现 `http.ts`**
+- [x] **Step 5: 实现 `http.ts`**
 
 ```ts
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -527,7 +527,7 @@ export function sameOrigin(req: IncomingMessage): boolean {
 }
 ```
 
-- [ ] **Step 6: 实现 `audit.ts`**
+- [x] **Step 6: 实现 `audit.ts`**
 
 ```ts
 import type { DatabaseSync } from 'node:sqlite';
@@ -569,7 +569,7 @@ export function expireAdminAudit(db: DatabaseSync, olderThan: number): number {
 }
 ```
 
-- [ ] **Step 7: 实现 `static.ts`**
+- [x] **Step 7: 实现 `static.ts`**
 
 ```ts
 import { lstat, readFile } from 'node:fs/promises';
@@ -627,7 +627,7 @@ export async function serveStatic(req: IncomingMessage, res: ServerResponse, roo
 }
 ```
 
-- [ ] **Step 8: 实现路由类型与登录路由**
+- [x] **Step 8: 实现路由类型与登录路由**
 
 新建 `gateway/src/admin/routes/types.ts`：
 
@@ -727,7 +727,7 @@ export function authRoutes(): AdminRoute[] {
 }
 ```
 
-- [ ] **Step 9: 实现 `server.ts`**
+- [x] **Step 9: 实现 `server.ts`**
 
 ```ts
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -842,12 +842,12 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL, de
 
 注意 `routes/auth.ts` 从 `server.ts` 引 `ADMIN_ACTOR`，`server.ts` 又引 `authRoutes`：这是值的循环引用。`ADMIN_ACTOR` 只在请求处理时读取（不在模块初始化时），ESM 下安全；如果 typecheck 或运行报 TDZ 错误，把 `ADMIN_ACTOR` 移到 `gateway/src/admin/actor.ts` 并从 `server.ts` re-export。
 
-- [ ] **Step 10: 跑测试确认通过**
+- [x] **Step 10: 跑测试确认通过**
 
 Run: `npm test -w gateway -- test/admin-server.test.ts test/admin-static.test.ts test/admin-audit.test.ts`
 Expected: PASS（11 + 4 + 3 项）。
 
-- [ ] **Step 11: 接线 `index.ts`**
+- [x] **Step 11: 接线 `index.ts`**
 
 在 `gateway/src/index.ts` 顶部 import 区追加：
 
@@ -908,7 +908,7 @@ if (!adminEnv.enabled) {
 
 `DAY_MS` 在 `index.ts` 里是在 `runCleanup` 之前声明的 `const`，`runCleanup` 首次执行发生在声明之后，可以直接用。
 
-- [ ] **Step 12: 手动冒烟（Mock，后台开启）**
+- [x] **Step 12: 手动冒烟（Mock，后台开启）**
 
 ```bash
 cd gateway
@@ -924,12 +924,12 @@ kill %1
 
 Expected：`401`、`503`、`1`。另外确认 `lsof -nP -iTCP:8788 -sTCP:LISTEN` 显示的是 `127.0.0.1:8788`，不是 `*:8788`（kill 之前执行）。冒烟用的数据库在 `/tmp`，跑完 `rm -rf /tmp/avatar-admin-smoke /tmp/avatar-admin-smoke.log`。
 
-- [ ] **Step 13: 全量回归**
+- [x] **Step 13: 全量回归**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部通过。
 
-- [ ] **Step 14: Commit**
+- [x] **Step 14: Commit**
 
 ```bash
 git add gateway/src/admin/http.ts gateway/src/admin/static.ts gateway/src/admin/audit.ts gateway/src/admin/routes/types.ts \

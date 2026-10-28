@@ -71,7 +71,7 @@ grep -n "AdminOverview" protocol/src/index.ts protocol/src/adminApi.ts
 
 ## Steps
 
-- [ ] **Step 1: 确认字体许可（A2），选定分支**
+- [x] **Step 1: 确认字体许可（A2），选定分支**
 
 打开华为官方的 HarmonyOS Sans 下载与许可页面（开发者联盟「设计 / 资源」中的 HarmonyOS Sans，下载包里附带许可协议文本），阅读许可原文，回答两个问题：
 1. 是否允许在本项目的内部后台网页里**自托管**（随网页分发字体文件）？
@@ -81,7 +81,7 @@ grep -n "AdminOverview" protocol/src/index.ts protocol/src/adminApi.ts
 
 把结论写进 `docs/blockers.md` 末尾一条新记录（用现有模板），标题「A2 HarmonyOS Sans 许可」，内容写许可原文的出处（下载包里的文件名和条款编号）、结论、选定的分支。分支 B 时状态写「已按 spec 回退，不阻塞」。
 
-- [ ] **Step 2: 根 workspaces 加 admin，建 `admin/package.json`**
+- [x] **Step 2: 根 workspaces 加 admin，建 `admin/package.json`**
 
 修改根 `package.json` 的 `workspaces`：
 
@@ -115,7 +115,7 @@ grep -n "AdminOverview" protocol/src/index.ts protocol/src/adminApi.ts
 
 `typescript`、`vite`、`vitest` 与 `avatar-core` 的版本保持一致，不另选。
 
-- [ ] **Step 3: 用精确版本安装其余依赖**
+- [x] **Step 3: 用精确版本安装其余依赖**
 
 先确认 `@vitejs/plugin-react` 当前版本支持 vite 8：
 
@@ -141,7 +141,7 @@ npm ls -w admin --depth=0
 
 预期：输出 `all exact`；`npm ls` 列出上面所有包，没有 `UNMET` 或 `invalid`。`@types/react`、`@types/react-dom` 是 React 的类型声明，属于 React 本身的配套，归在已批准的 React 依赖下；在提交说明里列出。
 
-- [ ] **Step 4: TS、Vite、HTML 配置**
+- [x] **Step 4: TS、Vite、HTML 配置**
 
 新建 `admin/tsconfig.json`：
 
@@ -197,7 +197,7 @@ export default defineConfig({
 </html>
 ```
 
-- [ ] **Step 5: 测试环境与测试辅助**
+- [x] **Step 5: 测试环境与测试辅助**
 
 新建 `admin/test/setup.ts`：
 
@@ -292,7 +292,7 @@ export function renderWithProviders(ui: ReactElement, fetchImpl: typeof fetch) {
 }
 ```
 
-- [ ] **Step 6: 写失败的 API 客户端测试**
+- [x] **Step 6: 写失败的 API 客户端测试**
 
 新建 `admin/test/client.test.ts`：
 
@@ -366,7 +366,7 @@ describe('createApiClient', () => {
 
 注意 `fakeFetch` 里 handler 是普通值时整个值都当作 200 的 body；需要指定状态码（例如 204、401）时必须写成函数 `() => ({ status, body })`。
 
-- [ ] **Step 7: 运行，确认失败**
+- [x] **Step 7: 运行，确认失败**
 
 ```bash
 npm install
@@ -375,7 +375,7 @@ npm test -w admin -- test/client.test.ts
 
 预期：FAIL，`Failed to resolve import "../src/api/client.ts"`（或 helpers 引用的 `AuthContext.tsx` 不存在）。
 
-- [ ] **Step 8: 实现 API 客户端与接口表**
+- [x] **Step 8: 实现 API 客户端与接口表**
 
 新建 `admin/src/api/client.ts`：
 
@@ -526,7 +526,7 @@ export function adminApi(client: ApiClient) {
 export type AdminApi = ReturnType<typeof adminApi>;
 ```
 
-- [ ] **Step 9: 写失败的主题、路由、登录测试**
+- [x] **Step 9: 写失败的主题、路由、登录测试**
 
 新建 `admin/test/theme.test.ts`：
 
@@ -669,7 +669,7 @@ describe('login', () => {
 
 `enters the console` 用例验证「键盘可完成登录」：密码框 `autoFocus`，直接键入后回车提交。
 
-- [ ] **Step 10: 运行，确认失败**
+- [x] **Step 10: 运行，确认失败**
 
 ```bash
 npm test -w admin
@@ -677,7 +677,7 @@ npm test -w admin
 
 预期：FAIL，找不到 `../src/color.ts`、`../src/theme.ts`、`../src/router.ts`、`../src/App.tsx`。
 
-- [ ] **Step 11: 实现主题与颜色工具**
+- [x] **Step 11: 实现主题与颜色工具**
 
 新建 `admin/src/color.ts`：
 
@@ -748,7 +748,7 @@ export const adminTheme: ThemeConfig = {
 
 `celadonTint` 只用作选中项底色，`white` 是侧栏底色；两者都是背景，不参与文字对比度。
 
-- [ ] **Step 12: 字体文件与全局样式**
+- [x] **Step 12: 字体文件与全局样式**
 
 **分支 A**：
 1. 从 Step 1 读过许可的那个官方下载包里取 `HarmonyOS_Sans_SC_Regular.ttf` 和 `HarmonyOS_Sans_SC_Medium.ttf`。
@@ -863,7 +863,7 @@ h3 {
 
 `.caption` 的 `#4d5d63` 是松墨在宣白上调浅的辅助色，对比度约 6.3，满足 AA。登录页左对齐（不是居中卡片），与内容区一致。
 
-- [ ] **Step 13: 路由、视图选项、鉴权上下文**
+- [x] **Step 13: 路由、视图选项、鉴权上下文**
 
 新建 `admin/src/router.ts`：
 
@@ -1020,7 +1020,7 @@ export function useApi(): AdminApi {
 }
 ```
 
-- [ ] **Step 14: 登录页、布局、路由表、入口**
+- [x] **Step 14: 登录页、布局、路由表、入口**
 
 新建 `admin/src/auth/LoginPage.tsx`：
 
@@ -1225,7 +1225,7 @@ createRoot(root).render(
 );
 ```
 
-- [ ] **Step 15: 运行测试、typecheck、构建**
+- [x] **Step 15: 运行测试、typecheck、构建**
 
 ```bash
 npm test -w admin
@@ -1286,7 +1286,7 @@ docker run --rm --entrypoint ls avatar-gateway:admin-check /app/admin/dist
 
 预期：构建成功；`ls` 列出 `index.html` 和 `assets`。没有 docker：跳过这两条，在进度报告里写「Dockerfile 未在本机构建验证（无 docker）」，并在 P2-T9 的回归里再提醒一次。
 
-- [ ] **Step 17: 自查设计约束**
+- [x] **Step 17: 自查设计约束**
 
 逐条对照本文件「设计约束」一节，在提交说明里写「已对照」：
 - 登录页、侧栏、顶栏没有全大写、`→`、`·` 拼接、渐变、阴影卡片；
@@ -1294,7 +1294,7 @@ docker run --rm --entrypoint ls avatar-gateway:admin-check /app/admin/dist
 - `theme.test.ts` 通过即代表颜色映射与对比度达标；
 - 键盘：Tab 能依次到达密码框、登录按钮，焦点有青瓷描边（`npm run dev -w admin` 打开 `http://127.0.0.1:5174` 手动按 Tab 看一次）。
 
-- [ ] **Step 18: 提交**
+- [x] **Step 18: 提交**
 
 ```bash
 git add package.json package-lock.json Dockerfile.gateway admin/package.json admin/tsconfig.json admin/vite.config.ts admin/index.html admin/src admin/test docs/blockers.md

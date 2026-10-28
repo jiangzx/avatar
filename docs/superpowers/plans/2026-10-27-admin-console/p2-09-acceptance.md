@@ -24,7 +24,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 全量自动化回归**
+- [x] **Step 1: 全量自动化回归**
 
 ```bash
 npm ci
@@ -35,7 +35,7 @@ npm test -w admin && npm run typecheck -w admin && npm run build -w admin
 
 预期：全部通过，typecheck 无输出，`admin/dist/index.html` 存在。把每条命令的通过数（vitest 最后一行 `Tests  N passed`）抄进验收记录。任何一条失败就停下修，不进入浏览器验收。
 
-- [ ] **Step 2: 起一个只用 Mock 的验收网关**
+- [x] **Step 2: 起一个只用 Mock 的验收网关**
 
 所有运行时文件放在仓库外：
 
@@ -70,7 +70,7 @@ lsof -nP -iTCP:8788 -sTCP:LISTEN
 
 预期：地址是 `127.0.0.1:8788`，不是 `*:8788`。
 
-- [ ] **Step 3: 造验收数据**
+- [x] **Step 3: 造验收数据**
 
 按 P1-T11 中写好的 Mock 端到端方法，针对端口 8797、上面的 `APP_SECRET` 和 `MEMORY_DB_PATH`：
 - 注册 2 台设备（得到 2 个 owner）；
@@ -89,7 +89,7 @@ for (const t of ['owners', 'sessions', 'usage_events', 'log_events']) console.lo
 
 预期：`owners 2`，`sessions` ≥ 4，`usage_events` 和 `log_events` 都大于 0。把数字抄进验收记录。
 
-- [ ] **Step 4: 验证 A3（Secure Cookie 在 http://127.0.0.1）**
+- [x] **Step 4: 验证 A3（Secure Cookie 在 http://127.0.0.1）**
 
 先看服务端发出的 Cookie 属性（密码用 `read -s` 读入，不进 shell 历史）：
 
@@ -117,7 +117,7 @@ unset ADMIN_PW
 - 先确认是不是只有 `127.0.0.1` 失败而 `localhost` 正常：如果是，在验收记录写明，并作为部署说明「请用 `http://localhost:<端口>` 访问」报告给用户。
 - 两个地址都失败：停下，记入 `docs/blockers.md`（标题「A3 Secure Cookie 在本机 http 上不可用」，写 Chrome 版本、现象、Set-Cookie 原文里的属性），向用户报告两个选项并等待决定：(a) 在反向代理上配 HTTPS 后再访问；(b) 其他用户指定的方案。决定后同步改 spec 的「未验证假设」与「安全复核卡」。
 
-- [ ] **Step 5: 键盘验收**
+- [x] **Step 5: 键盘验收**
 
 在 Chrome 里退出登录，然后只用键盘：
 1. 页面打开后焦点在密码框（`autoFocus`），直接输入密码，按回车：进入总览。
@@ -128,7 +128,7 @@ unset ADMIN_PW
 
 每一步写进验收记录（通过 / 不通过和现象）。不通过的项修好后重测。
 
-- [ ] **Step 6: 逐页截图并对照设计**
+- [x] **Step 6: 逐页截图并对照设计**
 
 截图用 ego-browser skill（`Skill("ego-browser")`，按它的说明打开 `http://127.0.0.1:8788/`、登录、截图），或者手动截图。窗口宽度 1280px 截一套；总览和时间线在 1440px 再各截一张。先打开顶栏「显示模拟数据」（Mock 数据默认隐藏），否则页面都是空状态。
 
@@ -163,7 +163,7 @@ unset ADMIN_PW
 
 截图前确认画面里没有浏览器书签栏、其他标签页标题等个人信息。
 
-- [ ] **Step 7: 封禁、解封、删除端到端**
+- [x] **Step 7: 封禁、解封、删除端到端**
 
 1. 在用户页找到第一台设备对应的用户（通话最多的那个），进入详情，点「封禁这位用户」并确认。
 2. 用第一台设备的 token 请求开始通话：
@@ -201,7 +201,7 @@ docker run --rm --entrypoint ls avatar-gateway:p2-accept /app/admin/dist
 
 预期：构建成功，列出 `index.html`、`assets`（分支 A 还有 `fonts`）。没有 docker：验收记录里写「未验证：本机无 docker」，并列入进度报告的跳过项。
 
-- [ ] **Step 9: 收尾运行环境**
+- [x] **Step 9: 收尾运行环境**
 
 ```bash
 pkill -f "src/index.ts" || true
@@ -210,7 +210,7 @@ lsof -nP -iTCP:8788 -sTCP:LISTEN || echo "admin port closed"
 
 `$ACCEPT_DIR` 里的数据库和日志只有 Mock 数据，可以保留供复查；验收记录里写明路径。不要把它们拷进仓库。
 
-- [ ] **Step 10: 写验收记录**
+- [x] **Step 10: 写验收记录**
 
 新建 `docs/testing/2026-10-27-admin-p2-acceptance.md`，结构如下（按实际结果填写，没做的写「未执行」和原因）：
 
@@ -274,7 +274,7 @@ Mock 网关（端口 8797，后台 8788，库 `$HOME/.avatar/admin-p2-accept/mem
 
 截图、浏览器操作由执行者完成的写「执行者确认」；需要用户亲自看过的项（至少总览、用户详情、时间线三张截图）发给用户，用户确认后写「用户确认（日期）」。
 
-- [ ] **Step 11: 更新 roadmap**
+- [x] **Step 11: 更新 roadmap**
 
 在 `docs/project/roadmap.md` 最上方（「多角色与分层记忆」之前）新增一节；如果计划 1 验收时已经建过这一节，就在其中追加计划 2 的状态：
 
@@ -296,7 +296,7 @@ Mock 网关（端口 8797，后台 8788，库 `$HOME/.avatar/admin-p2-accept/mem
 
 把 `p2-01` 到 `p2-09` 中实际完成的步骤勾选为 `- [x]`；没完成的保持 `- [ ]` 并在跳过项里列出。
 
-- [ ] **Step 12: 提交**
+- [x] **Step 12: 提交**
 
 ```bash
 git add docs/testing/2026-10-27-admin-p2-acceptance.md docs/testing/2026-10-27-admin-p2-acceptance docs/project/roadmap.md docs/superpowers/plans/2026-10-27-admin-console/p2-01-admin-config.md docs/superpowers/plans/2026-10-27-admin-console/p2-02-admin-auth.md docs/superpowers/plans/2026-10-27-admin-console/p2-03-admin-server.md docs/superpowers/plans/2026-10-27-admin-console/p2-04-read-apis.md docs/superpowers/plans/2026-10-27-admin-console/p2-05-owner-actions.md docs/superpowers/plans/2026-10-27-admin-console/p2-06-admin-scaffold.md docs/superpowers/plans/2026-10-27-admin-console/p2-07-pages-overview-users.md docs/superpowers/plans/2026-10-27-admin-console/p2-08-pages-trace-audit.md docs/superpowers/plans/2026-10-27-admin-console/p2-09-acceptance.md
@@ -309,6 +309,6 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 提交前用 `git status --short` 确认没有带上 `$ACCEPT_DIR` 下的文件、`.env*` 或 `admin/dist`。
 
-- [ ] **Step 13: 进度报告**
+- [x] **Step 13: 进度报告**
 
 向用户报告（中文）：完成了什么、每条回归命令的真实结果、A3 结论、截图里需要用户确认的三张、全部跳过项及原因。没跑过的不写「完成」。

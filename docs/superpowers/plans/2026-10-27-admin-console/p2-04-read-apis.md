@@ -79,7 +79,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写测试数据辅助**
+- [x] **Step 1: 写测试数据辅助**
 
 新建 `gateway/test/support/adminFixtures.ts`：
 
@@ -167,7 +167,7 @@ export function seedStandard(db: DatabaseSync): void {
 }
 ```
 
-- [ ] **Step 2: 写失败的切日测试**
+- [x] **Step 2: 写失败的切日测试**
 
 新建 `gateway/test/admin-days.test.ts`：
 
@@ -208,7 +208,7 @@ describe('Shanghai days', () => {
 });
 ```
 
-- [ ] **Step 3: 写失败的查询测试**
+- [x] **Step 3: 写失败的查询测试**
 
 新建 `gateway/test/admin-queries.test.ts`：
 
@@ -421,7 +421,7 @@ describe('logs and audit', () => {
 - 含 Mock：再加 `S_M` 10 分钟、200 token；Mock 的首音 500 进入样本 [500, 900, 1100]，p50 仍是 900。
 - B 的用量（不含 Mock）：今天 1000 token 未定价 + 昨天 1000 token 2000 微元。
 
-- [ ] **Step 4: 写失败的路由测试**
+- [x] **Step 4: 写失败的路由测试**
 
 新建 `gateway/test/admin-read-routes.test.ts`：
 
@@ -518,12 +518,12 @@ describe('admin read routes', () => {
 });
 ```
 
-- [ ] **Step 5: 跑测试确认失败**
+- [x] **Step 5: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/admin-days.test.ts test/admin-queries.test.ts test/admin-read-routes.test.ts`
 Expected: FAIL，`Cannot find module '../src/admin/days.ts'` 等。
 
-- [ ] **Step 6: 实现 `days.ts`**
+- [x] **Step 6: 实现 `days.ts`**
 
 ```ts
 import type { AdminRange } from '@anyidea/protocol';
@@ -562,7 +562,7 @@ export function sqlShanghaiDay(column: string): string {
 }
 ```
 
-- [ ] **Step 7: 实现 `queries.ts`**
+- [x] **Step 7: 实现 `queries.ts`**
 
 ```ts
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
@@ -844,7 +844,7 @@ export class AdminQueries {
 }
 ```
 
-- [ ] **Step 8: 追加 `listAudit`**
+- [x] **Step 8: 追加 `listAudit`**
 
 在 `gateway/src/admin/audit.ts` 顶部追加 `import type { AdminAuditRow, AdminPage } from '@anyidea/protocol';`，文件末尾追加：
 
@@ -867,7 +867,7 @@ export function listAudit(db: DatabaseSync, f: { action: string | null; from: nu
 }
 ```
 
-- [ ] **Step 9: 实现 `routes/read.ts`，挂到服务上**
+- [x] **Step 9: 实现 `routes/read.ts`，挂到服务上**
 
 新建 `gateway/src/admin/routes/read.ts`：
 
@@ -989,17 +989,17 @@ export function readRoutes(): AdminRoute[] {
 - `services` 里加 `queries: new AdminQueries(deps.db, now),`；
 - `routes` 改为 `[...authRoutes(), ...readRoutes()]`。
 
-- [ ] **Step 10: 跑测试确认通过**
+- [x] **Step 10: 跑测试确认通过**
 
 Run: `npm test -w gateway -- test/admin-days.test.ts test/admin-queries.test.ts test/admin-read-routes.test.ts`
 Expected: PASS（3 + 14 + 7 项）。若总览数字不对，先按 Step 3 末尾的推导核对 fixture，再查 SQL；不要改测试里的期望值去迁就实现。
 
-- [ ] **Step 11: 全量回归**
+- [x] **Step 11: 全量回归**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部通过。
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add gateway/src/admin/days.ts gateway/src/admin/queries.ts gateway/src/admin/routes/read.ts gateway/src/admin/audit.ts \

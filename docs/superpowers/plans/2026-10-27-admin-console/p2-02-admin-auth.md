@@ -58,7 +58,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 新建 `gateway/test/admin-auth.test.ts`：
 
@@ -201,12 +201,12 @@ describe('cookies', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/admin-auth.test.ts`
 Expected: FAIL，`Cannot find module '../src/admin/cookies.ts'`。
 
-- [ ] **Step 3: 实现 `sessions.ts`**
+- [x] **Step 3: 实现 `sessions.ts`**
 
 ```ts
 import { createHash, randomBytes } from 'node:crypto';
@@ -278,7 +278,7 @@ export function csrfMatches(session: AdminSession, header: string | string[] | u
 }
 ```
 
-- [ ] **Step 4: 实现 `loginGuard.ts`**
+- [x] **Step 4: 实现 `loginGuard.ts`**
 
 ```ts
 export type LoginCheck = { allowed: true } | { allowed: false; retryAfterMs: number };
@@ -332,7 +332,7 @@ export class LoginGuard {
 }
 ```
 
-- [ ] **Step 5: 实现 `cookies.ts`**
+- [x] **Step 5: 实现 `cookies.ts`**
 
 ```ts
 export const ADMIN_COOKIE = 'admin_sid';
@@ -359,7 +359,7 @@ export function clearedSessionCookie(): string {
 }
 ```
 
-- [ ] **Step 6: 跑测试确认通过**
+- [x] **Step 6: 跑测试确认通过**
 
 Run: `npm test -w gateway -- test/admin-auth.test.ts`
 Expected: PASS（12 项）。
@@ -367,7 +367,7 @@ Expected: PASS（12 项）。
 Run: `npm run typecheck -w gateway`
 Expected: 无错误。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gateway/src/admin/sessions.ts gateway/src/admin/loginGuard.ts gateway/src/admin/cookies.ts gateway/test/admin-auth.test.ts

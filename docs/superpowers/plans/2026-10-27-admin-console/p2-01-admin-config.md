@@ -61,7 +61,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败的配置测试**
+- [x] **Step 1: 写失败的配置测试**
 
 新建 `gateway/test/admin-config.test.ts`：
 
@@ -126,7 +126,7 @@ describe('loadAdminEnv', () => {
 });
 ```
 
-- [ ] **Step 2: 写失败的密码测试**
+- [x] **Step 2: 写失败的密码测试**
 
 新建 `gateway/test/admin-password.test.ts`：
 
@@ -175,12 +175,12 @@ describe('admin password', () => {
 });
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `npm test -w gateway -- test/admin-config.test.ts test/admin-password.test.ts`
 Expected: FAIL，`Cannot find module '../src/admin/config.ts'` 和 `'../src/admin/password.ts'`。
 
-- [ ] **Step 4: 实现 `password.ts`**
+- [x] **Step 4: 实现 `password.ts`**
 
 新建 `gateway/src/admin/password.ts`：
 
@@ -238,7 +238,7 @@ export async function verifyPassword(password: string, encoded: string): Promise
 }
 ```
 
-- [ ] **Step 5: 实现 `config.ts`，并把 `log/adminConfig.ts` 改为 re-export**
+- [x] **Step 5: 实现 `config.ts`，并把 `log/adminConfig.ts` 改为 re-export**
 
 现有 `gateway/src/log/adminConfig.ts`（P1-T4 建、P1-T9 加 `usageSink`）导出 `AdminConfigSchema`、`AdminConfig`、`loadAdminConfig`，约束是：`retention` 三项都是 1 起的整数（`usageDays` ≤ 3650、`logDays` ≤ 90、`auditDays` ≤ 3650），`logSink` / `usageSink` 都是 `flushMs` 100–60000、`maxBatch` 1–5000。新建 `gateway/src/admin/config.ts`，这三段**原样保留上面的约束**（P1 已有测试），只追加新字段：
 
@@ -304,7 +304,7 @@ export * from '../admin/config.ts';
 
 P1 的调用点（`index.ts`、测试）继续从 `log/adminConfig.ts` 导入，不用改。
 
-- [ ] **Step 6: 扩充 `admin.json`**
+- [x] **Step 6: 扩充 `admin.json`**
 
 在 `gateway/config/admin.json` 现有内容（`retention`、`logSink`、`usageSink` 保持原值）之后追加五个键，最终内容：
 
@@ -323,7 +323,7 @@ P1 的调用点（`index.ts`、测试）继续从 `log/adminConfig.ts` 导入，
 
 `logSink`（1000 / 200）、`usageSink`（1000 / 100）是 P1-T4、P1-T9 提交的值，不要改。
 
-- [ ] **Step 7: 写 `adminApi.ts` 和它的类型测试**
+- [x] **Step 7: 写 `adminApi.ts` 和它的类型测试**
 
 新建 `protocol/src/adminApi.ts`，内容 = 总览 C6 代码块逐字。注意 `AdminTimeline` 是
 
@@ -386,7 +386,7 @@ describe('admin api types', () => {
 });
 ```
 
-- [ ] **Step 8: 写哈希脚本**
+- [x] **Step 8: 写哈希脚本**
 
 新建 `gateway/scripts/admin-hash-password.ts`：
 
@@ -470,7 +470,7 @@ main().catch(() => {
 # ADMIN_PASSWORD_HASH=
 ```
 
-- [ ] **Step 9: 跑测试确认通过**
+- [x] **Step 9: 跑测试确认通过**
 
 Run: `npm test -w gateway -- test/admin-config.test.ts test/admin-password.test.ts && npm test -w protocol -- test/admin-api.test.ts`
 Expected: PASS，3 个文件全绿。
@@ -481,12 +481,12 @@ Expected: 一行，以 `scrypt$32768$8$1$` 开头；终端没有回显密码。
 Run: `printf 'short' | npm run -s admin:hash-password -w gateway; echo "exit=$?"`
 Expected: stderr「密码至少需要 12 个字符。」，`exit=1`。
 
-- [ ] **Step 10: 全量回归**
+- [x] **Step 10: 全量回归**
 
 Run: `npm test -w protocol && npm run typecheck -w protocol && npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部通过（P1 引用 `log/adminConfig.ts` 的测试不受影响）。
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add gateway/src/admin/config.ts gateway/src/admin/password.ts gateway/src/log/adminConfig.ts gateway/config/admin.json \

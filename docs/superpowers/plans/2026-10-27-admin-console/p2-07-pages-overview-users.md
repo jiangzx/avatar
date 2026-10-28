@@ -62,7 +62,7 @@ npm test -w admin && npm run typecheck -w admin
 
 ## Steps
 
-- [ ] **Step 1: 写失败的格式化与标签测试**
+- [x] **Step 1: 写失败的格式化与标签测试**
 
 新建 `admin/test/format.test.ts`：
 
@@ -187,7 +187,7 @@ describe('labels', () => {
 
 `END_REASON_LABELS` 的 7 个取值来自 `gateway/src/session/manager.ts` 里 `destroy(..., reason)` 的全部调用和 P2-T5 新增的 `owner_banned`。打开 `p1-10-session-columns-retention.md` 的结束原因取值表核对一次：表里多出的取值，同时补进测试数组和 `labels.ts`。
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 ```bash
 npm test -w admin -- test/format.test.ts test/labels.test.ts
@@ -195,7 +195,7 @@ npm test -w admin -- test/format.test.ts test/labels.test.ts
 
 预期：FAIL，找不到 `../src/format.ts`、`../src/labels.ts`。
 
-- [ ] **Step 3: 实现格式化与标签**
+- [x] **Step 3: 实现格式化与标签**
 
 新建 `admin/src/format.ts`：
 
@@ -332,7 +332,7 @@ export function endReasonLabel(row: { endedAt: number | null; endReason: string 
 }
 ```
 
-- [ ] **Step 4: 用 dataviz 选角色色**
+- [x] **Step 4: 用 dataviz 选角色色**
 
 调用 dataviz skill（`Skill("dataviz")`），任务描述：「三个类别（小暖、小凯、小欣）的横条颜色，放在白底和 `#F6F8F7` 底上；主色已是 `#2F6F68`（青瓷），错误色 `#B42318`（朱砂）、警示色 `#B7791F`（秋香）不能被占用；需要和青瓷协调、彼此可区分（含色觉障碍）」。按它的方法选色，并运行它附带的校验器。
 
@@ -347,7 +347,7 @@ export const CHARACTER_COLORS: Record<string, string> = {
 };
 ```
 
-- [ ] **Step 5: 运行，确认通过**
+- [x] **Step 5: 运行，确认通过**
 
 ```bash
 npm test -w admin -- test/format.test.ts test/labels.test.ts
@@ -355,7 +355,7 @@ npm test -w admin -- test/format.test.ts test/labels.test.ts
 
 预期：PASS（format 8、labels 4）。
 
-- [ ] **Step 6: 加载钩子与通用组件**
+- [x] **Step 6: 加载钩子与通用组件**
 
 新建 `admin/src/useLoad.ts`：
 
@@ -665,7 +665,7 @@ export function PagedTable<T extends object>({ paged, columns, rowKey, empty, ex
 }
 ```
 
-- [ ] **Step 7: 写失败的简报句测试**
+- [x] **Step 7: 写失败的简报句测试**
 
 新建 `admin/test/brief.test.tsx`：
 
@@ -711,7 +711,7 @@ describe('Brief', () => {
 });
 ```
 
-- [ ] **Step 8: 运行，确认失败**
+- [x] **Step 8: 运行，确认失败**
 
 ```bash
 npm test -w admin -- test/brief.test.tsx
@@ -719,7 +719,7 @@ npm test -w admin -- test/brief.test.tsx
 
 预期：FAIL，找不到 `../src/components/Brief.tsx`。
 
-- [ ] **Step 9: 实现简报句**
+- [x] **Step 9: 实现简报句**
 
 新建 `admin/src/components/Brief.tsx`：
 
@@ -778,7 +778,7 @@ export function Brief({ range, brief }: { range: AdminRange; brief: AdminOvervie
 
 JSX 换行会吃掉行首行尾空白：`，{costLead}` 后换行接 `<button>`、`</button>` 后换行接 `，` 都不会产生多余空格；`{when} <a` 和 `聊了 <a` 同一行里的空格会保留。测试断言的是完整 `textContent`，空格多一个少一个都会失败。
 
-- [ ] **Step 10: 运行，确认通过**
+- [x] **Step 10: 运行，确认通过**
 
 ```bash
 npm test -w admin -- test/brief.test.tsx
@@ -786,7 +786,7 @@ npm test -w admin -- test/brief.test.tsx
 
 预期：PASS（4）。
 
-- [ ] **Step 11: 写失败的总览页测试**
+- [x] **Step 11: 写失败的总览页测试**
 
 新建 `admin/test/overview.test.tsx`：
 
@@ -893,7 +893,7 @@ describe('OverviewPage', () => {
 });
 ```
 
-- [ ] **Step 12: 运行，确认失败**
+- [x] **Step 12: 运行，确认失败**
 
 ```bash
 npm test -w admin -- test/overview.test.tsx
@@ -901,7 +901,7 @@ npm test -w admin -- test/overview.test.tsx
 
 预期：FAIL，找不到 `../src/pages/OverviewPage.tsx`。
 
-- [ ] **Step 13: 实现总览页**
+- [x] **Step 13: 实现总览页**
 
 新建 `admin/src/pages/OverviewPage.tsx`：
 
@@ -1047,7 +1047,7 @@ function SpendList({ byKind }: { byKind: AdminOverview['byKind'] }) {
 
 如果当前 Ant Design 版本的 `Segmented` 不支持泛型参数写法，改成 `<Segmented options={RANGE_OPTIONS} value={range} onChange={(v) => setRange(v as AdminRange)} />`，行为不变。
 
-- [ ] **Step 14: 运行，确认通过**
+- [x] **Step 14: 运行，确认通过**
 
 ```bash
 npm test -w admin -- test/overview.test.tsx
@@ -1055,7 +1055,7 @@ npm test -w admin -- test/overview.test.tsx
 
 预期：PASS（10）。
 
-- [ ] **Step 15: 写失败的用户列表、用户详情、通话列表测试**
+- [x] **Step 15: 写失败的用户列表、用户详情、通话列表测试**
 
 新建 `admin/test/users.test.tsx`：
 
@@ -1260,7 +1260,7 @@ describe('SessionsPage', () => {
 });
 ```
 
-- [ ] **Step 16: 运行，确认失败**
+- [x] **Step 16: 运行，确认失败**
 
 ```bash
 npm test -w admin -- test/users.test.tsx test/user-detail.test.tsx test/sessions.test.tsx
@@ -1268,7 +1268,7 @@ npm test -w admin -- test/users.test.tsx test/user-detail.test.tsx test/sessions
 
 预期：FAIL，找不到三个页面文件。
 
-- [ ] **Step 17: 实现用户列表、用户详情、通话列表**
+- [x] **Step 17: 实现用户列表、用户详情、通话列表**
 
 新建 `admin/src/pages/UsersPage.tsx`：
 
@@ -1590,7 +1590,7 @@ export function SessionsPage({ oid, now = Date.now }: { oid: string | undefined;
 
 `from` 由 `rangeStart(range, now())` 算出，同一天内值不变，不会因为重新渲染反复请求。
 
-- [ ] **Step 18: 接上路由**
+- [x] **Step 18: 接上路由**
 
 把 `admin/src/routes.tsx` 改为：
 
@@ -1624,7 +1624,7 @@ export function PageRoutes() {
 }
 ```
 
-- [ ] **Step 19: 全量测试、typecheck、构建**
+- [x] **Step 19: 全量测试、typecheck、构建**
 
 ```bash
 npm test -w admin
@@ -1636,7 +1636,7 @@ npm run build -w admin
 
 `user-detail` 的「已封禁」「已删除」提示是 Ant Design `message`，渲染进 `document.body` 下的 `.ant-message`。若因动画导致找不到，在 `renderWithProviders` 的 `ConfigProvider theme` 里加 `token: { ...adminTheme.token, motion: false }`（只改测试辅助），不要在页面里去掉提示。
 
-- [ ] **Step 20: 自查文案与设计**
+- [x] **Step 20: 自查文案与设计**
 
 用 `npm run dev -w admin` 打开总览、用户、用户详情、通话四个页面（需要按 P2-T9 Step 2 的方法起一个带 Mock 数据的网关），逐条对照本文件「文案」表和 spec「文案规则」，在提交说明里写「已对照」：
 - 没有统计卡网格，总览第一屏是简报句；
@@ -1644,7 +1644,7 @@ npm run build -w admin
 - 金额都有「元」，未定价的地方写「未定价」；
 - 按钮名和成功提示一致（封禁 / 已封禁，解封 / 已解封，删除 / 已删除）。
 
-- [ ] **Step 21: 提交**
+- [x] **Step 21: 提交**
 
 ```bash
 git add admin/src/format.ts admin/src/labels.ts admin/src/useLoad.ts admin/src/usePaged.ts admin/src/components admin/src/pages admin/src/theme.ts admin/src/styles.css admin/src/routes.tsx admin/test/format.test.ts admin/test/labels.test.ts admin/test/brief.test.tsx admin/test/overview.test.tsx admin/test/users.test.tsx admin/test/user-detail.test.tsx admin/test/sessions.test.tsx
