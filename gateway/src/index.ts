@@ -32,6 +32,7 @@ import { SqlitePriceBook, loadPricingBaseline } from './usage/pricing.ts';
 import { SqliteUsageRecorder } from './usage/recorder.ts';
 import { purgeExpiredUsage } from './usage/retention.ts';
 import type { ModelDefaults, Overlay } from './config-store/keys.ts';
+import { SqliteSecretStore, parseMasterKey } from './config-store/secrets.ts';
 import { fixedConfigSource, SqliteConfigStore, type ConfigSource } from './config-store/store.ts';
 import { buildConfigSnapshot, type ConfigSnapshot } from './session/configSnapshot.ts';
 import { makeSessionFactory } from './session/snapshotDeps.ts';
@@ -75,6 +76,16 @@ const buildSnapshot = (overlay: Overlay, version: number): ConfigSnapshot => bui
 const configSource: ConfigSource<ConfigSnapshot> | SqliteConfigStore<ConfigSnapshot> = memoryDb
   ? new SqliteConfigStore<ConfigSnapshot>({ db: memoryDb, build: buildSnapshot, logger })
   : fixedConfigSource(buildSnapshot({}, 0));
+// Admin-saved keys. ADMIN_SECRET_KEY unset = read-only; a malformed value fails startup.
+const secrets = memoryDb
+  ? new SqliteSecretStore({
+      db: memoryDb,
+      masterKey: parseMasterKey(process.env.ADMIN_SECRET_KEY),
+      env: config.qwenApiKey ? { DASHSCOPE_API_KEY: config.qwenApiKey } : {},
+      logger,
+    })
+  : null;
+if (secrets) logger.info('secret_store', { writable: secrets.writable(), source: secrets.info('DASHSCOPE_API_KEY').source });
 const boot = configSource.snapshot();
 logger.info('config_snapshot', { version: boot.version, characters: boot.characters.ids().length, disabled: boot.disabledCharacters.size });
 // Character cards (gateway/characters/): the id set must equal protocol CHARACTER_IDS, or startup fails.
@@ -144,9 +155,8 @@ const registry = store
 logger.info('identity_mode', { enabled: registry !== null, devEndpoints: identityConfig.enableDevEndpoints });
 const memoryService = store ? createMemoryService({ store, safety: boot.i18n.safety, logger }) : undefined;
 const writer = store ? new SqliteTranscriptWriter(store, boot.i18n.safety, logger) : undefined;
-// P3-T4 replaces these two with the SecretStore.
-const resolveApiKey = (): string | undefined => config.qwenApiKey;
-const apiKeyVersion = (): number => 0;
+const resolveApiKey = (): string | undefined => secrets?.resolve('DASHSCOPE_API_KEY') ?? config.qwenApiKey;
+const apiKeyVersion = (): number => secrets?.version() ?? 0;
 const textClients = new TextClientCache((settings) => new QwenTextClient({
   apiKey: settings.apiKey,
   endpoint: settings.endpoint,
