@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { ServerMessage } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
-import { SeeduplexAdapter } from '../src/adapters/seeduplex.ts';
+import { QwenAdapter } from '../src/adapters/qwen.ts';
 import { loadI18n } from '../src/i18n/load.ts';
 import { fixedRoleCatalog } from '../src/roles/catalog.ts';
 import type { SessionContext } from '../src/session/context.ts';
@@ -31,8 +31,8 @@ const wait = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Wire = { type: string; session?: { instructions?: string; audio?: { output?: { voice?: string } } } };
 
-/** A local Seeduplex upstream: records what the gateway sends and lets the test speak as the model. */
-async function seeduplexUpstream(servers: WebSocketServer[]) {
+/** A local Qwen upstream: acks the session, records what the gateway sends, lets the test speak as the model. */
+async function qwenUpstream(servers: WebSocketServer[]) {
   const server = new WebSocketServer({ port: 0 });
   servers.push(server);
   await new Promise<void>((resolve) => server.once('listening', resolve));
@@ -40,45 +40,48 @@ async function seeduplexUpstream(servers: WebSocketServer[]) {
   let socket: WebSocket | null = null;
   server.on('connection', (ws) => {
     socket = ws;
+    ws.send(JSON.stringify({ type: 'session.created' }));
     ws.on('message', (raw) => {
       const event = JSON.parse(raw.toString()) as Wire;
       received.push(event);
-      if (event.type === 'session.create') ws.send(JSON.stringify({ type: 'session.created' }));
+      if (event.type === 'session.update') ws.send(JSON.stringify({ type: 'session.updated' }));
     });
   });
   const emit = (event: Record<string, unknown>) => socket!.send(JSON.stringify(event));
   return {
     port: (server.address() as { port: number }).port,
     updates: () => received.filter((event) => event.type === 'session.update'),
-    final: (transcript: string) => {
-      emit({ type: 'conversation.item.input_audio_transcription.started' });
-      emit({ type: 'conversation.item.input_audio_transcription.completed', transcript });
-    },
+    final: (transcript: string) => emit({ type: 'conversation.item.input_audio_transcription.completed', transcript }),
     start: (id: string) => {
-      emit({ type: 'response.output_audio.started', response_id: id });
-      emit({ type: 'response.output_text.delta', response_id: id, delta: 'fixture reply' });
-      emit({ type: 'response.output_audio.delta', response_id: id, delta: Buffer.from(new Int16Array(480).buffer).toString('base64') });
+      emit({ type: 'response.created', response: { id } });
+      emit({ type: 'response.audio_transcript.delta', response_id: id, delta: 'fixture reply' });
+      emit({ type: 'response.audio.delta', response_id: id, delta: Buffer.from(new Int16Array(480).buffer).toString('base64') });
     },
-    done: (id: string) => emit({ type: 'response.output_audio.done', response_id: id }),
+    done: (id: string) => {
+      emit({ type: 'response.audio.done', response_id: id });
+      emit({ type: 'response.done', response: { id, status: 'completed' } });
+    },
   };
 }
 
-function seeduplexSession(port: number, overrides: Partial<SessionDeps>, language: 'zh' | 'en') {
+function qwenSession(port: number, overrides: Partial<SessionDeps>, language: 'zh' | 'en') {
   const sent: ServerMessage[] = [];
   const transport: Transport = { send: (message) => sent.push(message), sendAudio: () => {} };
   const session = new Session({
-    adapterFactory: () => new SeeduplexAdapter({ apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${port}`, voice: 'voice-default' }),
+    adapterFactory: () => new QwenAdapter({ apiKey: 'fixture-key', endpoint: `ws://127.0.0.1:${port}`, voice: 'voice-default' }),
     summarizer: new MockSummarizer(),
     roles: bilingual(),
     i18n,
     languageRules: i18n.language,
     voiceFor: (l) => `voice-${l}`,
+    // Production Qwen: the server VAD owns turns.
+    modelOwnsTurns: true,
     ...overrides,
   }, ctx(language), `seam-${language}`);
   return { session, transport, sent };
 }
 
-describe('push seam on a Seeduplex upstream (blockers #48)', () => {
+describe('push seam on a Qwen upstream (blockers #48)', () => {
   const servers: WebSocketServer[] = [];
   afterEach(async () => {
     for (const server of servers.splice(0)) {
@@ -87,41 +90,43 @@ describe('push seam on a Seeduplex upstream (blockers #48)', () => {
     }
   });
 
-  it('sends no session.update while a reply is due or live after a language switch, then one full update', async () => {
-    const up = await seeduplexUpstream(servers);
-    const { session, transport } = seeduplexSession(up.port, {}, 'en');
+  it('sends no session.update while a reply is due or live after a language switch, then one combined update', async () => {
+    const up = await qwenUpstream(servers);
+    const { session, transport } = qwenSession(up.port, {}, 'en');
     await session.start(transport);
     await wait();
     up.start('r1');
     up.done('r1');
     await wait();
     session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    await wait();
+    const base = up.updates().length; // the connect update and anything settled before the test turn
 
     up.final('今天天气不错'); // switches the session to zh before the reply starts
     await wait();
     expect(session.currentLanguage).toBe('zh');
-    expect(up.updates()).toHaveLength(0);
+    expect(up.updates()).toHaveLength(base);
     up.start('r2');
     await wait();
-    expect(up.updates()).toHaveLength(0);
+    expect(up.updates()).toHaveLength(base);
     up.done('r2');
     await wait();
-    expect(up.updates()).toHaveLength(0); // generation ended, playback has not
+    expect(up.updates()).toHaveLength(base); // generation ended, playback has not
 
     session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
     await wait();
-    const updates = up.updates();
-    expect(updates).toHaveLength(1);
-    expect(updates[0]!.session?.audio?.output?.voice).toBe('voice-zh');
-    expect(updates[0]!.session?.instructions).toContain('P-zh');
+    const added = up.updates().slice(base);
+    expect(added).toHaveLength(1);
+    expect(added[0]!.session?.audio?.output?.voice).toBe('voice-zh');
+    expect(added[0]!.session?.instructions).toContain('P-zh');
     session.end();
   });
 
   it('holds the summary push while a reply is live and sends it after playback ends', async () => {
-    const up = await seeduplexUpstream(servers);
+    const up = await qwenUpstream(servers);
     let release: (text: string) => void = () => {};
     const summarizer: Summarizer = { summarize: () => new Promise<string>((resolve) => { release = resolve; }) };
-    const { session, transport } = seeduplexSession(up.port, {
+    const { session, transport } = qwenSession(up.port, {
       summarizer,
       ledger: { keepRecentTurns: 1, summarizeAfterTurns: 1, summarizeAfterTokens: 10_000 },
     }, 'zh');
@@ -136,6 +141,8 @@ describe('push seam on a Seeduplex upstream (blockers #48)', () => {
     up.done('r2');
     await wait();
     session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
+    await wait();
+    const base = up.updates().length;
 
     up.final('第二句'); // two user turns: the summary starts
     up.start('r3');
@@ -143,16 +150,16 @@ describe('push seam on a Seeduplex upstream (blockers #48)', () => {
     release('SUMMARY-FIXTURE');
     await wait();
     expect(session.ledger.summary).toBe('SUMMARY-FIXTURE');
-    expect(up.updates()).toHaveLength(0);
+    expect(up.updates()).toHaveLength(base);
     up.done('r3');
     await wait();
-    expect(up.updates()).toHaveLength(0);
+    expect(up.updates()).toHaveLength(base);
 
     session.handleClientMessage({ type: 'playback.stopped', responseSeq: 3, playedMs: 300, reason: 'ended' });
     await wait();
-    const updates = up.updates();
-    expect(updates).toHaveLength(1);
-    expect(updates[0]!.session?.instructions).toContain('SUMMARY-FIXTURE');
+    const added = up.updates().slice(base);
+    expect(added).toHaveLength(1);
+    expect(added[0]!.session?.instructions).toContain('SUMMARY-FIXTURE');
     session.end();
   });
 });
