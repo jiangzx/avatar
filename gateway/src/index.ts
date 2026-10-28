@@ -1,14 +1,11 @@
 import type { Server } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LANGUAGES, type CharacterId, type Language } from '@anyidea/protocol';
+import { LANGUAGES, type Language } from '@anyidea/protocol';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech, withCharacterName } from './adapters/mock.ts';
 import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
-import { loadCharacterRegistry } from './characters/registry.ts';
-import { loadRoleCatalog } from './roles/fileCatalog.ts';
-import { missingRoleLanguages } from './roles/catalog.ts';
 import { expireAdminAudit } from './admin/audit.ts';
 import { loadAdminEnv } from './admin/config.ts';
 import { createAdminServer } from './admin/server.ts';
@@ -17,27 +14,27 @@ import { createLogLevelControl } from './log/levels.ts';
 import { createLogger } from './log/logger.ts';
 import { SqliteLogSink, deleteLogsBefore } from './log/sqliteSink.ts';
 import { stdoutSink } from './log/stdoutSink.ts';
-import { loadAffectConfig } from './session/affect.ts';
-import { loadMemoryBudget, loadPacing, validateBudgets } from './session/pacing.ts';
-import { checkAffectBudgets } from './session/affectRender.ts';
 import { devContextResolver } from './session/context.ts';
 import { MockSummarizer } from './session/ledger.ts';
 import { QwenSummarizer } from './session/qwenSummarizer.ts';
 import { SessionManager } from './session/manager.ts';
-import { Session } from './session/session.ts';
 import { createGatewayServer } from './server/server.ts';
 import { DeviceRegistry, ORPHAN_CLEANUP_INTERVAL_MS } from './identity/registry.ts';
 import { createMemoryService } from './identity/memoryService.ts';
 import { backfillKanaBigrams } from './memory/backfill.ts';
 import { openDatabase } from './memory/db.ts';
 import { SqliteMemoryStore } from './memory/store.ts';
-import { QwenTextClient } from './memory/textClient.ts';
+import { QwenTextClient, type TextModelClient } from './memory/textClient.ts';
+import { TextClientCache, switchingTextClient } from './memory/textClientCache.ts';
 import { MemoryWorker, withExtraction } from './memory/worker.ts';
 import { SqliteTranscriptWriter } from './memory/writer.ts';
 import { SqlitePriceBook, loadPricingBaseline } from './usage/pricing.ts';
 import { SqliteUsageRecorder } from './usage/recorder.ts';
 import { purgeExpiredUsage } from './usage/retention.ts';
-import { loadI18n } from './i18n/load.ts';
+import type { ModelDefaults, Overlay } from './config-store/keys.ts';
+import { fixedConfigSource, SqliteConfigStore, type ConfigSource } from './config-store/store.ts';
+import { buildConfigSnapshot, type ConfigSnapshot } from './session/configSnapshot.ts';
+import { makeSessionFactory } from './session/snapshotDeps.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
@@ -45,6 +42,7 @@ const adminConfig = loadAdminConfig(`${root}config/admin.json`);
 // Device identity (Plan B). MEMORY_DB_PATH unset = dev mode: no registration, no memory, bearers rejected.
 const identityConfig = loadIdentityConfig(process.env, fileURLToPath(new URL('../..', import.meta.url)));
 const memoryDb = identityConfig.memoryDbPath ? openDatabase(identityConfig.memoryDbPath, { busyTimeoutMs: identityConfig.busyTimeoutMs }) : null;
+const store = memoryDb ? new SqliteMemoryStore(memoryDb) : null;
 // One level control and one root logger per process; children carry sid/oid/char/seq/job.
 const levels = createLogLevelControl(config.logLevel);
 const stdout = stdoutSink();
@@ -58,31 +56,34 @@ const logSink = memoryDb
   : null;
 const logger = createLogger({ sinks: logSink ? [stdout, logSink] : [stdout], levels, strict: config.logStrict });
 logger.info('log_sink_ready', { db: logSink !== null, level: config.logLevel });
+// One validated snapshot drives startup checks and every new session. Publishing swaps it atomically.
+const modelDefaults: ModelDefaults = {
+  realtimeEndpoint: config.qwenEndpoint,
+  realtimeModel: config.qwenModel,
+  textEndpoint: config.summarizerEndpoint,
+  summarizerModel: config.summarizerModel,
+};
+const buildSnapshot = (overlay: Overlay, version: number): ConfigSnapshot => buildConfigSnapshot({
+  gatewayRoot: root,
+  overlay,
+  version,
+  ledger: config.ledger,
+  sessionStartTimeoutMs: config.sessionStartTimeoutMs,
+  models: modelDefaults,
+});
+// Identity on: the admin can publish overlays. Dev mode: the repo baseline only. An invalid baseline still fails startup.
+const configSource: ConfigSource<ConfigSnapshot> | SqliteConfigStore<ConfigSnapshot> = memoryDb
+  ? new SqliteConfigStore<ConfigSnapshot>({ db: memoryDb, build: buildSnapshot, logger })
+  : fixedConfigSource(buildSnapshot({}, 0));
+const boot = configSource.snapshot();
+logger.info('config_snapshot', { version: boot.version, characters: boot.characters.ids().length, disabled: boot.disabledCharacters.size });
 // Character cards (gateway/characters/): the id set must equal protocol CHARACTER_IDS, or startup fails.
-const characters = loadCharacterRegistry(`${root}characters`, LANGUAGES);
-logger.info('characters_loaded', { count: characters.ids().length });
-// File-backed roles (M1): gateway/roles/<role>/<language>/ + gateway/roles/_shared/<language>/.
-const roles = loadRoleCatalog(`${root}roles`, characters);
-for (const characterId of characters.ids()) {
-  const roleId = characters.roleOf(characterId);
-  const missingLanguages = missingRoleLanguages(roles, roleId, LANGUAGES);
-  if (missingLanguages.length > 0) throw new Error(`role_languages_incomplete:${roleId}:${missingLanguages.join(',')}`);
-}
-const pacing = loadPacing(`${root}config/pacing.json`);
-const memory = loadMemoryBudget(`${root}config/memory.json`);
-const i18n = loadI18n(`${root}config`);
-const affect = loadAffectConfig(`${root}config/affect.json`);
-const personasByLanguage: Partial<Record<Language, string[]>> = {};
-for (const pair of roles.characterLanguagePairs()) {
-  (personasByLanguage[pair.language] ??= []).push(roles.buildPersona(pair.characterId, pair.language));
-}
-const budgetReport = validateBudgets(pacing, memory, config.ledger, personasByLanguage);
-// Every language's longest affect render must fit its reserved room; otherwise refuse to start.
-checkAffectBudgets(budgetReport.budgets, i18n.affect);
+logger.info('characters_loaded', { count: boot.characters.ids().length });
+// Instruction room per language. The snapshot's build already validated budgets and cross-checks.
 const languageBudgetFields: Record<string, number> = {};
 for (const language of LANGUAGES) {
-  const budget = budgetReport.budgets[language];
-  const perLanguage = budgetReport.perLanguage[language];
+  const budget = boot.budgets.budgets[language];
+  const perLanguage = boot.budgets.perLanguage[language];
   if (!budget || !perLanguage) continue;
   languageBudgetFields[`${language}TotalChars`] = budget.totalChars;
   languageBudgetFields[`${language}MinHistoryChars`] = perLanguage.minHistoryChars;
@@ -90,28 +91,20 @@ for (const language of LANGUAGES) {
   languageBudgetFields[`${language}PinnedMaxChars`] = budget.pinnedMaxChars ?? 0;
 }
 logger.info('instruction_budget', {
-  totalChars: budgetReport.budget.totalChars,
-  minHistoryChars: budgetReport.minHistoryChars,
-  ledgerCapped: budgetReport.ledgerCapped,
+  totalChars: boot.budgets.budget.totalChars,
+  minHistoryChars: boot.budgets.minHistoryChars,
+  ledgerCapped: boot.budgets.ledgerCapped,
   ...languageBudgetFields,
 });
-for (const pair of roles.characterLanguagePairs()) {
-  const keywords = i18n.memory[pair.language].noticeKeywords;
-  const text = roles.director(pair.characterId, pair.language).memoryNoticeText;
-  if (!keywords.some((keyword) => text.includes(keyword))) {
-    throw new Error(`memory_notice_keyword_missing:${pair.characterId}:${pair.language}`);
-  }
-}
 logger.info('safety_rules', {
-  rejectPhrases: i18n.safety.rejectPhrases.length,
-  degradePhrases: i18n.safety.degradePhrases.length,
-  markPhrases: i18n.safety.markPhrases.length,
-  invisibleCodePoints: i18n.safety.invisibleCodePoints.length,
+  rejectPhrases: boot.i18n.safety.rejectPhrases.length,
+  degradePhrases: boot.i18n.safety.degradePhrases.length,
+  markPhrases: boot.i18n.safety.markPhrases.length,
+  invisibleCodePoints: boot.i18n.safety.invisibleCodePoints.length,
 });
 const script = loadMockScript(`${root}mock/script.json`);
 const speech = loadMockSpeech(`${root}mock/speech-24k.pcm`);
 if (!speech) logger.warn('mock_speech_missing', { hint: 'run scripts/make-mock-speech.sh' });
-const store = memoryDb ? new SqliteMemoryStore(memoryDb) : null;
 // Validated at every start, even without a DB, so a bad price file fails fast.
 const pricingBaseline = loadPricingBaseline(`${root}config/pricing.json`);
 const prices = memoryDb ? new SqlitePriceBook(memoryDb, pricingBaseline) : null;
@@ -127,118 +120,110 @@ if (store) {
   const reconciled = store.closeOpenSessions(Date.now());
   if (reconciled > 0) logger.info('sessions_reconciled', { count: reconciled });
   // One bounded pass over rows written before kana tokens existed. Never log message text.
-  const backfilled = backfillKanaBigrams(store, memory.kanaBackfillBatch ?? 500);
+  const backfilled = backfillKanaBigrams(store, boot.memory.kanaBackfillBatch ?? 500);
   if (backfilled > 0) logger.info('kana_bigram_backfill', { changed: backfilled });
 }
 const registry = store
   ? new DeviceRegistry({
       store,
-      roles,
-      characters,
+      roles: boot.roles,
+      characters: boot.characters,
       limits: {
         maxOwners: identityConfig.maxOwners,
         dailyCap: identityConfig.registerDailyCap,
         orphanOwnerDays: identityConfig.orphanOwnerDays,
         orphanCleanupBatch: identityConfig.orphanCleanupBatch,
       },
-      continuityGapMs: pacing.restReminder.continuityGapMs,
+      continuityGapMs: boot.pacing.restReminder.continuityGapMs,
       adapterName: config.adapter,
-      i18n,
+      i18n: boot.i18n,
+      snapshotMaxChars: () => configSource.snapshot().memory.instructions.snapshotMaxChars,
       logger,
     })
   : null;
 logger.info('identity_mode', { enabled: registry !== null, devEndpoints: identityConfig.enableDevEndpoints });
-const memoryService = store ? createMemoryService({ store, safety: i18n.safety, logger }) : undefined;
-const writer = store ? new SqliteTranscriptWriter(store, i18n.safety, logger) : undefined;
-const textClient = config.qwenApiKey && config.summarizerEndpoint
-  ? new QwenTextClient({
-      apiKey: config.qwenApiKey,
-      endpoint: config.summarizerEndpoint,
-      model: memory.extractModel ?? 'qwen-plus',
-      logger,
-      ...(usage ? { recorder: usage } : {}),
+const memoryService = store ? createMemoryService({ store, safety: boot.i18n.safety, logger }) : undefined;
+const writer = store ? new SqliteTranscriptWriter(store, boot.i18n.safety, logger) : undefined;
+// P3-T4 replaces these two with the SecretStore.
+const resolveApiKey = (): string | undefined => config.qwenApiKey;
+const apiKeyVersion = (): number => 0;
+const textClients = new TextClientCache((settings) => new QwenTextClient({
+  apiKey: settings.apiKey,
+  endpoint: settings.endpoint,
+  model: settings.model,
+  logger,
+  ...(usage ? { recorder: usage } : {}),
+}));
+/** Text client for one snapshot; rebuilt when the config version or the Key changes. */
+const textClientFor = (snapshot: ConfigSnapshot): TextModelClient | undefined => {
+  const apiKey = resolveApiKey();
+  if (!apiKey || !snapshot.model.textEndpoint) return undefined;
+  return textClients.get(`${snapshot.version}:${apiKeyVersion()}`, { apiKey, endpoint: snapshot.model.textEndpoint, model: snapshot.model.extractModel });
+};
+const workerClient = textClientFor(boot)
+  ? switchingTextClient(() => {
+      const client = textClientFor(configSource.snapshot());
+      if (!client) throw new Error('extract_unconfigured');
+      return client;
     })
   : null;
-const worker = store && textClient
+const worker = store && workerClient
   ? new MemoryWorker({
       store,
-      client: textClient,
-      systemPrompts: byLanguage((language) => roles.extractPrompt(language)),
-      labels: byLanguage((language) => i18n.memory[language].extractLabels),
-      maxTokens: memory.extractMaxTokens ?? 800,
-      policy: memory.extractPolicy ?? pacing.policies.summarize,
-      transcriptMaxChars: memory.extractTranscriptMaxChars ?? 6_000,
-      contextMaxChars: memory.extractContextMaxChars ?? 4_000,
+      client: workerClient,
+      systemPrompts: byLanguage((language) => boot.roles.extractPrompt(language)),
+      labels: byLanguage((language) => boot.i18n.memory[language].extractLabels),
+      maxTokens: boot.memory.extractMaxTokens ?? 800,
+      policy: boot.memory.extractPolicy ?? boot.pacing.policies.summarize,
+      transcriptMaxChars: boot.memory.extractTranscriptMaxChars ?? 6_000,
+      contextMaxChars: boot.memory.extractContextMaxChars ?? 4_000,
       // Care quotes are stored only while the care feature is on (data minimization).
-      ...(affect.enabled ? { quote: { maxChars: affect.care.quoteMaxChars, safety: i18n.safety, evidence: i18n.evidence } } : {}),
+      quote: { maxChars: boot.affect.care.quoteMaxChars, safety: boot.i18n.safety, evidence: boot.i18n.evidence },
+      quoteEnabled: () => configSource.snapshot().affect.enabled,
       logger,
     })
   : null;
-// session.start() may wait up to care.timeoutMs for the care line; it must fit inside the start timeout.
-if (affect.enabled && affect.care.timeoutMs >= config.sessionStartTimeoutMs) {
-  throw new Error(`care_timeout_exceeds_session_start: ${affect.care.timeoutMs} >= ${config.sessionStartTimeoutMs}`);
-}
-if (store && !textClient) logger.warn('memory_extract_unconfigured');
+if (store && !workerClient) logger.warn('memory_extract_unconfigured');
 // Sessions get the text client only for real adapters; Mock runs stay lexicon-only.
-logger.info('affect_analyzer', { enabled: affect.enabled && config.adapter !== 'mock' && textClient !== null });
+logger.info('affect_analyzer', { enabled: boot.affect.enabled && config.adapter !== 'mock' && workerClient !== null });
 const manager = new SessionManager(
-  (ctx, sessionId, noticePending = false) =>
-    new Session({
-      logger,
-      adapterFactory: () => config.adapter === 'seeduplex'
-        ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
-        : config.adapter === 'qwen'
-          ? new QwenAdapter({ apiKey: config.qwenApiKey!, endpoint: config.qwenEndpoint, model: config.qwenModel, voice: config.qwenVoice })
-          : new MockAdapter({ script: withCharacterName(script, characters.name(ctx.characterId, 'zh')), speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor, emitUsage: usage !== null }),
-      summarizer: config.summarizer === 'qwen'
-        ? new QwenSummarizer({
-            apiKey: config.qwenApiKey!,
-            endpoint: config.summarizerEndpoint,
-            model: config.summarizerModel,
-            ...(usage ? { recorder: usage, tag: { kind: 'summarize' as const, attribution: { ownerId: ctx.ownerId ?? null, agentId: ctx.agentId ?? null, sessionId, characterId: ctx.characterId } } } : {}),
-          })
-        : new MockSummarizer(),
-      roles,
-      characters,
-      ledger: config.ledger,
-      ...(config.adapter !== 'mock' && textClient ? { textClient } : {}),
-      ...(usage && usageSource ? { usage, usageSource } : {}),
-      confirmWindowMs: config.confirmWindowMs,
-      rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,
-      rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
-      modelOwnsTurns: config.adapter === 'qwen',
-      voiceFor: (language) => adapterVoice(ctx.characterId, language),
-      budget: budgetReport.budget,
-      budgets: budgetReport.budgets,
-      i18n,
-      ...(memory.recallClipChars !== undefined ? { recallClipChars: memory.recallClipChars } : {}),
-      ...(memory.recallPhraseTimeoutMs !== undefined ? { recallPhraseTimeoutMs: memory.recallPhraseTimeoutMs } : {}),
-      noticeKeywordsByLanguage: Object.fromEntries(
-        LANGUAGES.map((language) => [language, i18n.memory[language].noticeKeywords]),
-      ) as Record<Language, readonly string[]>,
-      modelContextTokenLimit: pacing.rebuild.contextChars,
-      rebuildTriggerRatio: pacing.rebuild.triggerRatio,
-      rebuildAfterTurns: pacing.rebuild.afterTurns,
-      summarizePolicy: pacing.policies.summarize,
-      ...(pacing.output.maxTokens !== null ? { maxOutputTokens: pacing.output.maxTokens } : {}),
-      tailGuardMs: pacing.tailGuardMs,
-      slim: pacing.slim,
-      push: pacing.push,
-      restReminder: pacing.restReminder,
-      toolTurnTimeoutMs: memory.toolTurnTimeoutMs,
-      pin: { maxPerCharacter: memory.pinMaxPerCharacter, maxChars: memory.pinMaxChars, finalWaitMs: memory.pinFinalWaitMs },
-      listMaxItems: memory.listMaxItems,
-      emotion: i18n.emotion,
-      affect,
-      languageRules: i18n.language,
-      ...(store ? { store } : {}),
-      ...(writer ? { writer } : {}),
-      ...(worker ? {
-        worker,
-        extractEveryUserTurns: memory.extractEveryUserTurns ?? 10,
-        extractSilenceMs: memory.extractSilenceMs ?? 180_000,
-      } : {}),
-    }, ctx, sessionId, noticePending),
+  makeSessionFactory(configSource, {
+    apiKey: resolveApiKey,
+    adapter: ({ snapshot, characterId, apiKey }) => config.adapter === 'seeduplex'
+      ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
+      : config.adapter === 'qwen'
+        ? new QwenAdapter({ apiKey: apiKey!, endpoint: snapshot.model.realtimeEndpoint, model: snapshot.model.realtimeModel, voice: config.qwenVoice })
+        : new MockAdapter({ script: withCharacterName(script, snapshot.characters.name(characterId, 'zh')), speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor, emitUsage: usage !== null }),
+    summarizer: ({ snapshot, apiKey, ctx, sessionId }) => config.summarizer === 'qwen'
+      ? new QwenSummarizer({
+          apiKey: apiKey!,
+          endpoint: snapshot.model.textEndpoint,
+          model: snapshot.model.summarizerModel,
+          ...(usage ? { recorder: usage, tag: { kind: 'summarize' as const, attribution: { ownerId: ctx.ownerId ?? null, agentId: ctx.agentId ?? null, sessionId, characterId: ctx.characterId } } } : {}),
+        })
+      : new MockSummarizer(),
+    // Sessions get the text client only for real adapters; Mock runs stay lexicon-only.
+    textClient: (snapshot) => (config.adapter !== 'mock' ? textClientFor(snapshot) : undefined),
+    // Character card voice for the active adapter, then the env default. Seeduplex has no Japanese voice.
+    voiceFor: (snapshot, characterId, language) => {
+      if (config.adapter === 'qwen') return snapshot.characters.voiceFor(characterId, 'qwen', language) ?? config.qwenVoices[language];
+      if (config.adapter === 'seeduplex') {
+        return language === 'ja' ? undefined : snapshot.characters.voiceFor(characterId, 'seeduplex', language) ?? config.seeduplexVoices[language];
+      }
+      return undefined;
+    },
+  }, {
+    ledger: config.ledger,
+    confirmWindowMs: config.confirmWindowMs,
+    rebuildBackoffBaseMs: config.rebuildBackoffBaseMs,
+    rebuildBackoffMaxMs: config.rebuildBackoffMaxMs,
+    modelOwnsTurns: config.adapter === 'qwen',
+    ...(store ? { store } : {}),
+    ...(writer ? { writer } : {}),
+    ...(worker ? { worker } : {}),
+    logger,
+    ...(usage && usageSource ? { usage, usageSource } : {}),
+  }),
   config.sessionGraceMs,
   config.sessionUnclaimedMs,
   config.sessionStartTimeoutMs,
@@ -249,7 +234,7 @@ const server = createGatewayServer({
   manager,
   appSecret: config.appSecret,
   // Identity on: DeviceRegistry resolves bearers; identity off: dev resolver (no bearer, any character, no memory).
-  contextResolver: registry ?? devContextResolver(roles, characters),
+  contextResolver: registry ?? devContextResolver(boot.roles, boot.characters),
   identity: registry ?? undefined,
   registerRateLimit: { max: identityConfig.registerRateLimitMax, windowMs: identityConfig.registerRateLimitWindowMs },
   ...(memoryService ? { memory: memoryService } : {}),
@@ -318,7 +303,7 @@ const shutdown = () => {
   adminServer?.closeAllConnections();
   void (async () => {
     try {
-      if (worker) await worker.drain(memory.extractDrainMs ?? 8_000);
+      if (worker) await worker.drain(boot.memory.extractDrainMs ?? 8_000);
     } finally {
       try {
         usage?.close();
@@ -345,21 +330,13 @@ function byLanguage<T>(make: (language: Language) => T): Record<Language, T> {
   return Object.fromEntries(LANGUAGES.map((language) => [language, make(language)])) as Record<Language, T>;
 }
 
-/** Character card voice for the active adapter, then the env default. Seeduplex has no Japanese voice. */
-function adapterVoice(characterId: CharacterId, language: Language): string | undefined {
-  if (config.adapter === 'qwen') return characters.voiceFor(characterId, 'qwen', language) ?? config.qwenVoices[language];
-  if (config.adapter === 'seeduplex') {
-    return language === 'ja' ? undefined : characters.voiceFor(characterId, 'seeduplex', language) ?? config.seeduplexVoices[language];
-  }
-  return undefined;
-}
-
-/** Same daily timer as orphan cleanup. Age and batch come from memory.json. */
+/** Same daily timer as orphan cleanup. Age and batch come from the current snapshot. */
 async function expireTranscripts(): Promise<void> {
   if (!store) return;
   const log = logger.child({ job: 'retention' });
-  const olderThan = Date.now() - memory.retentionDays * DAY_MS;
-  const limit = memory.retentionBatch;
+  const current = configSource.snapshot();
+  const olderThan = Date.now() - current.memory.retentionDays * DAY_MS;
+  const limit = current.memory.retentionBatch;
   for (const ownerId of store.ownerIds()) {
     for (;;) {
       const started = performance.now();
@@ -376,7 +353,7 @@ async function expireTranscripts(): Promise<void> {
     }
     // Quotes older than the care window can never be asked about; drop them even when care is off (data minimization).
     try {
-      const cleared = store.clearStaleCareQuotes(ownerId, Date.now() - affect.care.maxAgeDays * DAY_MS);
+      const cleared = store.clearStaleCareQuotes(ownerId, Date.now() - current.affect.care.maxAgeDays * DAY_MS);
       if (cleared > 0) log.info('care_quote_retention', { cleared });
     } catch {
       log.error('care_quote_retention_failed');
@@ -388,7 +365,7 @@ async function expireTranscripts(): Promise<void> {
 async function expireUsage(): Promise<void> {
   if (!memoryDb) return;
   const olderThan = Date.now() - adminConfig.retention.usageDays * DAY_MS;
-  const limit = memory.retentionBatch;
+  const limit = boot.memory.retentionBatch;
   for (;;) {
     const started = performance.now();
     let deleted: number;
@@ -408,16 +385,17 @@ async function expireUsage(): Promise<void> {
 async function expireLogs(): Promise<void> {
   if (!memoryDb) return;
   const cutoff = Date.now() - adminConfig.retention.logDays * DAY_MS;
+  const limit = boot.memory.retentionBatch;
   for (;;) {
     let deleted: number;
     try {
-      deleted = deleteLogsBefore(memoryDb, cutoff, memory.retentionBatch);
+      deleted = deleteLogsBefore(memoryDb, cutoff, limit);
     } catch {
       logger.error('log_retention_failed');
       return;
     }
     if (deleted > 0) logger.info('log_retention_batch', { deleted });
-    if (deleted < memory.retentionBatch) return;
+    if (deleted < limit) return;
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
 }

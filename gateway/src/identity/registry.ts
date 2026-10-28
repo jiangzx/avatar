@@ -48,8 +48,8 @@ export interface DeviceRegistryDeps {
   /** Realtime adapter name stored on each session row (config ADAPTER). */
   adapterName?: string;
   now?: () => number;
-  /** Defaults to instructions.snapshotMaxChars in gateway/config/memory.json. */
-  snapshotMaxChars?: number;
+  /** Defaults to instructions.snapshotMaxChars in gateway/config/memory.json. A function is read on every resolve (admin config). */
+  snapshotMaxChars?: number | (() => number);
   /** Language packs for the initial snapshot. Defaults to DEFAULT_I18N. */
   i18n?: I18nBundle;
   /** Root logger. Omitted in tests: the stdout default. */
@@ -61,13 +61,14 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
   /** Persists session start/end so orphan cleanup can spot never-connected owners. */
   readonly lifecycle: SessionLifecycle;
   private readonly now: () => number;
-  private readonly snapshotMaxChars: number;
+  private readonly snapshotMaxChars: () => number;
   private readonly i18n: I18nBundle;
 
   constructor(private readonly deps: DeviceRegistryDeps) {
     const memory = loadMemoryBudget(fileURLToPath(new URL('../../config/memory.json', import.meta.url)));
     this.now = deps.now ?? Date.now;
-    this.snapshotMaxChars = deps.snapshotMaxChars ?? memory.instructions.snapshotMaxChars;
+    const maxChars = deps.snapshotMaxChars ?? memory.instructions.snapshotMaxChars;
+    this.snapshotMaxChars = typeof maxChars === 'function' ? maxChars : () => maxChars;
     this.i18n = deps.i18n ?? DEFAULT_I18N;
     this.lifecycle = {
       started: (sessionId, ctx) => {
@@ -122,7 +123,7 @@ export class DeviceRegistry implements ContextResolver, IdentityService {
     // A pin the user asked to keep may be sensitive; it travels in pinnedMemory, not the three views.
     const views = renderMemoryViews({
       ...memoryViewSource(store, device.ownerId, agent.id),
-      maxChars: this.snapshotMaxChars,
+      maxChars: this.snapshotMaxChars(),
       labels: PROMPT_LABELS[language],
       rules: { addressingPatterns: this.i18n.memory[language].addressingPatterns, evidence: this.i18n.evidence },
     });

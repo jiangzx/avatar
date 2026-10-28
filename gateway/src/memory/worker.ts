@@ -38,8 +38,16 @@ export interface MemoryWorkerOptions {
   now?: () => number;
   /** Followup quote checks for the care revisit. Absent = every quote is dropped. */
   quote?: QuoteRules;
+  /** Read on every job; false drops every quote, so turning care off stops storing quotes at once. */
+  quoteEnabled?: () => boolean;
   /** Root logger. Omitted in tests: the stdout default. */
   logger?: Logger;
+}
+
+/** Quote rules for this job, or undefined when care is off. */
+export function activeQuoteRules(opts: Pick<MemoryWorkerOptions, 'quote' | 'quoteEnabled'>): QuoteRules | undefined {
+  if (opts.quoteEnabled && !opts.quoteEnabled()) return undefined;
+  return opts.quote;
 }
 
 /** One queue per owner. Jobs never overlap; a later job starts only after the earlier one settles. Each extract job handles one agent. */
@@ -167,7 +175,7 @@ export class MemoryWorker implements MemoryExtractor {
     const addressingIds = new Set(memory.facts.filter((fact) => fact.category === 'addressing').map((fact) => fact.id));
     const named = normalizeAddressingOps(batch.ops, addressingIds);
     // Quotes must be verbatim user statements from the lines the model saw; anything else loses its quote.
-    const vetted = vetFollowupQuotes(named.ops, users.map((row) => row.text), this.opts.quote);
+    const vetted = vetFollowupQuotes(named.ops, users.map((row) => row.text), activeQuoteRules(this.opts));
     const sourced = resolveFactSources(vetted, refs);
     const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, sourced.ops, consumed.map((row) => row.id));
     // Counts only: never the text of an op, a source line, or a name.
