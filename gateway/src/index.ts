@@ -253,6 +253,8 @@ const server = createGatewayServer({
   ...(memoryService ? { memory: memoryService } : {}),
   memoryRateLimit: { max: identityConfig.memoryRateLimitMax, windowMs: identityConfig.memoryRateLimitWindowMs },
   devToken: identityConfig.devToken,
+  // Admin switch: read per request so a publish takes effect for the next POST /session.
+  characterEnabled: (id) => !configSource.snapshot().disabledCharacters.has(id),
   allowedOrigin: makeOriginCheck(config.devOrigins),
   allowDebugText: config.allowDebugText,
   heartbeatMs: config.wsHeartbeatMs,

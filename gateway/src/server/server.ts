@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
-import { DEFAULT_CHARACTER_ID, FRAME_AI, FRAME_MIC, MIC_FRAME_SAMPLES, decodeAudioFrame, encodeAudioFrame } from '@anyidea/protocol';
+import { DEFAULT_CHARACTER_ID, FRAME_AI, FRAME_MIC, MIC_FRAME_SAMPLES, decodeAudioFrame, encodeAudioFrame, type CharacterId } from '@anyidea/protocol';
 import type { IdentityService } from '../identity/registry.ts';
 import type { MemoryService } from '../identity/memoryService.ts';
 import { defaultLogger, type Logger } from '../log/logger.ts';
@@ -48,6 +48,8 @@ export interface GatewayServerOptions {
   memory?: MemoryService;
   /** Separate bucket for the memory routes (MEMORY_RATE_LIMIT_*). */
   memoryRateLimit?: { max: number; windowMs: number };
+  /** False = the character is switched off in the admin; POST /session answers 409 character_disabled. Absent = all enabled. */
+  characterEnabled?: (id: CharacterId) => boolean;
   /** Root logger. Omitted in tests: the stdout default. */
   logger?: Logger;
   /** Admin ban check (spec Q32). Absent = no bans (dev mode). */
@@ -220,6 +222,12 @@ async function createSession(req: IncomingMessage, res: ServerResponse, opts: Ga
     return;
   }
   const characterId = body.data.character ?? DEFAULT_CHARACTER_ID;
+  // Switched off in the admin: new sessions only. Running sessions and their resumes continue.
+  if (opts.characterEnabled && !opts.characterEnabled(characterId)) {
+    loggerOf(opts).info('session_rejected', { reason: 'character_disabled', char: characterId });
+    json(res, 409, { error: 'character_disabled' });
+    return;
+  }
   const bearer = bearerToken(req);
   const resolved = bearer === null ? null : opts.contextResolver.resolve(bearer, characterId);
   if (!resolved?.ok) {

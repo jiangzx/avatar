@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import type { SessionTokens } from '@anyidea/protocol';
+import type { CharacterId, SessionTokens } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
 import { makeOriginCheck } from '../src/config.ts';
 import { DeviceRegistry, type IdentityLimits } from '../src/identity/registry.ts';
@@ -34,6 +34,7 @@ interface BootOptions {
   registerRateLimit?: { max: number; windowMs: number };
   sessionRateLimit?: { max: number; windowMs: number };
   devToken?: string;
+  characterEnabled?: (id: CharacterId) => boolean;
 }
 
 let server: Server | null = null;
@@ -66,6 +67,7 @@ async function boot(opts: BootOptions = {}) {
     registerRateLimit: opts.registerRateLimit,
     sessionRateLimit: opts.sessionRateLimit,
     devToken: opts.devToken,
+    ...(opts.characterEnabled ? { characterEnabled: opts.characterEnabled } : {}),
     ownerBanned: identityOn ? (ownerId: string) => store.isOwnerBanned(ownerId) : undefined,
   });
   await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
@@ -257,4 +259,43 @@ describe('banned owners', () => {
     expect((await call(base, 'POST', '/session', { bearer: token })).status).toBe(200);
   });
 
+});
+
+describe('disabled characters', () => {
+  it('answers 409 for a disabled character, before auth, and follows the switch', async () => {
+    const disabled = new Set<CharacterId>(['xiaoxin']);
+    const { base, contexts } = await boot({ characterEnabled: (id) => !disabled.has(id) });
+    const token = await register(base);
+    expect(await call(base, 'POST', '/session', { bearer: token, body: { character: 'xiaoxin' } }))
+      .toEqual({ status: 409, json: { error: 'character_disabled' } });
+    expect(await call(base, 'POST', '/session', { body: { character: 'xiaoxin' } }))
+      .toEqual({ status: 409, json: { error: 'character_disabled' } });
+    expect(await call(base, 'POST', '/session', { body: { character: 'lily' } }))
+      .toEqual({ status: 400, json: { error: 'unknown_character' } });
+    expect((await call(base, 'POST', '/session', { bearer: token, body: { character: 'xiaokai' } })).status).toBe(200);
+    disabled.delete('xiaoxin');
+    expect((await call(base, 'POST', '/session', { bearer: token, body: { character: 'xiaoxin' } })).status).toBe(200);
+    expect(contexts.map((c) => c.characterId)).toEqual(['xiaokai', 'xiaoxin']);
+  });
+
+  it('keeps a running session when its character is switched off', async () => {
+    const disabled = new Set<CharacterId>();
+    const { base } = await boot({ characterEnabled: (id) => !disabled.has(id) });
+    const token = await register(base);
+    const created = await call(base, 'POST', '/session', { bearer: token, body: { character: 'xiaoxin' } });
+    expect(created.status).toBe(200);
+    await startSession(base, created.json as unknown as SessionTokens);
+    disabled.add('xiaoxin');
+    expect(manager!.size).toBe(1);
+    const resumed = await call(base, 'POST', '/session/resume', {
+      body: { sessionId: (created.json as { sessionId: string }).sessionId, resumeToken: (created.json as { resumeToken: string }).resumeToken },
+    });
+    expect(resumed.status).toBe(200);
+  });
+
+  it('treats every character as enabled when no switch is given', async () => {
+    const { base } = await boot();
+    const token = await register(base);
+    expect((await call(base, 'POST', '/session', { bearer: token, body: { character: 'xiaoxin' } })).status).toBe(200);
+  });
 });
