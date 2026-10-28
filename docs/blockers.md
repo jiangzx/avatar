@@ -194,3 +194,9 @@
 - 在 pristine HEAD `54f1198` 的独立 worktree 运行同一脚本，结果相同（`passed:false`，同一断言）。与本任务改动无关。
 - 影响：Mock smoke 的 identity 分支在 HTTP 身份检查通过后中断，其后的 WS/记忆检查未运行；本任务用全量测试和其它 Step 12 探针覆盖。解除条件：后续任务更新该断言（不在 P3-T3 范围）。
 - 临时修正第一条断言后，脚本第 83 行 `assert.equal(style.status, 200)` 仍失败：`PATCH /agent/style` 返回 404。HEAD 同样失败；该端点已按测试 `gateway/test/identity-http.test.ts:171`（no longer serves PATCH /agent/style）移除，smoke 未同步。故 smoke 的 identity WS 流程整体不可用，直到脚本更新。
+
+## 2026-10-28 P3-T3 真实记忆库探针：实机库仍为 v6
+
+- 实机 `/Users/jed/.avatar/memory.db` 的 `PRAGMA user_version = 6`；`owners` 表没有 v7 的 `banned_at` 列。当前 v7 `SqliteMemoryStore` 在只读构造阶段即失败，探针按设计输出 `NOT RUN db_schema_incompatible`。
+- 因此 P3-T10 任务书的前置假设「计划 1 已把真实库升级到 v7」在实机不成立；P3-T10 开始前必须先在用户确认下做 WAL 安全的备份并迁移。不能用裸 `cp` 主库：当前 `memory.db-wal` 约 449 KB，裸拷贝会丢最新消息；应使用 SQLite 的 `.backup`/`VACUUM INTO` 或先 checkpoint 的在线备份。
+- 2026-10-28 P3-T3 的安全替代验证（不改线上库）：对实机库做临时 SQLite `.backup`，只把副本迁移到 v7，再用 `plan3-multilingual-recall-probe.mjs --real-db` 只读运行。结果：xiaonuan/xiaokai/xiaoxin 三个角色均为「上次聊到哪儿了」`hits:true`、「上次聊过电影吗」`hits:true`、「我说过喜欢喝茶吗」`hits:false`，`newTitleFlag` 全为 false。临时副本已删除；线上库仍为 v6，`.bak-v6` 未动。
