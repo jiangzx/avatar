@@ -120,3 +120,32 @@
 .prompt-diff-col p { margin: 0; line-height: 1.7; white-space: pre-wrap; }
 .prompt-diff del { color: #b42318; text-decoration: line-through; }
 .prompt-diff ins { background: #2f6f6826; text-decoration: none; }
+
+.pacing-ruler { padding: 16px 0; }
+.ruler-title { font-size: 17px; font-weight: 600; color: #24343b; margin: 0 0 4px; }
+.ruler-lead,
+.ruler-caption { font-size: 13px; line-height: 1.7; color: #4d5d63; margin: 0 0 8px; }
+.ruler-svg { width: 100%; height: auto; display: block; margin: 8px 0; }
+.ruler-axis { stroke: #dce3e1; stroke-width: 2; }
+.ruler-tick { stroke: #2f6f68; stroke-width: 2; }
+.ruler-label,
+.ruler-scale { font-size: 10px; fill: #2f6f68; font-variant-numeric: tabular-nums; }
+.ruler-scale { fill: #4d5d63; }
+.ruler-break,
+.ruler-end { font-size: 12px; fill: #4d5d63; }
+.ruler-steps { list-style: none; padding: 0; margin: 8px 0 12px; }
+.ruler-steps li {
+  display: grid;
+  grid-template-columns: 5.5em 1fr;
+  column-gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid #dce3e1;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ruler-steps li.is-conditional { color: #4d5d63; }
+.ruler-time { grid-row: span 3; font-variant-numeric: tabular-nums; color: #2f6f68; font-weight: 600; }
+.ruler-step { font-weight: 600; color: #24343b; }
+.ruler-line { grid-column: 2; }
+.ruler-line.is-planned { color: #4d5d63; }
+.ruler-note { grid-column: 2; font-size: 12px; color: #4d5d63; }
