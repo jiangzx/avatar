@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
-import { DEFAULT_CHARACTER_ID, FRAME_AI, FRAME_MIC, MIC_FRAME_SAMPLES, decodeAudioFrame, encodeAudioFrame, type CharacterId } from '@anyidea/protocol';
+import { DEFAULT_CHARACTER_ID, FRAME_AI, FRAME_MIC, MIC_FRAME_SAMPLES, SESSION_REJECTIONS, decodeAudioFrame, encodeAudioFrame, type CharacterId, type SessionCreateResponse } from '@anyidea/protocol';
 import type { IdentityService } from '../identity/registry.ts';
 import type { MemoryService } from '../identity/memoryService.ts';
 import { defaultLogger, type Logger } from '../log/logger.ts';
@@ -225,7 +225,7 @@ async function createSession(req: IncomingMessage, res: ServerResponse, opts: Ga
   // Switched off in the admin: new sessions only. Running sessions and their resumes continue.
   if (opts.characterEnabled && !opts.characterEnabled(characterId)) {
     loggerOf(opts).child({ char: characterId }).info('session_rejected', { reason: 'character_disabled' });
-    json(res, 409, { error: 'character_disabled' });
+    json(res, SESSION_REJECTIONS.character_disabled, { error: 'character_disabled' });
     return;
   }
   const bearer = bearerToken(req);
@@ -237,7 +237,7 @@ async function createSession(req: IncomingMessage, res: ServerResponse, opts: Ga
   // Memory routes stay open for a banned owner; only new sessions are refused.
   if (resolved.ctx.ownerId !== undefined && opts.ownerBanned?.(resolved.ctx.ownerId)) {
     loggerOf(opts).info('session_rejected', { reason: 'owner_banned' });
-    json(res, 403, { error: 'owner_banned' });
+    json(res, SESSION_REJECTIONS.owner_banned, { error: 'owner_banned' });
     return;
   }
   // create() flushes the previous owner, but only after this function returns a context.
@@ -254,7 +254,12 @@ async function createSession(req: IncomingMessage, res: ServerResponse, opts: Ga
     ctx = again.ctx;
     noticePending = again.noticePending;
   }
-  json(res, 200, opts.manager.create(ctx, noticePending));
+  const response: SessionCreateResponse = {
+    ...opts.manager.create(ctx, noticePending),
+    // Short hash only: the raw owner id never leaves the gateway.
+    diagId: ctx.ownerId === undefined ? 'dev' : ownerShortId(ctx.ownerId),
+  };
+  json(res, 200, response);
 }
 
 async function resumeSession(req: IncomingMessage, res: ServerResponse, opts: GatewayServerOptions): Promise<void> {

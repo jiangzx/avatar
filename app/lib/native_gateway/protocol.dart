@@ -7,14 +7,27 @@ const int aiSampleRate = 24000;
 const int micFrameSamples = 320;
 const int _headerBytes = 5;
 
+final _diagIdPattern = RegExp(r'^[A-Za-z0-9]{1,32}$');
+
 class SessionTokens {
-  const SessionTokens({required this.sessionId, required this.connectToken, required this.resumeToken});
+  const SessionTokens({required this.sessionId, required this.connectToken, required this.resumeToken, this.diagId});
 
   final String sessionId;
   final String connectToken;
   final String resumeToken;
 
-  Map<String, Object> toJson() => {'sessionId': sessionId, 'connectToken': connectToken, 'resumeToken': resumeToken};
+  /// Owner short id from POST /session ("dev" without identity); resume responses have none.
+  final String? diagId;
+
+  SessionTokens withDiagId(String? diagId) =>
+      SessionTokens(sessionId: sessionId, connectToken: connectToken, resumeToken: resumeToken, diagId: diagId);
+
+  Map<String, Object> toJson() => {
+    'sessionId': sessionId,
+    'connectToken': connectToken,
+    'resumeToken': resumeToken,
+    'diagId': ?diagId,
+  };
 
   static SessionTokens? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -22,7 +35,13 @@ class SessionTokens {
     final connectToken = raw['connectToken'];
     final resumeToken = raw['resumeToken'];
     if (sessionId is! String || connectToken is! String || resumeToken is! String) return null;
-    return SessionTokens(sessionId: sessionId, connectToken: connectToken, resumeToken: resumeToken);
+    final diagId = raw['diagId'];
+    return SessionTokens(
+      sessionId: sessionId,
+      connectToken: connectToken,
+      resumeToken: resumeToken,
+      diagId: diagId is String && _diagIdPattern.hasMatch(diagId) ? diagId : null,
+    );
   }
 }
 

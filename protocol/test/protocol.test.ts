@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { FRAME_AI, FRAME_MIC, decodeAudioFrame, encodeAudioFrame, truncateByPlayback } from '../src/index.ts';
+import {
+  FRAME_AI,
+  FRAME_MIC,
+  SESSION_REJECTIONS,
+  decodeAudioFrame,
+  encodeAudioFrame,
+  isSessionRejection,
+  truncateByPlayback,
+} from '../src/index.ts';
 
 describe('audio frame codec', () => {
   it('round-trips header and little-endian samples', () => {
@@ -41,5 +49,18 @@ describe('truncateByPlayback', () => {
   it('returns empty text when nothing was played', () => {
     expect(truncateByPlayback('你好', 0, 1000)).toBe('');
     expect(truncateByPlayback('你好', 100, 0)).toBe('');
+  });
+});
+
+describe('session rejection codes', () => {
+  it('maps each code to its HTTP status', () => {
+    expect(SESSION_REJECTIONS).toEqual({ owner_banned: 403, character_disabled: 409 });
+  });
+
+  it('recognizes only the two rejection codes', () => {
+    expect(isSessionRejection('owner_banned')).toBe(true);
+    expect(isSessionRejection('character_disabled')).toBe(true);
+    expect(isSessionRejection('unknown_character')).toBe(false);
+    expect(isSessionRejection(403)).toBe(false);
   });
 });

@@ -14,6 +14,7 @@ import { Session } from '../src/session/session.ts';
 import { TokenStore } from '../src/session/tokens.ts';
 import { parseClientMessage } from '../src/server/schemas.ts';
 import { createGatewayServer } from '../src/server/server.ts';
+import { ownerShortId } from '../src/log/ownerId.ts';
 
 const SECRET = 'test-secret-0123456789';
 const script: MockScript = { greeting: '你好', followup: '还在吗', fallbackReply: '我在听', turns: [] };
@@ -129,7 +130,8 @@ describe('gateway server', () => {
     expect((await post(base, '/session', {}, 'wrong-secret-0123456')).status).toBe(401);
     const ok = await post(base, '/session');
     expect(ok.status).toBe(200);
-    expect(Object.keys(ok.json).sort()).toEqual(['connectToken', 'resumeToken', 'sessionId']);
+    expect(Object.keys(ok.json).sort()).toEqual(['connectToken', 'diagId', 'resumeToken', 'sessionId']);
+    expect(ok.json.diagId).toBe('dev'); // APP_SECRET-only dev mode has no owner
   });
 
   it('rejects malformed or unknown bearer tokens on /session', async () => {
@@ -179,6 +181,19 @@ describe('gateway server', () => {
     const res = await fetch(base + '/session', { method: 'POST', headers: { 'content-type': 'application/json', 'x-app-secret': SECRET, authorization: 'Bearer device-token-0123456789' }, body: '{}' });
     expect(res.status).toBe(200);
     expect(seen).toEqual([ctx]);
+  });
+
+  it('returns the owner short id as diagId, never the raw owner id', async () => {
+    const ctx: SessionContext = { ownerId: 'owner-raw-id-1', agentId: 'a1', characterId: 'xiaokai', firstMeet: true };
+    const base = await boot({
+      contextResolver: { resolve: (b) => (b === 'device-token-0123456789' ? { ok: true, ctx, noticePending: false } : { ok: false }) },
+    });
+    const res = await fetch(base + '/session', { method: 'POST', headers: { 'content-type': 'application/json', 'x-app-secret': SECRET, authorization: 'Bearer device-token-0123456789' }, body: '{}' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.diagId).toBe(ownerShortId('owner-raw-id-1'));
+    expect(body.diagId).toMatch(/^[0-9a-f]{12}$/);
+    expect(JSON.stringify(body)).not.toContain('owner-raw-id-1');
   });
 
   it('passes the body character to the resolver and rejects anything else with 400', async () => {

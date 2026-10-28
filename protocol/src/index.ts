@@ -29,6 +29,17 @@ export interface SessionTokens {
 /** POST /session body. A missing character means DEFAULT_CHARACTER_ID (Mock and dev sessions). */
 export interface SessionCreateRequest { character?: CharacterId }
 
+/** POST /session refusals the app explains to the user (spec Q32/Q33). Body: { error: code }. */
+export const SESSION_REJECTIONS = { owner_banned: 403, character_disabled: 409 } as const;
+export type SessionRejectionCode = keyof typeof SESSION_REJECTIONS;
+
+export function isSessionRejection(code: unknown): code is SessionRejectionCode {
+  return typeof code === 'string' && Object.hasOwn(SESSION_REJECTIONS, code);
+}
+
+/** POST /session 200 body. diagId = owner short id, "dev" without an owner. Resume responses carry no diagId. */
+export interface SessionCreateResponse extends SessionTokens { diagId: string }
+
 export type ClientMessage =
   | { type: 'session.start'; clientInfo: { platform: string; audioPath: AudioPath; language?: Language } }
   | { type: 'session.resume'; sessionId: string }

@@ -56,4 +56,20 @@ void main() {
     final info = const SessionStart(language: 'zh').toJson()['clientInfo'] as Map;
     expect(info.keys, isNot(contains('voiceProfile')));
   });
+
+  test('SessionTokens reads a short diagId and ignores anything else', () {
+    final withId = SessionTokens.fromJson({
+      'sessionId': 's1', 'connectToken': 'c1', 'resumeToken': 'r1', 'diagId': '3f9a1c0b2d4e',
+    });
+    expect(withId?.diagId, '3f9a1c0b2d4e');
+    final dev = SessionTokens.fromJson({'sessionId': 's1', 'connectToken': 'c1', 'resumeToken': 'r1', 'diagId': 'dev'});
+    expect(dev?.diagId, 'dev');
+    final bad = SessionTokens.fromJson({'sessionId': 's1', 'connectToken': 'c1', 'resumeToken': 'r1', 'diagId': 'has space!'});
+    expect(bad, isNotNull);
+    expect(bad!.diagId, isNull);
+    final none = SessionTokens.fromJson({'sessionId': 's1', 'connectToken': 'c1', 'resumeToken': 'r1'});
+    expect(none?.diagId, isNull);
+    expect(none!.withDiagId('abc').diagId, 'abc');
+    expect(none.toJson().containsKey('diagId'), isFalse);
+  });
 }

@@ -291,6 +291,37 @@ void main() {
       {'character': 'xiaonuan'},
     ]);
   });
+
+  test('a 403 owner_banned keeps the code and is not renewed', () async {
+    final transport = FakeGatewayTransport(tokens: firstTokens)
+      ..freshRejection = const GatewayHttpResponse(statusCode: 403, body: {'error': 'owner_banned'});
+    final identity = FakeTokenProvider('device-token-0123456789', renewed: 'new-token-0123456789');
+    await expectLater(
+      client(transport, identity).start(),
+      throwsA(isA<GatewayHttpException>()
+          .having((e) => e.statusCode, 'statusCode', 403)
+          .having((e) => e.errorCode, 'errorCode', 'owner_banned')),
+    );
+    expect(identity.renewCalls, 0);
+  });
+
+  test('a 409 character_disabled keeps the code', () async {
+    final transport = FakeGatewayTransport(tokens: firstTokens)
+      ..freshRejection = const GatewayHttpResponse(statusCode: 409, body: {'error': 'character_disabled'});
+    await expectLater(
+      client(transport, FakeTokenProvider('device-token-0123456789')).start(),
+      throwsA(isA<GatewayHttpException>().having((e) => e.errorCode, 'errorCode', 'character_disabled')),
+    );
+  });
+
+  test('an error body that is not a short code leaves errorCode null', () async {
+    final transport = FakeGatewayTransport(tokens: firstTokens)
+      ..freshRejection = const GatewayHttpResponse(statusCode: 500, body: {'error': 'Some <html> text'});
+    await expectLater(
+      client(transport, FakeTokenProvider(null)).start(),
+      throwsA(isA<GatewayHttpException>().having((e) => e.errorCode, 'errorCode', isNull)),
+    );
+  });
 }
 
 class RecordingGatewayEvents implements GatewayClientEvents {
@@ -330,6 +361,8 @@ class FakeGatewayTransport implements GatewayTransport {
   bool failFresh = false;
   /// POST /session/resume answers 500; used to keep the client in its retry loop.
   bool failResume = false;
+  /// POST /session answers this instead of tokens (status + body), e.g. 403 owner_banned.
+  GatewayHttpResponse? freshRejection;
 
   FakeSocket get lastSocket => sockets.last;
 
@@ -345,6 +378,8 @@ class FakeGatewayTransport implements GatewayTransport {
     if (uri.path == '/session') postedBodies.add(body);
     if (uri.path == '/session') {
       postedBearers.add(bearer);
+      final rejection = freshRejection;
+      if (rejection != null) return rejection;
       if (rejectedBearers.contains(bearer) || failFresh) {
         return const GatewayHttpResponse(
           statusCode: 401,

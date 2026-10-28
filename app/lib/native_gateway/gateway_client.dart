@@ -22,10 +22,18 @@ abstract interface class GatewayClientLike {
   Future<void> close();
 }
 
+/// POST /session refusals the app explains to the user (protocol SESSION_REJECTIONS).
+const sessionRejectionCodes = {'owner_banned', 'character_disabled'};
+
+final _errorCodePattern = RegExp(r'^[a-z_]{1,40}$');
+
 class GatewayHttpException implements Exception {
-  const GatewayHttpException(this.statusCode);
+  const GatewayHttpException(this.statusCode, {this.errorCode});
 
   final int statusCode;
+
+  /// The body's short `error` code, when it is one (e.g. owner_banned); null otherwise.
+  final String? errorCode;
 }
 
 /// Supplies the device bearer for POST /session (Plan 3 B). token() == null means dev mode.
@@ -264,10 +272,11 @@ class NativeGatewayClient implements GatewayClientLike {
     final tokens = _tokens;
     if (_closedByUser || tokens == null) return;
     try {
-      _tokens = await _post('/session/resume', {
+      final resumed = await _post('/session/resume', {
         'sessionId': tokens.sessionId,
         'resumeToken': tokens.resumeToken,
       }).timeout(requestTimeout);
+      _tokens = resumed.withDiagId(tokens.diagId);
       if (_closedByUser) return;
       // If the server already started the session, a lost session.ready must not make
       // us send session.start again (the gateway rejects it with 4002 until expiry).
@@ -310,7 +319,12 @@ class NativeGatewayClient implements GatewayClientLike {
       bearer: bearer,
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw GatewayHttpException(response.statusCode);
+      final body = response.body;
+      final code = body is Map ? body['error'] : null;
+      throw GatewayHttpException(
+        response.statusCode,
+        errorCode: code is String && _errorCodePattern.hasMatch(code) ? code : null,
+      );
     }
     final tokens = SessionTokens.fromJson(response.body);
     if (tokens == null) throw const GatewayHttpException(502);
