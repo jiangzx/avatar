@@ -27,6 +27,7 @@ export const END_REASON_LABELS: Record<string, string> = {
   process_restart: '网关异常退出后补记',
 };
 
+// Seeduplex was removed in 2026-10; old call rows can still carry it.
 const ADAPTER_LABELS: Record<string, string> = {
   qwen: '通义千问',
   seeduplex: 'Seeduplex',

@@ -77,9 +77,10 @@ describe('OverviewPage', () => {
     expect(items).toEqual(['实时通话92%', '记忆整理6%', '对话摘要2%']);
   });
 
-  it('tells the admin when Seeduplex usage is not counted', async () => {
+  it('shows no adapter notice, whatever the adapter', async () => {
     setup({ ...overview, adapter: 'seeduplex' });
-    expect(await screen.findByText('当前使用 Seeduplex，通话用量不统计。')).toBeTruthy();
+    await screen.findByText('比昨天多 18 分钟。');
+    expect(screen.queryByText('当前使用 Seeduplex，通话用量不统计。')).toBeNull();
   });
 
   it('asks for mock data only when the switch is on', async () => {

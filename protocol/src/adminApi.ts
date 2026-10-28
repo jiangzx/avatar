@@ -8,7 +8,7 @@ export interface AdminOverview {
   byKind: Array<{ kind: string; costMicroYuan: number; share: number }>;
   latency: { firstAudioP50Ms: number | null; firstAudioP95Ms: number | null };
   alerts: Array<{ code: 'error_rate_1h' | 'first_audio_p95'; value: number; threshold: number }>;
-  adapter: string; // current gateway adapter; 'seeduplex' shows the not-counted notice
+  adapter: string; // current gateway adapter: 'qwen' | 'mock'
 }
 export interface AdminOwnerRow {
   oid: string; createdAt: number; lastSeenAt: number | null; banned: boolean;

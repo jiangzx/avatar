@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Segmented, Spin, Table, type TableColumnsType } from 'antd';
+import { Segmented, Spin, Table, type TableColumnsType } from 'antd';
 import type { AdminOverview, AdminRange } from '@anyidea/protocol';
 import { useApi } from '../auth/AuthContext.tsx';
 import { Brief } from '../components/Brief.tsx';
@@ -37,7 +37,6 @@ function OverviewBody({ data, today }: { data: AdminOverview; today: string }) {
   return (
     <>
       <Brief range={data.range} brief={data.brief} />
-      {data.adapter === 'seeduplex' && <Alert type="info" showIcon message="当前使用 Seeduplex，通话用量不统计。" style={{ marginBottom: 24 }} />}
       {data.alerts.length > 0 && <AlertList alerts={data.alerts} />}
       <LatencyLine latency={data.latency} />
       <DaysTable days={data.days} today={today} />
