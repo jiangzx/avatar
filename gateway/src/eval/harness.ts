@@ -75,7 +75,7 @@ export type SessionMaker = (onReplyMetrics: (m: ReplyMetrics) => void) => Sessio
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, ms)));
 
 /** In-process client stand-in: records server messages and audio, lets the harness await messages. */
-class SimTransport implements Transport {
+export class SimTransport implements Transport {
   readonly audioMs = new Map<number, number>();
   readonly firstAudioAt = new Map<number, number>();
   readonly text = new Map<number, string>();
@@ -112,7 +112,7 @@ class SimTransport implements Transport {
   }
 }
 
-interface Played { seq: number; kind: ResponseKind; firstAudioMs: number | null }
+export interface Played { seq: number; kind: ResponseKind; firstAudioMs: number | null }
 
 async function simulatePlayback(session: Session, seq: number, audioMs: number, run: EvalConfig['run']): Promise<void> {
   const total = audioMs / run.playbackSpeed;
@@ -138,7 +138,7 @@ async function playOne(session: Session, t: SimTransport, run: EvalConfig['run']
 }
 
 /** Plays every response of one exchange (a tool continuation may follow within settleMs). */
-async function playResponses(session: Session, t: SimTransport, run: EvalConfig['run'], sentAt: number | null): Promise<Played[]> {
+export async function playResponses(session: Session, t: SimTransport, run: EvalConfig['run'], sentAt: number | null): Promise<Played[]> {
   const out: Played[] = [];
   let wait = run.replyTimeoutMs;
   for (;;) {
@@ -150,7 +150,7 @@ async function playResponses(session: Session, t: SimTransport, run: EvalConfig[
 }
 
 /** The user stays silent: plays every response that starts within windowMs (the Director's proactive lines). */
-async function playSilence(session: Session, t: SimTransport, run: EvalConfig['run'], windowMs: number): Promise<Played[]> {
+export async function playSilence(session: Session, t: SimTransport, run: EvalConfig['run'], windowMs: number): Promise<Played[]> {
   const out: Played[] = [];
   const deadline = Date.now() + windowMs;
   for (;;) {
