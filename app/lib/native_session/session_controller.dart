@@ -615,9 +615,11 @@ class NativeSessionController implements GatewayClientEvents {
   String _errorCode(
     Object error, {
     String fallback = 'audio_playback_failed',
-  }) => error is GatewayHttpException
-      ? 'gateway_http_${error.statusCode}'
-      : fallback;
+  }) => switch (error) {
+    GatewayHttpException(:final errorCode?) when sessionRejectionCodes.contains(errorCode) => errorCode,
+    GatewayHttpException(:final statusCode) => 'gateway_http_$statusCode',
+    _ => fallback,
+  };
 
   void _emitAudioDiag(String edge, {AudioPlaybackSnapshot? before}) {
     final snapshot = audio.playbackSnapshot;

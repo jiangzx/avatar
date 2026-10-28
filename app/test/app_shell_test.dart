@@ -6,15 +6,18 @@ import 'package:avatar_app/avatar_engine/ui/engine_copy.dart';
 import 'package:avatar_app/duix/duix_bridge.dart';
 import 'package:avatar_app/duix/duix_crash_guard.dart';
 import 'package:avatar_app/identity/app_shell.dart';
+import 'package:avatar_app/identity/character_holds.dart';
 import 'package:avatar_app/identity/character_picker_page.dart';
 import 'package:avatar_app/identity/credential_store.dart';
 import 'package:avatar_app/identity/device_identity.dart';
 import 'package:avatar_app/identity/identity_api.dart';
+import 'package:avatar_app/identity/session_rejection.dart';
 import 'package:avatar_app/memory/memory_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/character_fixture.dart';
+import 'support/companion_fixture.dart';
 import 'support/duix_fakes.dart';
 import 'support/identity_fakes.dart';
 import 'support/memory_fakes.dart';
@@ -23,12 +26,15 @@ const tokenKey = DeviceIdentity.tokenKey;
 const characterKey = DeviceIdentity.characterKey;
 
 final catalog = loadTestCharacterCatalog();
+final companion = loadTestCompanionConfig();
 AvatarPageRequest? lastRequest;
 
-Widget app(DeviceIdentity identity, {EngineSwitchController? engines, MemoryApi? memory}) => MaterialApp(
+Widget app(DeviceIdentity identity, {EngineSwitchController? engines, MemoryApi? memory, CharacterHolds? holds}) => MaterialApp(
   home: AppShell(
     identity: identity,
     catalog: catalog,
+    companion: companion,
+    holds: holds,
     engines: engines,
     memory: memory,
     avatarBuilder: (request) {
@@ -363,6 +369,52 @@ void main() {
     await tester.tap(find.byKey(const Key('companion-cancel')));
     await tester.pump(); // the route starts closing; Navigator.push already completed
     transport.writeGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+  });
+
+  testWidgets('a banned owner sees the notice instead of the chat; retry opens a fresh page', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaoxin'));
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: FakeBackend())));
+    await tester.pumpAndSettle();
+    final before = pageKey();
+    lastRequest!.onSessionRejected!(SessionRejection.ownerBanned);
+    await tester.pumpAndSettle();
+    expect(find.text('服务暂时不可用，请联系家人'), findsOneWidget);
+    expect(find.text('AVATAR-xiaoxin'), findsNothing);
+    expect(find.byKey(const Key('settings')), findsNothing);
+    await tester.tap(find.byKey(const Key('banned-retry')));
+    await tester.pumpAndSettle();
+    expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
+    expect(pageKey(), isNot(before));
+  });
+
+  testWidgets('a disabled character returns to the picker, greyed with its note, and stays greyed', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaoxin'));
+    final holds = CharacterHolds(store, diag: (_) {});
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: FakeBackend()), holds: holds));
+    await tester.pumpAndSettle();
+    lastRequest!.onSessionRejected!(SessionRejection.characterDisabled);
+    await tester.pumpAndSettle();
+    expect(find.text('小欣暂时休息中，请先选一位别的伙伴'), findsOneWidget);
+    expect(find.text('暂时休息中'), findsOneWidget);
+    expect(lockOn('xiaoxin'), findsOneWidget);
+    expect(find.text('AVATAR-xiaoxin'), findsNothing);
+    expect(store.values.keys, contains('${CharacterHolds.keyPrefix}xiaoxin'));
+  });
+
+  testWidgets('a saved hold at launch keeps the character greyed; an expired one does not', (tester) async {
+    final future = DateTime.now().millisecondsSinceEpoch + 3600000;
+    final held = MemoryCredentialStore({...returning('xiaoxin'), '${CharacterHolds.keyPrefix}xiaoxin': '$future'});
+    await tester.pumpWidget(app(DeviceIdentity(store: held, backend: FakeBackend()), holds: CharacterHolds(held, diag: (_) {})));
+    await tester.pumpAndSettle();
+    expect(find.text('小欣暂时休息中，请先选一位别的伙伴'), findsOneWidget);
+    expect(find.text('AVATAR-xiaoxin'), findsNothing);
+
+    // Drop the first shell so the second one starts with fresh state.
+    await tester.pumpWidget(const SizedBox());
+    final expired = MemoryCredentialStore({...returning('xiaoxin'), '${CharacterHolds.keyPrefix}xiaoxin': '1'});
+    await tester.pumpWidget(app(DeviceIdentity(store: expired, backend: FakeBackend()), holds: CharacterHolds(expired, diag: (_) {})));
     await tester.pumpAndSettle();
     expect(find.text('AVATAR-xiaoxin'), findsOneWidget);
   });

@@ -13,6 +13,7 @@ import 'avatar_engine/presence_chip.dart';
 import 'companion_config.dart';
 import 'config.dart';
 import 'diag_log.dart';
+import 'identity/session_rejection.dart';
 import 'metrics.dart';
 import 'native_audio/filler_clips.dart';
 import 'native_gateway/gateway_client.dart';
@@ -75,6 +76,7 @@ class AvatarPage extends StatefulWidget {
     this.identity,
     this.onEngineFailure,
     this.onUnknownCharacter,
+    this.onSessionRejected,
     this.characterId,
     this.displayName = '',
     this.companion,
@@ -93,6 +95,9 @@ class AvatarPage extends StatefulWidget {
 
   /// POST /session answered 400 (unknown character). Null shows the usual error.
   final VoidCallback? onUnknownCharacter;
+
+  /// POST /session or the live session was refused (owner_banned / character_disabled). Null shows the usual error.
+  final void Function(SessionRejection rejection)? onSessionRejected;
 
   /// Chosen character: sent on POST /session and picks the filler clips. Null = gateway default (dev).
   final String? characterId;
@@ -320,6 +325,12 @@ class _AvatarPageState extends State<AvatarPage> {
       case UiMetric(:final name, :final ms):
         setState(() => _metrics.add(name, ms.toDouble()));
       case UiError(:final code):
+        final rejection = sessionRejectionOf(code);
+        final onRejected = widget.onSessionRejected;
+        if (rejection != null && onRejected != null) {
+          onRejected(rejection);
+          return;
+        }
         final unknown = widget.onUnknownCharacter;
         if (code == 'gateway_http_400' && unknown != null) {
           unknown(); // the only 400 of POST /session is unknown_character

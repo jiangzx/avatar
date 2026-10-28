@@ -5,13 +5,17 @@ import 'package:flutter/material.dart';
 import '../avatar_engine/avatar_engine.dart';
 import '../avatar_engine/engine_switch_controller.dart';
 import '../avatar_engine/ui/engine_copy.dart';
+import '../companion_config.dart';
 import '../memory/memory_api.dart';
 import '../native_gateway/gateway_client.dart';
 import 'character_availability.dart';
+import 'character_holds.dart';
 import 'character_picker_page.dart';
 import 'characters.dart';
 import 'companion_settings_page.dart';
+import 'credential_store.dart';
 import 'device_identity.dart';
+import 'session_rejection.dart';
 
 /// What the shell asks the avatar builder for. A new [key] means a fresh page and session.
 class AvatarPageRequest {
@@ -22,6 +26,7 @@ class AvatarPageRequest {
     required this.engine,
     this.onEngineFailure,
     this.onUnknownCharacter,
+    this.onSessionRejected,
   });
 
   final Key key;
@@ -34,6 +39,9 @@ class AvatarPageRequest {
 
   /// POST /session answered 400: the gateway does not know this character.
   final VoidCallback? onUnknownCharacter;
+
+  /// POST /session or the live session was refused (owner_banned / character_disabled).
+  final void Function(SessionRejection rejection)? onSessionRejected;
 }
 
 /// First launch: character picker + registration. Afterwards: the saved character's chat.
@@ -43,7 +51,9 @@ class AppShell extends StatefulWidget {
     super.key,
     required this.identity,
     required this.catalog,
+    required this.companion,
     required this.avatarBuilder,
+    this.holds,
     this.engines,
     this.memory,
   });
@@ -51,6 +61,12 @@ class AppShell extends StatefulWidget {
   final DeviceIdentity identity;
   final CharacterCatalog catalog;
   final Widget Function(AvatarPageRequest request) avatarBuilder;
+
+  /// Rejection copy and the disabled-character hold (assets/config/companion.json).
+  final CompanionConfig companion;
+
+  /// Persistent holds for disabled characters; null keeps them for this run only.
+  final CharacterHolds? holds;
 
   /// Null = 3D only (tests and builds without Duix): Duix characters are hidden.
   final EngineSwitchController? engines;
@@ -81,15 +97,22 @@ class _AppShellState extends State<AppShell> {
   /// at pop start, while the settings page stays mounted for the close animation.
   bool _settingsOpen = false;
 
+  late final CharacterHolds _holds = widget.holds ?? CharacterHolds(MemoryCredentialStore());
+
+  /// The gateway refused this owner; show the notice instead of the chat.
+  bool _banned = false;
+
   @override
   void initState() {
     super.initState();
     unawaited(_load());
   }
 
-  CharacterAvailability _availabilityOf(CharacterOption option) =>
-      widget.engines?.availabilityFor(option) ??
-      (option.engine == AvatarEngineKind.webview ? const Available() : const Hidden());
+  CharacterAvailability _availabilityOf(CharacterOption option) {
+    if (_holds.isHeld(option.id)) return Unavailable(widget.companion.characterDisabledNote);
+    return widget.engines?.availabilityFor(option) ??
+        (option.engine == AvatarEngineKind.webview ? const Available() : const Hidden());
+  }
 
   Future<void> _load() async {
     String? character;
@@ -100,6 +123,7 @@ class _AppShellState extends State<AppShell> {
       error = identityErrorText('storage');
     }
     await widget.engines?.load(); // never throws: failures read as hidden or unsupported
+    await _holds.load(widget.catalog.options.map((option) => option.id)); // never throws
     if (!mounted) return;
     final saved = character == null ? null : widget.catalog.byId(character);
     setState(() {
@@ -111,10 +135,13 @@ class _AppShellState extends State<AppShell> {
   }
 
   /// Why the saved character cannot open now, or null when it can.
-  String? _blockedReason(CharacterOption option) => switch (_availabilityOf(option)) {
-    Available() || Checking() || Preparing() => null,
-    Unavailable() || PrepareFailed() || Hidden() => savedUnavailableText(option.title),
-  };
+  String? _blockedReason(CharacterOption option) {
+    if (_holds.isHeld(option.id)) return widget.companion.disabledReasonFor(option.title);
+    return switch (_availabilityOf(option)) {
+      Available() || Checking() || Preparing() => null,
+      Unavailable() || PrepareFailed() || Hidden() => savedUnavailableText(option.title),
+    };
+  }
 
   /// Copies the Duix model when needed. Null = ready; otherwise a reason code for identityErrorText.
   Future<String?> _prepare(CharacterOption option) async {
@@ -219,6 +246,21 @@ class _AppShellState extends State<AppShell> {
     setState(() => _pickerReason = unknownCharacterText);
   }
 
+  Future<void> _onSessionRejected(CharacterOption option, SessionRejection rejection) async {
+    switch (rejection) {
+      case SessionRejection.ownerBanned:
+        if (mounted) setState(() => _banned = true);
+      case SessionRejection.characterDisabled:
+        await _holds.hold(option.id, widget.companion.characterDisabledHold);
+        if (mounted) setState(() => _pickerReason = widget.companion.disabledReasonFor(option.title));
+    }
+  }
+
+  void _retryAfterBan() => setState(() {
+    _banned = false;
+    _pageEpoch++;
+  });
+
   Widget _picker(String initial, String? reason) => CharacterPickerPage(
     title: '选一位陪您聊天的伙伴',
     confirmLabel: '就选这个',
@@ -242,6 +284,7 @@ class _AppShellState extends State<AppShell> {
     final id = _character;
     final character = id == null ? null : widget.catalog.byId(id);
     if (character == null) return _picker(widget.catalog.defaultId, null);
+    if (_banned) return _BannedNotice(text: widget.companion.ownerBannedText, onRetry: _retryAfterBan);
     final reason = _pickerReason;
     if (reason != null) return _picker(character.id, reason);
     return _home(character);
@@ -262,6 +305,7 @@ class _AppShellState extends State<AppShell> {
                       ? (failure) => _onEngineFailure(character, failure)
                       : null,
                   onUnknownCharacter: _onUnknownCharacter,
+                  onSessionRejected: (rejection) => unawaited(_onSessionRejected(character, rejection)),
                 ),
               ),
       ),
@@ -295,6 +339,45 @@ class _SettingsButton extends StatelessWidget {
           width: 64,
           height: 64,
           child: Icon(Icons.tune, color: Colors.white, size: 32),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Shown after owner_banned: no chat, no settings, one plain retry.
+class _BannedNotice extends StatelessWidget {
+  const _BannedNotice({required this.text, required this.onRetry});
+
+  final String text;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: const Color(0xFF10131A),
+    body: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              text,
+              key: const Key('banned-notice'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 26, height: 1.5),
+            ),
+            const SizedBox(height: 40),
+            SizedBox(
+              height: 64,
+              child: FilledButton(
+                key: const Key('banned-retry'),
+                onPressed: onRetry,
+                child: const Text('再试一次', style: TextStyle(fontSize: 22)),
+              ),
+            ),
+          ],
         ),
       ),
     ),

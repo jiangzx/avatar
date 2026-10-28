@@ -322,6 +322,56 @@ void main() {
       throwsA(isA<GatewayHttpException>().having((e) => e.errorCode, 'errorCode', isNull)),
     );
   });
+
+  test('a ban found while reconnecting stops retrying and reports owner_banned once', () async {
+    final transport = FakeGatewayTransport(tokens: firstTokens);
+    final events = RecordingGatewayEvents();
+    final c = NativeGatewayClient(
+      baseUri: Uri.parse('http://gw.test'),
+      appSecret: 'secret-123456789',
+      transport: transport,
+      events: events,
+      maxResume: const Duration(milliseconds: 40),
+      reconnectBase: const Duration(milliseconds: 1),
+      reconnectMax: const Duration(milliseconds: 2),
+    );
+    await c.start();
+    transport.lastSocket.emitText('{"type":"session.ready","sessionId":"first"}');
+    transport.failResume = true;
+    transport.freshRejection = const GatewayHttpResponse(statusCode: 403, body: {'error': 'owner_banned'});
+    transport.lastSocket.closeUnexpectedly();
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    final posts = transport.postedPaths.where((p) => p == '/session').length;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(transport.postedPaths.where((p) => p == '/session').length, posts);
+    final errors = events.messages.whereType<GatewayError>().toList();
+    expect(errors.map((e) => e.code), ['owner_banned']);
+    expect(errors.single.retryable, isFalse);
+    expect(events.statuses.last, GatewayStatus.closed);
+  });
+
+  test('a plain 401 while reconnecting keeps the existing retry loop', () async {
+    final transport = FakeGatewayTransport(tokens: firstTokens);
+    final events = RecordingGatewayEvents();
+    final c = NativeGatewayClient(
+      baseUri: Uri.parse('http://gw.test'),
+      appSecret: 'secret-123456789',
+      transport: transport,
+      events: events,
+      maxResume: const Duration(milliseconds: 40),
+      reconnectBase: const Duration(milliseconds: 1),
+      reconnectMax: const Duration(milliseconds: 2),
+    );
+    await c.start();
+    transport.lastSocket.emitText('{"type":"session.ready","sessionId":"first"}');
+    transport.failResume = true;
+    transport.failFresh = true;
+    transport.lastSocket.closeUnexpectedly();
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(events.messages.whereType<GatewayError>(), isEmpty);
+    expect(events.statuses.last, isNot(GatewayStatus.closed));
+    await c.close();
+  });
 }
 
 class RecordingGatewayEvents implements GatewayClientEvents {

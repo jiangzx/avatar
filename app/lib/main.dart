@@ -15,6 +15,7 @@ import 'duix/duix_crash_guard.dart';
 import 'duix/duix_engine.dart';
 import 'identity/app_shell.dart';
 import 'identity/avatars.dart';
+import 'identity/character_holds.dart';
 import 'identity/characters.dart';
 import 'identity/device_identity.dart';
 import 'identity/identity_api.dart';
@@ -151,6 +152,8 @@ class _HomeState extends State<_Home> {
   Widget build(BuildContext context) => AppShell(
     identity: _identity,
     catalog: widget.catalog,
+    companion: widget.companion,
+    holds: CharacterHolds(_store),
     engines: _engines,
     memory: _memory,
     avatarBuilder: (request) => AvatarPage(
@@ -162,6 +165,7 @@ class _HomeState extends State<_Home> {
       companion: widget.companion,
       onEngineFailure: request.onEngineFailure,
       onUnknownCharacter: request.onUnknownCharacter,
+      onSessionRejected: request.onSessionRejected,
       handoff: _handoff,
     ),
   );

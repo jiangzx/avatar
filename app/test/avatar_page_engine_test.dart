@@ -1,6 +1,5 @@
 import 'package:avatar_app/avatar_engine/avatar_engine.dart';
 import 'package:avatar_app/avatar_page.dart';
-import 'package:avatar_app/companion_config.dart';
 import 'package:avatar_app/native_audio/audio_types.dart';
 import 'package:avatar_app/native_audio/speech_detector.dart';
 import 'package:avatar_app/native_session/events.dart';
@@ -9,6 +8,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/companion_fixture.dart';
 
 class FakeEngine implements AvatarEngine {
   FakeEngine({this.presence = false, this.failWith});
@@ -177,7 +178,7 @@ void main() {
         engineFactory: () => engine,
         platform: FakePlatform(),
         displayName: '小暖',
-        companion: const CompanionConfig(aiCaption: '我是 AI 陪伴，不是真人', restToastMs: 6000),
+        companion: loadTestCompanionConfig(),
       ),
     ));
     await tester.pump();

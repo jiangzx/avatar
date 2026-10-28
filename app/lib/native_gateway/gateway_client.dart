@@ -299,7 +299,11 @@ class NativeGatewayClient implements GatewayClientLike {
     try {
       await _startFresh();
       _disconnectedAt = null;
-    } catch (_) {
+    } catch (error) {
+      if (error is GatewayHttpException && sessionRejectionCodes.contains(error.errorCode)) {
+        _stopForRejection(error.errorCode!);
+        return;
+      }
       // Start a fresh retry window. Keeping the old timestamp makes _scheduleResume
       // enter the expired branch again immediately, spinning without backoff.
       _disconnectedAt = DateTime.now();
@@ -341,6 +345,17 @@ class NativeGatewayClient implements GatewayClientLike {
       path: '/ws',
       queryParameters: {'token': token},
     );
+  }
+
+  /// The gateway refused this owner or character: retrying cannot help, so stop and tell the page.
+  void _stopForRejection(String code) {
+    _closedByUser = true;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _readyTimer?.cancel();
+    _readyTimer = null;
+    events.onMessage(GatewayError(code, false));
+    _emitClosed();
   }
 
   void _emitClosed() {

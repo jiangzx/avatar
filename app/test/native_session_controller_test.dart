@@ -696,6 +696,31 @@ void main() {
     expect(subtitles.where((s) => s.role == 'user').single.responseSeq, isNull);
     expect(f.events.whereType<UiResponseStart>().single.kind, 'reminder');
   });
+
+  test('a rejected session start reports the rejection code, not the HTTP status', () async {
+    final f = SessionFakes();
+    final c = f.controller();
+    f.client.startError = const GatewayHttpException(403, errorCode: 'owner_banned');
+    await expectLater(c.start(), throwsA(isA<GatewayHttpException>()));
+    expect(f.events.whereType<UiError>().map((e) => e.code), ['owner_banned']);
+  });
+
+  test('other HTTP failures keep the gateway_http code', () async {
+    final f = SessionFakes();
+    final c = f.controller();
+    f.client.startError = const GatewayHttpException(400, errorCode: 'unknown_character');
+    await expectLater(c.start(), throwsA(isA<GatewayHttpException>()));
+    expect(f.events.whereType<UiError>().map((e) => e.code), ['gateway_http_400']);
+  });
+
+  test('an owner_banned error message mid-session reaches the page', () async {
+    final f = SessionFakes();
+    final c = f.controller();
+    await c.start();
+    f.client.emit(const GatewayError('owner_banned', false));
+    await pumpEvents();
+    expect(f.events.whereType<UiError>().map((e) => e.code), contains('owner_banned'));
+  });
 }
 
 class SessionFakes {
@@ -886,6 +911,7 @@ class FakeClient implements GatewayClientLike {
   int failNextStarts = 0;
   int startCalls = 0;
   int closeCalls = 0;
+  Object? startError;
 
   @override
   void attachEvents(GatewayClientEvents events) => this.events = events;
@@ -893,6 +919,8 @@ class FakeClient implements GatewayClientLike {
   @override
   Future<void> start() async {
     startCalls++;
+    final error = startError;
+    if (error != null) throw error;
     if (failNextStarts > 0) {
       failNextStarts--;
       throw StateError('gateway unavailable');

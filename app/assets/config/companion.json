@@ -1,4 +1,8 @@
 {
   "aiCaption": "我是 AI 陪伴，不是真人",
-  "restToastMs": 6000
+  "restToastMs": 6000,
+  "ownerBannedText": "服务暂时不可用，请联系家人",
+  "characterDisabledNote": "暂时休息中",
+  "characterDisabledReason": "{name}暂时休息中，请先选一位别的伙伴",
+  "characterDisabledHoldMs": 86400000
 }
