@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, App, Button, Input, Modal, Spin } from 'antd';
 import type { AdminConfigDraft, AdminConfigImpactLine, AdminConfigPreview } from '@anyidea/protocol';
 import { useApi } from '../auth/AuthContext.tsx';
+import { useEscapeClose } from '../useEscapeClose.ts';
 import { PromptDiff } from './PromptDiff.tsx';
 
 export interface PublishDialogProps {
@@ -29,6 +30,8 @@ export function PublishDialog({ open, draft, count, onClose, onPublished }: Publ
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
+  // AntD Modal's own Escape handling is unreliable in this environment; use the shared capture-phase hook.
+  useEscapeClose(open, onClose);
 
   useEffect(() => {
     setPreview(null);

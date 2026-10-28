@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConfigScenePage } from '../src/config/ConfigScenePage.tsx';
+import { PublishDialog } from '../src/config/PublishDialog.tsx';
 import { PromptDiff } from '../src/config/PromptDiff.tsx';
 import { fakeFetch, renderWithProviders } from './helpers.tsx';
 import {
@@ -99,6 +100,24 @@ describe('ConfigScenePage', () => {
     await waitFor(() => expect(bodyOf(calls, 'POST', '/admin/api/config/publish')).toEqual({
       baseVersion: 7, changes: [{ key: careDaysItem.key, value: 5 }], resets: [], confirmText: '确认发布',
     }));
+  });
+
+  it('closes the publish dialog on Escape', async () => {
+    const onClose = vi.fn();
+    const { fetch } = fakeFetch({ 'POST /admin/api/config/preview': preview() });
+    renderWithProviders(
+      <PublishDialog
+        open
+        draft={{ baseVersion: 7, changes: [{ key: restItem.key, value: 60 }], resets: [] }}
+        count={1}
+        onClose={onClose}
+        onPublished={() => {}}
+      />,
+      fetch,
+    );
+    expect(await screen.findByText('发布这 1 项改动？')).toBeTruthy();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
   it('shows the server message when the config changed elsewhere', async () => {
