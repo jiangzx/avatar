@@ -28,7 +28,7 @@ export interface GatewayServerOptions {
 
 ## Steps
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 修改 `gateway/test/identity-http.test.ts`：
 
@@ -91,12 +91,12 @@ describe('disabled characters', () => {
 
 （`/session/resume` 的请求体字段名以 `server.ts` 里 `ResumeRequestSchema` 为准；当前是 `sessionId` 和 `resumeToken`。若该接口要求先断开 WS 才能续连，按 `identity-http.test.ts` 里已有的 resume 用例的做法先关闭 socket；本用例要验证的只是「停用不影响已有会话的续连」。）
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 Run: `npm test -w gateway -- test/identity-http.test.ts`
 Expected: 新增的第一个用例 FAIL（实际 401/200，期望 409）；typecheck 层面 `characterEnabled` 不是 `GatewayServerOptions` 的字段。其余旧用例 PASS。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 修改 `gateway/src/server/server.ts`：
 
@@ -129,12 +129,12 @@ Expected: 新增的第一个用例 FAIL（实际 401/200，期望 409）；typec
   characterEnabled: (id) => !configSource.snapshot().disabledCharacters.has(id),
 ```
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [x] **Step 4: 运行测试，确认通过**
 
 Run: `npm test -w gateway -- test/identity-http.test.ts`
 Expected: PASS（新旧用例全部）。
 
-- [ ] **Step 5: 全量回归并提交**
+- [x] **Step 5: 全量回归并提交**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS，typecheck 无输出。

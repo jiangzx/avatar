@@ -15,7 +15,7 @@ AI avatar voice-chat POC (Android phone first). Read this file first, then `docs
 - Language: replies in Simplified Chinese; code comments in English, short.
 - Never log conversation content (audio, ASR text, reply text). Logs carry event names, ids, counts, durations, error codes only.
 - Conversation text may be persisted only in the memory store (SQLite behind `MemoryStore`, per `docs/superpowers/specs/2026-10-17-companionship-memory-design.md`), after the memory notice and unless the owner declined, and must be deletable. Never store audio. Exception: hand-written synthetic eval scenarios and their results may live in `docs/testing/`.
-- Never commit secrets. Keys go in env vars or `--dart-define`; `.env*` stays ignored (`.env.example` excepted).
+- Never commit secrets. Keys live only in env vars, `--dart-define`, or the admin console's encrypted store (AES-256-GCM in SQLite, master key `ADMIN_SECRET_KEY` from env); never in the repo, and never in logs, audit rows, or error messages. `.env*` stays ignored (`.env.example` excepted).
 - Until a model Key exists, everything must run on `MockAdapter` (`ADAPTER=mock` only).
 - Tunable values live in config files, not scattered in code.
 - Do not invent skills, commands, dependencies, or APIs. Unverified third-party behavior is an assumption: mark it and validate with a minimal step first.

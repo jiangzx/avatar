@@ -200,3 +200,4 @@
 - 实机 `/Users/jed/.avatar/memory.db` 的 `PRAGMA user_version = 6`；`owners` 表没有 v7 的 `banned_at` 列。当前 v7 `SqliteMemoryStore` 在只读构造阶段即失败，探针按设计输出 `NOT RUN db_schema_incompatible`。
 - 因此 P3-T10 任务书的前置假设「计划 1 已把真实库升级到 v7」在实机不成立；P3-T10 开始前必须先在用户确认下做 WAL 安全的备份并迁移。不能用裸 `cp` 主库：当前 `memory.db-wal` 约 449 KB，裸拷贝会丢最新消息；应使用 SQLite 的 `.backup`/`VACUUM INTO` 或先 checkpoint 的在线备份。
 - 2026-10-28 P3-T3 的安全替代验证（不改线上库）：对实机库做临时 SQLite `.backup`，只把副本迁移到 v7，再用 `plan3-multilingual-recall-probe.mjs --real-db` 只读运行。结果：xiaonuan/xiaokai/xiaoxin 三个角色均为「上次聊到哪儿了」`hits:true`、「上次聊过电影吗」`hits:true`、「我说过喜欢喝茶吗」`hits:false`，`newTitleFlag` 全为 false。临时副本已删除；线上库仍为 v6，`.bak-v6` 未动。
+- 2026-10-28 P3-T10 已解除：经用户确认，先停 8787 网关，用 SQLite `.backup` 生成包含 WAL 的 `memory.db.bak-v6-20261028`（校验 v6、owners 1/agents 3/sessions 12/messages 60），再迁移线上库到 v7；重启网关后 8787 正常监听。真实召回探针已在 v7 线上库只读通过（三个角色 true/true/false，`newTitleFlag` 全 false）。旧 `.bak-v6` 保留。

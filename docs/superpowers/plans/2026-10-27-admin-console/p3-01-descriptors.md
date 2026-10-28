@@ -105,7 +105,7 @@ Key 本身不走覆盖层，由 P3-T4 的 `SecretStore` 管，模型与 Key 页�
 
 ## Steps
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 新建 `gateway/test/config-descriptors.test.ts`：
 
@@ -290,12 +290,12 @@ describe('validateDisplayValue', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 Run: `npm test -w gateway -- test/config-descriptors.test.ts`
 Expected: FAIL，报 `Failed to load url ../src/config-store/descriptors.ts`（文件还不存在）。
 
-- [ ] **Step 3: 实现 `keys.ts`**
+- [x] **Step 3: 实现 `keys.ts`**
 
 新建 `gateway/src/config-store/keys.ts`：
 
@@ -435,7 +435,7 @@ export function readTargetValue(root: string, target: OverlayTarget, models: Mod
 }
 ```
 
-- [ ] **Step 4: 实现 `descriptors.ts`、`units.ts`、`options.ts`**
+- [x] **Step 4: 实现 `descriptors.ts`、`units.ts`、`options.ts`**
 
 新建 `gateway/src/config-store/descriptors.ts`：
 
@@ -634,7 +634,7 @@ export function optionsFor(options: QwenOptions, ref: string, language: Language
 }
 ```
 
-- [ ] **Step 5: 实现 `validate.ts`**
+- [x] **Step 5: 实现 `validate.ts`**
 
 新建 `gateway/src/config-store/validate.ts`：
 
@@ -744,7 +744,7 @@ function passesCheckin(text: string, rules: SilenceRules): boolean {
 }
 ```
 
-- [ ] **Step 6: 写 Qwen 下拉候选**
+- [x] **Step 6: 写 Qwen 下拉候选**
 
 新建 `gateway/config/admin/qwen-options.json`。只放仓库里正在用的值和 env 默认值；以后要加新的模型或音色，先按官方文档确认名字再加（不要凭记忆加）：
 
@@ -775,7 +775,7 @@ function passesCheckin(text: string, rules: SilenceRules): boolean {
 }
 ```
 
-- [ ] **Step 7: 写六个场景的说明卡**
+- [x] **Step 7: 写六个场景的说明卡**
 
 新建 `gateway/config/admin/descriptors/pacing.json`：
 
@@ -1235,14 +1235,14 @@ function passesCheckin(text: string, rules: SilenceRules): boolean {
 }
 ```
 
-- [ ] **Step 8: 运行测试，确认通过**
+- [x] **Step 8: 运行测试，确认通过**
 
 Run: `npm test -w gateway -- test/config-descriptors.test.ts`
 Expected: PASS（全部用例）。
 
 若「baseline passes its own validation」失败：说明某个基线值超出了说明卡的范围或字数。**不要改基线文件**，按报错把说明卡的上限放宽到能容纳基线（字数类取基线长度 + 50% 向上取整到 10），并在提交说明里写明。若某个 ja/en 的 `checkinText` 基线不满足 checkin 规则，停下报告（那说明运行时规则和文件已经不一致，属于高风险区）。
 
-- [ ] **Step 9: 全量回归并提交**
+- [x] **Step 9: 全量回归并提交**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS，typecheck 无输出。

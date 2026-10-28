@@ -148,7 +148,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写接口表的失败测试**
+- [x] **Step 1: 写接口表的失败测试**
 
 新建 `admin/test/config-api.test.ts`：
 
@@ -188,12 +188,12 @@ describe('config endpoints', () => {
 });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `npm test -w admin -- test/config-api.test.ts`
 Expected: FAIL：`api.configScene is not a function`（typecheck 层面也报不存在）。
 
-- [ ] **Step 3: `put` 与接口表**
+- [x] **Step 3: `put` 与接口表**
 
 修改 `admin/src/api/client.ts`（P2-T6）：
 1. `ApiClient` 接口加一行 `put<T>(path: string, body?: unknown): Promise<T>;`
@@ -224,7 +224,7 @@ Expected: FAIL：`api.configScene is not a function`（typecheck 层面也报不
 Run: `npm test -w admin -- test/config-api.test.ts`
 Expected: PASS。
 
-- [ ] **Step 4: 写测试夹具**
+- [x] **Step 4: 写测试夹具**
 
 新建 `admin/test/fixtures/config.ts`：
 
@@ -380,7 +380,7 @@ export function bodyOf(calls: Array<{ method: string; url: URL; init: RequestIni
 }
 ```
 
-- [ ] **Step 5: 写纯函数的失败测试**
+- [x] **Step 5: 写纯函数的失败测试**
 
 新建 `admin/test/config-logic.test.ts`：
 
@@ -482,12 +482,12 @@ describe('diffText', () => {
 });
 ```
 
-- [ ] **Step 6: 运行，确认失败**
+- [x] **Step 6: 运行，确认失败**
 
 Run: `npm test -w admin -- test/config-logic.test.ts`
 Expected: FAIL，报 `Failed to resolve import "../src/config/format.ts"`。
 
-- [ ] **Step 7: 实现 format、draft、validate、textDiff**
+- [x] **Step 7: 实现 format、draft、validate、textDiff**
 
 新建 `admin/src/config/format.ts`：
 
@@ -672,12 +672,12 @@ function lcs(a: string[], b: string[], ops: DiffOp[]): void {
 }
 ```
 
-- [ ] **Step 8: 运行，确认通过**
+- [x] **Step 8: 运行，确认通过**
 
 Run: `npm test -w admin -- test/config-logic.test.ts`
 Expected: PASS（4 个 describe，12 个用例）。
 
-- [ ] **Step 9: 写页面组件的失败测试**
+- [x] **Step 9: 写页面组件的失败测试**
 
 新建 `admin/test/config-scene.test.tsx`：
 
@@ -849,12 +849,12 @@ describe('PromptDiff', () => {
 });
 ```
 
-- [ ] **Step 10: 运行，确认失败**
+- [x] **Step 10: 运行，确认失败**
 
 Run: `npm test -w admin -- test/config-scene.test.tsx`
 Expected: FAIL，报 `Failed to resolve import "../src/config/ConfigScenePage.tsx"`。
 
-- [ ] **Step 11: 实现 PromptDiff、SettingRow、UnpublishedBar**
+- [x] **Step 11: 实现 PromptDiff、SettingRow、UnpublishedBar**
 
 新建 `admin/src/config/PromptDiff.tsx`：
 
@@ -996,7 +996,7 @@ export function UnpublishedBar({ count, blocked, onDiscard, onReview }: Unpublis
 }
 ```
 
-- [ ] **Step 12: 实现 PublishDialog 和 ConfigScenePage**
+- [x] **Step 12: 实现 PublishDialog 和 ConfigScenePage**
 
 新建 `admin/src/config/PublishDialog.tsx`：
 
@@ -1224,7 +1224,7 @@ export function ConfigScenePage({ scene, aside, below }: ConfigScenePageProps) {
 }
 ```
 
-- [ ] **Step 13: 写样式**
+- [x] **Step 13: 写样式**
 
 新建 `admin/src/config/config.css`（颜色取 P2-T6 `palette` 的值；P2-T6 没有 CSS 变量，这里直接写色值）：
 
@@ -1353,12 +1353,12 @@ export function ConfigScenePage({ scene, aside, below }: ConfigScenePageProps) {
 .prompt-diff ins { background: #2f6f6826; text-decoration: none; }
 ```
 
-- [ ] **Step 14: 运行，确认通过**
+- [x] **Step 14: 运行，确认通过**
 
 Run: `npm test -w admin -- test/config-scene.test.tsx test/config-logic.test.ts test/config-api.test.ts`
 Expected: PASS（三个文件全部通过）。如果 `getByRole('spinbutton')` 在当前 Ant Design 版本上拿不到，先在测试里打印 `row.innerHTML` 确认 InputNumber 的 input 有没有 `role="spinbutton"`；不要改断言含义。
 
-- [ ] **Step 15: 侧栏与路由**
+- [x] **Step 15: 侧栏与路由**
 
 修改 `admin/src/layout/AppLayout.tsx`：
 
@@ -1401,12 +1401,12 @@ export const NAV_GROUPS: NavGroup[] = [
 
 （`top`、`id` 是 P2-T8 在 `PageRoutes` 里解构的 `route.segments`。）
 
-- [ ] **Step 16: 全量验证**
+- [x] **Step 16: 全量验证**
 
 Run: `npm test -w admin && npm run typecheck -w admin && npm run build -w admin`
 Expected: 全部通过；`admin/dist/` 生成。P2 的 `auth.test.tsx` 如果断言了侧栏只有两组，按新的三组更新那条断言（只改分组数量，不改其他含义）。
 
-- [ ] **Step 17: 提交**
+- [x] **Step 17: 提交**
 
 ```bash
 git add admin/src/api/client.ts admin/src/api/endpoints.ts admin/src/layout/AppLayout.tsx admin/src/routes.tsx \

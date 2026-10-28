@@ -80,7 +80,7 @@ export function activeQuoteRules(opts: Pick<MemoryWorkerOptions, 'quote' | 'quot
 
 ## Steps
 
-- [ ] **Step 1: 写失败测试（文本客户端缓存、关怀原话开关）**
+- [x] **Step 1: 写失败测试（文本客户端缓存、关怀原话开关）**
 
 新建 `gateway/test/text-client-cache.test.ts`：
 
@@ -145,7 +145,7 @@ describe('activeQuoteRules', () => {
 
 （`rules` 的形状与 `index.ts` 传给 `MemoryWorker` 的 `quote` 一致：`{ maxChars, safety, evidence }`。若 `QuoteRules` 的字段名不同，以 `gateway/src/memory/worker.ts` 中 `QuoteRules` 的实际定义为准改测试里的对象，不改 `QuoteRules`。）
 
-- [ ] **Step 2: 写失败测试（会话依赖与工厂）**
+- [x] **Step 2: 写失败测试（会话依赖与工厂）**
 
 新建 `gateway/test/snapshot-deps.test.ts`：
 
@@ -324,12 +324,12 @@ describe('DeviceRegistry snapshotMaxChars', () => {
 
 （如果 P2-T5 给 `DeviceRegistryDeps` 加了必填字段，按 P2-T5 的定义补上；如果 `resolve` 在新设备上不渲染记忆视图导致 `reads` 为 0，把断言改为在 `resolve` 前先用 `store.setAddressing(ownerId, '王阿姨', now)` 写一条称呼——ownerId 从 `registry.resolve(...).ctx.ownerId` 取。）
 
-- [ ] **Step 3: 运行四个测试，确认失败**
+- [x] **Step 3: 运行四个测试，确认失败**
 
 Run: `npm test -w gateway -- test/text-client-cache.test.ts test/worker-quote-gate.test.ts test/snapshot-deps.test.ts test/registry-snapshot-chars.test.ts`
 Expected: FAIL：`textClientCache.ts`、`snapshotDeps.ts` 不存在；`activeQuoteRules` 未导出；`snapshotMaxChars` 不接受函数（typecheck 层面）且 `reads` 为 0。
 
-- [ ] **Step 4: 实现 `textClientCache.ts`**
+- [x] **Step 4: 实现 `textClientCache.ts`**
 
 新建 `gateway/src/memory/textClientCache.ts`：
 
@@ -356,7 +356,7 @@ export function switchingTextClient(resolve: () => TextModelClient): TextModelCl
 }
 ```
 
-- [ ] **Step 5: worker 的关怀原话开关**
+- [x] **Step 5: worker 的关怀原话开关**
 
 修改 `gateway/src/memory/worker.ts`：
 
@@ -389,7 +389,7 @@ export function activeQuoteRules(opts: Pick<MemoryWorkerOptions, 'quote' | 'quot
     const vetted = vetFollowupQuotes(named.ops, users.map((row) => row.text), activeQuoteRules(this.opts));
 ```
 
-- [ ] **Step 6: 注册表接受取值函数**
+- [x] **Step 6: 注册表接受取值函数**
 
 修改 `gateway/src/identity/registry.ts`：
 
@@ -418,7 +418,7 @@ export function activeQuoteRules(opts: Pick<MemoryWorkerOptions, 'quote' | 'quot
 
 第 120 行 `maxChars: this.snapshotMaxChars,` 改为 `maxChars: this.snapshotMaxChars(),`。
 
-- [ ] **Step 7: 实现 `snapshotDeps.ts`**
+- [x] **Step 7: 实现 `snapshotDeps.ts`**
 
 新建 `gateway/src/session/snapshotDeps.ts`：
 
@@ -524,12 +524,12 @@ export function makeSessionFactory(
 }
 ```
 
-- [ ] **Step 8: 运行四个新测试**
+- [x] **Step 8: 运行四个新测试**
 
 Run: `npm test -w gateway -- test/text-client-cache.test.ts test/worker-quote-gate.test.ts test/snapshot-deps.test.ts test/registry-snapshot-chars.test.ts`
 Expected: PASS。
 
-- [ ] **Step 9: 改 `index.ts`：启动校验与配置来源**
+- [x] **Step 9: 改 `index.ts`：启动校验与配置来源**
 
 以下修改以当前 `gateway/src/index.ts` 为准（计划 1、2 已经在里面加了 logger、用量记录、后台服务等；这些**保留不动**）。下面用到的 P1 模块变量名是确定的：根 logger `logger`、日志级别 `levels`、后台配置 `adminConfig`（P1-T4），价格表 `prices`、用量记录器 `usage`（可能为 null）、`usageSource`（P1-T9）。`buildSnapshot`/`configSource` 必须放在 `logger` 定义之后。
 
@@ -575,7 +575,7 @@ logger.info('config_snapshot', { version: boot.version, characters: boot.charact
 | `byLanguage` 辅助函数 | 保留 |
 | `adapterVoice` 函数 | 删除，由下一步的 `voiceFor` 取代 |
 
-- [ ] **Step 10: 改 `index.ts`：文本客户端、worker、会话工厂**
+- [x] **Step 10: 改 `index.ts`：文本客户端、worker、会话工厂**
 
 1. 把原来的 `const textClient = config.qwenApiKey && config.summarizerEndpoint ? new QwenTextClient({...}) : null;` 替换为下面的代码。`make` 回调里就是原来的 `new QwenTextClient({...})` 调用（保留 P1-T9 加的 `recorder: usage`），只把 `apiKey`、`endpoint`、`model` 换成 `settings` 的字段：
 
@@ -652,7 +652,7 @@ const workerClient = textClientFor(boot)
 
 4. 新增 import：`ModelDefaults`、`Overlay`（`./config-store/keys.ts`）、`SqliteConfigStore`、`fixedConfigSource`（`./config-store/store.ts`）、`buildConfigSnapshot`、`ConfigSnapshot`（`./session/configSnapshot.ts`）、`makeSessionFactory`（`./session/snapshotDeps.ts`）、`TextClientCache`、`switchingTextClient`（`./memory/textClientCache.ts`）、`TextModelClient`（`./memory/textClient.ts`）。删除不再使用的 import：`loadCharacterRegistry`、`loadRoleCatalog`、`missingRoleLanguages`、`loadAffectConfig`、`loadMemoryBudget`、`loadPacing`、`validateBudgets`、`checkAffectBudgets`、`loadI18n`、`Session`（若已无直接使用）、`CharacterId`（若已无直接使用）。
 
-- [ ] **Step 11: typecheck 与全量回归**
+- [x] **Step 11: typecheck 与全量回归**
 
 Run: `npm run typecheck -w gateway`
 Expected: 无输出。报「未使用的 import」或「找不到名字」时按 Step 10 第 4 点补删。
@@ -660,7 +660,7 @@ Expected: 无输出。报「未使用的 import」或「找不到名字」时按
 Run: `npm test -w gateway`
 Expected: 全部 PASS；文件数 = 开始前的数字 + 4，用例数 = 开始前 + 新增用例数。任何旧用例失败都说明行为变了：停下排查，不要改旧测试的断言。
 
-- [ ] **Step 12: 进程级冒烟与召回探针**
+- [x] **Step 12: 进程级冒烟与召回探针**
 
 1. Mock 冒烟（从仓库根目录）：
 
@@ -687,7 +687,7 @@ ADAPTER=mock SUMMARIZER=mock APP_SECRET=local-dev-secret-0123 PORT=8798 MEMORY_D
 
 Expected: 两行，`config_snapshot` 带 `"version":0`，`gateway_listening` 带 `"port":8798`。
 
-- [ ] **Step 13: 提交**
+- [x] **Step 13: 提交**
 
 ```bash
 git add gateway/src/memory/textClientCache.ts gateway/src/session/snapshotDeps.ts gateway/src/memory/worker.ts \

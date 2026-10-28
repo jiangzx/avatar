@@ -81,7 +81,7 @@ export function explainBuildError(error: unknown): ConfigIssue[];
 
 ## Steps
 
-- [ ] **Step 1: 写失败的快照测试**
+- [x] **Step 1: 写失败的快照测试**
 
 新建 `gateway/test/config-snapshot.test.ts`：
 
@@ -189,7 +189,7 @@ describe('buildConfigSnapshot', () => {
 });
 ```
 
-- [ ] **Step 2: 写失败的 store 测试**
+- [x] **Step 2: 写失败的 store 测试**
 
 新建 `gateway/test/config-store.test.ts`：
 
@@ -320,12 +320,12 @@ describe('SqliteConfigStore', () => {
 });
 ```
 
-- [ ] **Step 3: 运行两个测试，确认失败**
+- [x] **Step 3: 运行两个测试，确认失败**
 
 Run: `npm test -w gateway -- test/config-snapshot.test.ts test/config-store.test.ts`
 Expected: FAIL，报 `Failed to load url ../src/config-store/errors.ts` 和 `../src/session/configSnapshot.ts`。
 
-- [ ] **Step 4: 实现 `errors.ts`**
+- [x] **Step 4: 实现 `errors.ts`**
 
 新建 `gateway/src/config-store/errors.ts`：
 
@@ -348,7 +348,7 @@ export class ConfigConflictError extends Error {
 }
 ```
 
-- [ ] **Step 5: 实现 `materialize.ts`**
+- [x] **Step 5: 实现 `materialize.ts`**
 
 新建 `gateway/src/config-store/materialize.ts`：
 
@@ -443,7 +443,7 @@ function hasProtocol(value: string, protocol: string): boolean {
 }
 ```
 
-- [ ] **Step 6: 实现 `session/configSnapshot.ts`**
+- [x] **Step 6: 实现 `session/configSnapshot.ts`**
 
 新建 `gateway/src/session/configSnapshot.ts`。启动校验的内容与 `gateway/src/index.ts` 第 33–77 行和第 137–139 行一致（角色卡、角色包语言完整性、pacing、memory、i18n、affect、各语言人设预算、affect 预算、记忆告知关键词、关怀超时），只是读的是临时目录：
 
@@ -594,14 +594,14 @@ export function explainBuildError(error: unknown): ConfigIssue[] {
 
 注意：`virtualSettings` 抛出的 `ConfigInvalidError` 已经带 key 和中文，原样上抛；`all_characters_disabled` 由上面的映射表翻译。
 
-- [ ] **Step 7: 运行快照测试**
+- [x] **Step 7: 运行快照测试**
 
 Run: `npm test -w gateway -- test/config-snapshot.test.ts`
 Expected: PASS。
 
 如果「every numeric descriptor builds at its min and max」失败，报错里会写出 `key=值`：说明 P3-T1 的说明卡范围超出了 zod 或交叉校验。把那张说明卡的 `min`/`max` 收窄到能通过，同时确认基线值仍在范围内（P3-T1 的测试会再检查一遍），一并提交并在提交说明里写明。不要放宽 zod schema。
 
-- [ ] **Step 8: 实现 `store.ts`**
+- [x] **Step 8: 实现 `store.ts`**
 
 新建 `gateway/src/config-store/store.ts`：
 
@@ -775,7 +775,7 @@ function sameOverlay(a: Overlay, b: Overlay): boolean {
 }
 ```
 
-- [ ] **Step 9: 运行 store 测试和全量回归**
+- [x] **Step 9: 运行 store 测试和全量回归**
 
 Run: `npm test -w gateway -- test/config-store.test.ts`
 Expected: PASS。
@@ -783,7 +783,7 @@ Expected: PASS。
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS，typecheck 无输出。
 
-- [ ] **Step 10: 提交**
+- [x] **Step 10: 提交**
 
 ```bash
 git add gateway/src/config-store/errors.ts gateway/src/config-store/materialize.ts gateway/src/config-store/store.ts \

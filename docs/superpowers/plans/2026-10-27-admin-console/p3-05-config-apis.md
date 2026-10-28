@@ -146,18 +146,18 @@ export function buildConfigAdmin(db: DatabaseSync, opts?: { activeSessions?: () 
 
 ## Steps
 
-- [ ] **Step 1: 追加协议类型**
+- [x] **Step 1: 追加协议类型**
 
 在 `protocol/src/adminApi.ts` 末尾追加上面「Produces」第一段代码块里的全部类型（逐字复制）。`protocol/src/index.ts` 已经 re-export 这个文件（P2-T1），不用改。
 
 Run: `npm run typecheck -w protocol`
 Expected: 无输出。
 
-- [ ] **Step 2: 导出 `UNIT_WORDS`、`TOKEN_MEANINGS`**
+- [x] **Step 2: 导出 `UNIT_WORDS`、`TOKEN_MEANINGS`**
 
 修改 `gateway/src/config-store/validate.ts`：把 `const UNIT_WORDS: Record<string, string> = ...` 改为 `export const UNIT_WORDS: Record<string, string> = ...`；把 `const TOKEN_MEANINGS: Record<string, string> = ...` 改为 `export const TOKEN_MEANINGS: Record<string, string> = ...`。
 
-- [ ] **Step 3: 写测试辅助 `buildConfigAdmin`**
+- [x] **Step 3: 写测试辅助 `buildConfigAdmin`**
 
 新建 `gateway/test/support/configAdmin.ts`（`config-api.test.ts` 和 `config-routes.test.ts` 共用）：
 
@@ -219,7 +219,7 @@ export function buildConfigAdmin(db: DatabaseSync, opts: BuildConfigAdminOptions
 }
 ```
 
-- [ ] **Step 4: 写失败的 API 测试**
+- [x] **Step 4: 写失败的 API 测试**
 
 新建 `gateway/test/config-api.test.ts`：
 
@@ -453,12 +453,12 @@ describe('prices', () => {
 
 （测试里 `sessions` 是可变的，用来模拟进行中的通话数。`loadPricingBaseline`、`SqlitePriceBook` 来自 P1-T8；如果 P1-T8 的 `pricing.json` 里没有 `qwen-plus`，把 prices 用例中的模型换成 `pricing.json` 里有的任一文本模型。）
 
-- [ ] **Step 5: 运行测试，确认失败**
+- [x] **Step 5: 运行测试，确认失败**
 
 Run: `npm test -w gateway -- test/config-api.test.ts`
 Expected: FAIL，报找不到 `src/admin/configApi.ts`（经 `support/configAdmin.ts` 导入）。
 
-- [ ] **Step 6: 实现 `configApi.ts`**
+- [x] **Step 6: 实现 `configApi.ts`**
 
 新建 `gateway/src/admin/configApi.ts`：
 
@@ -880,12 +880,12 @@ function diffKeys(a: Overlay, b: Overlay): string[] {
 
 说明：审计用例里 `before`/`after` 是存储单位（毫秒），这是有意的——审计记的是实际写进配置的值。`AdminAudit.record` 会对 `detail` 跑 P1-T3 的 `guardFields`（非严格模式），所以字段名不能含黑名单词（`item1`、`count`、`more`、`version`、`keys`、`toVersion`、`source`、`model`、`effectiveFrom` 都不含），单个字符串超过 120 字会被 `guardFields` 按它的规则处理；最长的键约 45 字，正常不会超。
 
-- [ ] **Step 7: 运行 API 测试**
+- [x] **Step 7: 运行 API 测试**
 
 Run: `npm test -w gateway -- test/config-api.test.ts`
 Expected: PASS。
 
-- [ ] **Step 8: 给测试启动器加 `configAdmin`**
+- [x] **Step 8: 给测试启动器加 `configAdmin`**
 
 修改 `gateway/test/support/admin.ts`（P2-T3）：
 
@@ -893,7 +893,7 @@ Expected: PASS。
 2. `BootAdminOptions` 末尾加 `configAdmin?: ConfigAdminApi;`
 3. `createAdminServer({ ... })` 的参数对象末尾加 `...(opts.configAdmin ? { configAdmin: opts.configAdmin } : {}),`
 
-- [ ] **Step 9: 写失败的路由测试**
+- [x] **Step 9: 写失败的路由测试**
 
 新建 `gateway/test/config-routes.test.ts`（经过真实后台服务：登录、同源、CSRF 都由 P2-T3 的分发检查）：
 
@@ -988,12 +988,12 @@ describe('config routes', () => {
 
 `AdminHarness.api()` 带 `auth` 时自动加 Cookie、`x-csrf-token` 和同源 `origin`（P2-T3）；只给 `headers.cookie` 时没有 CSRF 头，用来测 403。
 
-- [ ] **Step 10: 运行，确认失败**
+- [x] **Step 10: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/config-routes.test.ts`
 Expected: FAIL：`/admin/api/config/scenes` 登录后返回 404（路由还没注册），或 typecheck 层面 `configAdmin` 不在 `AdminDeps` 里。
 
-- [ ] **Step 11: 实现 `routes/config.ts` 并注册**
+- [x] **Step 11: 实现 `routes/config.ts` 并注册**
 
 新建 `gateway/src/admin/routes/config.ts`：
 
@@ -1094,12 +1094,12 @@ export function configRoutes(): AdminRoute[] {
 
 3. `createAdminServer` 里的 `routes` 列表（P2-T4、P2-T5 已追加 `readRoutes()`、`ownerRoutes()`）末尾追加 `...(deps.configAdmin ? configRoutes() : [])`。
 
-- [ ] **Step 12: 运行路由测试**
+- [x] **Step 12: 运行路由测试**
 
 Run: `npm test -w gateway -- test/config-routes.test.ts test/config-api.test.ts`
 Expected: PASS。
 
-- [ ] **Step 13: 接到 `index.ts`**
+- [x] **Step 13: 接到 `index.ts`**
 
 在 `gateway/src/index.ts` 创建后台服务（`createAdminServer(...)`，P2-T3）之前加：
 
@@ -1123,7 +1123,7 @@ const configAdmin = configSource instanceof SqliteConfigStore && memoryDb && pri
 
 `prices`、`logger` 是 P1-T9、P1-T4 在本文件定义的变量；`secrets` 来自 P3-T4，`configSource`、`modelDefaults` 来自 P3-T3。`AdminAudit` 是无状态的写入器，这里另建一个实例与后台服务内部那个写同一张表，没有问题。把 `configAdmin` 加进传给 `createAdminServer` 的 deps：`...(configAdmin ? { configAdmin } : {})`。说明卡和下拉候选在有数据库时总是加载，文件写错会让启动失败（尽早暴露）。新增 import：`ConfigAdminApi`（`./admin/configApi.ts`）、`AdminAudit`（`./admin/audit.ts`，若 P2-T3 已 import `expireAdminAudit` 就合并成一行）、`loadDescriptorCatalog`、`loadQwenOptions`、`CHARACTER_IDS`。
 
-- [ ] **Step 14: 全量回归并提交**
+- [x] **Step 14: 全量回归并提交**
 
 Run: `npm test -w protocol && npm run typecheck -w protocol && npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS，typecheck 无输出。

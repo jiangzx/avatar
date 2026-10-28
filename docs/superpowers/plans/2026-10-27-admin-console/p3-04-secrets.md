@@ -44,7 +44,7 @@ export class SqliteSecretStore {
 
 ## Steps
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 新建 `gateway/test/secrets.test.ts`：
 
@@ -166,12 +166,12 @@ describe('SqliteSecretStore', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 Run: `npm test -w gateway -- test/secrets.test.ts`
 Expected: FAIL，报 `Failed to load url ../src/config-store/secrets.ts`。
 
-- [ ] **Step 3: 实现 `secrets.ts`**
+- [x] **Step 3: 实现 `secrets.ts`**
 
 新建 `gateway/src/config-store/secrets.ts`：
 
@@ -282,12 +282,12 @@ function decrypt(key: Buffer, row: Row): string {
 }
 ```
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [x] **Step 4: 运行测试，确认通过**
 
 Run: `npm test -w gateway -- test/secrets.test.ts`
 Expected: PASS。
 
-- [ ] **Step 5: `.env.example` 说明**
+- [x] **Step 5: `.env.example` 说明**
 
 在 `gateway/.env.example` 中 `DASHSCOPE_API_KEY` 那一段之后加（注释行，不写真实值）：
 
@@ -297,7 +297,7 @@ Expected: PASS。
 # ADMIN_SECRET_KEY=
 ```
 
-- [ ] **Step 6: 接线到 `index.ts`**
+- [x] **Step 6: 接线到 `index.ts`**
 
 （P3-T3 已合入后再做。）在 `configSource` 之后加：
 
@@ -332,7 +332,7 @@ const apiKeyVersion = (): number => secrets?.version() ?? 0;
 
 说明：`loadConfig` 在 `ADAPTER=qwen` 时仍要求 env 里有 `DASHSCOPE_API_KEY`（启动兜底），本任务不改这一点。
 
-- [ ] **Step 7: 回归与启动验证**
+- [x] **Step 7: 回归与启动验证**
 
 Run: `npm test -w gateway && npm run typecheck -w gateway`
 Expected: 全部 PASS，typecheck 无输出。
@@ -350,7 +350,7 @@ ADAPTER=mock SUMMARIZER=mock APP_SECRET=local-dev-secret-0123 PORT=8798 MEMORY_D
 
 Expected: 第一条输出一行，含 `"writable":true` 和 `"source":"missing"`；第二条输出 `1`（启动失败并给出原因）。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add gateway/src/config-store/secrets.ts gateway/test/secrets.test.ts gateway/src/index.ts gateway/.env.example

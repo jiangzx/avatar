@@ -10,7 +10,7 @@
 1. P2 后台登录：`POST /admin/api/login`，body `{ "password": "<明文>" }`，成功返回 `AdminMe` 并下发会话 Cookie；写操作带请求头 `x-csrf-token: <AdminMe.csrfToken>`。
 2. P3-T3：每个会话在取配置快照时记一条 info 日志 `session_config`，绑定 `sid`，字段 `version`（快照的配置版本号），因此会进入 `log_events`。
 3. P3-T5：`GET /admin/api/config/scenes/pacing` 返回 `AdminConfigScene`（`activeVersion`、`items[]`），含 key `pacing:restReminder.firstAfterMs`；`POST /admin/api/config/publish` 的请求体是 `{ baseVersion, changes, resets }`，`changes[].value` 是**显示单位**（这一项是分钟，范围 10–120、步长 5），成功返回 `AdminConfigVersion`（新版本号在 `id`）；过期 `baseVersion` 返回 409。
-4. P2-T1：`ADMIN_PASSWORD_HASH` 格式 `scrypt$<N>$<r>$<p>$<saltB64>$<hashB64>`，keylen 64。
+4. P2-T1：`ADMIN_PASSWORD_HASH` 格式 `scrypt$<N>$<r>$<p>$<saltB64>$<hashB64>`，keylen 32。
 
 如果 2 不成立（P3-T3 没有这条日志），先在 P3-T3 的范围内补上并加测试，再继续本任务；不要在验收脚本里改用别的判断方式。
 
@@ -30,7 +30,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 基线**
+- [x] **Step 1: 基线**
 
 Run（仓库根目录）：
 ```bash
@@ -41,7 +41,7 @@ npm test -w admin && npm run typecheck -w admin && npm run build -w admin
 ```
 Expected：工作区只有与本任务无关的已知改动（不要碰它们）；四组命令全部通过。记下每组的真实文件数和用例数，Step 9 要写进验收记录。
 
-- [ ] **Step 2: 修改 AGENTS.md 的密钥硬规则**
+- [x] **Step 2: 修改 AGENTS.md 的密钥硬规则**
 
 把 `AGENTS.md` 第 18 行：
 
@@ -58,7 +58,7 @@ Expected：工作区只有与本任务无关的已知改动（不要碰它们）
 Run: `grep -n "Never commit secrets" AGENTS.md`
 Expected：只有一行，内容为新文本。
 
-- [ ] **Step 3: 召回探针接受 v7 库**
+- [x] **Step 3: 召回探针接受 v7 库**
 
 Run: `grep -n "version !== 6" docs/testing/plan3-multilingual-recall-probe.mjs`
 
@@ -75,7 +75,7 @@ Run: `grep -n "version !== 6" docs/testing/plan3-multilingual-recall-probe.mjs`
 Run: `node --check docs/testing/plan3-multilingual-recall-probe.mjs`
 Expected：无输出（语法通过）。
 
-- [ ] **Step 4: 跑召回探针（高风险区门槛）**
+- [x] **Step 4: 跑召回探针（高风险区门槛）**
 
 Run（仓库根目录）：
 ```bash
@@ -88,7 +88,7 @@ Expected：
 
 任何一项失败：停下，按 AGENTS.md 高风险区规则报告用户，不继续后面的步骤。
 
-- [ ] **Step 5: 写配置隔离冒烟脚本**
+- [x] **Step 5: 写配置隔离冒烟脚本**
 
 新建 `docs/testing/2026-10-27-config-isolation-smoke.mjs`：
 
@@ -117,7 +117,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function passwordHash(password) {
   const N = 16384, r = 8, p = 1;
   const salt = randomBytes(16);
-  const hash = scryptSync(password, salt, 64, { N, r, p });
+  const hash = scryptSync(password, salt, 32, { N, r, p });
   return `scrypt$${N}$${r}$${p}$${salt.toString('base64')}$${hash.toString('base64')}`;
 }
 
@@ -237,8 +237,11 @@ async function main() {
     const stale = await admin('POST', '/admin/api/config/publish', { baseVersion: oldVersion, changes: [{ key: REST_KEY, value: restItem.current }], resets: [] });
     assert.equal(stale.status, 409, 'stale baseVersion');
 
-    // 3. Session B (another character, so A is not replaced) starts after the publish.
-    const second = await app('/session', { character: 'xiaokai' }, token);
+    // 3. Session B (a second owner, so A is not replaced by the one-session-per-owner rule) starts after the publish.
+    const registrationB = await app('/device/register', { clientInfo: { platform: 'test' } });
+    assert.equal(registrationB.status, 200);
+    const tokenB = registrationB.body.deviceToken;
+    const second = await app('/session', { character: 'xiaokai' }, tokenB);
     assert.equal(second.status, 200);
     const sessionB = await open(second.body);
 
@@ -268,6 +271,7 @@ async function main() {
     // 5. Nothing secret or conversational reached stdout.
     assert(!logs.includes(password), 'password leaked');
     assert(!logs.includes(token), 'device token leaked');
+    assert(!logs.includes(tokenB), 'device token B leaked');
     assert(!/您好|我是小暖|我是小凯/.test(logs), 'conversation text leaked');
     db.close();
     sessionB.ws.close();
@@ -290,7 +294,7 @@ main().catch((error) => {
 Run: `node --check docs/testing/2026-10-27-config-isolation-smoke.mjs`
 Expected：无输出。
 
-- [ ] **Step 6: 跑配置隔离冒烟**
+- [x] **Step 6: 跑配置隔离冒烟**
 
 Run（仓库根目录）：`node docs/testing/2026-10-27-config-isolation-smoke.mjs`
 Expected：最后一行 JSON，`ok: true`，`sessionA` 等于 `oldVersion`，`sessionB` 等于 `newVersion`；进程退出码 0。
@@ -300,7 +304,7 @@ Expected：最后一行 JSON，`ok: true`，`sessionA` 等于 `oldVersion`，`se
 - `session_config rows` 超时：核对上游行为 2（P3-T3 的日志）以及 `log_events` 的批量写入间隔（`admin.json` 的 `logSink.flushMs`，脚本最多等 5 秒）。
 - `session A keeps the old snapshot` 失败：这是功能缺陷，回到 P3-T3 修，不能改断言。
 
-- [ ] **Step 7: 浏览器截图验收**
+- [x] **Step 7: 浏览器截图验收**
 
 准备（仓库根目录，新终端；临时库，不碰真实库）：
 ```bash
@@ -314,6 +318,8 @@ unset ADMIN_PW
   npm run start)
 ```
 （`admin:hash-password` 若不支持从标准输入读，按 P2-T1 的实际用法交互输入；密码不要写进命令行参数或文件。）
+
+> 2026-10-28 执行修正：实机 8787 已运行，截图用临时 `PORT=8797`、`ADMIN_PORT=8788`；`DASHSCOPE_API_KEY` 用合成占位值（非真实 Key）以显示末 4 位；`ADMIN_PASSWORD_HASH` 按 P2 实际 keylen 32 生成。截图共 27 张，用户在 2026-10-28 确认关键截图与 S1–S14 结果通过。
 
 在桌面 Chrome 打开 `http://127.0.0.1:8788/`，窗口宽 1280px，用刚才的密码登录。截图保存在仓库外 `~/.avatar/screenshots/2026-10-27-admin-p3/`（截图不提交）。逐项检查并记录通过/不通过：
 
@@ -336,7 +342,7 @@ unset ADMIN_PW
 
 执行代理能用浏览器自动化截图就自己截图检查；不能时请用户在浏览器里逐项确认，并在记录里写「用户确认」。检查完停止网关（Ctrl+C）并删除临时目录：`rm -rf "$ACCEPT_DIR"`。
 
-- [ ] **Step 8: 全量回归**
+- [x] **Step 8: 全量回归**
 
 Run（仓库根目录）：
 ```bash
@@ -347,7 +353,7 @@ node scripts/generate-character-ids.mjs --check
 ```
 Expected：全部通过。计划 3 不改 App，不需要跑 `flutter test`。
 
-- [ ] **Step 9: 写验收记录**
+- [x] **Step 9: 写验收记录**
 
 新建 `docs/testing/2026-10-27-admin-console-p3-acceptance.md`，按下面的结构写，数字和结论全部来自 Step 1–8 的真实输出（不要照抄示例数字）：
 
@@ -399,7 +405,7 @@ Expected：全部通过。计划 3 不改 App，不需要跑 `flutter test`。
 - <没有就写「无」；有就写原因和 blockers 编号>
 ```
 
-- [ ] **Step 10: 更新 roadmap 与旧计划状态**
+- [x] **Step 10: 更新 roadmap 与旧计划状态**
 
 1. `docs/superpowers/plans/2026-10-18-config-admin-later.md`：把
 
@@ -442,7 +448,7 @@ The admin page that edits it was superseded on 2026-10-27 by the [admin-console 
 
 5. 有任何跳过或不通过的项：按 AGENTS.md 第 7 条记入 `docs/blockers.md`（新编号，写明现象、影响、下一步），并在 roadmap 里列出编号。
 
-- [ ] **Step 11: 提交**
+- [x] **Step 11: 提交**
 
 ```bash
 git add AGENTS.md docs/testing/2026-10-27-config-isolation-smoke.mjs docs/testing/2026-10-27-admin-console-p3-acceptance.md \

@@ -2,7 +2,7 @@
 
 > 本文件只记下已经定下的范围，避免以后重开。它不是可执行任务清单。动工前要另写一份带任务的实现计划，并先得到批准。
 
-**状态：** 未开工。不在沉默三步的那次实现里。
+**状态：** 已被取代（2026-10-27）。范围并入 [后台管理与可观测设计](../specs/2026-10-27-admin-console-design.md) 的配置部分，由 `docs/superpowers/plans/2026-10-27-admin-console/` 的计划 3 实现。本文件只保留作历史记录。
 
 **规格：** `docs/superpowers/specs/2026-10-17-companionship-memory-design.md` 第 2 节。
 

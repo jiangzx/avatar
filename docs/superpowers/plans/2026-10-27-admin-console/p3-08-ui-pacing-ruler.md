@@ -51,7 +51,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 新建 `admin/test/pacing-ruler.test.tsx`：
 
@@ -142,12 +142,12 @@ describe('PacingRuler', () => {
 });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `npm test -w admin -- test/pacing-ruler.test.tsx`
 Expected: FAIL，报 `Failed to resolve import "../src/config/PacingRuler.tsx"`。
 
-- [ ] **Step 3: 实现计算模块**
+- [x] **Step 3: 实现计算模块**
 
 新建 `admin/src/config/pacingRuler.ts`：
 
@@ -229,7 +229,7 @@ export function restMarks(firstMin: number, everyMin: number, horizonMin = 120):
 }
 ```
 
-- [ ] **Step 4: 实现组件**
+- [x] **Step 4: 实现组件**
 
 新建 `admin/src/config/PacingRuler.tsx`：
 
@@ -307,7 +307,7 @@ export function PacingRuler({ view }: { view: SceneView }) {
 }
 ```
 
-- [ ] **Step 5: 追加样式**
+- [x] **Step 5: 追加样式**
 
 在 `admin/src/config/config.css` 末尾追加：
 
@@ -342,12 +342,12 @@ export function PacingRuler({ view }: { view: SceneView }) {
 .ruler-note { grid-column: 2; font-size: 12px; color: #4d5d63; }
 ```
 
-- [ ] **Step 6: 运行，确认通过**
+- [x] **Step 6: 运行，确认通过**
 
 Run: `npm test -w admin -- test/pacing-ruler.test.tsx`
 Expected: PASS（7 个用例）。
 
-- [ ] **Step 7: 对话节奏页带右栏**
+- [x] **Step 7: 对话节奏页带右栏**
 
 修改 `admin/src/routes.tsx`：import `PacingRuler`（`./config/PacingRuler.tsx`），把 T7 加的 `case 'settings':` 分支替换为：
 
@@ -360,12 +360,12 @@ Expected: PASS（7 个用例）。
     }
 ```
 
-- [ ] **Step 8: 全量验证**
+- [x] **Step 8: 全量验证**
 
 Run: `npm test -w admin && npm run typecheck -w admin && npm run build -w admin`
 Expected: 全部通过。
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add admin/src/config/pacingRuler.ts admin/src/config/PacingRuler.tsx admin/src/config/config.css admin/src/routes.tsx admin/test/pacing-ruler.test.tsx

@@ -44,7 +44,7 @@
 
 ## Steps
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 新建 `admin/test/model-pricing-versions.test.tsx`：
 
@@ -243,12 +243,12 @@ describe('VersionsPage', () => {
 });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `npm test -w admin -- test/model-pricing-versions.test.tsx`
 Expected: FAIL，报 `Failed to resolve import "../src/config/priceFormat.ts"`。
 
-- [ ] **Step 3: 实现 priceFormat**
+- [x] **Step 3: 实现 priceFormat**
 
 新建 `admin/src/config/priceFormat.ts`：
 
@@ -268,7 +268,7 @@ export function shanghaiDayStart(day: string): number {
 }
 ```
 
-- [ ] **Step 4: 实现 SecretsPanel 和 ModelKeyPage**
+- [x] **Step 4: 实现 SecretsPanel 和 ModelKeyPage**
 
 新建 `admin/src/config/SecretsPanel.tsx`：
 
@@ -400,7 +400,7 @@ export function ModelKeyPage() {
 }
 ```
 
-- [ ] **Step 5: 实现 PricingPage**
+- [x] **Step 5: 实现 PricingPage**
 
 新建 `admin/src/config/PricingPage.tsx`：
 
@@ -586,7 +586,7 @@ export function PricingPage() {
 
 日期用文本框而不是 Ant Design 的 DatePicker：测试和小白都更直观（占位文字给出格式），也不需要额外的 dayjs 配置。
 
-- [ ] **Step 6: 实现 VersionsPage**
+- [x] **Step 6: 实现 VersionsPage**
 
 新建 `admin/src/config/VersionsPage.tsx`：
 
@@ -757,7 +757,7 @@ export function VersionsPage() {
 
 注意：「全部恢复默认」按钮和确认弹窗里的「恢复默认」按钮名字不同，测试用 `getByRole('button', { name: '恢复默认' })` 只命中弹窗里的那个；这一页没有其他名为「恢复默认」的按钮（说明行的「恢复默认」不在这一页）。
 
-- [ ] **Step 7: 追加样式**
+- [x] **Step 7: 追加样式**
 
 在 `admin/src/config/config.css` 末尾追加：
 
@@ -786,12 +786,12 @@ tr.version-active > td:first-child { box-shadow: inset 3px 0 0 #2f6f68; }
 .version-actions { display: inline-flex; align-items: center; gap: 4px; }
 ```
 
-- [ ] **Step 8: 运行，确认通过**
+- [x] **Step 8: 运行，确认通过**
 
 Run: `npm test -w admin -- test/model-pricing-versions.test.tsx`
 Expected: PASS（priceFormat 1、SecretsPanel 3、PricingPage 3、VersionsPage 3，共 10 个用例）。
 
-- [ ] **Step 9: 侧栏与路由**
+- [x] **Step 9: 侧栏与路由**
 
 修改 `admin/src/layout/AppLayout.tsx`：在 T7 加的「调设置」分组 `items` 末尾追加：
 
@@ -815,12 +815,12 @@ Expected: PASS（priceFormat 1、SecretsPanel 3、PricingPage 3、VersionsPage 3
       return <PricingPage />;
 ```
 
-- [ ] **Step 10: 全量验证**
+- [x] **Step 10: 全量验证**
 
 Run: `npm test -w admin && npm run typecheck -w admin && npm run build -w admin`
 Expected: 全部通过。
 
-- [ ] **Step 11: 提交**
+- [x] **Step 11: 提交**
 
 ```bash
 git add admin/src/config/priceFormat.ts admin/src/config/SecretsPanel.tsx admin/src/config/ModelKeyPage.tsx \
