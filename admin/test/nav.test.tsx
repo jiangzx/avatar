@@ -9,7 +9,9 @@ describe('sidebar navigation', () => {
     renderWithProviders(<AppLayout><div /></AppLayout>, fetch);
     const links = await screen.findAllByRole('link');
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '#/overview', '#/users', '#/sessions', '#/trace', '#/audit',
+      '#/overview', '#/users', '#/sessions',
+      '#/settings/pacing', '#/settings/affect', '#/settings/memory', '#/settings/characters', '#/settings/copy', '#/settings/model',
+      '#/trace', '#/audit',
     ]);
     for (const link of links) expect((link as HTMLAnchorElement).tabIndex).toBe(0);
   });

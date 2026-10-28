@@ -10,6 +10,17 @@ export interface NavGroup { title: string; items: NavItem[] }
 /** Grouped by task (spec「布局」). Plan 3 inserts 调设置 between the two groups. */
 export const NAV_GROUPS: NavGroup[] = [
   { title: '看情况', items: [{ path: '/overview', label: '总览' }, { path: '/users', label: '用户' }, { path: '/sessions', label: '通话' }] },
+  {
+    title: '调设置',
+    items: [
+      { path: '/settings/pacing', label: '对话节奏' },
+      { path: '/settings/affect', label: '情绪与关怀' },
+      { path: '/settings/memory', label: '记忆' },
+      { path: '/settings/characters', label: '角色' },
+      { path: '/settings/copy', label: '文案' },
+      { path: '/settings/model', label: '模型与 Key' },
+    ],
+  },
   { title: '查问题', items: [{ path: '/trace', label: '排查' }, { path: '/audit', label: '审计' }] },
 ];
 
@@ -17,7 +28,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const route = useRoute();
   const { logout } = useAuth();
   const { includeMock, setIncludeMock } = useViewOptions();
-  const top = `/${route.segments[0] ?? 'overview'}`;
+  const allPaths = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.path));
+  const top = allPaths.includes(route.path) ? route.path : `/${route.segments[0] ?? 'overview'}`;
 
   return (
     <Layout style={{ minHeight: '100vh' }}>

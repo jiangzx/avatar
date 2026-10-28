@@ -12,6 +12,7 @@ export type Query = Record<string, string | number | boolean | null | undefined>
 export interface ApiClient {
   get<T>(path: string, query?: Query): Promise<T>;
   post<T>(path: string, body?: unknown): Promise<T>;
+  put<T>(path: string, body?: unknown): Promise<T>;
   del<T>(path: string, body?: unknown): Promise<T>;
 }
 
@@ -46,7 +47,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   // Wrap the global so it is never called with a foreign `this`.
   const fetchImpl = options.fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
 
-  async function send<T>(method: 'GET' | 'POST' | 'DELETE', path: string, query?: Query, body?: unknown): Promise<T> {
+  async function send<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, query?: Query, body?: unknown): Promise<T> {
     const headers: Record<string, string> = { accept: 'application/json' };
     if (method !== 'GET') {
       const token = options.csrfToken();
@@ -83,6 +84,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   return {
     get: (path, query) => send('GET', path, query),
     post: (path, body) => send('POST', path, undefined, body ?? {}),
+    put: (path, body) => send('PUT', path, undefined, body ?? {}),
     del: (path, body) => send('DELETE', path, undefined, body),
   };
 }

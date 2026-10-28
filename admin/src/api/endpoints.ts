@@ -1,5 +1,14 @@
 import type {
   AdminAuditRow,
+  AdminConfigDraft,
+  AdminConfigOverview,
+  AdminConfigPreview,
+  AdminConfigPublishRequest,
+  AdminConfigResetRequest,
+  AdminConfigRollbackRequest,
+  AdminConfigScene,
+  AdminConfigVersion,
+  AdminConfigVersionDiff,
   AdminDeleteOwnerRequest,
   AdminLoginRequest,
   AdminLogLevel,
@@ -11,7 +20,12 @@ import type {
   AdminOwnerDetail,
   AdminOwnerRow,
   AdminPage,
+  AdminPriceCreate,
+  AdminPriceRow,
+  AdminPricing,
   AdminRange,
+  AdminSecretReveal,
+  AdminSecretRow,
   AdminSessionRow,
   AdminTimeline,
 } from '@anyidea/protocol';
@@ -45,6 +59,20 @@ export function adminApi(client: ApiClient) {
     logLevel: () => client.get<AdminLogLevelState>('/log-level'),
     setLogLevel: (body: AdminLogLevelRequest) => client.post<AdminLogLevelState>('/log-level', body),
     audit: (q: AuditQuery) => client.get<AdminPage<AdminAuditRow>>('/audit', { action: q.action, from: q.from, to: q.to, cursor: q.cursor }),
+    // Plan 3: config overlay, keys, prices.
+    configOverview: () => client.get<AdminConfigOverview>('/config/scenes'),
+    configScene: (id: string) => client.get<AdminConfigScene>(`/config/scenes/${seg(id)}`),
+    configPreview: (draft: AdminConfigDraft) => client.post<AdminConfigPreview>('/config/preview', draft),
+    configPublish: (body: AdminConfigPublishRequest) => client.post<AdminConfigVersion>('/config/publish', body),
+    configVersions: (before: number | null) => client.get<AdminPage<AdminConfigVersion>>('/config/versions', { before, limit: 20 }),
+    configVersionDiff: (id: number) => client.get<AdminConfigVersionDiff>(`/config/versions/${id}/diff`),
+    configRollback: (body: AdminConfigRollbackRequest) => client.post<AdminConfigVersion>('/config/rollback', body),
+    configReset: (body: AdminConfigResetRequest) => client.post<AdminConfigVersion>('/config/reset', body),
+    secrets: () => client.get<AdminSecretRow[]>('/secrets'),
+    putSecret: (name: string, value: string) => client.put<AdminSecretRow>(`/secrets/${seg(name)}`, { value }),
+    revealSecret: (name: string) => client.post<AdminSecretReveal>(`/secrets/${seg(name)}/reveal`),
+    pricing: () => client.get<AdminPricing>('/pricing'),
+    addPrice: (body: AdminPriceCreate) => client.post<AdminPriceRow>('/pricing', body),
   };
 }
 
