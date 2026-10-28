@@ -11,6 +11,7 @@ describe('sidebar navigation', () => {
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '#/overview', '#/users', '#/sessions',
       '#/settings/pacing', '#/settings/affect', '#/settings/memory', '#/settings/characters', '#/settings/copy', '#/settings/model',
+      '#/pricing', '#/settings/versions',
       '#/trace', '#/audit',
     ]);
     for (const link of links) expect((link as HTMLAnchorElement).tabIndex).toBe(0);

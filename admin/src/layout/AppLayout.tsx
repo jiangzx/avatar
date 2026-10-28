@@ -19,6 +19,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/settings/characters', label: '角色' },
       { path: '/settings/copy', label: '文案' },
       { path: '/settings/model', label: '模型与 Key' },
+      { path: '/pricing', label: '价格表' },
+      { path: '/settings/versions', label: '配置版本' },
     ],
   },
   { title: '查问题', items: [{ path: '/trace', label: '排查' }, { path: '/audit', label: '审计' }] },
