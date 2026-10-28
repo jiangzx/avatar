@@ -615,7 +615,7 @@ export class Session {
           sessionId: this.sessionId,
           role: 'assistant',
           text: state.text,
-          now: Date.now(),
+          now: this.now(),
         });
         state.flushed = true;
       } catch {
@@ -960,7 +960,7 @@ export class Session {
     }
     if (this.writer && this.context.ownerId) {
       try {
-        this.writer.markNotified(this.context.ownerId, Date.now());
+        this.writer.markNotified(this.context.ownerId, this.now());
       } catch {
         // The user heard it; failing to persist only means the next session asks again.
         this.log.error('memory_notice_write_failed');
@@ -1201,7 +1201,7 @@ export class Session {
           sessionId: this.sessionId,
           role: 'user',
           text,
-          now: Date.now(),
+          now: this.now(),
         }).messageId ?? null;
       } catch {
         this.log.error('transcript_write_failed', { role: 'user' });
@@ -1298,7 +1298,7 @@ export class Session {
       ...(recallClient ? { textClient: recallClient } : {}),
       ledger: this.ledger,
       actions: this.actions,
-      now: Date.now(),
+      now: this.now(),
       ...(triggerText ? { triggerText } : {}),
       turn: this.turns.access(),
       memoryGate: () => this.memoryGate(),

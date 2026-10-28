@@ -1278,6 +1278,20 @@ describe('Session', () => {
     expect(append).toHaveBeenCalledTimes(3);
   });
 
+  it('stamps transcript rows with the injected clock', async () => {
+    const append = vi.fn<TranscriptWriter['append']>(() => ({ result: 'stored' as const }));
+    const s = setup({ writer: { append, markNotified: () => {} }, now: () => 1_700_000_000_000 }, ownedCtx, 'session-clock');
+    await s.session.start(s.transport);
+    await vi.advanceTimersByTimeAsync(1000);
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 300, reason: 'ended' });
+    s.session.flush();
+    s.session.handleClientMessage({ type: 'debug.userText', text: '我叫老王' });
+    expect(append.mock.calls.map((c) => [c[0].role, c[0].now])).toEqual([
+      ['assistant', 1_700_000_000_000],
+      ['user', 1_700_000_000_000],
+    ]);
+  });
+
   it('flushes the playback slice of an interrupted reply', async () => {
     const append = vi.fn<TranscriptWriter['append']>(() => ({ result: 'stored' as const }));
     const s = setup({ writer: { append, markNotified: () => {} } }, ownedCtx, 'session-cut');
@@ -1307,6 +1321,17 @@ describe('Session', () => {
     const later = of(s.sent, 'response.start').at(-1)!;
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: later.responseSeq, playedMs: 300, reason: 'ended' });
     expect(markNotified).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks notified with the injected clock', async () => {
+    const markNotified = vi.fn();
+    const writer: TranscriptWriter = { append: () => ({ result: 'stored' as const }), markNotified };
+    const s = setup({ writer, now: () => 1_700_000_000_000 }, ownedCtx, 'notice-clock', true);
+    await greetAndFinish(s);
+    await vi.advanceTimersByTimeAsync(1000);
+    const notice = of(s.sent, 'response.start').at(-1)!;
+    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: notice.responseSeq, playedMs: 300, reason: 'ended' });
+    expect(markNotified).toHaveBeenCalledWith('owner-1', 1_700_000_000_000);
   });
 
   it('does not mark notified when the memory notice is interrupted', async () => {

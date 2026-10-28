@@ -125,7 +125,7 @@ export class MemoryWorker implements MemoryExtractor {
     const users = takePrefix(pending.filter((row) => row.role === 'user'), this.transcriptMaxChars);
     if (users.length === 0) {
       // Assistant-only tail: advance the watermark without spending a model call.
-      const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, [], pending.map((row) => row.id));
+      const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, [], pending.map((row) => row.id), this.opts.now?.() ?? Date.now());
       log.info('memory_extract', { reason, result: applied === 'applied' ? 'assistant_only' : applied, ops: 0, messages: pending.length });
       return;
     }
@@ -177,7 +177,7 @@ export class MemoryWorker implements MemoryExtractor {
     // Quotes must be verbatim user statements from the lines the model saw; anything else loses its quote.
     const vetted = vetFollowupQuotes(named.ops, users.map((row) => row.text), activeQuoteRules(this.opts));
     const sourced = resolveFactSources(vetted, refs);
-    const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, sourced.ops, consumed.map((row) => row.id));
+    const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, sourced.ops, consumed.map((row) => row.id), now);
     // Counts only: never the text of an op, a source line, or a name.
     const counts = {
       droppedCategory: batch.droppedCategory,

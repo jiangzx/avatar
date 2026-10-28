@@ -258,13 +258,15 @@ export function applyExtractOps(
   epochsAtStart: { owner: number; agent: number },
   ops: readonly ResolvedOp[],
   messageIds: readonly string[],
+  /** Write time; the worker passes its clock so evals can simulate days. */
+  now: number = Date.now(),
 ): 'applied' | 'stale' | 'incomplete' {
   try {
     return store.immediate(() => {
       const current = store.memoryEpochs(ownerId, agentId);
       if (!current || current.owner !== epochsAtStart.owner || current.agent !== epochsAtStart.agent) return 'stale';
       store.writeExtraction(ownerId, agentId, {
-        now: Date.now(),
+        now,
         messageIds,
         facts: ops.filter((op) => op.table === 'user_facts'),
         notes: ops.filter((op) => op.table === 'relationship_notes'),

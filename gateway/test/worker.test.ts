@@ -352,6 +352,21 @@ describe('followup quotes in the worker', () => {
     expect(seen).toContain('问问复查结果');
     expect(seen).not.toContain('我下周二去医院复查膝盖');
   });
+
+  it('stamps extracted rows with the worker clock', async () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const created = seedOwner(store, 'h1', 1);
+    store.insertMessage({ id: 'm1', sessionId: 's1', ownerId: created.ownerId, agentId: created.agentId, role: 'user', text: '我明天要去医院复查腰，有点担心。', bigrams: '', now: 2 });
+    const client: TextModelClient = {
+      complete: async () => JSON.stringify({ ops: [
+        { op: 'add', table: 'followups', text: '问问腰部复查', dueAt: 9_000, quote: '我明天要去医院复查腰', sensitive: true },
+      ] }),
+    };
+    const clocked = new MemoryWorker({ store, client, systemPrompt: '陈述。', maxTokens: 80, policy, quote: quoteRules, now: () => 1_800_000_000_000 });
+    await clocked.enqueue(created.ownerId, created.agentId, 'session_end');
+    expect(db.prepare('SELECT created_at FROM followups').all()).toEqual([{ created_at: 1_800_000_000_000 }]);
+  });
 });
 
 describe('per-character extraction', () => {
