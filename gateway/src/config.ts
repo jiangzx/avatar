@@ -11,12 +11,7 @@ import { unique } from './unique.ts';
 export interface GatewayConfig {
   port: number;
   appSecret: string;
-  adapter: 'mock' | 'seeduplex' | 'qwen';
-  seeduplexApiKey?: string;
-  seeduplexEndpoint: string;
-  seeduplexModel: string;
-  seeduplexVoice: string;
-  seeduplexVoices: Record<'zh' | 'en', string>;
+  adapter: 'mock' | 'qwen';
   qwenApiKey?: string;
   qwenEndpoint: string;
   qwenModel: string;
@@ -59,9 +54,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (appSecret.length < 16) throw new Error('APP_SECRET must be set (at least 16 characters)');
   if (/^(change-me|same-as-)/i.test(appSecret)) throw new Error('APP_SECRET must be replaced (template placeholder)');
   const adapter = env.ADAPTER ?? 'mock';
-  if (adapter !== 'mock' && adapter !== 'seeduplex' && adapter !== 'qwen') throw new Error(`Unsupported ADAPTER \"${adapter}\"`);
-  const seeduplexApiKey = env.SEEDUPLEX_API_KEY;
-  if (adapter === 'seeduplex' && !seeduplexApiKey) throw new Error('SEEDUPLEX_API_KEY must be set when ADAPTER=seeduplex');
+  if (adapter !== 'mock' && adapter !== 'qwen') throw new Error(`Unsupported ADAPTER \"${adapter}\"`);
   const qwenApiKey = env.DASHSCOPE_API_KEY;
   if (adapter === 'qwen' && !qwenApiKey) throw new Error('DASHSCOPE_API_KEY must be set when ADAPTER=qwen');
   if (adapter === 'qwen' && !env.QWEN_ENDPOINT) throw new Error('QWEN_ENDPOINT must be set when ADAPTER=qwen');
@@ -69,11 +62,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (summarizer !== 'mock' && summarizer !== 'qwen') throw new Error(`Unsupported SUMMARIZER \"${summarizer}\"`);
   if (summarizer === 'qwen' && !qwenApiKey) throw new Error('DASHSCOPE_API_KEY must be set when SUMMARIZER=qwen');
   if (summarizer === 'qwen' && !env.QWEN_SUMMARIZER_ENDPOINT) throw new Error('QWEN_SUMMARIZER_ENDPOINT must be set when SUMMARIZER=qwen');
-  const seeduplexEndpoint = env.SEEDUPLEX_ENDPOINT ?? 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue';
   const qwenEndpoint = env.QWEN_ENDPOINT ?? '';
   const summarizerEndpoint = env.QWEN_SUMMARIZER_ENDPOINT ?? '';
   // Fail at startup, not on the first session, for a wrong scheme or malformed URL.
-  if (adapter === 'seeduplex') requireProtocol('SEEDUPLEX_ENDPOINT', seeduplexEndpoint, ['ws:', 'wss:']);
   if (adapter === 'qwen') requireProtocol('QWEN_ENDPOINT', qwenEndpoint, ['ws:', 'wss:']);
   if (summarizer === 'qwen') requireProtocol('QWEN_SUMMARIZER_ENDPOINT', summarizerEndpoint, ['http:', 'https:']);
   const port = Number(env.PORT ?? 8787);
@@ -115,20 +106,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     ja: env.QWEN_VOICE_JA ?? 'Tina',
     en: env.QWEN_VOICE_EN ?? 'Tina',
   };
-  const seeduplexVoice = env.SEEDUPLEX_VOICE ?? 'zh_male_xiaotian_jupiter_bigtts';
-  const seeduplexVoices: Record<'zh' | 'en', string> = {
-    zh: env.SEEDUPLEX_VOICE_ZH ?? seeduplexVoice,
-    en: env.SEEDUPLEX_VOICE_EN ?? 'en_male_tim_uranus_bigtts',
-  };
   return {
     port,
     appSecret,
     adapter,
-    ...(seeduplexApiKey ? { seeduplexApiKey } : {}),
-    seeduplexEndpoint,
-    seeduplexModel: env.SEEDUPLEX_MODEL ?? '1.2.6.1',
-    seeduplexVoice: seeduplexVoices.zh,
-    seeduplexVoices,
     ...(qwenApiKey ? { qwenApiKey } : {}),
     qwenEndpoint,
     qwenModel: env.QWEN_MODEL ?? 'qwen3.8-omni-flash-realtime',

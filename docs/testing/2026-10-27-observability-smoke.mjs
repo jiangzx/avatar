@@ -36,7 +36,7 @@ async function main() {
     LOG_LEVEL: 'info',
     ...(qwen
       ? { ADAPTER: 'qwen' }
-      : { ADAPTER: 'mock', SUMMARIZER: 'mock', DASHSCOPE_API_KEY: '', SEEDUPLEX_API_KEY: '', QWEN_SUMMARIZER_ENDPOINT: '' }),
+      : { ADAPTER: 'mock', SUMMARIZER: 'mock', DASHSCOPE_API_KEY: '', QWEN_SUMMARIZER_ENDPOINT: '' }),
   };
   delete env.ADMIN_PORT;
   const args = qwen ? ['--env-file=.env', '--import', 'tsx', 'src/index.ts'] : ['--import', 'tsx', 'src/index.ts'];

@@ -110,6 +110,6 @@ describe('SqliteSecretStore', () => {
 
   it('knows its secret names', () => {
     expect(isSecretName('DASHSCOPE_API_KEY')).toBe(true);
-    expect(isSecretName('SEEDUPLEX_API_KEY')).toBe(false);
+    expect(isSecretName('OTHER_API_KEY')).toBe(false);
   });
 });

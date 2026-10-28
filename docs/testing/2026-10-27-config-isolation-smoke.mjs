@@ -47,7 +47,6 @@ async function main() {
       ADAPTER: 'mock',
       SUMMARIZER: 'mock',
       DASHSCOPE_API_KEY: '',
-      SEEDUPLEX_API_KEY: '',
       QWEN_SUMMARIZER_ENDPOINT: '',
       MEMORY_DB_PATH: dbPath,
       APP_SECRET: appSecret,

@@ -19,13 +19,13 @@ describe('config', () => {
     }
   });
 
-  it('only accepts the mock adapter in Plan 1', () => {
-    expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), ADAPTER: 'seeduplex' })).toThrow(/ADAPTER/);
+  it('rejects the removed Seeduplex adapter', () => {
+    expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), ADAPTER: 'seeduplex' })).toThrow('Unsupported ADAPTER "seeduplex"');
   });
 
   it('parses defaults and dev origins', () => {
     const c = loadConfig({ APP_SECRET: 'x'.repeat(16), DEV_ORIGINS: 'http://localhost:5173, http://a.test' });
-    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', seeduplexEndpoint: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue', seeduplexModel: '1.2.6.1', seeduplexVoice: 'zh_male_xiaotian_jupiter_bigtts', seeduplexVoices: { zh: 'zh_male_xiaotian_jupiter_bigtts', en: 'en_male_tim_uranus_bigtts' }, qwenEndpoint: '', qwenModel: 'qwen3.8-omni-flash-realtime', qwenVoice: 'longanlingxin', qwenVoices: { zh: 'longanlingxin', ja: 'Tina', en: 'Tina' }, summarizer: 'mock', summarizerEndpoint: '', summarizerModel: 'qwen-flash', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, mockPaceFactor: 2, sessionStartTimeoutMs: 10000, confirmWindowMs: 300, ledger: { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6000 }, sessionGraceMs: 60000, sessionUnclaimedMs: 300000, wsHeartbeatMs: 10000, wsMaxFramesPerSecond: 100, maxSessions: 100, sessionRateLimitMax: 10, sessionRateLimitWindowMs: 60000, resumeRateLimitMax: 30, resumeRateLimitWindowMs: 60000, trustProxy: false, rebuildBackoffBaseMs: 1000, rebuildBackoffMaxMs: 8000, logLevel: 'info', logStrict: false });
+    expect(c).toEqual({ port: 8787, appSecret: 'x'.repeat(16), adapter: 'mock', qwenEndpoint: '', qwenModel: 'qwen3.8-omni-flash-realtime', qwenVoice: 'longanlingxin', qwenVoices: { zh: 'longanlingxin', ja: 'Tina', en: 'Tina' }, summarizer: 'mock', summarizerEndpoint: '', summarizerModel: 'qwen-flash', allowDebugText: false, devOrigins: ['http://localhost:5173', 'http://a.test'], mockSpeechThreshold: 800, mockPaceFactor: 2, sessionStartTimeoutMs: 10000, confirmWindowMs: 300, ledger: { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6000 }, sessionGraceMs: 60000, sessionUnclaimedMs: 300000, wsHeartbeatMs: 10000, wsMaxFramesPerSecond: 100, maxSessions: 100, sessionRateLimitMax: 10, sessionRateLimitWindowMs: 60000, resumeRateLimitMax: 30, resumeRateLimitWindowMs: 60000, trustProxy: false, rebuildBackoffBaseMs: 1000, rebuildBackoffMaxMs: 8000, logLevel: 'info', logStrict: false });
   });
 
   it('parses LOG_LEVEL and turns on strict log checks only in test and development', () => {
@@ -43,21 +43,9 @@ describe('config', () => {
       APP_SECRET: 'x'.repeat(16),
       QWEN_VOICE: 'qwen-zh',
       QWEN_VOICE_JA: 'Tina',
-      SEEDUPLEX_VOICE: 'seed-zh',
-      SEEDUPLEX_VOICE_EN: 'seed-en',
     });
     expect(c.qwenVoices).toEqual({ zh: 'qwen-zh', ja: 'Tina', en: 'Tina' });
-    expect(c.seeduplexVoices).toEqual({ zh: 'seed-zh', en: 'seed-en' });
     expect(c.qwenVoice).toBe('qwen-zh');
-    expect(c.seeduplexVoice).toBe('seed-zh');
-  });
-
-  it('requires a key only when Seeduplex is explicitly selected', () => {
-    expect(() => loadConfig({ APP_SECRET: 'x'.repeat(16), ADAPTER: 'seeduplex' })).toThrow(/SEEDUPLEX_API_KEY/);
-    const c = loadConfig({ APP_SECRET: 'x'.repeat(16), ADAPTER: 'seeduplex', SEEDUPLEX_API_KEY: 'test-key', SEEDUPLEX_VOICE: 'test-voice' });
-    expect(c.adapter).toBe('seeduplex');
-    expect(c.seeduplexApiKey).toBe('test-key');
-    expect(c.seeduplexVoice).toBe('test-voice');
   });
 
   it('requires Qwen endpoint and key only when Qwen is explicitly selected', () => {
@@ -92,7 +80,6 @@ describe('config', () => {
     const base = { APP_SECRET: 'x'.repeat(16) };
     expect(() => loadConfig({ ...base, ADAPTER: 'qwen', DASHSCOPE_API_KEY: 'k', QWEN_ENDPOINT: 'https://workspace.example/realtime' })).toThrow(/QWEN_ENDPOINT/);
     expect(() => loadConfig({ ...base, ADAPTER: 'qwen', DASHSCOPE_API_KEY: 'k', QWEN_ENDPOINT: 'not a url' })).toThrow(/QWEN_ENDPOINT/);
-    expect(() => loadConfig({ ...base, ADAPTER: 'seeduplex', SEEDUPLEX_API_KEY: 'k', SEEDUPLEX_ENDPOINT: 'http://openspeech.example' })).toThrow(/SEEDUPLEX_ENDPOINT/);
     expect(() => loadConfig({ ...base, SUMMARIZER: 'qwen', DASHSCOPE_API_KEY: 'k', QWEN_SUMMARIZER_ENDPOINT: 'wss://workspace.example/chat' })).toThrow(/QWEN_SUMMARIZER_ENDPOINT/);
   });
 

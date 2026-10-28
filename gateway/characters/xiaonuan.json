@@ -20,8 +20,7 @@
     "en": ["Hello {name}, I'm Xiaonuan. It's my first time keeping you company, and I'll come by often.", "Hi {name}, my name is Xiaonuan. From now on, I'll be here to chat with you."]
   },
   "voices": {
-    "qwen": { "zh": "longanlingxin", "ja": "Tina", "en": "Tina" },
-    "seeduplex": { "zh": null, "en": null }
+    "qwen": { "zh": "longanlingxin", "ja": "Tina", "en": "Tina" }
   },
   "extensions": {}
 }

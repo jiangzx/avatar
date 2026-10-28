@@ -177,7 +177,7 @@ describe('substantive conversation silence', () => {
     s.d.onAiTurnEnded('leave承接');
     await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
     expect(s.requests).toHaveLength(4);
-    // Qwen renders `instruction`; Seeduplex speaks `fallbackText`. Both get the planned check-in.
+    // Qwen renders `instruction`; a verbatim (direct-TTS) adapter would speak `fallbackText`. Both get the planned check-in.
     expect(s.requests.at(-1)).toEqual({ cue: 'followup', instruction: 'READ "checkin承接"', fallbackText: 'checkin承接' });
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded(cfg.checkinText);

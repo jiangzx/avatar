@@ -26,7 +26,7 @@ const director: DirectorConfig = {
 };
 const speak = (line: string) => ({ cue: 'toolContinue', instruction: `请直接说下面这句话，不要改写：${line}`, fallbackText: line });
 
-/** The test drives model events itself, in Qwen or Seeduplex order. */
+/** The test drives model events itself, in Qwen or direct-TTS order. */
 class FakeAdapter extends EventEmitter<AdapterEvents> implements RealtimeAdapter {
   readonly supportsPlaybackTruncate = false;
   readonly supportsUserText = true;
@@ -217,7 +217,7 @@ describe('pin_memory in a live session', () => {
     expect(declined.pinned()).toEqual([]);
   });
 
-  it('sends the same grounded request to a direct-TTS (Seeduplex) adapter', async () => {
+  it('sends the same grounded request to a direct-TTS adapter', async () => {
     const t = boot({ verbatim: true });
     await open(t);
     t.adapter.emit('userTranscript', '记住我女儿叫小芳', true);
@@ -226,7 +226,7 @@ describe('pin_memory in a live session', () => {
     await vi.advanceTimersByTimeAsync(0);
     t.adapter.done();
     await vi.advanceTimersByTimeAsync(0);
-    // Seeduplex speaks fallbackText; Qwen follows the verbatim instruction. Never toolContinueText.
+    // A verbatim adapter speaks fallbackText; Qwen follows the verbatim instruction. Never toolContinueText.
     expect(t.adapter.requests.at(-1)).toEqual(speak(zh.confirmText));
     expect(t.adapter.requests.some((request) => request.fallbackText === director.toolContinueText)).toBe(false);
   });

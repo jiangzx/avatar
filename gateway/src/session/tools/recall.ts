@@ -181,7 +181,7 @@ async function phrase(client: TextModelClient | undefined, source: string | unde
   }
 }
 
-/** Seeduplex cannot continue a tool turn; speak the grounded line instead of a canned reply. */
+/** Speak the grounded line, never a canned continuation (pitfall #6). */
 function outcome(lines: readonly string[], copy: RecallCopy, phrased?: string): ToolOutcome {
   if (lines.length === 0) return { ok: true, text: copy.wrapText, spokenText: copy.emptyText, spokenFound: false };
   return {

@@ -2,7 +2,6 @@ import type { Server } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LANGUAGES, CHARACTER_IDS, type Language } from '@anyidea/protocol';
-import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech, withCharacterName } from './adapters/mock.ts';
 import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
@@ -125,10 +124,9 @@ const prices = memoryDb ? new SqlitePriceBook(memoryDb, pricingBaseline) : null;
 const usage = memoryDb && prices
   ? new SqliteUsageRecorder({ db: memoryDb, prices, logger, flushMs: adminConfig.usageSink.flushMs, maxBatch: adminConfig.usageSink.maxBatch })
   : null;
-// Seeduplex is not counted (spec Q9/Q14).
 const usageSource = config.adapter === 'qwen'
   ? { adapter: 'qwen' as const, model: config.qwenModel }
-  : config.adapter === 'mock' ? { adapter: 'mock' as const, model: 'mock' } : null;
+  : { adapter: 'mock' as const, model: 'mock' };
 if (store) {
   // This process is the only gateway for the DB: any row still open belongs to a dead process.
   const reconciled = store.closeOpenSessions(Date.now());
@@ -202,11 +200,9 @@ logger.info('affect_analyzer', { enabled: boot.affect.enabled && config.adapter 
 const manager = new SessionManager(
   makeSessionFactory(configSource, {
     apiKey: resolveApiKey,
-    adapter: ({ snapshot, characterId, apiKey }) => config.adapter === 'seeduplex'
-      ? new SeeduplexAdapter({ apiKey: config.seeduplexApiKey!, endpoint: config.seeduplexEndpoint, model: config.seeduplexModel, voice: config.seeduplexVoice })
-      : config.adapter === 'qwen'
-        ? new QwenAdapter({ apiKey: apiKey!, endpoint: snapshot.model.realtimeEndpoint, model: snapshot.model.realtimeModel, voice: config.qwenVoice })
-        : new MockAdapter({ script: withCharacterName(script, snapshot.characters.name(characterId, 'zh')), speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor, emitUsage: usage !== null }),
+    adapter: ({ snapshot, characterId, apiKey }) => config.adapter === 'qwen'
+      ? new QwenAdapter({ apiKey: apiKey!, endpoint: snapshot.model.realtimeEndpoint, model: snapshot.model.realtimeModel, voice: config.qwenVoice })
+      : new MockAdapter({ script: withCharacterName(script, snapshot.characters.name(characterId, 'zh')), speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor, emitUsage: usage !== null }),
     summarizer: ({ snapshot, apiKey, ctx, sessionId }) => config.summarizer === 'qwen'
       ? new QwenSummarizer({
           apiKey: apiKey!,
@@ -217,14 +213,10 @@ const manager = new SessionManager(
       : new MockSummarizer(),
     // Sessions get the text client only for real adapters; Mock runs stay lexicon-only.
     textClient: (snapshot) => (config.adapter !== 'mock' ? textClientFor(snapshot) : undefined),
-    // Character card voice for the active adapter, then the env default. Seeduplex has no Japanese voice.
-    voiceFor: (snapshot, characterId, language) => {
-      if (config.adapter === 'qwen') return snapshot.characters.voiceFor(characterId, 'qwen', language) ?? config.qwenVoices[language];
-      if (config.adapter === 'seeduplex') {
-        return language === 'ja' ? undefined : snapshot.characters.voiceFor(characterId, 'seeduplex', language) ?? config.seeduplexVoices[language];
-      }
-      return undefined;
-    },
+    // Character card voice for the active adapter, then the env default.
+    voiceFor: (snapshot, characterId, language) => config.adapter === 'qwen'
+      ? snapshot.characters.voiceFor(characterId, 'qwen', language) ?? config.qwenVoices[language]
+      : undefined,
   }, {
     ledger: config.ledger,
     confirmWindowMs: config.confirmWindowMs,

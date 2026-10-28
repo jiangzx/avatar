@@ -20,8 +20,7 @@
     "en": ["Hello {name}, I'm Xiaoxin. It's my first time stopping by to sit with you.", "Hi {name}, my name is Xiaoxin. Let's have a good chat now and then."]
   },
   "voices": {
-    "qwen": { "zh": "Tina", "ja": "Tina", "en": "Tina" },
-    "seeduplex": { "zh": null, "en": null }
+    "qwen": { "zh": "Tina", "ja": "Tina", "en": "Tina" }
   },
   "extensions": {}
 }

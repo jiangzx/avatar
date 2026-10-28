@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { CHARACTER_IDS, type CharacterId, type Language } from '@anyidea/protocol';
 import { CharacterCardSchema, hasForeignName, validateCard, type CharacterCard } from './card.ts';
 
-export type VoiceAdapter = 'qwen' | 'seeduplex';
+export type VoiceAdapter = 'qwen';
 
 /** Read-only view of the character cards. Built once at startup; immutable afterwards. */
 export interface CharacterRegistry {
@@ -68,10 +68,8 @@ class CardRegistry implements CharacterRegistry {
     return pick(id, language, this.card(id).greetingsFirstMeet[language]);
   }
 
-  voiceFor(id: CharacterId, adapter: VoiceAdapter, language: Language): string | undefined {
-    const voices = this.card(id).voices;
-    if (adapter === 'qwen') return voices.qwen[language] ?? undefined;
-    return language === 'ja' ? undefined : voices.seeduplex[language] ?? undefined;
+  voiceFor(id: CharacterId, _adapter: VoiceAdapter, language: Language): string | undefined {
+    return this.card(id).voices.qwen[language] ?? undefined;
   }
 
   private card(id: CharacterId): CharacterCard {

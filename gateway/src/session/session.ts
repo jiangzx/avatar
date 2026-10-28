@@ -98,7 +98,7 @@ export interface SessionDeps {
   onReplyMetrics?: (m: ReplyMetrics) => void;
   /** Usage sink for realtime replies. Unset in eval and most tests, so nothing is billed there. */
   usage?: UsageRecorder;
-  /** Adapter and model billed for realtime replies. Seeduplex passes none: its usage is not counted. */
+  /** Adapter and model billed for realtime replies. Unset in eval and most tests. */
   usageSource?: { adapter: 'qwen' | 'mock'; model: string };
   summarizePolicy?: PolicySpec;
   maxOutputTokens?: number;

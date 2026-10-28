@@ -25,8 +25,6 @@ export const CharacterCardSchema = z.object({
   greetingsFirstMeet: perLanguage(z.array(z.string().trim().min(1).max(200)).min(1).max(5)),
   voices: z.object({
     qwen: z.object({ zh: Voice, ja: Voice, en: Voice }).strict(),
-    // Seeduplex has no Japanese voice.
-    seeduplex: z.object({ zh: Voice, en: Voice }).strict(),
   }).strict(),
   /** Namespaced keys only, e.g. "avatar/duixModel". */
   extensions: z.record(z.string().regex(/^[a-z][a-z0-9-]*\/[A-Za-z0-9-]+$/), z.unknown()),

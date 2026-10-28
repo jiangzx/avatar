@@ -15,8 +15,8 @@ export interface PushGateDeps {
 }
 
 /**
- * Holds session changes until a safe seam (blockers #48: a Seeduplex session.update during a
- * reply silences the next turn). Merges requests, sends at most one per user turn and per interval.
+ * Holds session changes until a safe seam (blockers #48: a session.update during a reply can
+ * silence the next turn). Merges requests, sends at most one per user turn and per interval.
  */
 export class PushGate {
   private pending: PushRequest | null = null;

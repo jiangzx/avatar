@@ -144,13 +144,13 @@ describe('sessionDepsFromSnapshot usageSource', () => {
     expect(deps.usageSource).toEqual({ adapter: 'qwen', model: 'qwen3.8-omni-flash-realtime-admin' });
   });
 
-  it('keeps the mock model and leaves seeduplex without a usage source', () => {
+  it('keeps the mock model and leaves usageSource unset when none is passed', () => {
     const s = snap();
     const mock = sessionDepsFromSnapshot(s, ctx, 'sid-test', factories(), {
       usageSource: { adapter: 'mock', model: 'mock' },
     });
     expect(mock.usageSource).toEqual({ adapter: 'mock', model: 'mock' });
-    const seeduplex = sessionDepsFromSnapshot(s, ctx, 'sid-test', factories(), {});
-    expect(seeduplex.usageSource).toBeUndefined();
+    const unbilled = sessionDepsFromSnapshot(s, ctx, 'sid-test', factories(), {});
+    expect(unbilled.usageSource).toBeUndefined();
   });
 });
