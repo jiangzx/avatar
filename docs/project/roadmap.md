@@ -11,6 +11,7 @@
 - 计划 2 交付：后台端口（只绑 127.0.0.1）、scrypt 登录/CSRF/审计、七组只读 API、`admin/` 前端（总览简报句、用户、通话、排查时间线、审计、临时日志级别）、封禁/解封/删除。A2 字体验证结论为分支 B（系统回退栈，不自托管、不用 CDN）。
 - 计划 2 验收（2026-10-28，用户确认浏览器）：[记录](../testing/2026-10-27-admin-p2-acceptance.md)。A3 在 127.0.0.1 与 localhost 均通过；回归 protocol 3 文件 14 项、gateway 99 文件 1251 项、admin 19 文件 89 项通过，三个 typecheck 与 admin 构建通过；封禁/解封/删除端到端通过。
 - 计划 2 跳过：Docker 镜像构建（本机 daemon 不可用）；Mock 断线错误样本。视觉备注（用户确认可接受）：通话表横向滚动、时间线未列事件原名、空总览保留一行 0。
+- 2026-10-28 P3-T3 执行修正（用户批准）：qwen 会话的 `usageSource.model` 取该会话快照的 `model.realtimeModel`，不再沿用启动时的 env 默认；mock 仍为 `'mock'`，seeduplex 没有 `usageSource`。原因：后台可以把 realtime 模型改成与 env 不同的值，费用必须按会话实际使用的模型计价。
 - 下一步：计划 3 的 P3-T1（`p3-01-descriptors.md`）。
 
 ## 多角色与分层记忆（2026-10-26 起）

@@ -133,3 +133,24 @@ describe('makeSessionFactory', () => {
     expect(config[1]!.binding.oid).toBeUndefined();
   });
 });
+
+describe('sessionDepsFromSnapshot usageSource', () => {
+  it('prices qwen usage with the snapshot realtime model', () => {
+    const s = snap();
+    const snapshot: ConfigSnapshot = { ...s, model: { ...s.model, realtimeModel: 'qwen3.8-omni-flash-realtime-admin' } };
+    const deps = sessionDepsFromSnapshot(snapshot, ctx, 'sid-test', factories(), {
+      usageSource: { adapter: 'qwen', model: 'env-old' },
+    });
+    expect(deps.usageSource).toEqual({ adapter: 'qwen', model: 'qwen3.8-omni-flash-realtime-admin' });
+  });
+
+  it('keeps the mock model and leaves seeduplex without a usage source', () => {
+    const s = snap();
+    const mock = sessionDepsFromSnapshot(s, ctx, 'sid-test', factories(), {
+      usageSource: { adapter: 'mock', model: 'mock' },
+    });
+    expect(mock.usageSource).toEqual({ adapter: 'mock', model: 'mock' });
+    const seeduplex = sessionDepsFromSnapshot(s, ctx, 'sid-test', factories(), {});
+    expect(seeduplex.usageSource).toBeUndefined();
+  });
+});

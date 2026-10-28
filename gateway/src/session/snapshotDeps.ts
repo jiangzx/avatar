@@ -41,6 +41,10 @@ export function sessionDepsFromSnapshot(
   const textClient = factories.textClient(snapshot);
   return {
     ...runtime,
+    // Usage must be priced with the model this session actually uses.
+    ...(runtime.usageSource?.adapter === 'qwen'
+      ? { usageSource: { adapter: 'qwen' as const, model: snapshot.model.realtimeModel } }
+      : {}),
     adapterFactory: () => factories.adapter({ snapshot, characterId, apiKey }),
     summarizer: factories.summarizer({ snapshot, apiKey, ctx, sessionId }),
     roles: snapshot.roles,

@@ -65,6 +65,8 @@ export interface MemoryWorkerOptions { /* existing */ quoteEnabled?: () => boole
 export function activeQuoteRules(opts: Pick<MemoryWorkerOptions, 'quote' | 'quoteEnabled'>): QuoteRules | undefined;
 ```
 
+> **2026-10-28 执行修正（P3-T3 复查后，用户批准）：** qwen 会话的 `usageSource.model` 不再原样透传，改取该会话快照的 `model.realtimeModel`；mock 仍为 `{ adapter: 'mock', model: 'mock' }`，seeduplex 没有 `usageSource`。原因：后台可以把 realtime 模型改成与 env 默认不同的值，费用必须按这通会话实际使用的模型计价。此修正只影响 qwen 的 `usageSource`，本文其余「运行时字段原样透传」的约定不变。
+
 ## 哪些配置跟着快照走、哪些仍是启动时的值
 
 | 使用方 | 来源 | 说明 |
