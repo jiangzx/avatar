@@ -40,7 +40,7 @@
   CompanionSettingsPage({..., String? diagCode, CompanionConfig? companion});   // either null hides the button
   ```
 
-- [ ] **Step 1: 写失败测试（配置、诊断编号、转发、控制器）**
+- [x] **Step 1: 写失败测试（配置、诊断编号、转发、控制器）**
 
 1. `app/test/companion_config_test.dart`：`parses the shipped config` 末尾加
 
@@ -117,12 +117,12 @@
   });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `cd app && flutter test test/companion_config_test.dart test/diag_log_test.dart test/native_gateway_client_test.dart test/native_session_controller_test.dart`
 Expected: FAIL，编译错误：`diagCopyLabel`、`diagCodeFor`、`diagCodeKey`、`SessionReady.diagId` 未定义。
 
-- [ ] **Step 3: 实现配置、诊断编号、转发、控制器**
+- [x] **Step 3: 实现配置、诊断编号、转发、控制器**
 
 1. `app/assets/config/companion.json` 末尾加两个键（注意上一行补逗号）：
 
@@ -193,12 +193,12 @@ class SessionReady extends ServerMessage {
         emit(UiDiag(diagCodeKey, diagCodeFor(sessionId, diagId)));
 ```
 
-- [ ] **Step 4: 运行，确认通过**
+- [x] **Step 4: 运行，确认通过**
 
 Run: `cd app && flutter test test/companion_config_test.dart test/diag_log_test.dart test/native_gateway_client_test.dart test/native_session_controller_test.dart`
 Expected: PASS。
 
-- [ ] **Step 5: 设置页与外壳——写失败测试**
+- [x] **Step 5: 设置页与外壳——写失败测试**
 
 1. `app/test/companion_settings_page_test.dart`：
    - import 区加 `import 'package:flutter/services.dart';` 和 `import 'support/companion_fixture.dart';`。
@@ -258,12 +258,12 @@ Widget page({MemoryApi? memory, VoidCallback? onMemoryChanged, String? diagCode}
   });
 ```
 
-- [ ] **Step 6: 运行，确认失败**
+- [x] **Step 6: 运行，确认失败**
 
 Run: `cd app && flutter test test/companion_settings_page_test.dart test/app_shell_test.dart`
 Expected: FAIL，编译错误：`diagCode`、`companion`（设置页）、`onDiagCode` 未定义。
 
-- [ ] **Step 7: 实现设置页、AvatarPage、AppShell、main**
+- [x] **Step 7: 实现设置页、AvatarPage、AppShell、main**
 
 `app/lib/identity/companion_settings_page.dart`：
 1. import 区加：
@@ -358,17 +358,17 @@ import '../companion_config.dart';
 
 `app/lib/main.dart`：`AvatarPage(` 里加 `onDiagCode: request.onDiagCode,`。
 
-- [ ] **Step 8: 运行，确认通过**
+- [x] **Step 8: 运行，确认通过**
 
 Run: `cd app && flutter test test/companion_settings_page_test.dart test/app_shell_test.dart && flutter analyze`
 Expected: PASS；`No issues found!`
 
-- [ ] **Step 9: 全量回归**
+- [x] **Step 9: 全量回归**
 
 Run: `cd app && flutter test && flutter analyze`
 Expected: 全部通过；`No issues found!`
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add app/assets/config/companion.json app/lib/companion_config.dart app/lib/diag_log.dart app/lib/native_gateway/protocol.dart app/lib/native_gateway/gateway_client.dart app/lib/native_session/session_controller.dart app/lib/avatar_page.dart app/lib/identity/app_shell.dart app/lib/identity/companion_settings_page.dart app/lib/main.dart app/test/companion_config_test.dart app/test/diag_log_test.dart app/test/native_gateway_client_test.dart app/test/native_session_controller_test.dart app/test/companion_settings_page_test.dart app/test/app_shell_test.dart

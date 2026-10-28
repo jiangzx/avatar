@@ -40,7 +40,7 @@
   const sessionRejectionCodes = {'owner_banned', 'character_disabled'};
   ```
 
-- [ ] **Step 1: 写 protocol 的失败测试**
+- [x] **Step 1: 写 protocol 的失败测试**
 
 在 `protocol/test/protocol.test.ts` 顶部 import 里加入 `SESSION_REJECTIONS, isSessionRejection`，文件末尾追加：
 
@@ -59,12 +59,12 @@ describe('session rejection codes', () => {
 });
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `npm test -w protocol -- test/protocol.test.ts`
 Expected: FAIL，`SESSION_REJECTIONS` / `isSessionRejection` 未导出（TypeError: isSessionRejection is not a function）。
 
-- [ ] **Step 3: 实现 protocol**
+- [x] **Step 3: 实现 protocol**
 
 在 `protocol/src/index.ts` 的 `SessionCreateRequest` 定义之后追加：
 
@@ -81,12 +81,12 @@ export function isSessionRejection(code: unknown): code is SessionRejectionCode 
 export interface SessionCreateResponse extends SessionTokens { diagId: string }
 ```
 
-- [ ] **Step 4: 运行，确认通过**
+- [x] **Step 4: 运行，确认通过**
 
 Run: `npm test -w protocol && npm run typecheck -w protocol`
 Expected: PASS，typecheck 无输出。
 
-- [ ] **Step 5: 写 gateway 的失败测试**
+- [x] **Step 5: 写 gateway 的失败测试**
 
 `gateway/test/server.test.ts` 顶部 import 加 `import { ownerShortId } from '../src/log/ownerId.ts';`。把第 132 行的键断言改为：
 
@@ -112,12 +112,12 @@ Expected: PASS，typecheck 无输出。
   });
 ```
 
-- [ ] **Step 6: 运行，确认失败**
+- [x] **Step 6: 运行，确认失败**
 
 Run: `npm test -w gateway -- test/server.test.ts`
 Expected: FAIL，两处断言缺少 `diagId`。
 
-- [ ] **Step 7: 实现 gateway**
+- [x] **Step 7: 实现 gateway**
 
 `gateway/src/server/server.ts`：
 1. import 区加 `import { ownerShortId } from '../log/ownerId.ts';`，并在已有的 `@anyidea/protocol` import 里加入 `SESSION_REJECTIONS`、`type SessionCreateResponse`。
@@ -144,12 +144,12 @@ Expected: FAIL，两处断言缺少 `diagId`。
 
 （错误码字符串保持不变，只把 403 / 409 数字换成 `SESSION_REJECTIONS`，以后改状态码只改一处。）
 
-- [ ] **Step 8: 运行，确认通过**
+- [x] **Step 8: 运行，确认通过**
 
 Run: `npm test -w gateway -- test/server.test.ts && npm run typecheck -w gateway`
 Expected: PASS；typecheck 无输出。
 
-- [ ] **Step 9: 写 App 解析的失败测试**
+- [x] **Step 9: 写 App 解析的失败测试**
 
 `app/test/native_gateway_protocol_test.dart` 末尾 `main()` 内追加：
 
@@ -221,12 +221,12 @@ Expected: PASS；typecheck 无输出。
   });
 ```
 
-- [ ] **Step 10: 运行，确认失败**
+- [x] **Step 10: 运行，确认失败**
 
 Run: `cd app && flutter test test/native_gateway_protocol_test.dart test/native_gateway_client_test.dart`
 Expected: FAIL，编译错误：`diagId`、`withDiagId`、`errorCode` 未定义。
 
-- [ ] **Step 11: 实现 App 解析**
+- [x] **Step 11: 实现 App 解析**
 
 `app/lib/native_gateway/protocol.dart` 第 10–27 行的 `SessionTokens` 整体替换为：
 
@@ -312,17 +312,17 @@ class GatewayHttpException implements Exception {
       _tokens = resumed.withDiagId(tokens.diagId);
 ```
 
-- [ ] **Step 12: 运行，确认通过**
+- [x] **Step 12: 运行，确认通过**
 
 Run: `cd app && flutter test test/native_gateway_protocol_test.dart test/native_gateway_client_test.dart && flutter analyze`
 Expected: 全部 PASS；`No issues found!`
 
-- [ ] **Step 13: 全量回归**
+- [x] **Step 13: 全量回归**
 
 Run（仓库根）：`npm test -w protocol && npm test -w gateway && npm run typecheck -w gateway`，再 `cd app && flutter test`
 Expected: 全部通过。
 
-- [ ] **Step 14: Commit**
+- [x] **Step 14: Commit**
 
 ```bash
 git add protocol/src/index.ts protocol/test/protocol.test.ts gateway/src/server/server.ts gateway/test/server.test.ts app/lib/native_gateway/protocol.dart app/lib/native_gateway/gateway_client.dart app/test/native_gateway_protocol_test.dart app/test/native_gateway_client_test.dart

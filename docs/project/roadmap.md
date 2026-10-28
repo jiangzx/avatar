@@ -2,7 +2,7 @@
 
 ## 后台管理与可观测（2026-10-27 起）
 
-状态：**计划 1（可观测基础）完成；计划 2 完成并验收（2026-10-28，用户确认浏览器）；计划 3（配置覆盖层）完成并验收（2026-10-28，用户确认截图）；计划 4 未开始**。
+状态：**计划 1（可观测基础）完成；计划 2 完成并验收（2026-10-28，用户确认浏览器）；计划 3（配置覆盖层）完成并验收（2026-10-28，用户确认截图）；计划 4（App 改动）完成并验收（2026-10-28，用户确认手机 A/B/C；C4 到期恢复跳过）**。
 - 设计：[spec](../superpowers/specs/2026-10-27-admin-console-design.md)（决策 Q1–Q38）。取代 [config-admin-later](../superpowers/plans/2026-10-18-config-admin-later.md)。
 - 计划：[overview](../superpowers/plans/2026-10-27-admin-console/00-overview.md)，四份计划按 1 → 2 → 3 → 4 顺序执行，subagent-driven-development。
 - 计划 1 交付：注入式 Logger（四级、sid/oid/char/seq 绑定、字段黑名单）、`log_events`（7 天）、`usage_events`（写入时定格费用，180 天）、`pricing.json` 价格基线、`sessions.adapter/end_reason`、删除 owner 连带删除用量与日志；数据库 `user_version=7`（v6 原地升级）。
@@ -15,7 +15,10 @@
 - 计划 3 交付：说明卡白名单与配置覆盖层（版本、预览、发布、回滚、恢复默认、baseVersion 冲突）；会话按快照启动（进行中的会话保持旧快照）；Key AES-256-GCM 加密存储与 env 回退；角色停用 409；配置页/发布弹窗/提示词 diff/节奏尺；模型与 Key、价格表、配置版本页；AGENTS.md 密钥规则按 Q16 更新。
 - 计划 3 验收（2026-10-28，用户确认截图）：[记录](../testing/2026-10-27-admin-console-p3-acceptance.md)。真实库已用 WAL 安全备份迁移到 v7；回归 protocol 3/14、gateway 109 文件 1344 项、admin 24 文件 129 项，三个 typecheck、admin build、`generate-character-ids --check` 通过；召回探针 `--temp` 133 项、`--real-db` 三角色均 true/true/false 且 `newTitleFlag` 全 false；配置隔离冒烟 A=0/B=1、过期 baseVersion 409。
 - 计划 3 跳过与遗留：Mock 冒烟脚本两处过期断言（pre-existing，见 `docs/blockers.md`）、Docker 镜像构建（无 daemon）、A1 阿里云账单核对（用户侧）、P3-T7 发布 400 issues 未展开、P3-T9 若干低优先级 UI 项；详见验收记录。
-- 下一步：计划 4（App 改动）。
+- 计划 4 交付：protocol `SESSION_REJECTIONS` / `SessionCreateResponse.diagId`；App 封禁提示与重试、停用角色置灰（24 小时本地保留）、logcat `session_ready` 诊断行、设置页复制诊断编号。
+- 计划 4 验收（2026-10-28，用户确认手机）：[记录](../testing/2026-10-27-admin-app-acceptance.md)。自动回归 protocol 3/16、gateway 109/1345、admin 24/129、flutter 350、三个 typecheck、admin build、flutter analyze 全通过。真机 A（诊断编号）、B（封禁/解封/重试）、C1–C3（停用/换角色/重启后仍置灰）用户确认通过；C4（24 小时到期恢复）跳过。手机验收使用临时 Mock 库，App 本机 device token 被临时 owner 覆盖；按用户确认切回线上后注册新的线上 owner，旧 owner 记忆不会自动接上（blockers #65 类别），真实库数据未删除。
+- 计划 4 跳过与问题：C4 未实等到期（本机小暖约 24 小时后自动恢复）；临时库身份副作用见 `docs/blockers.md`。
+- 下一步：Plan 4 提交未推送，推送前待用户确认。
 
 ## 多角色与分层记忆（2026-10-26 起）
 

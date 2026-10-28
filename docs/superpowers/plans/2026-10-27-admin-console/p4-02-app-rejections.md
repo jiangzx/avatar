@@ -55,7 +55,7 @@
   ```
   P4-T3 会在 `companion.json` 再加两个键，并给 `AvatarPageRequest` / `AvatarPage` 加 `onDiagCode`。
 
-- [ ] **Step 1: 配置——写失败测试**
+- [x] **Step 1: 配置——写失败测试**
 
 `app/test/companion_config_test.dart` 整体替换为：
 
@@ -104,12 +104,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: 运行，确认失败**
+- [x] **Step 2: 运行，确认失败**
 
 Run: `cd app && flutter test test/companion_config_test.dart`
 Expected: FAIL，编译错误 `ownerBannedText` 等未定义。
 
-- [ ] **Step 3: 配置——实现**
+- [x] **Step 3: 配置——实现**
 
 `app/assets/config/companion.json` 整体替换为：
 
@@ -235,12 +235,12 @@ CompanionConfig loadTestCompanionConfig() =>
 `companion: const CompanionConfig(aiCaption: '我是 AI 陪伴，不是真人', restToastMs: 6000),`
 改为 `companion: loadTestCompanionConfig(),`，并在 import 区加 `import 'support/companion_fixture.dart';`。
 
-- [ ] **Step 4: 运行，确认通过**
+- [x] **Step 4: 运行，确认通过**
 
 Run: `cd app && flutter test test/companion_config_test.dart test/avatar_page_engine_test.dart`
 Expected: PASS。
 
-- [ ] **Step 5: 网关客户端停止重连——写失败测试**
+- [x] **Step 5: 网关客户端停止重连——写失败测试**
 
 `app/test/native_gateway_client_test.dart` 的 `main()` 末尾追加：
 
@@ -296,12 +296,12 @@ Expected: PASS。
   });
 ```
 
-- [ ] **Step 6: 运行，确认失败**
+- [x] **Step 6: 运行，确认失败**
 
 Run: `cd app && flutter test test/native_gateway_client_test.dart`
 Expected: 第一个新用例 FAIL（POST /session 次数仍在增长，没有 `GatewayError`）。
 
-- [ ] **Step 7: 网关客户端——实现**
+- [x] **Step 7: 网关客户端——实现**
 
 `app/lib/native_gateway/gateway_client.dart`：
 1. `_restartFresh` 的 `catch (_)` 替换为：
@@ -336,12 +336,12 @@ Expected: 第一个新用例 FAIL（POST /session 次数仍在增长，没有 `G
 
 （首次 `start()` 时的 403/409 仍由 `start()` 抛出 `GatewayHttpException`，交给会话控制器处理，见下一步。）
 
-- [ ] **Step 8: 运行，确认通过**
+- [x] **Step 8: 运行，确认通过**
 
 Run: `cd app && flutter test test/native_gateway_client_test.dart`
 Expected: PASS。
 
-- [ ] **Step 9: 会话控制器错误码——写失败测试**
+- [x] **Step 9: 会话控制器错误码——写失败测试**
 
 `app/test/native_session_controller_test.dart`：
 1. `FakeClient` 加字段 `Object? startError;`，`start()` 改为：
@@ -390,12 +390,12 @@ Expected: PASS。
 
 （`unknown_character` 必须继续映射成 `gateway_http_400`：`AvatarPage` 用它识别未知角色。）
 
-- [ ] **Step 10: 运行，确认失败**
+- [x] **Step 10: 运行，确认失败**
 
 Run: `cd app && flutter test test/native_session_controller_test.dart`
 Expected: 第一个新用例 FAIL：实际为 `gateway_http_403`。
 
-- [ ] **Step 11: 会话控制器——实现**
+- [x] **Step 11: 会话控制器——实现**
 
 `app/lib/native_session/session_controller.dart` 的 `_errorCode` 替换为：
 
@@ -410,12 +410,12 @@ Expected: 第一个新用例 FAIL：实际为 `gateway_http_403`。
   };
 ```
 
-- [ ] **Step 12: 运行，确认通过**
+- [x] **Step 12: 运行，确认通过**
 
 Run: `cd app && flutter test test/native_session_controller_test.dart`
 Expected: PASS。
 
-- [ ] **Step 13: 拒绝映射与本机置灰——写失败测试**
+- [x] **Step 13: 拒绝映射与本机置灰——写失败测试**
 
 新建 `app/test/session_rejection_test.dart`：
 
@@ -493,12 +493,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 14: 运行，确认失败**
+- [x] **Step 14: 运行，确认失败**
 
 Run: `cd app && flutter test test/session_rejection_test.dart test/character_holds_test.dart`
 Expected: FAIL，文件不存在。
 
-- [ ] **Step 15: 实现映射与置灰存储**
+- [x] **Step 15: 实现映射与置灰存储**
 
 新建 `app/lib/identity/session_rejection.dart`：
 
@@ -566,12 +566,12 @@ class CharacterHolds {
 }
 ```
 
-- [ ] **Step 16: 运行，确认通过**
+- [x] **Step 16: 运行，确认通过**
 
 Run: `cd app && flutter test test/session_rejection_test.dart test/character_holds_test.dart`
 Expected: PASS。
 
-- [ ] **Step 17: AppShell——写失败测试**
+- [x] **Step 17: AppShell——写失败测试**
 
 `app/test/app_shell_test.dart`：
 1. import 区加：
@@ -657,12 +657,12 @@ Widget app(DeviceIdentity identity, {EngineSwitchController? engines, MemoryApi?
 
 > 写计划时 `characters.json` 里小欣的 `title` 是「小欣」。如果实际 title 不同，按 `catalog.byId('xiaoxin')!.title` 拼出期望文案再断言，不要改配置迁就测试。
 
-- [ ] **Step 18: 运行，确认失败**
+- [x] **Step 18: 运行，确认失败**
 
 Run: `cd app && flutter test test/app_shell_test.dart`
 Expected: FAIL，编译错误：`AppShell` 没有 `companion` / `holds` 参数，`AvatarPageRequest` 没有 `onSessionRejected`。
 
-- [ ] **Step 19: AppShell、AvatarPage、main——实现**
+- [x] **Step 19: AppShell、AvatarPage、main——实现**
 
 `app/lib/identity/app_shell.dart`：
 1. import 区加：
@@ -828,17 +828,17 @@ class _BannedNotice extends StatelessWidget {
 2. `AppShell(` 里加 `companion: widget.companion,` 和 `holds: CharacterHolds(_store),`。
 3. `AvatarPage(` 里加 `onSessionRejected: request.onSessionRejected,`。
 
-- [ ] **Step 20: 运行，确认通过**
+- [x] **Step 20: 运行，确认通过**
 
 Run: `cd app && flutter test test/app_shell_test.dart && flutter analyze`
 Expected: PASS；`No issues found!`
 
-- [ ] **Step 21: 全量回归**
+- [x] **Step 21: 全量回归**
 
 Run: `cd app && flutter test && flutter analyze`
 Expected: 全部通过；`No issues found!`
 
-- [ ] **Step 22: Commit**
+- [x] **Step 22: Commit**
 
 ```bash
 git add app/assets/config/companion.json app/lib/companion_config.dart app/lib/identity/session_rejection.dart app/lib/identity/character_holds.dart app/lib/native_gateway/gateway_client.dart app/lib/native_session/session_controller.dart app/lib/avatar_page.dart app/lib/identity/app_shell.dart app/lib/main.dart app/test/support/companion_fixture.dart app/test/companion_config_test.dart app/test/character_holds_test.dart app/test/session_rejection_test.dart app/test/native_gateway_client_test.dart app/test/native_session_controller_test.dart app/test/app_shell_test.dart app/test/avatar_page_engine_test.dart

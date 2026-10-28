@@ -20,7 +20,7 @@
 - Consumes：P4-T1 `diagId`；P4-T2 封禁提示屏（`banned-notice`、`banned-retry`）、置灰（`CharacterHolds`）；P4-T3 `session_ready` 诊断行、设置页 `copy-diag`；计划 2 的封禁 / 解封 / 排查页；计划 3 的角色停用开关。
 - Produces：验收记录与 roadmap 更新，无代码。
 
-- [ ] **Step 1: 自动回归**
+- [x] **Step 1: 自动回归**
 
 Run（仓库根）：
 
@@ -33,7 +33,7 @@ cd app && flutter test && flutter analyze
 
 Expected: 全部通过；`flutter analyze` 输出 `No issues found!`。把每条命令的通过数（例如 `gateway 7x files, 1xxx tests`、`flutter test` 的 `+NNN: All tests passed!`）抄进验收记录。
 
-- [ ] **Step 2: 内容安全自查**
+- [x] **Step 2: 内容安全自查**
 
 Run（仓库根）：
 
@@ -44,7 +44,7 @@ grep -rn "debugPrint(" app/lib
 
 Expected: 新增的诊断行只有 `session_ready`（字段 `sid`、`diag`）和 `character_hold_read_failed` / `character_hold_write_failed`（无字段）；没有任何新增 `debugPrint` 打印文本内容。结论写进记录。
 
-- [ ] **Step 3: 构建并安装**
+- [x] **Step 3: 构建并安装**
 
 ```bash
 cd app
@@ -54,7 +54,7 @@ adb install -r build/app/outputs/flutter-apk/app-debug.apk
 
 Expected: `Success`。不需要卸载重装（本计划没有改本地存储格式）。
 
-- [ ] **Step 4: 打开 logcat**
+- [x] **Step 4: 打开 logcat**
 
 另开终端：
 
@@ -62,7 +62,7 @@ Expected: `Success`。不需要卸载重装（本计划没有改本地存储格�
 adb logcat -c && adb logcat -s flutter:I | grep anyidea.diag
 ```
 
-- [ ] **Step 5: 手机验收 A——诊断编号**
+- [x] **Step 5: 手机验收 A——诊断编号**
 
 1. 打开 App，进入任一角色聊天，等到状态变成可以说话。
 2. logcat 应出现一行 `anyidea.diag event=session_ready sid=<uuid> diag=<12 位十六进制>`。
@@ -72,7 +72,7 @@ adb logcat -c && adb logcat -s flutter:I | grep anyidea.diag
 
 记录：sid 前 8 位、diag、后台是否找到（是 / 否）。
 
-- [ ] **Step 6: 手机验收 B——封禁**
+- [x] **Step 6: 手机验收 B——封禁**
 
 1. 手机保持在聊天中。后台用户详情页找到 Step 5 的 diag 对应的用户，点「封禁」并确认。
 2. 手机上通话应在几秒内结束，出现一屏「服务暂时不可用，请联系家人」和「再试一次」，没有设置按钮。logcat 不应出现持续刷屏的重连。
@@ -92,7 +92,7 @@ adb logcat -c && adb logcat -s flutter:I | grep anyidea.diag
 
 记录每一步是否符合（用户确认）。
 
-- [ ] **Step 8: 写验收记录**
+- [x] **Step 8: 写验收记录**
 
 新建 `docs/testing/2026-10-27-admin-app-acceptance.md`，结构：
 
@@ -130,13 +130,13 @@ adb logcat -c && adb logcat -s flutter:I | grep anyidea.diag
 
 记录里不出现任何对话内容、Key、`app/dev.json` 的值；sid 只写前 8 位。
 
-- [ ] **Step 9: 更新 roadmap 与计划勾选**
+- [x] **Step 9: 更新 roadmap 与计划勾选**
 
 - `docs/project/roadmap.md` 本阶段条目写：计划 4 完成情况、Step 1 的真实命令与结果、手机验收结论（用户确认的写明）、未通过或跳过的项及 blockers 编号、下一步。
 - 勾选 `p4-01` 到 `p4-04` 中实际完成的步骤。
 - 有跳过项时按 AGENTS.md 第 7 条写进 `docs/blockers.md`。
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add docs/testing/2026-10-27-admin-app-acceptance.md docs/project/roadmap.md docs/superpowers/plans/2026-10-27-admin-console/p4-01-protocol-diag.md docs/superpowers/plans/2026-10-27-admin-console/p4-02-app-rejections.md docs/superpowers/plans/2026-10-27-admin-console/p4-03-app-diagnostics.md docs/superpowers/plans/2026-10-27-admin-console/p4-04-acceptance.md
