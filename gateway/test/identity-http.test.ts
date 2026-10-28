@@ -7,12 +7,14 @@ import WebSocket from 'ws';
 import type { CharacterId, SessionTokens } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
 import { makeOriginCheck } from '../src/config.ts';
+import type { Logger } from '../src/log/logger.ts';
 import { DeviceRegistry, type IdentityLimits } from '../src/identity/registry.ts';
 import { hashToken } from '../src/identity/tokens.ts';
 import { openDatabase } from '../src/memory/db.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
 import { fixedRoleCatalog } from '../src/roles/catalog.ts';
 import { shippedCharacters } from './support/shipped.ts';
+import { captureLogger } from './helpers/logCapture.ts';
 import { devContextResolver, type SessionContext } from '../src/session/context.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
@@ -35,6 +37,7 @@ interface BootOptions {
   sessionRateLimit?: { max: number; windowMs: number };
   devToken?: string;
   characterEnabled?: (id: CharacterId) => boolean;
+  logger?: Logger;
 }
 
 let server: Server | null = null;
@@ -68,6 +71,7 @@ async function boot(opts: BootOptions = {}) {
     sessionRateLimit: opts.sessionRateLimit,
     devToken: opts.devToken,
     ...(opts.characterEnabled ? { characterEnabled: opts.characterEnabled } : {}),
+    logger: opts.logger,
     ownerBanned: identityOn ? (ownerId: string) => store.isOwnerBanned(ownerId) : undefined,
   });
   await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
@@ -291,6 +295,19 @@ describe('disabled characters', () => {
       body: { sessionId: (created.json as { sessionId: string }).sessionId, resumeToken: (created.json as { resumeToken: string }).resumeToken },
     });
     expect(resumed.status).toBe(200);
+  });
+
+  it('logs the rejection with the character id as a child binding, not a plain field', async () => {
+    const cap = captureLogger();
+    const { base } = await boot({ logger: cap.logger, characterEnabled: (id) => id !== 'xiaoxin' });
+    expect(await call(base, 'POST', '/session', { body: { character: 'xiaoxin' } }))
+      .toEqual({ status: 409, json: { error: 'character_disabled' } });
+    const rejected = cap.events('session_rejected');
+    expect(rejected).toHaveLength(1);
+    // char is a reserved field; only a child binding survives. The line carries no conversation content.
+    expect(rejected[0]).toMatchObject({ level: 'info', binding: { char: 'xiaoxin' }, fields: { reason: 'character_disabled' } });
+    expect(rejected[0]!.binding).toEqual({ char: 'xiaoxin' });
+    expect(rejected[0]!.fields).toEqual({ reason: 'character_disabled' });
   });
 
   it('treats every character as enabled when no switch is given', async () => {

@@ -224,7 +224,7 @@ async function createSession(req: IncomingMessage, res: ServerResponse, opts: Ga
   const characterId = body.data.character ?? DEFAULT_CHARACTER_ID;
   // Switched off in the admin: new sessions only. Running sessions and their resumes continue.
   if (opts.characterEnabled && !opts.characterEnabled(characterId)) {
-    loggerOf(opts).info('session_rejected', { reason: 'character_disabled', char: characterId });
+    loggerOf(opts).child({ char: characterId }).info('session_rejected', { reason: 'character_disabled' });
     json(res, 409, { error: 'character_disabled' });
     return;
   }
