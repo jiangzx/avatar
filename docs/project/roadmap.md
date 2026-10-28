@@ -20,6 +20,17 @@
 - 计划 4 跳过与问题：C4 未实等到期（本机小暖约 24 小时后自动恢复）；临时库身份副作用见 `docs/blockers.md`。
 - 下一步：Plan 4 提交未推送，推送前待用户确认。
 
+## 关系连续的主动互动（2026-10-28 设计）
+
+状态：**P0 完成（2026-10-29）**。验收：[记录](../testing/2026-10-28-p0-seeduplex-removal.md)。回归 protocol 3 文件 16 项、gateway 107 文件 1332 项、admin 24 文件 129 项通过；三个 typecheck、admin build、`generate-character-ids --check` 通过。
+- 设计：[spec](../superpowers/specs/2026-10-28-relational-proactivity-design.md)（grilling 决策 Q1–Q26，附竞品与学术调研）。
+- spec 已批准（2026-10-28，用户）。
+- 计划：[overview](../superpowers/plans/2026-10-28-relational-proactivity/00-overview.md)，P0（下架 Seeduplex，4 个任务）与 P1（多会话剧本评测与基线，6 个任务），subagent-driven-development。编写时已在临时 worktree 里试跑 P0-T1/T2 与 P1-T1–T5 的代码：gateway 111 文件 1358 项、typecheck 通过，推送闸门变异验证有效，旅程 CLI 在 Mock 下跑通 5 个旅程；admin 部分未试跑（本机 `admin` 依赖未安装，执行前需根目录 `npm ci`）。P2–P5 计划在 P1 基线完成后再写。
+- 计划已获用户同意（2026-10-28），将在另一台机器上执行；分支 `dev-proactivity`（基于 `dev-admin` `bf49c4f`）已推送。
+- 2026-10-29 追加 P2（数据层，9 个任务）与 P3 前半（Qwen 服从度探针、`proactivity.json` 与后台场景、决策引擎，3 个任务）计划；用户已定开放项 1（敏感原话直接进 Qwen 指令）与 2（熟悉度影响被动回复语气）。编写时在临时 worktree 试跑 P1+P2+P3 前半代码：gateway 123 文件 1433 项、typecheck 通过（admin、App 未试跑）。P3 后半、P4、P5 待 P3-T0 探针结论后再写。
+- 下一步：P1-T1（`p1-01-clock-injection.md`）。
+- 坑位第 7、12 条已在 P0 改写（2026-10-29）。第 4、5、8 条仍按 spec「坑位契约修订」在对应计划中改写；在那之前这三条照旧有效。
+
 ## 多角色与分层记忆（2026-10-26 起）
 
 状态：**Task 1–17 完成，真机验收 P1–P13 用户确认通过；未推送**。
@@ -130,12 +141,12 @@ Plan 4 写 spec 前完成 4 个最小探针，只新增 `gateway/scripts/probe-e
 4. **快照只注入用户可核对的内容。** 完整快照 = 称呼 + 非敏感事实 + 最近已结束会话的用户陈述；开场快照 = 称呼 + 非敏感事实；主动接话 = 非敏感事实。episode、关系备注、敏感事实、助手原文一律不进提示词。例外（2026-10-23 Plan 4 契约修订）：开场关怀是唯一例外：可以使用一条最近 7 天内、来自已结束会话、通过证据校验的用户原话（可以是敏感内容）。原话本身只作为关怀句生成器的输入，不进入实时模型指令、快照或规划器。由它生成并通过校验的关怀句是助手自己的话：它作为开场发给实时模型（Qwen 的 item 模式下会成为一条消息），播出后作为助手文本进入 ledger，并随最近对话进入后续指令。这是允许的。第 4 条已按 Q33 修订，见第 14 条。
 5. **有称呼时开场不走规划器。** 一律用 `greetingNameTexts` 安全模板；只有没有称呼时才让规划器问称呼。否则模型会编“您喜欢听京剧”。
 6. **召回表达交给模型包装，但事实锁死。** `roles/_shared/recall.md` 只接收一条用户原话；新增 `《》/「」/『』/“”` 作品名、丢失原话关键词、超 60 字、超时 1.5s 都退回逐字原话。不要退回固定模板，也不要允许包装模型补充事实。
-7. **Seeduplex 没有 `response.create`。** 真实探针返回 `unknown event name`，工具轮不能靠上游续答。`recall_memory` 的 grounded `spokenText` 由网关 `speech_text_buffer.commit` 直接 TTS；不要把 recall 改回通用 `toolContinueText`（“来，咱们接着说”）。
+7. **（已删除）** Seeduplex 已于 2026-10-28 下架（P0）。工具轮的规则见第 6 条：召回播报句由网关交给实时模型照读，不退回通用「来，咱们接着说」。
 8. **四段式必须由规划器运行。** 不要因为用户上一句在问回忆就跳过规划器，否则退回固定“您接着说/您还方便吗”。规划器禁止补充输入里没有的具体人名/作品名/地名；context/check 主动接话题或提问，leave 留话头但不问“还在听”，只有 checkin 确认是否还在听；checkin 的内容校验不能删。
 9. **配置文案只是失败兜底。** 不要把兜底句写回规划器指令或当固定话术；否定句里含具体作品名也会被模型照读。
 10. **抽取/摘要只以用户原话为依据。** 助手回复只推进 `extracted` 水位，不写成用户事实；健康事实必须 `sensitive=1`。
 11. **回归清单。** 至少跑 `npm test -w gateway`、`npm run typecheck -w gateway`，并用真实记忆库验证：“上次聊到哪儿了 / 上次聊过电影吗 / 我说过喜欢喝茶吗”。前两个只能引用真实用户陈述并自然包装，第三个必须找不到；不得出现新作品名或固定模板句。
-12. 所有 session 变更（指令、音色、状态卡、摘要、换语言）只能经过 `PushGate`（`gateway/src/session/pushGate.ts`）在缝隙推送，不要直接调用 `adapter.updateInstructions` / `updateVoice`。Seeduplex 播报中途做 `session.update`，当前回复会继续，但下一轮不再响应，而且没有 error（#48）。
+12. 所有 session 变更（指令、音色、状态卡、摘要、换语言）只能经过 `PushGate`（`gateway/src/session/pushGate.ts`）在缝隙推送，不要直接调用 `adapter.updateInstructions` / `updateVoice`。回复进行中做 `session.update` 可能让下一轮不再响应且没有 error（#48，最早在 Seeduplex 上发现；回归测试 `push-seam.test.ts` 现在跑在本地 Qwen 上游上）。
 13. **私有记忆一律按 `agent_id` 划分。** 作用域键只来自服务端 `SessionContext`（`ownerId`/`agentId`/`characterId`），绝不取自工具参数、模型输出或 HTTP body。FTS 和最近陈述查询都必须带 `agent_id`；跨角色隔离测试（`iso_*`）不能删。
 14. **钉住的敏感项只进完整快照。** 第 4 条按 Q33 修订：用户明确钉住的敏感记忆（如健康）可以进完整快照，不进开场快照和主动接话快照；设置页能看到，语音列表只给一句「在设置里能看到」。
 

@@ -19,7 +19,7 @@ AI avatar voice-chat POC (Android phone first). Read this file first, then `docs
 - Until a model Key exists, everything must run on `MockAdapter` (`ADAPTER=mock` only).
 - Tunable values live in config files, not scattered in code.
 - Do not invent skills, commands, dependencies, or APIs. Unverified third-party behavior is an assumption: mark it and validate with a minimal step first.
-- 记忆召回与角色记忆隔离、开场/沉默四段式、Seeduplex 工具轮是高风险区：改动前先读 `docs/project/roadmap.md` 的「记忆与回忆：已踩过的坑」，并向用户确认；改后必须跑 gateway 全量测试、typecheck 和真实记忆库召回探针。
+- 记忆召回与角色记忆隔离、开场/沉默四段式、实时模型工具轮是高风险区：改动前先读 `docs/project/roadmap.md` 的「记忆与回忆：已踩过的坑」，并向用户确认；改后必须跑 gateway 全量测试、typecheck 和真实记忆库召回探针。
 - Never overwrite unrelated uncommitted changes; never stage with `git add -A`. Add explicit paths.
 - Never claim code, tests, or verification are done unless you ran them. Report the real command and result; if you could not verify, say what and why.
 
