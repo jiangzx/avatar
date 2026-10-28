@@ -7,11 +7,13 @@ import type { SessionManager } from '../session/manager.ts';
 import type { SqlitePriceBook } from '../usage/pricing.ts';
 import { AdminAudit } from './audit.ts';
 import type { AdminConfig } from './config.ts';
+import type { ConfigAdminApi } from './configApi.ts';
 import { ADMIN_COOKIE, readCookie } from './cookies.ts';
 import { applySecurityHeaders, readJsonBody, sameOrigin, sendError } from './http.ts';
 import { LoginGuard } from './loginGuard.ts';
 import { AdminQueries } from './queries.ts';
 import { authRoutes } from './routes/auth.ts';
+import { configRoutes } from './routes/config.ts';
 import { logLevelRoutes } from './routes/logLevel.ts';
 import { ownerRoutes } from './routes/owners.ts';
 import { readRoutes } from './routes/read.ts';
@@ -34,6 +36,8 @@ export interface AdminDeps {
   adapterName: string;
   staticDir: string;
   now?: () => number;
+  /** Plan 3 config, key and price API. Absent: those routes are not registered. */
+  configAdmin?: ConfigAdminApi;
 }
 
 export function createAdminServer(deps: AdminDeps): Server {
@@ -45,7 +49,10 @@ export function createAdminServer(deps: AdminDeps): Server {
     queries: new AdminQueries(deps.db, now),
     now,
   };
-  const routes: readonly AdminRoute[] = [...authRoutes(), ...readRoutes(), ...ownerRoutes(), ...logLevelRoutes()];
+  const routes: readonly AdminRoute[] = [
+    ...authRoutes(), ...readRoutes(), ...ownerRoutes(), ...logLevelRoutes(),
+    ...(deps.configAdmin ? configRoutes() : []),
+  ];
   return createServer((req, res) => {
     handle(req, res, deps, services, routes).catch(() => {
       deps.logger.error('admin_http_error', { route: 'unmatched' });

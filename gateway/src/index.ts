@@ -1,13 +1,14 @@
 import type { Server } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LANGUAGES, type Language } from '@anyidea/protocol';
+import { LANGUAGES, CHARACTER_IDS, type Language } from '@anyidea/protocol';
 import { SeeduplexAdapter } from './adapters/seeduplex.ts';
 import { QwenAdapter } from './adapters/qwen.ts';
 import { MockAdapter, loadMockScript, loadMockSpeech, withCharacterName } from './adapters/mock.ts';
 import { loadConfig, loadIdentityConfig, makeOriginCheck } from './config.ts';
-import { expireAdminAudit } from './admin/audit.ts';
+import { AdminAudit, expireAdminAudit } from './admin/audit.ts';
 import { loadAdminEnv } from './admin/config.ts';
+import { ConfigAdminApi } from './admin/configApi.ts';
 import { createAdminServer } from './admin/server.ts';
 import { loadAdminConfig } from './log/adminConfig.ts';
 import { createLogLevelControl } from './log/levels.ts';
@@ -32,6 +33,8 @@ import { SqlitePriceBook, loadPricingBaseline } from './usage/pricing.ts';
 import { SqliteUsageRecorder } from './usage/recorder.ts';
 import { purgeExpiredUsage } from './usage/retention.ts';
 import type { ModelDefaults, Overlay } from './config-store/keys.ts';
+import { loadDescriptorCatalog } from './config-store/descriptors.ts';
+import { loadQwenOptions } from './config-store/options.ts';
 import { SqliteSecretStore, parseMasterKey } from './config-store/secrets.ts';
 import { fixedConfigSource, SqliteConfigStore, type ConfigSource } from './config-store/store.ts';
 import { buildConfigSnapshot, type ConfigSnapshot } from './session/configSnapshot.ts';
@@ -272,6 +275,21 @@ if (!adminEnv.enabled) {
 } else if (!memoryDb || !store || !prices) {
   logger.info('admin_disabled', { reason: 'memory_db_unset' });
 } else {
+  // Admin config API: only with a database (versioned overlays) and when the admin server runs.
+  const configAdmin = configSource instanceof SqliteConfigStore && memoryDb && prices
+    ? new ConfigAdminApi({
+        db: memoryDb,
+        store: configSource,
+        catalog: loadDescriptorCatalog(`${root}config/admin/descriptors`, { languages: LANGUAGES, characters: CHARACTER_IDS }),
+        options: loadQwenOptions(`${root}config/admin/qwen-options.json`),
+        secrets,
+        prices,
+        audit: new AdminAudit(memoryDb, logger),
+        gatewayRoot: root,
+        models: modelDefaults,
+        activeSessions: () => manager.size,
+      })
+    : undefined;
   const admin = createAdminServer({
     db: memoryDb,
     store,
@@ -283,6 +301,7 @@ if (!adminEnv.enabled) {
     passwordHash: adminEnv.passwordHash,
     adapterName: config.adapter,
     staticDir: resolve(root, '..', 'admin', 'dist'),
+    ...(configAdmin ? { configAdmin } : {}),
   });
   adminServer = admin;
   // A busy admin port must not take the voice gateway down (no dead air for the phone).

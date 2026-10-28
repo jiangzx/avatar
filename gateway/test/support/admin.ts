@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import type { DatabaseSync } from 'node:sqlite';
 import { loadAdminConfig, type AdminConfig } from '../../src/admin/config.ts';
+import type { ConfigAdminApi } from '../../src/admin/configApi.ts';
 import { hashPassword } from '../../src/admin/password.ts';
 import { createAdminServer } from '../../src/admin/server.ts';
 import { createLogLevelControl, type LogLevelControl } from '../../src/log/levels.ts';
@@ -38,6 +39,7 @@ export interface BootAdminOptions {
   staticDir?: string;
   now?: () => number;
   adapterName?: string;
+  configAdmin?: ConfigAdminApi;
 }
 
 export async function bootAdmin(opts: BootAdminOptions = {}): Promise<AdminHarness> {
@@ -63,6 +65,7 @@ export async function bootAdmin(opts: BootAdminOptions = {}): Promise<AdminHarne
     adapterName: opts.adapterName ?? 'mock',
     staticDir: opts.staticDir ?? '/nonexistent-admin-dist',
     ...(opts.now ? { now: opts.now } : {}),
+    ...(opts.configAdmin ? { configAdmin: opts.configAdmin } : {}),
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

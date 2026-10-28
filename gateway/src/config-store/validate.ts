@@ -8,9 +8,9 @@ import { toStored } from './units.ts';
 export interface ValidateContext { baseline: OverlayValue; silence: Record<Language, SilenceRules>; options: QwenOptions }
 export type ValidateResult = { ok: true; stored: OverlayValue } | { ok: false; message: string };
 
-const UNIT_WORDS: Record<string, string> = { second: '秒', minute: '分钟', day: '天', count: '条', char: '字', level: '级' };
+export const UNIT_WORDS: Record<string, string> = { second: '秒', minute: '分钟', day: '天', count: '条', char: '字', level: '级' };
 /** What a placeholder stands for, in words an admin understands. */
-const TOKEN_MEANINGS: Record<string, string> = {
+export const TOKEN_MEANINGS: Record<string, string> = {
   '{name}': '老人称呼',
   '{{char}}': '角色名字',
   '{{charSpoken}}': '角色名字的读音',

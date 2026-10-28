@@ -34,3 +34,57 @@ export type AdminLogLevel = 'debug' | 'info' | 'warn' | 'error';
 export interface AdminLogLevelState { global: AdminLogLevel; overrides: Array<{ scope: 'global' | 'owner'; oid: string | null; level: AdminLogLevel; until: number }> }
 export interface AdminLogLevelRequest { scope: 'global' | 'owner'; oid?: string; level: AdminLogLevel | 'reset' }
 export interface AdminDeleteOwnerRequest { confirm: string } // must equal the oid
+export type AdminConfigSceneId = 'pacing' | 'affect' | 'memory' | 'characters' | 'copy' | 'model';
+export type AdminConfigValue = number | boolean | string | string[];
+export type AdminConfigRisk = 'low' | 'medium' | 'high';
+export type AdminConfigControl = 'number' | 'switch' | 'text' | 'textarea' | 'list' | 'select';
+export interface AdminConfigSceneSummary { id: AdminConfigSceneId; title: string; intro: string; changedCount: number }
+export interface AdminConfigOverview { activeVersion: number; startupIssues: string[]; scenes: AdminConfigSceneSummary[] }
+export interface AdminConfigOption { value: string; label: string; priceNote: string | null }
+export interface AdminConfigItem {
+  key: string; descriptorKey: string; label: string; purpose: string;
+  impact: { characters: string; stage: string; effective: 'next_session' };
+  control: AdminConfigControl;
+  unit: string | null;                 // display word: '秒' | '分钟' | '天' | '条' | '字' | '级'
+  unitId: 'second' | 'minute' | 'day' | 'count' | 'char' | 'level' | null; // stable id for client logic (pacing ruler)
+  min: number | null; max: number | null; step: number | null;
+  maxChars: number | null; minItems: number | null; maxItems: number | null; itemMaxChars: number | null;
+  requiredTokens: string[]; tokenMeanings: Record<string, string>; // e.g. { '{{char}}': '角色名字' } for every required token
+  options: AdminConfigOption[]; pattern: 'wss_url' | 'https_url' | null;
+  complianceNote: string | null; risk: AdminConfigRisk; riskNote: string | null;
+  language: 'zh' | 'ja' | 'en' | null; character: string | null;
+  baseline: AdminConfigValue; current: AdminConfigValue; changed: boolean;
+}
+export interface AdminConfigReadonlyNote { label: string; purpose: string; note: string }
+export interface AdminConfigScene { id: AdminConfigSceneId; title: string; intro: string; activeVersion: number; items: AdminConfigItem[]; readonly: AdminConfigReadonlyNote[] }
+export interface AdminConfigChange { key: string; value: AdminConfigValue }
+export interface AdminConfigDraft { baseVersion: number; changes: AdminConfigChange[]; resets: string[] }
+export interface AdminConfigIssue { key: string | null; message: string }
+export interface AdminConfigImpactLine {
+  key: string; label: string; scene: string; before: string; after: string; characters: string;
+  risk: AdminConfigRisk; textDiff: { before: string; after: string } | null;
+}
+export interface AdminConfigPreview {
+  ok: boolean; issues: AdminConfigIssue[]; lines: AdminConfigImpactLine[]; summary: string;
+  activeSessions: number; requiresConfirm: boolean; confirmPhrase: string;
+}
+export interface AdminConfigPublishRequest extends AdminConfigDraft { note?: string; confirmText?: string }
+export interface AdminConfigVersion { id: number; createdAt: number; kind: 'publish' | 'rollback' | 'reset'; actor: string; note: string | null; changedKeys: string[]; active: boolean }
+export interface AdminConfigVersionDiff { id: number; lines: AdminConfigImpactLine[] }
+export interface AdminConfigRollbackRequest { toVersion: number; baseVersion: number }
+export interface AdminConfigResetRequest { keys: string[] | 'all'; baseVersion: number }
+export interface AdminConfigInvalid extends AdminError { issues: AdminConfigIssue[] }
+export interface AdminSecretRow { name: string; label: string; source: 'admin' | 'env' | 'missing'; last4: string | null; updatedAt: number | null; writable: boolean }
+export interface AdminSecretUpdate { value: string }
+export interface AdminSecretReveal { name: string; value: string }
+export interface AdminPriceRow {
+  id: string; model: string; effectiveFrom: number;
+  inputText: number; inputAudio: number | null; outputText: number; outputAudio: number | null; cached: number | null;
+  source: string; checkedAt: string; origin: 'baseline' | 'admin'; active: boolean;
+}
+export interface AdminPricing { prices: AdminPriceRow[]; unpricedModels: Array<{ model: string; calls: number }> } // unpriced: real (non-mock) calls with no price
+export interface AdminPriceCreate {
+  model: string; effectiveFrom: number;
+  inputText: number; inputAudio: number | null; outputText: number; outputAudio: number | null; cached: number | null;
+  source: string; checkedAt: string;
+}
