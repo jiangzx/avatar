@@ -25,6 +25,7 @@ app/android/app/libs/
 app/android/app/src/main/assets/duix/*.zip
 
 # local developer metadata and credential notes
+.cursor/
 .codegraph/
 .idea/
 docs/Qwen/*
