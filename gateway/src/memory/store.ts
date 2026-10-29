@@ -56,6 +56,42 @@ export interface MoodSummaryInput {
   crisis: boolean;
 }
 export interface MoodSummaryRecord extends MoodSummaryInput { id: string; createdAt: number }
+
+/** Derived from ended sessions (spec 关系画像); nothing is stored. Day and hour use Asia/Shanghai. */
+export interface RelationshipStats {
+  firstMetAt: number | null;
+  sessions: number;
+  totalMinutes: number;
+  activeDays: number;
+  lastSessionAt: number | null;
+  /** 24 buckets of session starts by Beijing hour. */
+  hourHistogram: number[];
+}
+
+const SHANGHAI_OFFSET_MS = 8 * 3_600_000;
+
+/** Pure fold over ended sessions sorted by start. */
+export function relationshipStatsOf(rows: ReadonlyArray<{ startedAt: number; endedAt: number }>): RelationshipStats {
+  const hourHistogram = Array.from({ length: 24 }, () => 0);
+  const days = new Set<string>();
+  let ms = 0;
+  for (const row of rows) {
+    const local = new Date(row.startedAt + SHANGHAI_OFFSET_MS);
+    const hour = local.getUTCHours();
+    hourHistogram[hour] = (hourHistogram[hour] ?? 0) + 1;
+    days.add(local.toISOString().slice(0, 10));
+    ms += Math.max(0, row.endedAt - row.startedAt);
+  }
+  return {
+    firstMetAt: rows[0]?.startedAt ?? null,
+    sessions: rows.length,
+    totalMinutes: Math.round(ms / 60_000),
+    activeDays: days.size,
+    lastSessionAt: rows.at(-1)?.startedAt ?? null,
+    hourHistogram,
+  };
+}
+
 export interface DeletedItem { kind: 'profile' | 'agent_fact' | 'pinned'; agentId: string | null; text: string; sourceMessageIds: string[] }
 
 export const PROFILE_CATEGORIES: readonly ProfileCategory[] = ['addressing', 'profile'];
@@ -181,6 +217,8 @@ export interface MemoryStore {
   recordMoodSummary(ownerId: string, agentId: string, input: MoodSummaryInput, now: number): boolean;
   /** Newest first. */
   listMoodSummaries(ownerId: string, agentId: string, limit: number): MoodSummaryRecord[];
+  /** Familiarity inputs from this agent's ended sessions. */
+  relationshipStats(ownerId: string, agentId: string): RelationshipStats;
   /** Agent rows of one owner, one per character met. */
   listAgents(ownerId: string): AgentRecord[];
   /** Ids of this owner's live messages whose FTS tokens all match; agentId null = any agent of the owner. */
@@ -326,6 +364,8 @@ function prepareStatements(db: DatabaseSync) {
       started_at
     ), end_reason = 'process_restart' WHERE ended_at IS NULL`),
     listSessions: p('SELECT s.id, s.agent_id, s.started_at, s.ended_at FROM sessions s JOIN agents a ON a.id = s.agent_id WHERE a.owner_id = ? ORDER BY s.started_at'),
+    relationshipSessions: p(`SELECT s.started_at, s.ended_at FROM sessions s JOIN agents a ON a.id = s.agent_id
+      WHERE a.owner_id = ? AND s.agent_id = ? AND s.ended_at IS NOT NULL ORDER BY s.started_at, s.id`),
     hasEndedSession: p('SELECT 1 AS ok FROM sessions WHERE agent_id = ? AND ended_at IS NOT NULL LIMIT 1'),
     ownerSessionsNewestFirst: p(`SELECT s.started_at, s.ended_at FROM sessions s JOIN agents a ON a.id = s.agent_id
       WHERE a.owner_id = ? ORDER BY COALESCE(s.ended_at, ?) DESC, s.rowid DESC`),
@@ -971,6 +1011,13 @@ export class SqliteMemoryStore implements MemoryStore {
       crisis: r.crisis === 1,
       createdAt: r.created_at as number,
     }));
+  }
+
+  relationshipStats(ownerId: string, agentId: string): RelationshipStats {
+    return relationshipStatsOf(this.q.relationshipSessions.all(ownerId, agentId).map((r) => ({
+      startedAt: r.started_at as number,
+      endedAt: r.ended_at as number,
+    })));
   }
 
   writeExtraction(ownerId: string, agentId: string, change: ExtractionChange): void {
