@@ -28,6 +28,9 @@ export type AgentFactCategory = 'preference' | 'person' | 'health' | 'other' | '
 export interface ProfileFactRow { id: string; category: ProfileCategory; text: string }
 export interface AgentFactRow { id: string; category: AgentFactCategory; text: string; sensitive: boolean }
 export interface PinnedRow { id: string; text: string; sensitive: boolean; createdAt: number }
+/** A followup with a quote and no done_at is a thread (spec 2026-10-28). */
+export const THREAD_KINDS = ['event', 'concern', 'plan'] as const;
+export type ThreadKind = (typeof THREAD_KINDS)[number];
 export interface DeletedItem { kind: 'profile' | 'agent_fact' | 'pinned'; agentId: string | null; text: string; sourceMessageIds: string[] }
 
 export const PROFILE_CATEGORIES: readonly ProfileCategory[] = ['addressing', 'profile'];
@@ -196,7 +199,7 @@ export type EpisodeChange =
   | { op: 'update'; id: string; summary?: string; mood?: string | null }
   | { op: 'remove'; id: string };
 export type FollowupChange =
-  | { op: 'add'; text: string; dueAt: number; quote?: string; sensitive?: boolean }
+  | { op: 'add'; text: string; dueAt: number; quote?: string; sensitive?: boolean; kind?: ThreadKind; sourceMessageIds?: readonly string[] }
   | { op: 'update'; id: string; text?: string; dueAt?: number }
   | { op: 'remove'; id: string };
 
@@ -399,8 +402,8 @@ function prepareStatements(db: DatabaseSync) {
     deleteEpisodesInstr: p('DELETE FROM episodes WHERE owner_id = ? AND agent_id = ? AND instr(summary, ?) > 0'),
     deleteAllEpisodes: p('DELETE FROM episodes WHERE owner_id = ? AND agent_id = ?'),
     listFollowups: p('SELECT id, text, due_at FROM followups WHERE owner_id = ? AND agent_id = ? AND done_at IS NULL ORDER BY due_at, id'),
-    insertFollowup: p(`INSERT INTO followups (id, owner_id, agent_id, text, due_at, done_at, source_session_id, quote, sensitive, created_at)
-      VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`),
+    insertFollowup: p(`INSERT INTO followups (id, owner_id, agent_id, text, due_at, done_at, source_session_id, quote, sensitive, created_at, kind, source_message_ids)
+      VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`),
     updateFollowup: p(`UPDATE followups SET text = COALESCE(?, text), due_at = COALESCE(?, due_at)
       WHERE id = ? AND owner_id = ? AND agent_id = ?`),
     deleteFollowup: p('DELETE FROM followups WHERE id = ? AND owner_id = ? AND agent_id = ?'),
@@ -1020,7 +1023,9 @@ export class SqliteMemoryStore implements MemoryStore {
       const id = randomUUID();
       // Quoted user words are always sensitive; health followups also set it explicitly.
       const sensitive = op.sensitive === true || op.quote !== undefined ? 1 : 0;
-      this.q.insertFollowup.run(id, ownerId, agentId, op.text, op.dueAt, sessionId, op.quote ?? null, sensitive, now);
+      // Only a quoted followup cites a user line; the citation trigger deletes it with that line.
+      const sources = op.quote !== undefined ? unionIds(op.sourceMessageIds ?? []) : [];
+      this.q.insertFollowup.run(id, ownerId, agentId, op.text, op.dueAt, sessionId, op.quote ?? null, sensitive, now, op.kind ?? 'concern', JSON.stringify(sources));
       // The audit diff carries the model's summary only, never the quote.
       this.audit(ownerId, agentId, 'followups', id, 'add', op.text, 'extract', now);
       return;

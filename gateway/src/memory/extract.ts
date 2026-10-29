@@ -7,7 +7,7 @@ import { isMemoryEvidence, type EvidenceRules } from './evidence.ts';
 import { normalizeForMatch } from './grounding.ts';
 import { scanText } from './scan.ts';
 import { ADDRESSING_MAX_CHARS, plainAddressing } from './snapshot.ts';
-import { ExtractIncompleteError, type MemoryStore } from './store.ts';
+import { ExtractIncompleteError, THREAD_KINDS, type MemoryStore } from './store.ts';
 export type { TextModelClient } from './textClient.ts';
 
 const Id = z.string().min(1).max(80);
@@ -80,6 +80,8 @@ const FollowupAdd = z.object({
   /** Verbatim user words. Length and evidence are checked by vetFollowupQuotes, so a long quote never fails the batch here. */
   quote: z.string().max(2_000).optional(),
   sensitive: z.boolean().optional(),
+  /** Unknown values are dropped, not fatal: one bad label must not lose the batch. */
+  kind: z.enum(THREAD_KINDS).optional().catch(undefined),
 });
 // Unknown keys are stripped (zod default): update can never change or re-flag a quote, and a stray key does not fail the batch.
 const FollowupUpdate = z.object({
@@ -156,7 +158,14 @@ export function parseExtractBatch(raw: unknown): ExtractBatch {
       kept.push(item);
     }
   }
-  return { ops: z.array(OpSchema).parse(kept), droppedCategory, missingSources, invalidSources };
+  const ops = z.array(OpSchema).parse(kept).map((op) => {
+    if (op.table === 'followups' && op.op === 'add' && op.kind === undefined) {
+      const { kind: _unknown, ...rest } = op;
+      return rest;
+    }
+    return op;
+  });
+  return { ops, droppedCategory, missingSources, invalidSources };
 }
 
 /** Zod. Throws on malformed JSON or a malformed op. */
@@ -223,6 +232,16 @@ export function vetFollowupQuotes(ops: readonly ExtractOp[], userLines: readonly
     const { quote: raw, ...rest } = op;
     const quote = (raw ?? '').trim();
     return rules && quoteAllowed(quote, userLines, rules) ? { ...rest, quote } : rest;
+  });
+}
+
+/** Links each kept quote to the user line it was copied from, so deleting that line drops the thread. */
+export function attachQuoteSources(ops: readonly ResolvedOp[], users: ReadonlyArray<{ id: string; text: string }>): ResolvedOp[] {
+  return ops.map((op) => {
+    if (op.table !== 'followups' || op.op !== 'add' || op.quote === undefined) return op;
+    const key = normalizeForMatch(op.quote);
+    const source = users.find((row) => normalizeForMatch(row.text).includes(key));
+    return { ...op, sourceMessageIds: source ? [source.id] : [] };
   });
 }
 

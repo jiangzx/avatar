@@ -9,7 +9,7 @@ import { errorCodeOf, runWithPolicy, type PolicySpec } from '../reliability/poli
 import type { SessionContext } from '../session/context.ts';
 import type { SessionLifecycle } from '../session/manager.ts';
 import {
-  applyExtractOps, normalizeAddressingOps, parseExtractBatch, resolveFactSources, vetFollowupQuotes,
+  applyExtractOps, attachQuoteSources, normalizeAddressingOps, parseExtractBatch, resolveFactSources, vetFollowupQuotes,
   type ExtractBatch, type QuoteRules, type TextModelClient,
 } from './extract.ts';
 import type { ExtractMemory, MemoryStore, PendingMessage } from './store.ts';
@@ -177,7 +177,8 @@ export class MemoryWorker implements MemoryExtractor {
     // Quotes must be verbatim user statements from the lines the model saw; anything else loses its quote.
     const vetted = vetFollowupQuotes(named.ops, users.map((row) => row.text), activeQuoteRules(this.opts));
     const sourced = resolveFactSources(vetted, refs);
-    const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, sourced.ops, consumed.map((row) => row.id), now);
+    const linked = attachQuoteSources(sourced.ops, users);
+    const applied = applyExtractOps(this.opts.store, ownerId, agentId, epochs, linked, consumed.map((row) => row.id), now);
     // Counts only: never the text of an op, a source line, or a name.
     const counts = {
       droppedCategory: batch.droppedCategory,
