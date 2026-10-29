@@ -2,7 +2,7 @@
   "scene": "copy",
   "title": "文案",
   "intro": "AI 在固定场合说的原话。三种语言分开改。",
-  "order": 5,
+  "order": 6,
   "items": [
     {
       "key": "i18n:{lang}/memory.restReminderText",

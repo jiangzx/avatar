@@ -9,6 +9,7 @@ import type { I18nBundle } from '../i18n/types.ts';
 import { missingRoleLanguages } from '../roles/catalog.ts';
 import { loadRoleCatalog, type FileRoleCatalog } from '../roles/fileCatalog.ts';
 import { loadAffectConfig, type AffectConfig } from './affect.ts';
+import { loadProactivity, type ProactivityConfig } from './proactive/config.ts';
 import { checkAffectBudgets } from './affectRender.ts';
 import type { LedgerOptions } from './ledger.ts';
 import { loadMemoryBudget, loadPacing, validateBudgets, type BudgetReport, type MemoryBudgetConfig, type PacingConfig } from './pacing.ts';
@@ -21,6 +22,7 @@ export interface ConfigSnapshot {
   pacing: PacingConfig;
   memory: MemoryBudgetConfig;
   affect: AffectConfig;
+  proactivity: ProactivityConfig;
   i18n: I18nBundle;
   roles: FileRoleCatalog;
   characters: CharacterRegistry;
@@ -64,6 +66,7 @@ export function buildConfigSnapshot(input: SnapshotInput): ConfigSnapshot {
     const memory = loadMemoryBudget(`${root}/config/memory.json`);
     const i18n = loadI18n(`${root}/config`);
     const affect = loadAffectConfig(`${root}/config/affect.json`);
+    const proactivity = loadProactivity(`${root}/config/proactivity.json`);
     const personas: Partial<Record<Language, string[]>> = {};
     for (const pair of roles.characterLanguagePairs()) {
       (personas[pair.language] ??= []).push(roles.buildPersona(pair.characterId, pair.language));
@@ -83,6 +86,7 @@ export function buildConfigSnapshot(input: SnapshotInput): ConfigSnapshot {
       pacing,
       memory,
       affect,
+      proactivity,
       i18n,
       roles,
       characters,

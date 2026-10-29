@@ -153,4 +153,10 @@ describe('sessionDepsFromSnapshot usageSource', () => {
     const unbilled = sessionDepsFromSnapshot(s, ctx, 'sid-test', factories(), {});
     expect(unbilled.usageSource).toBeUndefined();
   });
+
+  it('passes the proactivity config into the session deps', () => {
+    const s = snap();
+    const deps = sessionDepsFromSnapshot(s, ctx, 'sid-test', factories(), {});
+    expect(deps.proactivity).toBe(s.proactivity);
+  });
 });

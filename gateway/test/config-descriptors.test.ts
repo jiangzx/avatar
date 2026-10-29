@@ -59,8 +59,8 @@ describe('overlay keys', () => {
 });
 
 describe('descriptor catalog', () => {
-  it('has the six scenes in order', () => {
-    expect(catalog.scenes().map((s) => s.id)).toEqual(['pacing', 'affect', 'memory', 'characters', 'copy', 'model']);
+  it('has the seven scenes in order', () => {
+    expect(catalog.scenes().map((s) => s.id)).toEqual(['pacing', 'affect', 'proactivity', 'memory', 'characters', 'copy', 'model']);
   });
 
   it('expands {lang} and {char} and keeps keys unique', () => {

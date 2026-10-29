@@ -15,6 +15,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: '/settings/pacing', label: '对话节奏' },
       { path: '/settings/affect', label: '情绪与关怀' },
+      { path: '/settings/proactivity', label: '主动互动' },
       { path: '/settings/memory', label: '记忆' },
       { path: '/settings/characters', label: '角色' },
       { path: '/settings/copy', label: '文案' },

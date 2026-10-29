@@ -1,0 +1,39 @@
+{
+  "enabled": true,
+  "defaultTier": "moderate",
+  "tiers": {
+    "quiet": { "threshold": 70, "maxPerSession": 2, "maxPerDay": 4 },
+    "moderate": { "threshold": 45, "maxPerSession": 4, "maxPerDay": 10 },
+    "active": { "threshold": 30, "maxPerSession": 6, "maxPerDay": 16 }
+  },
+  "acceptance": { "priorAccepted": 2, "priorRejected": 2, "windowMs": 15000 },
+  "familiarity": { "familiarMinSessions": 3, "familiarMinDays": 2, "oldFriendMinSessions": 15, "oldFriendMinDays": 10 },
+  "threads": {
+    "maxPerSession": 2,
+    "event": { "preDays": 1, "postDays": 7, "maxMentions": 2 },
+    "concern": { "intervalDays": 3, "maxMentions": 3, "expireDays": 14 },
+    "plan": { "minDays": 3, "maxDays": 7, "maxMentions": 1 },
+    "urgency": { "eventAfter": 100, "eventBefore": 80, "concern": 60, "plan": 50 },
+    "importance": { "sensitive": 80, "plain": 50 }
+  },
+  "mood": { "lookbackHours": 72, "recentHours": 24, "lowIntensity": 2, "staleUrgency": 50 },
+  "routine": {
+    "morning": { "start": 6, "end": 10 },
+    "noon": { "start": 11, "end": 13 },
+    "evening": { "start": 17, "end": 19 },
+    "night": { "start": 20, "end": 22 }
+  },
+  "humanConnection": { "lowRelevance": 70 },
+  "kinds": {
+    "threadFollowup": { "enabled": true, "priority": 1, "weights": { "relevance": 15, "urgency": 40, "importance": 30, "novelty": 15 }, "base": { "relevance": 50, "urgency": 0, "importance": 0 } },
+    "moodCheck": { "enabled": true, "priority": 2, "weights": { "relevance": 40, "urgency": 25, "importance": 25, "novelty": 10 }, "base": { "relevance": 100, "urgency": 100, "importance": 60 } },
+    "continueThread": { "enabled": true, "priority": 3, "weights": { "relevance": 35, "urgency": 30, "importance": 20, "novelty": 15 }, "base": { "relevance": 80, "urgency": 50, "importance": 50 } },
+    "routine": { "enabled": true, "priority": 4, "weights": { "relevance": 40, "urgency": 20, "importance": 20, "novelty": 20 }, "base": { "relevance": 100, "urgency": 30, "importance": 40 } },
+    "humanConnection": { "enabled": true, "priority": 5, "weights": { "relevance": 30, "urgency": 10, "importance": 40, "novelty": 20 }, "base": { "relevance": 40, "urgency": 20, "importance": 60 } },
+    "interestTopic": { "enabled": true, "priority": 6, "weights": { "relevance": 30, "urgency": 10, "importance": 30, "novelty": 30 }, "base": { "relevance": 50, "urgency": 20, "importance": 40 } },
+    "selfShare": { "enabled": true, "priority": 7, "weights": { "relevance": 30, "urgency": 10, "importance": 20, "novelty": 40 }, "base": { "relevance": 40, "urgency": 10, "importance": 20 } }
+  },
+  "maxChars": 50,
+  "fallbackAfterMs": 3000,
+  "fallbackKeep": 3
+}

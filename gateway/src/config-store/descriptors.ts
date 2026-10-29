@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import type { CharacterId, Language } from '@anyidea/protocol';
 
-export const SCENE_IDS = ['pacing', 'affect', 'memory', 'characters', 'copy', 'model'] as const;
+export const SCENE_IDS = ['pacing', 'affect', 'proactivity', 'memory', 'characters', 'copy', 'model'] as const;
 export type SceneId = (typeof SCENE_IDS)[number];
 
 const PerLanguageInt = z.object({

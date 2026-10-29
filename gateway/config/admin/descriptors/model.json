@@ -2,7 +2,7 @@
   "scene": "model",
   "title": "模型与 Key",
   "intro": "通话和整理记忆用哪个通义千问模型、连哪个地址。Key 在本页下方单独管理。",
-  "order": 6,
+  "order": 7,
   "items": [
     {
       "key": "model:qwen.realtimeModel",

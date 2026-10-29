@@ -2,7 +2,7 @@
   "scene": "characters",
   "title": "角色",
   "intro": "三个角色各自的性格、开场白和声音，以及三人共用的人设。",
-  "order": 4,
+  "order": 5,
   "items": [
     {
       "key": "character:{char}.enabled",

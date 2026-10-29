@@ -10,7 +10,7 @@ describe('sidebar navigation', () => {
     const links = await screen.findAllByRole('link');
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '#/overview', '#/users', '#/sessions',
-      '#/settings/pacing', '#/settings/affect', '#/settings/memory', '#/settings/characters', '#/settings/copy', '#/settings/model',
+      '#/settings/pacing', '#/settings/affect', '#/settings/proactivity', '#/settings/memory', '#/settings/characters', '#/settings/copy', '#/settings/model',
       '#/pricing', '#/settings/versions',
       '#/trace', '#/audit',
     ]);

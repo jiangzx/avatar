@@ -2,7 +2,7 @@
   "scene": "memory",
   "title": "记忆",
   "intro": "AI 每次聊天带着多少记忆、老人的原话保存多久。后台看不到记忆内容。",
-  "order": 3,
+  "order": 4,
   "items": [
     {
       "key": "memory:instructions.snapshotMaxChars",

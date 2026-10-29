@@ -34,7 +34,7 @@ export type AdminLogLevel = 'debug' | 'info' | 'warn' | 'error';
 export interface AdminLogLevelState { global: AdminLogLevel; overrides: Array<{ scope: 'global' | 'owner'; oid: string | null; level: AdminLogLevel; until: number }> }
 export interface AdminLogLevelRequest { scope: 'global' | 'owner'; oid?: string; level: AdminLogLevel | 'reset' }
 export interface AdminDeleteOwnerRequest { confirm: string } // must equal the oid
-export type AdminConfigSceneId = 'pacing' | 'affect' | 'memory' | 'characters' | 'copy' | 'model';
+export type AdminConfigSceneId = 'pacing' | 'affect' | 'proactivity' | 'memory' | 'characters' | 'copy' | 'model';
 export type AdminConfigValue = number | boolean | string | string[];
 export type AdminConfigRisk = 'low' | 'medium' | 'high';
 export type AdminConfigControl = 'number' | 'switch' | 'text' | 'textarea' | 'list' | 'select';

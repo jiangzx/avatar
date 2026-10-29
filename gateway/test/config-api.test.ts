@@ -39,12 +39,12 @@ beforeEach(() => {
 afterEach(() => { if (db.isOpen) db.close(); });
 
 describe('reading', () => {
-  it('lists six scenes with change counts', () => {
+  it('lists seven scenes with change counts', () => {
     const overview = api.overview();
     expect(overview.activeVersion).toBe(0);
     expect(overview.startupIssues).toEqual([]);
     expect(overview.scenes.map((s) => [s.id, s.changedCount])).toEqual([
-      ['pacing', 0], ['affect', 0], ['memory', 0], ['characters', 0], ['copy', 0], ['model', 0],
+      ['pacing', 0], ['affect', 0], ['proactivity', 0], ['memory', 0], ['characters', 0], ['copy', 0], ['model', 0],
     ]);
   });
 

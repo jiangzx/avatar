@@ -24,6 +24,7 @@ const CONFIG_FILES = {
   memory: 'config/memory.json',
   affect: 'config/affect.json',
   emotion: 'config/emotion.json',
+  proactivity: 'config/proactivity.json',
 } as const;
 const SEGMENT = /^(?:[A-Za-z][A-Za-z0-9]*|\d+)$/;
 const FORBIDDEN_SEGMENTS = new Set(['constructor', 'prototype', '__proto__']);
@@ -44,6 +45,7 @@ export function parseOverlayKey(key: string): OverlayTarget {
     case 'memory':
     case 'affect':
     case 'emotion':
+    case 'proactivity':
       if (!rest) return fail();
       return { kind: 'json', file: CONFIG_FILES[domain], path: jsonPath(rest) };
     case 'i18n': {

@@ -27,7 +27,7 @@ describe('config routes', () => {
   it('reads scenes and one scene', async () => {
     const overview = await json(await h.api('/admin/api/config/scenes', { auth }));
     expect(overview.status).toBe(200);
-    expect((overview.body.scenes as unknown[]).length).toBe(6);
+    expect((overview.body.scenes as unknown[]).length).toBe(7);
     const scene = await json(await h.api('/admin/api/config/scenes/pacing', { auth }));
     expect(scene.body.id).toBe('pacing');
     expect(await json(await h.api('/admin/api/config/scenes/nope', { auth }))).toEqual({ status: 404, body: { error: 'scene_not_found', message: '没有这个设置分组。' } });
