@@ -48,8 +48,6 @@ import { DEFAULT_TOOL_TURN_TIMEOUT_MS, loadMemoryBudget, type PacingConfig } fro
 import { PushGate, type PushRequest } from './pushGate.ts';
 import { shouldSpeakBridge, slimClockAction } from './slim.ts';
 import { ToolTurn } from './toolTurn.ts';
-import { createSilencePlanner } from './silence.ts';
-import { timeContext } from './timeContext.ts';
 import { TurnFinals } from './turnAccess.ts';
 import { createToolRegistry, type ToolOutcome, type ToolRegistry } from './tools/registry.ts';
 
@@ -203,7 +201,6 @@ export class Session {
   /** Held after an explicit language request so later speech does not flip the reply language. */
   private languageLock: Language | null = null;
   private readonly personas = new Map<Language, string>();
-  private readonly silencePlanners = new Map<Language, ReturnType<typeof createSilencePlanner>>();
   /** Every live session.update goes through here (blockers #48). */
   private readonly gate: PushGate;
   private readonly push: PacingConfig['push'];
@@ -380,9 +377,6 @@ export class Session {
     const extractor = deps.worker;
     const ownerId = ctx.ownerId;
     const agentId = ctx.agentId;
-    const hasSilencePlanner = deps.roles.supportedLanguages(this.roleId)
-      .some((language) => deps.roles.director(ctx.characterId, language).silenceDecision !== undefined);
-    const textPlanner = Boolean(deps.textClient) && hasSilencePlanner;
     this.director = new Director(
       (language) => this.directorConfig(language),
       {
@@ -391,14 +385,7 @@ export class Session {
         firstMeetGreeting: () => this.firstMeetGreeting(),
         openingRequest: () => this.proactive?.openingLine({ language: this.language, name: this.greetingName(), firstMeet: this.context.firstMeet }) ?? null,
         safeGreeting: () => this.safeGreeting(),
-        ...(textPlanner || this.proactive ? { planProactiveLine: (context, signal) => this.planProactiveLine(context, signal) } : {}),
-        ...(textPlanner ? {
-          getMemorySnapshot: (stage) => stage === 'greeting'
-            // A first meeting must not sound like a reunion: the greeting planner sees no memory.
-            ? (this.context.firstMeet ? '' : this.context.greetingMemorySnapshot ?? '')
-            : this.context.proactiveMemorySnapshot ?? '',
-          ...(deps.affect?.enabled ? { getPlanExtras: () => this.planExtras() } : {}),
-        } : {}),
+        ...(this.proactive ? { planProactiveLine: (context, signal) => this.planProactiveLine(context, signal) } : {}),
         ...(extractor && ownerId && agentId ? { onQuietRest: () => { void extractor.enqueue(ownerId, agentId, 'silence', this.language); } } : {}),
         logger: this.log,
       },
@@ -763,36 +750,23 @@ export class Session {
     });
   }
 
-  private planProactiveLine(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null> {
-    if (context.stage !== 'greeting' && this.proactive) {
-      const line = this.proactive.silenceLine({
-        step: context.stage,
-        language: this.language,
-        hadContent: context.userText !== '',
-        lastUtterance: context.userText,
-        knownName: this.greetingName() !== null,
-        card: this.affectCard,
-        lowIntensity: this.deps.affect?.lowIntensity ?? Number.POSITIVE_INFINITY,
-        ...(this.openLoop ? { openLoop: this.openLoop } : {}),
-      });
-      if (line && 'request' in line) return { text: line.request.fallbackText, request: line.request };
-      if (line && 'quiet' in line) return { text: null, quiet: true };
-      if (line && 'close' in line) return { text: null, close: true };
-    }
-    return this.textPlan(context, signal);
-  }
-
-  /** The text-model planner: the opening, and silence steps the engine does not handle. */
-  private textPlan(context: SilenceContext, signal: AbortSignal): Promise<SilencePlan | null> | null {
-    const config = this.deps.roles.director(this.context.characterId, this.language).silenceDecision;
-    const client = this.textFor('silence_plan');
-    if (!config || !client) return null;
-    let planner = this.silencePlanners.get(this.language);
-    if (!planner) {
-      planner = createSilencePlanner(client, config, this.i18n.silence[this.language], this.log);
-      this.silencePlanners.set(this.language, planner);
-    }
-    return planner(context, signal);
+  /** Silence steps ask the decision engine; null = the configured stage copy. The opening never comes here with a known name. */
+  private planProactiveLine(context: SilenceContext, _signal: AbortSignal): SilencePlan | null {
+    if (context.stage === 'greeting' || !this.proactive) return null;
+    const line = this.proactive.silenceLine({
+      step: context.stage,
+      language: this.language,
+      hadContent: context.userText !== '',
+      lastUtterance: context.userText,
+      knownName: this.greetingName() !== null,
+      card: this.affectCard,
+      lowIntensity: this.deps.affect?.lowIntensity ?? Number.POSITIVE_INFINITY,
+      ...(this.openLoop ? { openLoop: this.openLoop } : {}),
+    });
+    if (line && 'request' in line) return { text: line.request.fallbackText, request: line.request };
+    if (line && 'quiet' in line) return { text: null, quiet: true };
+    if (line && 'close' in line) return { text: null, close: true };
+    return null;
   }
 
   private send(msg: ServerMessage): void {
@@ -875,27 +849,6 @@ export class Session {
     } catch {
       this.log.error('mood_summary_write_failed');
     }
-  }
-
-  /** Planner-only extras: latest card, the session's open loop, and localized time words. */
-  private planExtras(): Pick<SilenceContext, 'affect' | 'openLoop' | 'timeOfDay' | 'season' | 'solarTerm'> {
-    const config = this.deps.affect;
-    if (!config) return {};
-    const card = this.affectCard;
-    return {
-      ...timeContext(this.now(), config.timeZone, config.solarTermWindowDays, this.i18n.affect[this.language]),
-      ...(card ? {
-        affect: {
-          emotion: card.emotion,
-          intensity: card.intensity,
-          trend: card.trend,
-          need: card.need,
-          low: isLow(card, config.lowIntensity),
-          crisis: card.crisis,
-        },
-      } : {}),
-      ...(this.openLoop ? { openLoop: this.openLoop } : {}),
-    };
   }
 
   private sessionConfig(): SessionConfig {

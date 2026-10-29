@@ -4,18 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Language, ServerMessage } from '@anyidea/protocol';
 import type { AdapterEvents, ProactiveRequest, RealtimeAdapter, SessionConfig } from '../src/adapters/types.ts';
 import { loadI18n } from '../src/i18n/load.ts';
-import type { SilenceRules } from '../src/i18n/types.ts';
-import type { TextModelClient } from '../src/memory/textClient.ts';
 import type { MemoryStore } from '../src/memory/store.ts';
 import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
 import { PROMPT_LABELS } from '../src/roles/labels.ts';
-import type { SilenceDecisionConfig } from '../src/roles/types.ts';
 import { ActionRouter } from '../src/session/actions.ts';
 import type { SessionContext } from '../src/session/context.ts';
-import type { DirectorConfig, SilenceContext } from '../src/session/director.ts';
+import type { DirectorConfig } from '../src/session/director.ts';
 import { ConversationLedger, MockSummarizer } from '../src/session/ledger.ts';
 import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
-import { createSilencePlanner } from '../src/session/silence.ts';
 import { createToolRegistry, type ToolContext } from '../src/session/tools/registry.ts';
 import { NO_TURN } from '../src/session/turnAccess.ts';
 
@@ -27,13 +23,6 @@ const director: DirectorConfig = {
   followupInstruction: 'F', followupText: 'followup', idleNoticeInstruction: 'I', idleNoticeText: 'idle',
   resumeInstruction: 'R', resumeText: 'resume', toolContinueInstruction: 'C', toolContinueText: 'ok',
   memoryNoticeInstruction: 'M', memoryNoticeText: 'notice',
-};
-
-const silenceDecision: SilenceDecisionConfig = {
-  instruction: 'Return the silence decision as JSON.',
-  speakInstruction: 'SAY {continuation}',
-  maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
-  policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
 };
 
 /** Records what a real adapter would receive; the test drives the model events itself. */
@@ -253,7 +242,6 @@ describe('multilingual session', () => {
     const jaDirector: DirectorConfig = {
       ...director,
       greetingNameTexts: ['{name}、またお会いしましたね。'],
-      silenceDecision,
     };
     const jaRoles = fixedRoleCatalog('P-zh', director, {
       languages: ['zh', 'ja', 'en'],
@@ -279,7 +267,6 @@ describe('multilingual session', () => {
     const zhDirector: DirectorConfig = {
       ...director,
       greetingNameTexts: ['{name}，又见面了。'],
-      silenceDecision,
     };
     const zhRoles = fixedRoleCatalog('P-zh', director, {
       languages: ['zh', 'ja', 'en'],
@@ -346,30 +333,6 @@ describe('multilingual session', () => {
     zhOnly.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
     expect(missed).not.toHaveBeenCalled();
     zhOnly.session.end();
-  });
-
-  it('accepts a ja checkin with both parts, rejects one without anytime, and keeps zh unchanged', async () => {
-    const context: SilenceContext = {
-      stage: 'checkin',
-      userText: '今天走了很多路，脚有点酸。',
-      assistantText: '今天走了不少地方。',
-      previousTexts: [],
-      memorySnapshot: '',
-    };
-    const signal = new AbortController().signal;
-    const planner = (line: string, rules: SilenceRules) => createSilencePlanner(
-      { complete: async () => JSON.stringify({ speak: true, text: line }) } satisfies TextModelClient,
-      silenceDecision,
-      rules,
-    );
-
-    const jaLine = 'まだ聞こえていますか？急がなくて大丈夫です。いつでもお話しできますよ。';
-    expect(await planner(jaLine, i18n.silence.ja)(context, signal)).toEqual({ text: jaLine });
-    expect(await planner('まだ聞こえていますか？今日はいい天気ですね。', i18n.silence.ja)(context, signal)).toBeNull();
-
-    const zhLine = '您还在听吗？不着急，您随时想聊都可以。';
-    expect(await planner(zhLine, i18n.silence.zh)(context, signal)).toEqual({ text: zhLine });
-    expect(await planner('您还在听吗？今天天气不错。', i18n.silence.zh)(context, signal)).toBeNull();
   });
 
   it('keeps the zh instructions, tool copy, and recall fallbacks unchanged', async () => {

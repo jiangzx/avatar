@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DirectorSchema, loadConfig, loadDirectorConfig, loadIdentityConfig, makeOriginCheck } from '../src/config.ts';
-import { shippedRoles } from './support/shipped.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -150,18 +149,10 @@ describe('config', () => {
     // A new session greets first and then asks.
     expect(d.greetingMemoryText?.startsWith('您好')).toBe(true);
     expect(d.greetingMemoryText).toContain('？');
-    expect(d.silenceDecision?.temperature).toBe(0.8);
-    expect(d.silenceDecision?.variationHints?.greeting).toHaveLength(3);
-    expect(d.silenceDecision?.variationHints?.checkin).toHaveLength(3);
-    expect(d.silenceDecision?.instruction).toContain('greeting');
-    expect(d.silenceDecision?.instruction).toContain('checkin');
-    expect(d.silenceDecision?.instruction).toContain('主动挑一个相关的小话题');
-    expect(d.silenceDecision?.instruction).toContain('checkin：必须问对方是否还在听');
     expect(d.greetingRetryMs).toBe(800);
     // No bare acknowledgement fallback and no name on every proactive line.
     expect(d.toolContinueText).not.toMatch(/^[好嗯哦行啊]/);
     expect(d.toolContinueInstruction).toContain('应答词');
-    expect(d.silenceDecision?.instruction).toContain('一律不要叫名字');
     expect(d.openingFollowText).toBe('您要是方便，告诉我怎么称呼您就好。');
     expect(d.openingFollowInstruction).toContain('称呼');
     expect(d.bargeMissText).toBe('没听清，您再说一遍。');
@@ -177,24 +168,10 @@ describe('config', () => {
       expect(en[field]).toBe(zh[field]);
     }
     for (const d of [ja, en]) {
-      expect(d.silenceDecision?.maxTokens).toBe(zh.silenceDecision?.maxTokens);
-      expect(d.silenceDecision?.maxInputChars).toBe(zh.silenceDecision?.maxInputChars);
-      expect(d.silenceDecision?.temperature).toBe(zh.silenceDecision?.temperature);
-      expect(d.silenceDecision?.policy).toEqual(zh.silenceDecision?.policy);
-      expect(d.silenceDecision?.speakInstruction).toContain('{continuation}');
       expect(d.topicInstruction).toContain('{topic}');
       expect(d.greetingNameTexts).toHaveLength(3);
       for (const text of d.greetingNameTexts ?? []) expect(text).toContain('{name}');
-      for (const stage of ['greeting', 'context', 'check', 'leave', 'checkin', 'rest']) {
-        expect(d.silenceDecision?.instruction).toContain(stage);
-      }
-      expect(d.silenceDecision?.instruction).toContain('previousTexts');
-      expect(d.silenceDecision?.instruction).toContain('close');
-      expect(d.silenceDecision?.variationHints?.greeting).toHaveLength(3);
-      expect(d.silenceDecision?.variationHints?.checkin).toHaveLength(3);
     }
-    expect(ja.silenceDecision?.maxReplyChars).toBe(60);
-    expect(en.silenceDecision?.maxReplyChars).toBe(120);
     expect(ja.quietPhrases).toEqual(['やめて', '静かにして', '黙って', '話さないで', '静かに']);
     expect(en.quietPhrases).toEqual(['be quiet', 'stop talking', 'quiet please', "don't talk", 'silence']);
     expect(ja.lightPhrases).toEqual(['うん', 'はい', 'ええ', 'そうですね', 'わかりました', 'なるほど']);
@@ -241,18 +218,6 @@ describe('config', () => {
     // Check-in limits follow maxCheckinChars (en 80, ja 60), not the zh 30.
     expect(en.checkinInstruction).toContain('80 characters');
     expect(ja.checkinInstruction).toContain('60 文字');
-    expect(en.silenceDecision?.instruction).toContain('within 80 characters');
-    expect(ja.silenceDecision?.instruction).toContain('60 文字以内');
-
-    // Variation hint labels are localized: zh keeps the contract text, ja is natural
-    // Japanese, en is ASCII.
-    expect(zh.silenceDecision?.variationHintLabel).toContain('本次建议角度');
-    expect(ja.silenceDecision?.variationHintLabel).toBeTruthy();
-    expect(ja.silenceDecision?.variationHintLabel).toMatch(/[ぁ-んァ-ン]/);
-    expect(ja.silenceDecision?.variationHintLabel).not.toContain('您');
-    expect(ja.silenceDecision?.variationHintLabel).not.toContain('本次建议角度');
-    expect(en.silenceDecision?.variationHintLabel).toBeTruthy();
-    expect(en.silenceDecision?.variationHintLabel).not.toMatch(/[㐀-鿿ぁ-んァ-ン]/);
 
     // English copy carries no Chinese characters; Japanese copy is not the Chinese text.
     const enText = JSON.stringify(en);
@@ -262,72 +227,6 @@ describe('config', () => {
 
   it('rejects an invalid director config', () => {
     expect(() => loadDirectorConfig(`${root}package.json`)).toThrow();
-  });
-
-  it('requires a variation hint label when hints are configured', () => {
-    const value = JSON.parse(readFileSync(`${root}roles/elder-companion/en/director.json`, 'utf8')) as {
-      silenceDecision: Record<string, unknown>;
-    };
-    delete value.silenceDecision.variationHintLabel;
-    expect(() => DirectorSchema.parse(value)).toThrow(/silence_variation_hint_label_missing/);
-  });
-
-  it('rejects optional speech retries and a speak template that cannot carry the approved line', () => {
-    const cfg = loadDirectorConfig(`${root}roles/elder-companion/zh/director.json`);
-    const decision = cfg.silenceDecision!;
-    expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
-      ...decision, policy: { ...decision.policy, retries: 1 },
-    } })).toThrow();
-    expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
-      ...decision, speakInstruction: 'generic presence',
-    } })).toThrow();
-    expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
-      ...decision, temperature: 3,
-    } })).toThrow();
-    expect(() => DirectorSchema.parse({ ...cfg, silenceDecision: {
-      ...decision, variationHints: { checkin: [] },
-    } })).toThrow();
-  });
-
-  it('appends affect, open-loop and time rules 12-15 to every planner prompt without touching rules 1-11', () => {
-    const load = (language: 'zh' | 'ja' | 'en') =>
-      loadDirectorConfig(`${root}roles/elder-companion/${language}/director.json`).silenceDecision!.instruction;
-
-    const zh = load('zh');
-    expect(zh).toContain('12) affect 是对方此刻状态的内部参考，可能没有；其中 low 为 true 时（优先于第 3 条），context、check 不起新话题');
-    expect(zh).toContain('crisis 为 true 时，任何阶段都不起新话题，只表达你一直在，并劝对方联系家人或身边的人');
-    expect(zh).toContain('13) affect.need 为 share_joy 或 chat、且 low 不为 true 时，context 可以接住 userText 里已有的细节，check 最多再问一个和它相关的小问题；leave、checkin 不再起新话题或问新问题');
-    expect(zh).toContain('14) openLoop 是对方本次说过、还没说完的事，可能没有；只在 context、check 阶段可用，用法同 userText');
-    expect(zh).toContain('15) timeOfDay、season、solarTerm 是当地时段、季节和前后几天内的节气（日期是约数），只用于 greeting 的寒暄措辞，不要编造天气');
-    expect(zh).toContain('10) 只能使用输入里已经出现过的具体人名、作品名、地名和事件；不要补充输入里没有的具体名字或作品名。');
-    expect(zh).toContain('checkin：必须问对方是否还在听，并说明随时都可以接着聊；不超过 30 个字');
-    expect(zh.indexOf('11) ')).toBeLessThan(zh.indexOf('12) '));
-    expect(zh.indexOf('15) ')).toBeLessThan(zh.indexOf('只输出 JSON：'));
-
-    const ja = load('ja');
-    expect(ja).toContain('12) affect は相手の今の様子の内部参考で、ないこともある。');
-    expect(ja).toContain('crisis が true のときは、どの段階でも新しい話題を出さず');
-    expect(ja).toContain('13) affect.need が share_joy または chat で');
-    expect(ja).toContain('leave と checkin では新しい話題も新しい質問も出さず');
-    expect(ja).toContain('14) openLoop は相手が今回話した、まだ終わっていない事柄で');
-    expect(ja).toContain('15) timeOfDay、season、solarTerm は現地の時間帯、季節、前後数日以内の節気（日付はおおよそ）');
-    expect(ja).toContain('10) 入力に出てきた具体的な人名、作品名、地名、出来事だけを使う。');
-    expect(ja.indexOf('11) ')).toBeLessThan(ja.indexOf('12) '));
-    expect(ja.indexOf('15) ')).toBeLessThan(ja.indexOf('JSON だけを出力：'));
-    expect(ja).not.toContain('您');
-
-    const en = load('en');
-    expect(en).toContain('12) affect is internal guidance about how they feel right now and may be absent.');
-    expect(en).toContain('When affect.crisis is true, do not start a new topic at any stage');
-    expect(en).toContain('13) When affect.need is share_joy or chat and affect.low is not true');
-    expect(en).toContain('in leave and checkin do not start a new topic or ask a new question');
-    expect(en).toContain('14) openLoop is something they said earlier in this conversation that is not finished');
-    expect(en).toContain('15) timeOfDay, season, and solarTerm are the local time of day');
-    expect(en).toContain('never invent the weather');
-    expect(en).toContain('10) Use only the specific names, titles, places, and events that already appear in the input');
-    expect(en.indexOf('11) ')).toBeLessThan(en.indexOf('12) '));
-    expect(en.indexOf('15) ')).toBeLessThan(en.indexOf('Output JSON only:'));
-    expect(en).not.toMatch(/[一-鿿]/);
   });
 });
 
@@ -363,12 +262,6 @@ describe('identity config', () => {
     for (const [key, value] of [['MAX_OWNERS', '0'], ['REGISTER_DAILY_CAP', 'x'], ['REGISTER_RATE_LIMIT_MAX', '0'], ['REGISTER_RATE_LIMIT_WINDOW_MS', '99'], ['ORPHAN_OWNER_DAYS', '0'], ['ORPHAN_CLEANUP_BATCH', '0'], ['MEMORY_DB_BUSY_TIMEOUT_MS', '99'], ['ENABLE_DEV_ENDPOINTS', 'yes']] as const) {
       expect(() => loadIdentityConfig({ ...base, [key]: value }, repoRoot)).toThrow(key);
     }
-  });
-
-  it('gives the en silence hint label a trailing space', () => {
-    const roles = shippedRoles();
-    const label = roles.director('xiaonuan', 'en').silenceDecision?.variationHintLabel;
-    expect(label?.endsWith(': ')).toBe(true);
   });
 
   it('requires a strong, distinct DEV_TOKEN only when dev endpoints are enabled, without echoing it', () => {

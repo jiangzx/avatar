@@ -17,9 +17,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const i18n = loadI18n(`${root}config`);
 const proactivity = loadProactivity(`${root}config/proactivity.json`);
 const shipped = loadDirectorConfig(`${root}roles/elder-companion/zh/director.json`);
-// No silenceDecision: this session has no text planner, so every silence line comes from the engine.
-const { silenceDecision: _planner, ...zh } = shipped;
-const director = { ...zh, topics: [{ id: 'meal', prompt: '今天吃了什么好吃的', fallbackText: '您今天吃了点什么好吃的？' }] };
+const director = { ...shipped, topics: [{ id: 'meal', prompt: '今天吃了什么好吃的', fallbackText: '您今天吃了点什么好吃的？' }] };
 const AFTERNOON = Date.parse('2026-11-03T15:00:00+08:00');
 const DAY = 86_400_000;
 
@@ -262,6 +260,29 @@ describe('familiarity tone (open item 2)', () => {
     const t = boot();
     await t.open();
     expect(t.adapter.connects[0]!.instructions).toContain(director.familiarityTones!.new);
+  });
+});
+
+describe('no text planner anywhere (P4-T5)', () => {
+  it('a first meeting without a name opens with the configured instruction, and no text model is called', async () => {
+    const complete = vi.fn(async () => '{"speak":true,"text":"不应出现"}');
+    const adapter = new FakeAdapter();
+    const session = new Session({
+      adapterFactory: () => adapter,
+      summarizer: new MockSummarizer(),
+      roles: fixedRoleCatalog('P', director),
+      textClient: { complete },
+      i18n,
+      proactivity,
+    }, { characterId: 'xiaonuan', firstMeet: true, language: 'zh' }, 'no-planner');
+    sessions.push(session);
+    await session.start({ send: () => {}, sendAudio: () => {} });
+    expect(adapter.requests[0]).toEqual({ cue: 'greeting', instruction: director.greetingInstruction, fallbackText: director.greetingText });
+    adapter.done();
+    session.handleClientMessage({ type: 'playback.stopped', responseSeq: 1, playedMs: 0, reason: 'ended' });
+    await vi.advanceTimersByTimeAsync(director.contextAfterMs! + director.checkAfterMs!);
+    expect(adapter.requests.length).toBeGreaterThanOrEqual(2);
+    expect(complete).not.toHaveBeenCalled();
   });
 });
 

@@ -77,7 +77,7 @@ describe('descriptor catalog', () => {
   });
 
   it('never whitelists technical or safety fields', () => {
-    const forbidden = [/^pacing:(rebuild|tailGuardMs|slim|policies|push|output)/, /safety/, /_shared/, /director\.\w*Instruction/, /silenceDecision/, /bargeMiss/, /memoryNotice/, /pinMaxPerCharacter/];
+    const forbidden = [/^pacing:(rebuild|tailGuardMs|slim|policies|push|output)/, /safety/, /_shared/, /director\.\w*Instruction/, /bargeMiss/, /memoryNotice/, /pinMaxPerCharacter/];
     for (const item of catalog.all()) for (const pattern of forbidden) expect(item.key, item.key).not.toMatch(pattern);
   });
 

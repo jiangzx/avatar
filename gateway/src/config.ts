@@ -165,29 +165,6 @@ export function makeOriginCheck(devOrigins: string[]): (origin: string) => boole
 }
 
 const DirectorSchema = z.object({
-  silenceDecision: z.object({
-    instruction: z.string().min(1),
-    speakInstruction: z.string().includes('{continuation}'),
-    maxTokens: z.number().int().min(32).max(512),
-    maxInputChars: z.number().int().min(100).max(20000),
-    maxReplyChars: z.number().int().min(1).max(120),
-    temperature: z.number().min(0).max(2),
-    variationHints: z.object({
-      greeting: z.array(z.string().min(1)).min(1).optional(),
-      checkin: z.array(z.string().min(1)).min(1).optional(),
-    }).strict().optional(),
-    /** Localized prefix for a variation hint; required whenever variationHints is present. */
-    variationHintLabel: z.string().min(1).optional(),
-    policy: z.object({
-      timeoutMs: z.number().int().min(100).max(10000),
-      retries: z.literal(0),
-      backoffMs: z.literal(0),
-      maxBackoffMs: z.literal(0),
-    }).strict(),
-  }).strict()
-    .refine(c => c.maxReplyChars <= c.maxInputChars, { message: 'silence_reply_exceeds_input_budget' })
-    .refine(c => c.variationHints === undefined || c.variationHintLabel !== undefined, { message: 'silence_variation_hint_label_missing' })
-    .optional(),
   followupAfterMs: z.number().int().positive(),
   idleNoticeAfterMs: z.number().int().positive(),
   maxConsecutive: z.number().int().min(0),

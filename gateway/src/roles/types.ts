@@ -1,5 +1,3 @@
-import type { PolicySpec } from '../reliability/policy.ts';
-
 /** What a proactive line is for; each has one zh purpose sentence (spec 意图渲染). */
 export const INTENT_PURPOSES = ['threadEventBefore', 'threadEventAfter', 'threadConcern', 'threadPlan',
   'moodCheckNow', 'moodCheckEarlier', 'routineMorning', 'routineNoon', 'routineEvening', 'routineNight',
@@ -29,24 +27,6 @@ export interface IntentCopy {
 
 export type FallbackGroups = Record<FallbackKey, readonly string[]>;
 
-export interface SilenceDecisionConfig {
-  instruction: string;
-  speakInstruction: string;
-  maxTokens: number;
-  maxInputChars: number;
-  maxReplyChars: number;
-  /** Sampling temperature for spoken lines; higher values vary the phrasing. */
-  temperature: number;
-  /** Structural angles that push phrasing apart; hints only, never spoken verbatim. */
-  variationHints?: {
-    greeting?: readonly string[];
-    checkin?: readonly string[];
-  };
-  /** Localized label placed before a variation hint in the planner system prompt. */
-  variationHintLabel?: string;
-  policy: PolicySpec;
-}
-
 /** A light conversation starter used for the first silence follow-up. */
 export interface TopicCard {
   id: string;
@@ -55,7 +35,6 @@ export interface TopicCard {
 }
 
 export interface DirectorConfig {
-  silenceDecision?: SilenceDecisionConfig;
   followupAfterMs: number;
   idleNoticeAfterMs: number;
   maxConsecutive: number;
@@ -73,7 +52,7 @@ export interface DirectorConfig {
   checkinAfterMs?: number;
   /** After the final check-in, wait this long still silent, then one looser line. Default 180000. */
   restAfterMs?: number;
-  /** Legacy/test template. Production uses silenceDecision.speakInstruction. */
+  /** Step 1 instruction for the configured path (ja/en, no name yet). */
   contextInstruction?: string;
   /** Step 1 spoken fallback when the judged continuation is declined. Defaults to followupText. */
   contextText?: string;

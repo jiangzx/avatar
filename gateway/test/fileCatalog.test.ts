@@ -141,8 +141,6 @@ describe('FileRoleCatalog', () => {
     expect(roles.director('xiaokai', 'zh').greetingText).toBe('您好，我是小凯，来陪您说说话。您怎么称呼？');
     expect(roles.director('xiaonuan', 'ja').greetingText).toBe('こんにちは、シャオヌアンです。お話ししに来ました。どうお呼びすればいいですか？');
     expect(roles.director('xiaoxin', 'en').greetingText).toBe("Hello, I'm Xiaoxin. I came to keep you company. What should I call you?");
-    expect(roles.director('xiaonuan', 'zh').silenceDecision?.instruction).toContain('你是小暖，正在陪一位长辈聊天。');
-    expect(roles.director('xiaonuan', 'zh').silenceDecision?.instruction).toContain('标成「基本情况」的记忆是已知的基本资料');
     expect(roles.recallPrompt('xiaoxin', 'en').startsWith('You are Xiaoxin,')).toBe(true);
     expect(roles.affectPrompt('xiaonuan', 'zh').startsWith('你是小暖的情绪分析器')).toBe(true);
     expect(roles.buildPersona('xiaokai', 'ja')).toContain('自分の名前を口にするときは「シャオカイ」と言います。');

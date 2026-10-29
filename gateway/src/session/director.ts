@@ -696,7 +696,6 @@ export class Director {
 
   private planSpeakInstruction(stage: ProactivePlanStage): string {
     const c = this.cfg;
-    if (c.silenceDecision?.speakInstruction) return c.silenceDecision.speakInstruction;
     return stage === 'greeting'
       ? (c.greetingInstruction ?? this.silence().contextInstruction)
       : this.silence().contextInstruction;

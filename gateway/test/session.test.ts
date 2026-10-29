@@ -6,7 +6,7 @@ import type { SessionConfig } from '../src/adapters/types.ts';
 import { loadI18n } from '../src/i18n/load.ts';
 import { fixedRoleCatalog, type RoleCatalog } from '../src/roles/catalog.ts';
 import type { SessionContext } from '../src/session/context.ts';
-import type { DirectorConfig, SilenceContext } from '../src/session/director.ts';
+import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import type { ReplyMetrics } from '../src/session/metrics.ts';
 import type { MemoryStore } from '../src/memory/store.ts';
@@ -14,7 +14,6 @@ import type { TextModelClient } from '../src/memory/textClient.ts';
 import { PROMPT_LABELS } from '../src/roles/labels.ts';
 import { loadAffectConfig } from '../src/session/affect.ts';
 import type { PushGate } from '../src/session/pushGate.ts';
-import { timeContext } from '../src/session/timeContext.ts';
 import { InterruptCoordinator } from '../src/session/interrupt.ts';
 import type { PacingConfig } from '../src/session/pacing.ts';
 import { Session, type SessionDeps, type TranscriptWriter, type Transport } from '../src/session/session.ts';
@@ -244,11 +243,6 @@ describe('Session', () => {
     const roles = fixedRoleCatalog('P', {
       ...director,
       greetingNameTexts: ['{name}，又见面了。'],
-      silenceDecision: {
-        instruction: 'D', speakInstruction: 'SAY {continuation}',
-        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
-        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
-      },
     });
     const s = setup({
       roles,
@@ -277,11 +271,6 @@ describe('Session', () => {
     const enDirector: DirectorConfig = {
       ...director,
       greetingNameTexts: ['{name}, good to see you again.'],
-      silenceDecision: {
-        instruction: 'D', speakInstruction: 'SAY {continuation}',
-        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
-        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
-      },
     };
     const roles = fixedRoleCatalog('P-en', enDirector, { languages: ['en'], defaultLanguage: 'en', directors: { en: enDirector } });
     const s = setup({
@@ -302,11 +291,6 @@ describe('Session', () => {
     const enDirector: DirectorConfig = {
       ...director,
       greetingNameTexts: ['{name}, good to see you again.'],
-      silenceDecision: {
-        instruction: 'D', speakInstruction: 'SAY {continuation}',
-        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
-        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
-      },
     };
     const roles = fixedRoleCatalog('P-en', enDirector, { languages: ['en'], defaultLanguage: 'en', directors: { en: enDirector } });
     const s = setup({
@@ -350,18 +334,12 @@ describe('Session', () => {
   });
 
   it('keeps the substantive answer when a deferred memory notice plays after it', async () => {
-    const inputs: unknown[] = [];
     const s = setup({
       adapterFactory: () => new MockAdapter({
         script: { ...script, memoryNotice: director.memoryNoticeText, turns: [{ match: '老王', user: '我叫老王', reply: '王叔好' }] },
         replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1,
       }),
-      roles: fixedRoleCatalog('P', { ...director, contextAfterMs: 3000, silenceDecision: {
-        instruction: 'DECIDE', speakInstruction: 'READ {continuation}',
-        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
-        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
-      } }),
-      textClient: { complete: async input => { inputs.push(JSON.parse(input.user)); return '{"speak":false}'; } },
+      roles: fixedRoleCatalog('P', { ...director, contextAfterMs: 3000 }),
     }, ownedCtx, 'deferred-notice', true);
     await s.session.start(s.transport);
     await vi.advanceTimersByTimeAsync(150);
@@ -370,76 +348,27 @@ describe('Session', () => {
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(5000);
     expect(assistantText(s.sent, 3)).toBe(director.memoryNoticeText);
-    expect(inputs).toEqual([{ stage: 'greeting', userText: '', assistantText: '', previousTexts: [], memorySnapshot: '' }]);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 3, playedMs: 5000, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(3000);
-    expect(inputs).toEqual([
-      { stage: 'greeting', userText: '', assistantText: '', previousTexts: [], memorySnapshot: '' },
-      { stage: 'context', userText: '我叫老王', assistantText: '王叔好', previousTexts: [], memorySnapshot: '' },
-    ]);
     await vi.advanceTimersByTimeAsync(600000);
     expect(of(s.sent, 'response.start')).toHaveLength(4);
     s.session.end();
   });
 
-  it('decides once from completed playback and ignores duplicate playback receipts', async () => {
-    const inputs: unknown[] = [];
+  it('speaks the configured context line once and ignores duplicate playback receipts', async () => {
     const s = setup({
-      roles: fixedRoleCatalog('P', { ...director, contextAfterMs: 3000, silenceDecision: {
-        instruction: 'DECIDE', speakInstruction: 'READ {continuation}',
-        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
-        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
-      } }),
-      textClient: { complete: async input => { inputs.push(JSON.parse(input.user)); return '{"speak":false}'; } },
+      roles: fixedRoleCatalog('P', { ...director, contextAfterMs: 3000 }),
     });
     await greetAndFinish(s);
     for (let i = 0; i < 10; i++) s.session.handleMicAudio(loud());
     for (let i = 0; i < 40; i++) s.session.handleMicAudio(quiet());
     await vi.advanceTimersByTimeAsync(5000);
-    expect(inputs).toHaveLength(1);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(3000);
-    expect(inputs).toEqual([
-      { stage: 'greeting', userText: '', assistantText: '', previousTexts: [], memorySnapshot: '' },
-      { stage: 'context', userText: '我叫老王', assistantText: '王叔好', previousTexts: [], memorySnapshot: '' },
-    ]);
     s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
     await vi.advanceTimersByTimeAsync(600000);
-    expect(inputs).toHaveLength(2);
-    // A declined context line still speaks the configured fallback; the duplicate receipt adds nothing.
+    // The configured context line is spoken once; the duplicate receipt adds nothing.
     expect(of(s.sent, 'response.start')).toHaveLength(3);
-    s.session.end();
-  });
-
-  it.each(['new_turn', 'disconnect', 'rebuild'] as const)('discards optional speech across %s', async event => {
-    let finish!: (raw: string) => void;
-    let decisionSignal!: AbortSignal;
-    const s = setup({
-      roles: fixedRoleCatalog('P', { ...director, contextAfterMs: 3000, silenceDecision: {
-        instruction: 'DECIDE', speakInstruction: 'READ {continuation}',
-        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
-        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
-      } }),
-      textClient: { complete: input => {
-        const context = JSON.parse(input.user) as { stage: string };
-        if (context.stage === 'greeting') return Promise.resolve('{"speak":false}');
-        decisionSignal = input.signal;
-        return new Promise(resolve => { finish = resolve; });
-      } },
-    });
-    await greetAndFinish(s);
-    s.session.handleClientMessage({ type: 'debug.userText', text: '聊聊公园' });
-    await vi.advanceTimersByTimeAsync(1000);
-    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(decisionSignal).toBeDefined();
-    if (event === 'new_turn') s.session.handleClientMessage({ type: 'debug.userText', text: '再聊聊树' });
-    if (event === 'disconnect') s.session.detachTransport();
-    if (event === 'rebuild') s.mocks[0].emit('error', 'synthetic_retryable', true);
-    expect(decisionSignal.aborted).toBe(true);
-    finish('{"speak":true,"text":"公园里那条小路让您惦记着。"}');
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(of(s.sent, 'response.start').filter(m => m.kind === 'followup')).toEqual([]);
     s.session.end();
   });
 
@@ -2190,56 +2119,9 @@ describe('Session affect render', () => {
   });
 });
 
-describe('Session planner extras and topic exhaustion', () => {
+describe('topic exhaustion', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
-
-  const plannerDirector: DirectorConfig = {
-    ...director,
-    contextAfterMs: 3000,
-    silenceDecision: {
-      instruction: 'DECIDE', speakInstruction: 'READ {continuation}',
-      maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
-      policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
-    },
-  };
-  /** 14:00 in Asia/Shanghai on 2026-10-23. */
-  const FIXED_NOW = Date.UTC(2026, 9, 23, 6, 0);
-
-  it('sends the latest card, the open loop and local time words to the planner', async () => {
-    const plannerInputs: unknown[] = [];
-    const s = setup({
-      roles: fixedRoleCatalog('P', plannerDirector),
-      i18n,
-      affect: affectFixture,
-      now: () => FIXED_NOW,
-      textClient: { complete: async (input) => {
-        if (input.system === 'DECIDE') {
-          plannerInputs.push(JSON.parse(input.user));
-          return '{"speak":false}';
-        }
-        return affectCardJson({ emotion: 'happy', intensity: 1, trend: 'flat', need: 'chat', strategy: 'ask', openLoop: '明天要去医院复查' });
-      } },
-    });
-    const time = timeContext(FIXED_NOW, affectFixture.timeZone, affectFixture.solarTermWindowDays, i18n.affect.zh);
-    await greetAndFinish(s);
-    expect(plannerInputs).toEqual([{ stage: 'greeting', userText: '', assistantText: '', previousTexts: [], memorySnapshot: '', ...time }]);
-    s.session.handleClientMessage({ type: 'debug.userText', text: '明天要去医院复查' });
-    await vi.advanceTimersByTimeAsync(1000);
-    s.session.handleClientMessage({ type: 'playback.stopped', responseSeq: 2, playedMs: 300, reason: 'ended' });
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(plannerInputs[1]).toEqual({
-      stage: 'context',
-      userText: '明天要去医院复查',
-      assistantText: '我在听',
-      previousTexts: [],
-      memorySnapshot: '',
-      ...time,
-      affect: { emotion: 'happy', intensity: 1, trend: 'flat', need: 'chat', low: false, crisis: false },
-      openLoop: '明天要去医院复查',
-    });
-    s.session.end();
-  });
 
   it('arms the topic-exhaustion hint after one short answer and drops it on real content, asking for a push each time', async () => {
     const s = setup({
@@ -2279,31 +2161,6 @@ describe('Session planner extras and topic exhaustion', () => {
     s.session.handleClientMessage({ type: 'debug.userText', text: '嗯嗯' });
     await vi.advanceTimersByTimeAsync(10);
     expect(sessionInternals(s.session).instructions()).not.toContain(hint);
-    s.session.end();
-  });
-
-  it('forgets the open loop and the card on a forget rebuild, so the planner no longer sees them', async () => {
-    const s = setup({
-      roles: fixedRoleCatalog('P', plannerDirector),
-      i18n,
-      affect: affectFixture,
-      now: () => FIXED_NOW,
-      textClient: { complete: async (input) => (input.system === 'DECIDE'
-        ? '{"speak":false}'
-        : affectCardJson({ emotion: 'sad', intensity: 2, trend: 'flat', need: 'vent', strategy: 'comfort', openLoop: '明天要去医院复查' })) },
-    });
-    await greetAndFinish(s);
-    s.session.handleClientMessage({ type: 'debug.userText', text: '明天要去医院复查' });
-    await vi.advanceTimersByTimeAsync(10);
-    const view = s.session as unknown as {
-      planExtras(): Pick<SilenceContext, 'affect' | 'openLoop'>;
-      rebuild(reason: string, keepToolTurn?: boolean): Promise<void>;
-    };
-    expect(view.planExtras().openLoop).toBe('明天要去医院复查');
-    void view.rebuild('forget', true);
-    expect(view.planExtras().openLoop).toBeUndefined();
-    expect(view.planExtras().affect).toBeUndefined();
-    await vi.advanceTimersByTimeAsync(10);
     s.session.end();
   });
 });

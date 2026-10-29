@@ -20,11 +20,6 @@ const director: DirectorConfig = {
   toolContinueInstruction: 'C', toolContinueText: '好。', memoryNoticeInstruction: 'N', memoryNoticeText: '记着。',
   greetingMemoryInstruction: 'GM', greetingMemoryText: '又见到您了。',
   greetingNameTexts: ['{name}，又见面了。'],
-  silenceDecision: {
-    instruction: 'D', speakInstruction: 'SAY {continuation}',
-    maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
-    policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
-  },
 };
 
 /** Card stub: the no-name line names the character and language so the fallback is unambiguous. */
@@ -78,12 +73,12 @@ describe('opening by first meeting and addressing', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-  it('first meeting, no name: the planner sees no memory and the card line is the fallback', async () => {
+  it('first meeting, no name: speaks the configured instruction and the card line, and does not call the text model', async () => {
     const { inputs, client } = planner();
     const s = open({ ...owned, firstMeet: true, memorySnapshot: PROFILE, greetingMemorySnapshot: PROFILE, proactiveMemorySnapshot: PROFILE }, client);
     await s.session.start(s.transport);
     await vi.advanceTimersByTimeAsync(100);
-    expect(inputs).toEqual([expect.objectContaining({ stage: 'greeting', memorySnapshot: '' })]);
+    expect(inputs).toEqual([]);
     expect(greetingCalls(s.creates)).toEqual([{ cue: 'greeting', instruction: 'G', fallbackText: 'NO-NAME xiaokai zh' }]);
     s.session.end();
   });
@@ -101,12 +96,12 @@ describe('opening by first meeting and addressing', () => {
     s.session.end();
   });
 
-  it('met before, no name: the planner keeps the greeting view and the memory copy is the fallback', async () => {
+  it('met before, no name: speaks the configured memory greeting and does not call the text model', async () => {
     const { inputs, client } = planner();
     const s = open({ ...owned, firstMeet: false, memorySnapshot: PROFILE, greetingMemorySnapshot: PROFILE, proactiveMemorySnapshot: PROFILE }, client);
     await s.session.start(s.transport);
     await vi.advanceTimersByTimeAsync(100);
-    expect(inputs).toEqual([expect.objectContaining({ stage: 'greeting', memorySnapshot: PROFILE })]);
+    expect(inputs).toEqual([]);
     expect(greetingCalls(s.creates)).toEqual([{ cue: 'greeting', instruction: 'GM', fallbackText: '又见到您了。' }]);
     s.session.end();
   });

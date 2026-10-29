@@ -114,11 +114,7 @@ describe('Director', () => {
     const line = '您好呀，又见面了。上次说的公园后来去了吗？';
     const d = new Director({
       ...cfg,
-      silenceDecision: {
-        instruction: 'D', speakInstruction: 'SAY {continuation}',
-        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
-        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
-      },
+      greetingInstruction: 'SAY {continuation}',
     }, {
       requestResponse: (_k, r) => reqs.push(r),
       planProactiveLine: context => { contexts.push(context); return { text: line }; },
@@ -241,11 +237,6 @@ describe('Director', () => {
     const d = new Director({
       ...cfg,
       restAfterMs: 180000,
-      silenceDecision: {
-        instruction: 'D', speakInstruction: 'SAY {continuation}',
-        maxTokens: 128, maxInputChars: 6000, maxReplyChars: 60, temperature: 0.8,
-        policy: { timeoutMs: 2000, retries: 0, backoffMs: 0, maxBackoffMs: 0 },
-      },
     }, {
       requestResponse: () => {},
       planProactiveLine: context => { stages.push(context.stage); return { text: '接着聊' }; },
