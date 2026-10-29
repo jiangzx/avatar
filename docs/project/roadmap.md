@@ -28,7 +28,8 @@
 - 计划：[overview](../superpowers/plans/2026-10-28-relational-proactivity/00-overview.md)，P0（下架 Seeduplex，4 个任务）与 P1（多会话剧本评测与基线，6 个任务），subagent-driven-development。编写时已在临时 worktree 里试跑 P0-T1/T2 与 P1-T1–T5 的代码：gateway 111 文件 1358 项、typecheck 通过，推送闸门变异验证有效，旅程 CLI 在 Mock 下跑通 5 个旅程；admin 部分未试跑（本机 `admin` 依赖未安装，执行前需根目录 `npm ci`）。P2–P5 计划在 P1 基线完成后再写。
 - 计划已获用户同意（2026-10-28），将在另一台机器上执行；分支 `dev-proactivity`（基于 `dev-admin` `bf49c4f`）已推送。
 - 2026-10-29 追加 P2（数据层，9 个任务）与 P3 前半（Qwen 服从度探针、`proactivity.json` 与后台场景、决策引擎，3 个任务）计划；用户已定开放项 1（敏感原话直接进 Qwen 指令）与 2（熟悉度影响被动回复语气）。编写时在临时 worktree 试跑 P1+P2+P3 前半代码：gateway 123 文件 1433 项、typecheck 通过（admin、App 未试跑）。P3 后半、P4、P5 待 P3-T0 探针结论后再写。
-- 下一步：P3-T0（`p3-00-qwen-probe.md`）。用户于 2026-10-29 要求不在计划交界停顿，P2 与 P3 前半继续执行；P2 已于同日验收。
+- 2026-10-29 P3-T0 Qwen 服从度探针：**未通过，待用户决定**。命令：`node --env-file-if-exists=gateway/.env --import tsx gateway/scripts/probe-intent-grounding.ts`（80 次，failures 0，约 222 秒，模型 `qwen3.8-omni-flash-realtime`）。汇总：写法 A calls 40、violations 4、mentionRate 0.96、overMaxChars 0；写法 B calls 40、violations 6、mentionRate 0.88、overMaxChars 1。人工复核后编造 A 4 条、B 6 条，均不为 0，两种写法都不选用。数字规则对「两天」「一天」有误报（A 1 条、B 3 条）。编造是规则没抓住的材料外细节：健康场景补出「按时吃药/服药」（A `health-sensitive` 第 2–5 次，B 第 1–3 次与第 5 次）；写法 B 另有 `event-before` 第 4 次「医院流程都熟」、`human-connection` 第 3 次「家里一切都好」（该条也超长）。无材料的 `presence-check` 没有提问。P3 后半的渲染方案按 spec 开放项 3 的备选，由用户在「编造率高的意图降级为兜底句」和「连接预取窗口内由文本模型先写好句子」之间决定。结果：[intent-grounding-probe.json](../testing/2026-10-29-intent-grounding-probe.json)。单元测试 `npm test -w gateway -- test/proactive-grounding.test.ts` 5 项通过，`npm run typecheck -w gateway` 通过。
+- 下一步：P3-T1（`p3-01-proactivity-config.md`）。探针不阻塞 P3-T1、P3-T2。用户于 2026-10-29 要求不在计划交界停顿，P2 与 P3 前半继续执行；P2 已于同日验收。
 - 坑位第 7、12 条已在 P0 改写（2026-10-29）。第 4、5、8 条仍按 spec「坑位契约修订」在对应计划中改写；在那之前这三条照旧有效。
 
 ## 多角色与分层记忆（2026-10-26 起）

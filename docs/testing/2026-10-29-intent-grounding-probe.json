@@ -1,0 +1,1166 @@
+{
+  "synthetic": true,
+  "date": "2026-10-29",
+  "model": "qwen3.8-omni-flash-realtime",
+  "maxChars": 50,
+  "summary": [
+    {
+      "variant": "A",
+      "calls": 40,
+      "failures": 0,
+      "violations": 4,
+      "mentionRate": 0.96,
+      "overMaxChars": 0
+    },
+    {
+      "variant": "B",
+      "calls": 40,
+      "failures": 0,
+      "violations": 6,
+      "mentionRate": 0.88,
+      "overMaxChars": 1
+    }
+  ],
+  "rows": [
+    {
+      "variant": "A",
+      "case": "event-before",
+      "run": 1,
+      "text": "陈叔，后天复查腰的事儿别太紧张，放轻松就好。",
+      "chars": 22,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "event-before",
+      "run": 2,
+      "text": "后天上午去医院复查腰，别太紧张，放轻松就好。",
+      "chars": 22,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "event-before",
+      "run": 3,
+      "text": "陈叔，后天上午要去医院复查腰呀？别太紧张，放轻松就好。",
+      "chars": 27,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "event-before",
+      "run": 4,
+      "text": "陈叔，记得您后天要去复查腰呢。别太担心，放轻松去就好，我在这儿陪着您呀。",
+      "chars": 36,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "event-before",
+      "run": 5,
+      "text": "陈叔，后天复查腰的事儿别太担心，放宽心去就行。",
+      "chars": 23,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "event-after",
+      "run": 1,
+      "text": "陈叔，上午复查腰的事咋样了？医生怎么说呀？",
+      "chars": 21,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "event-after",
+      "run": 2,
+      "text": "上午复查腰的事儿办得咋样啦？心里还打鼓不？",
+      "chars": 21,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "event-after",
+      "run": 3,
+      "text": "陈叔，上午复查腰的结果咋样？心里还打鼓不？",
+      "chars": 21,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "event-after",
+      "run": 4,
+      "text": "陈叔，上午复查腰的事办得咋样了？心里那块石头落地没？",
+      "chars": 26,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "event-after",
+      "run": 5,
+      "text": "陈叔，腰复查得咋样了？心里还打鼓不？",
+      "chars": 18,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "concern",
+      "run": 1,
+      "text": "您膝盖晚上还疼吗？睡得好些没？",
+      "chars": 15,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "concern",
+      "run": 2,
+      "text": "陈叔，您膝盖晚上还疼吗？睡得好点没？",
+      "chars": 18,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "concern",
+      "run": 3,
+      "text": "陈叔，晚上膝盖还疼吗？睡得好不好？",
+      "chars": 17,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "concern",
+      "run": 4,
+      "text": "陈叔，膝盖晚上还疼吗？睡得好些没？",
+      "chars": 17,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "concern",
+      "run": 5,
+      "text": "陈叔，您膝盖晚上还疼吗？睡得好不好呀？",
+      "chars": 19,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "health-sensitive",
+      "run": 1,
+      "text": "陈叔，您这两天量血压还高吗？可得注意休息，别太累着呀。",
+      "chars": 27,
+      "ungrounded": {
+        "titles": [],
+        "numbers": [
+          "两天"
+        ]
+      },
+      "violation": true,
+      "mentionsMaterial": true,
+      "manualReview": "false_positive: 「两天」来自目的里的「这两天」，不是材料外的新数字"
+    },
+    {
+      "variant": "A",
+      "case": "health-sensitive",
+      "run": 2,
+      "text": "陈叔，您这两天量血压还高吗？记得按时吃药，多休息呀。",
+      "chars": 26,
+      "ungrounded": {
+        "titles": [],
+        "numbers": [
+          "两天"
+        ]
+      },
+      "violation": true,
+      "mentionsMaterial": true,
+      "manualReview": "fabrication"
+    },
+    {
+      "variant": "A",
+      "case": "health-sensitive",
+      "run": 3,
+      "text": "陈叔，这两天血压量着还稳当不？记得按时吃药，别太累着呀。",
+      "chars": 28,
+      "ungrounded": {
+        "titles": [],
+        "numbers": [
+          "两天"
+        ]
+      },
+      "violation": true,
+      "mentionsMaterial": true,
+      "manualReview": "fabrication"
+    },
+    {
+      "variant": "A",
+      "case": "health-sensitive",
+      "run": 4,
+      "text": "陈叔，您这几天血压量着还稳吗？记得按时吃药，别太累着呀。",
+      "chars": 28,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": "fabrication"
+    },
+    {
+      "variant": "A",
+      "case": "health-sensitive",
+      "run": 5,
+      "text": "陈叔，这两天血压还稳吗？记得按时吃药，别太累着。",
+      "chars": 24,
+      "ungrounded": {
+        "titles": [],
+        "numbers": [
+          "两天"
+        ]
+      },
+      "violation": true,
+      "mentionsMaterial": false,
+      "manualReview": "fabrication"
+    },
+    {
+      "variant": "A",
+      "case": "human-connection",
+      "run": 1,
+      "text": "闺女在深圳忙，一年回来一两趟。您有空给她打个电话，聊聊家常，她肯定高兴。",
+      "chars": 36,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "human-connection",
+      "run": 2,
+      "text": "闺女在深圳忙，您有空给她发个消息，说说家里的事，她肯定高兴。",
+      "chars": 30,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "human-connection",
+      "run": 3,
+      "text": "闺女在深圳忙，一年回不来几趟。您有空给她打个视频，听听她说话也热闹。",
+      "chars": 34,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "human-connection",
+      "run": 4,
+      "text": "闺女在深圳忙，您有空给她打个视频，听听她的声音也挺暖心的。",
+      "chars": 29,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "human-connection",
+      "run": 5,
+      "text": "闺女在深圳忙，您有空多跟她语音聊聊，听听她近况，心里也踏实。",
+      "chars": 30,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "mood-check",
+      "run": 1,
+      "text": "陈叔，这几天心里好受些没？别老闷着，有事儿随时喊我。",
+      "chars": 26,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "mood-check",
+      "run": 2,
+      "text": "陈叔，最近心里还闷着吗？别一个人扛着，有啥想说的随时找我聊聊。",
+      "chars": 31,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "mood-check",
+      "run": 3,
+      "text": "陈叔，最近心里还堵得慌吗？别硬扛着，我在这儿听着呢。",
+      "chars": 26,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "mood-check",
+      "run": 4,
+      "text": "陈叔，最近身子骨还舒坦不？心里头有啥想说的，随时喊我一声。",
+      "chars": 29,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "mood-check",
+      "run": 5,
+      "text": "陈叔，最近心里还闷不闷呀？小暖一直惦记着您呢。",
+      "chars": 23,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "routine-morning",
+      "run": 1,
+      "text": "陈叔早呀，昨晚睡得香不？",
+      "chars": 12,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "routine-morning",
+      "run": 2,
+      "text": "陈叔早呀，昨晚睡得香不？",
+      "chars": 12,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "routine-morning",
+      "run": 3,
+      "text": "陈叔早呀，昨晚睡得香不？",
+      "chars": 12,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "routine-morning",
+      "run": 4,
+      "text": "陈叔早呀，昨晚睡得咋样？",
+      "chars": 12,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "routine-morning",
+      "run": 5,
+      "text": "陈叔早呀，昨晚睡得香不香？",
+      "chars": 13,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "presence-check",
+      "run": 1,
+      "text": "陈叔，我在这儿听着呢，您想聊啥随时喊我。",
+      "chars": 20,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "presence-check",
+      "run": 2,
+      "text": "陈叔，我在这儿呢，您慢慢歇着，想聊了随时喊我。",
+      "chars": 23,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "presence-check",
+      "run": 3,
+      "text": "您歇着，我在这儿呢，想聊随时喊我。",
+      "chars": 17,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "presence-check",
+      "run": 4,
+      "text": "陈叔，我在这儿呢，您歇着，想聊随时喊我。",
+      "chars": 20,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "A",
+      "case": "presence-check",
+      "run": 5,
+      "text": "陈叔，我在这儿呢，您歇着就行。",
+      "chars": 15,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "event-before",
+      "run": 1,
+      "text": "陈叔，后天上午复查腰的事您别太担心，心里打鼓是正常的。提前祝您检查顺利，结果都好。",
+      "chars": 41,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "event-before",
+      "run": 2,
+      "text": "陈叔，后天复查腰的事别太担心，放轻松去就行。",
+      "chars": 22,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "event-before",
+      "run": 3,
+      "text": "陈叔，后天上午复查腰的事我记着呢。别太打鼓，放宽心，祝您一切顺利呀。",
+      "chars": 34,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "event-before",
+      "run": 4,
+      "text": "陈叔，后天复查腰的事别太担心，医院流程都熟。您今晚好好睡，我陪您聊点轻松的转移下注意力？",
+      "chars": 44,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": "fabrication"
+    },
+    {
+      "variant": "B",
+      "case": "event-before",
+      "run": 5,
+      "text": "陈叔，后天上午去复查腰别紧张，放轻松就好。",
+      "chars": 21,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "event-after",
+      "run": 1,
+      "text": "陈叔，上午去医院复查腰怎么样啦？心里还打鼓吗？",
+      "chars": 23,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "event-after",
+      "run": 2,
+      "text": "陈叔，上午去医院复查腰，结果咋样呀？心里还打鼓不？",
+      "chars": 25,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "event-after",
+      "run": 3,
+      "text": "陈叔，腰复查结果咋样？别太担心。",
+      "chars": 16,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": false,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "event-after",
+      "run": 4,
+      "text": "陈叔，上午去复查腰咋样了？心里那块石头落地没？",
+      "chars": 23,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "event-after",
+      "run": 5,
+      "text": "陈叔，上午去医院复查腰的事儿办得咋样啦？心里那点儿打鼓的感觉好些没？",
+      "chars": 34,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "concern",
+      "run": 1,
+      "text": "陈叔，最近膝盖晚上还疼吗？睡得好些没？",
+      "chars": 19,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "concern",
+      "run": 2,
+      "text": "陈叔，您膝盖晚上还疼吗？睡得好些没？",
+      "chars": 18,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "concern",
+      "run": 3,
+      "text": "陈叔，前几天您说膝盖晚上疼得睡不踏实，现在好些了吗？",
+      "chars": 26,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "concern",
+      "run": 4,
+      "text": "陈叔，最近膝盖晚上还疼吗？睡得好不好？",
+      "chars": 19,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "concern",
+      "run": 5,
+      "text": "陈叔，您最近膝盖晚上还疼得厉害吗？睡不踏实可太遭罪了，真希望您好点。",
+      "chars": 34,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "health-sensitive",
+      "run": 1,
+      "text": "陈叔，您这两天血压量着还高吗？记得按时吃药，别太累着呀。",
+      "chars": 28,
+      "ungrounded": {
+        "titles": [],
+        "numbers": [
+          "两天"
+        ]
+      },
+      "violation": true,
+      "mentionsMaterial": true,
+      "manualReview": "fabrication"
+    },
+    {
+      "variant": "B",
+      "case": "health-sensitive",
+      "run": 2,
+      "text": "陈叔，这两天血压还高吗？记得按时吃药，别太累着。",
+      "chars": 24,
+      "ungrounded": {
+        "titles": [],
+        "numbers": [
+          "两天"
+        ]
+      },
+      "violation": true,
+      "mentionsMaterial": false,
+      "manualReview": "fabrication"
+    },
+    {
+      "variant": "B",
+      "case": "health-sensitive",
+      "run": 3,
+      "text": "陈叔，这两天血压还高吗？记得按时吃药，别太累着呀。",
+      "chars": 25,
+      "ungrounded": {
+        "titles": [],
+        "numbers": [
+          "两天"
+        ]
+      },
+      "violation": true,
+      "mentionsMaterial": false,
+      "manualReview": "fabrication"
+    },
+    {
+      "variant": "B",
+      "case": "health-sensitive",
+      "run": 4,
+      "text": "陈叔，您昨天说血压有点高，这两天量着好些没？别太累着，心里踏实最重要。",
+      "chars": 35,
+      "ungrounded": {
+        "titles": [],
+        "numbers": [
+          "两天"
+        ]
+      },
+      "violation": true,
+      "mentionsMaterial": true,
+      "manualReview": "false_positive: 「两天」来自目的里的「这两天」，不是材料外的新数字"
+    },
+    {
+      "variant": "B",
+      "case": "health-sensitive",
+      "run": 5,
+      "text": "陈叔，您这几天量血压有点高，可得注意休息。别太劳累，保持心情舒畅，按时服药。",
+      "chars": 38,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": "fabrication"
+    },
+    {
+      "variant": "B",
+      "case": "human-connection",
+      "run": 1,
+      "text": "闺女在深圳忙，一年回不来几趟。您有空给她打个电话，唠唠家常，她肯定高兴。",
+      "chars": 36,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "human-connection",
+      "run": 2,
+      "text": "闺女在深圳工作，一年回来一两趟。有空多给她打打电话，聊聊家常，她肯定也惦记您呢。",
+      "chars": 40,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "human-connection",
+      "run": 3,
+      "text": "闺女在深圳忙，一年回来一两趟确实不容易。您有空给她发个消息，让她知道家里一切都好，她在外打拼也更安心呢。",
+      "chars": 52,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": "fabrication"
+    },
+    {
+      "variant": "B",
+      "case": "human-connection",
+      "run": 4,
+      "text": "闺女在深圳忙，一年回来一两趟挺不容易。您有空给她打个电话，聊聊家常，她肯定特别开心。",
+      "chars": 42,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "human-connection",
+      "run": 5,
+      "text": "闺女在深圳忙，一年回来一两趟确实少。平时多通个电话聊聊近况，心里也踏实些。",
+      "chars": 37,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": true,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "mood-check",
+      "run": 1,
+      "text": "陈叔，好久没聊了，您最近身子骨还舒坦吧？",
+      "chars": 20,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "mood-check",
+      "run": 2,
+      "text": "陈叔，今天感觉好些了吗？心里要是还堵得慌，咱就慢慢聊，不着急。",
+      "chars": 31,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "mood-check",
+      "run": 3,
+      "text": "陈叔，好久没见您了，心里一直惦记着。最近身体还舒坦吧？",
+      "chars": 27,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "mood-check",
+      "run": 4,
+      "text": "陈叔，最近还好吗？心里要是觉得闷，随时找我聊聊，我都在呢。",
+      "chars": 29,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "mood-check",
+      "run": 5,
+      "text": "陈叔，好久没聊了。最近心里还闷不闷？要是想说话，小暖随时都在呢。",
+      "chars": 32,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "routine-morning",
+      "run": 1,
+      "text": "陈叔早呀，昨晚睡得香不香？新的一天开始啦，精神头足不足？",
+      "chars": 28,
+      "ungrounded": {
+        "titles": [],
+        "numbers": [
+          "一天"
+        ]
+      },
+      "violation": true,
+      "mentionsMaterial": null,
+      "manualReview": "false_positive: 「一天」来自「新的一天」，不是日期或数量"
+    },
+    {
+      "variant": "B",
+      "case": "routine-morning",
+      "run": 2,
+      "text": "陈叔早呀！昨晚睡得香不香？新的一天精神头足不足？",
+      "chars": 24,
+      "ungrounded": {
+        "titles": [],
+        "numbers": [
+          "一天"
+        ]
+      },
+      "violation": true,
+      "mentionsMaterial": null,
+      "manualReview": "false_positive: 「一天」来自「新的一天」，不是日期或数量"
+    },
+    {
+      "variant": "B",
+      "case": "routine-morning",
+      "run": 3,
+      "text": "陈叔早呀，昨晚睡得香不香？",
+      "chars": 13,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "routine-morning",
+      "run": 4,
+      "text": "陈叔早呀，昨晚睡得香不？精神头足不足？",
+      "chars": 19,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "routine-morning",
+      "run": 5,
+      "text": "陈叔早呀，昨晚睡得香不香？今天精神头咋样？",
+      "chars": 21,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "presence-check",
+      "run": 1,
+      "text": "您歇着，我在这儿呢。",
+      "chars": 10,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "presence-check",
+      "run": 2,
+      "text": "陈叔，您慢慢歇着，小暖一直在这儿听着呢，想聊了随时喊我。",
+      "chars": 28,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "presence-check",
+      "run": 3,
+      "text": "陈叔，我在这儿听着呢，您歇着，想聊了随时喊我。",
+      "chars": 23,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "presence-check",
+      "run": 4,
+      "text": "陈叔，我在这儿呢，您想聊随时叫我。",
+      "chars": 17,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    },
+    {
+      "variant": "B",
+      "case": "presence-check",
+      "run": 5,
+      "text": "陈叔，我在这儿呢，您歇会儿，想聊了随时喊我。",
+      "chars": 22,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "violation": false,
+      "mentionsMaterial": null,
+      "manualReview": null
+    }
+  ]
+}
