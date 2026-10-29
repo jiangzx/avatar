@@ -2032,6 +2032,37 @@ describe('Session affect tracker', () => {
     expect(writes.join('')).not.toContain('腰');
   });
 
+  it('writes one mood summary at session end with the injected clock', async () => {
+    const { client } = recordingClient();
+    const recordMoodSummary = vi.fn(() => true);
+    const store = { ...memoryStoreStub({}), recordMoodSummary } as unknown as MemoryStore;
+    const s = setup({ textClient: client, affect: affectConfig, store, now: () => 1_700_000_000_000 }, ownedCtx, 'mood-session');
+    s.mocks[0]!.emit('userTranscript', '今天腰有点疼，心里也闷', true);
+    await vi.advanceTimersByTimeAsync(10);
+    s.session.end();
+    s.session.end();
+    expect(recordMoodSummary).toHaveBeenCalledTimes(1);
+    expect(recordMoodSummary).toHaveBeenCalledWith('owner-1', 'agent-1', {
+      sessionId: 'mood-session', dominant: 'sad', peakIntensity: 2, endEmotion: 'sad', endIntensity: 2, endTrend: 'flat', crisis: false,
+    }, 1_700_000_000_000);
+  });
+
+  it('writes no mood summary without an owner or without accepted cards', async () => {
+    const recordMoodSummary = vi.fn(() => true);
+    const store = { ...memoryStoreStub({}), recordMoodSummary } as unknown as MemoryStore;
+    const failing: TextModelClient = { complete: async () => 'not json' };
+    const noCards = setup({ textClient: failing, affect: affectConfig, store }, ownedCtx, 'mood-none');
+    noCards.mocks[0]!.emit('userTranscript', '今天腰有点疼，心里也闷', true);
+    await vi.advanceTimersByTimeAsync(10);
+    noCards.session.end();
+    const { client } = recordingClient();
+    const devSession = setup({ textClient: client, affect: affectConfig, store });
+    devSession.mocks[0]!.emit('userTranscript', '今天腰有点疼，心里也闷', true);
+    await vi.advanceTimersByTimeAsync(10);
+    devSession.session.end();
+    expect(recordMoodSummary).not.toHaveBeenCalled();
+  });
+
   it('resets the tracker when a forget rebuild starts', async () => {
     const { client } = recordingClient();
     const s = setup({ textClient: client, affect: affectConfig });

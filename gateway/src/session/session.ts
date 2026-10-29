@@ -25,7 +25,8 @@ import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
 import { composeCareGreeting, generateCareLine } from './care.ts';
-import { AffectTracker, affectSummaryFields, isLow, type AffectCard, type AffectConfig } from './affect.ts';
+import { AffectTracker, affectSummaryFields, isLow, type AffectCard, type AffectConfig, type AffectSummary } from './affect.ts';
+import { summarizeMood } from './mood.ts';
 import { renderAffect } from './affectRender.ts';
 import type { TranscriptWriter } from '../memory/writer.ts';
 import { DEFAULT_I18N } from '../i18n/load.ts';
@@ -305,6 +306,8 @@ export class Session {
   private greetingText: string | null = null;
   /** Latest accepted analyzer card; session memory only, never logged. */
   private affectCard: AffectCard | null = null;
+  /** Highest card intensity this session; feeds the end-of-session mood summary. */
+  private moodPeak = 0;
   /** Affect text the last push request was made for. */
   private affectRendered = '';
   /** affect_crisis is logged at most once per session. */
@@ -641,7 +644,9 @@ export class Session {
     this.director.stop();
     this.emotion?.dispose();
     if (this.affect) {
-      this.log.info('affect_summary', affectSummaryFields(this.affect.summary()));
+      const summary = this.affect.summary();
+      this.log.info('affect_summary', affectSummaryFields(summary));
+      this.recordMood(summary);
       this.affect.dispose();
     }
     this.interrupt.dispose();
@@ -780,6 +785,7 @@ export class Session {
     const config = this.deps.affect;
     if (this.ended || !config) return;
     this.affectCard = card;
+    this.moodPeak = Math.max(this.moodPeak, card.intensity);
     // The tracker already checked the open loop against the user's own lines.
     if (card.openLoop) this.openLoop = card.openLoop;
     if (card.crisis && !this.crisisLogged) {
@@ -797,6 +803,20 @@ export class Session {
     // The open loop is the user's own words; forget/decline must drop it too (spec §8).
     this.openLoop = undefined;
     this.emotion?.releaseHold();
+  }
+
+  /** End of session: one labels-only mood row (spec 情绪轨迹). The store applies the notice/consent gate. */
+  private recordMood(summary: AffectSummary): void {
+    const store = this.deps.store;
+    const { ownerId, agentId } = this.context;
+    if (!store || !ownerId || !agentId) return;
+    const mood = summarizeMood(summary, this.affectCard, this.moodPeak, this.sessionId);
+    if (!mood) return;
+    try {
+      store.recordMoodSummary(ownerId, agentId, mood, this.now());
+    } catch {
+      this.log.error('mood_summary_write_failed');
+    }
   }
 
   /** Planner-only extras: latest card, the session's open loop, and localized time words. */

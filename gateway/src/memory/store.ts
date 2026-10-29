@@ -44,6 +44,18 @@ export interface ThreadRecord {
   sourceSessionId: string | null;
 }
 export type ThreadCloseReason = 'resolved' | 'declined' | 'expired';
+export type AffectEmotion = 'neutral' | 'happy' | 'sad' | 'love';
+/** One session's mood, labels only (spec 2026-10-28 情绪轨迹). */
+export interface MoodSummaryInput {
+  sessionId: string;
+  dominant: AffectEmotion;
+  peakIntensity: 1 | 2 | 3;
+  endEmotion: AffectEmotion;
+  endIntensity: 1 | 2 | 3;
+  endTrend: 'better' | 'worse' | 'flat';
+  crisis: boolean;
+}
+export interface MoodSummaryRecord extends MoodSummaryInput { id: string; createdAt: number }
 export interface DeletedItem { kind: 'profile' | 'agent_fact' | 'pinned'; agentId: string | null; text: string; sourceMessageIds: string[] }
 
 export const PROFILE_CATEGORIES: readonly ProfileCategory[] = ['addressing', 'profile'];
@@ -165,6 +177,10 @@ export interface MemoryStore {
   markThreadMentioned(ownerId: string, id: string, now: number): boolean;
   /** Closes a thread and clears its quote; the audit row is content-free. False when closed or foreign. */
   closeThread(ownerId: string, id: string, reason: ThreadCloseReason, now: number): boolean;
+  /** Stores one session mood once the notice played and memory is not declined. False when skipped. */
+  recordMoodSummary(ownerId: string, agentId: string, input: MoodSummaryInput, now: number): boolean;
+  /** Newest first. */
+  listMoodSummaries(ownerId: string, agentId: string, limit: number): MoodSummaryRecord[];
   /** Agent rows of one owner, one per character met. */
   listAgents(ownerId: string): AgentRecord[];
   /** Ids of this owner's live messages whose FTS tokens all match; agentId null = any agent of the owner. */
@@ -449,6 +465,11 @@ function prepareStatements(db: DatabaseSync) {
     markThreadMentioned: p(`UPDATE followups SET mention_count = mention_count + 1, last_mentioned_at = ?
       WHERE id = ? AND owner_id = ? AND done_at IS NULL AND quote IS NOT NULL`),
     closeThread: p('UPDATE followups SET done_at = ?, close_reason = ?, quote = NULL WHERE id = ? AND owner_id = ? AND done_at IS NULL'),
+    insertMood: p(`INSERT INTO mood_summaries (id, owner_id, agent_id, session_id, dominant, peak_intensity, end_emotion, end_intensity, end_trend, crisis, created_at)
+      SELECT ?, o.id, a.id, ?, ?, ?, ?, ?, ?, ?, ? FROM owners o JOIN agents a ON a.owner_id = o.id
+      WHERE o.id = ? AND a.id = ? AND o.notified_at IS NOT NULL AND o.memory_consent <> 'declined'`),
+    listMoods: p(`SELECT id, session_id, dominant, peak_intensity, end_emotion, end_intensity, end_trend, crisis, created_at
+      FROM mood_summaries WHERE owner_id = ? AND agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?`),
 
     // Audit
     insertChange: p(`INSERT INTO memory_changes (id, owner_id, agent_id, table_name, row_id, op, diff, actor, created_at)
@@ -929,6 +950,27 @@ export class SqliteMemoryStore implements MemoryStore {
       this.audit(ownerId, (owner?.agent_id as string | undefined) ?? null, 'followups', id, 'close', '', 'proactive', now);
       return true;
     });
+  }
+
+  recordMoodSummary(ownerId: string, agentId: string, input: MoodSummaryInput, now: number): boolean {
+    return this.q.insertMood.run(
+      randomUUID(), input.sessionId, input.dominant, input.peakIntensity, input.endEmotion, input.endIntensity,
+      input.endTrend, input.crisis ? 1 : 0, now, ownerId, agentId,
+    ).changes === 1;
+  }
+
+  listMoodSummaries(ownerId: string, agentId: string, limit: number): MoodSummaryRecord[] {
+    return this.q.listMoods.all(ownerId, agentId, limit).map((r) => ({
+      id: r.id as string,
+      sessionId: r.session_id as string,
+      dominant: r.dominant as AffectEmotion,
+      peakIntensity: r.peak_intensity as 1 | 2 | 3,
+      endEmotion: r.end_emotion as AffectEmotion,
+      endIntensity: r.end_intensity as 1 | 2 | 3,
+      endTrend: r.end_trend as MoodSummaryInput['endTrend'],
+      crisis: r.crisis === 1,
+      createdAt: r.created_at as number,
+    }));
   }
 
   writeExtraction(ownerId: string, agentId: string, change: ExtractionChange): void {
