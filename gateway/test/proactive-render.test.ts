@@ -101,9 +101,9 @@ describe('buildIntent', () => {
     expect(buildIntent(decision('humanConnection'), input())).toBeNull();
   });
 
-  it('returns null for quiet and the plain greeting, and when the thread does not match the decision', () => {
+  it('returns null for quiet and when the thread does not match the decision', () => {
     expect(buildIntent(decision('quiet'), input())).toBeNull();
-    expect(buildIntent(decision('greetingPlain'), input({ moment: 'sessionStart' }))).toBeNull();
+    expect(buildIntent(decision('greetingPlain'), input({ moment: 'sessionStart' }))!.purpose).toBe('greetingPlain');
     expect(buildIntent(decision('threadFollowup', 'other'), input({ material: { thread: thread() } }))).toBeNull();
   });
 

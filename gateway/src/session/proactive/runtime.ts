@@ -15,7 +15,7 @@ import { checkSpoken, violationsOf } from './check.ts';
 import { SCORED_KINDS, type ProactivityConfig, type ScoredKind } from './config.ts';
 import { decide, familiarityOf, type Decision, type DecisionContext, type Familiarity, type Moment } from './engine.ts';
 import { pickFallback } from './fallback.ts';
-import { renderIntent, speakLineRequest } from './render.ts';
+import { composeOpening, renderIntent, speakLineRequest } from './render.ts';
 
 // Same step names as the Director's ladder; the session maps a planner stage to one of these.
 export type SilenceStep = 'context' | 'check' | 'leave' | 'checkin' | 'rest';
@@ -26,6 +26,10 @@ export interface ProactiveCopy {
   fallbacks?: FallbackGroups;
   topics: readonly TopicCard[];
   quietPhrases: readonly string[];
+  /** Name templates for a plain opening's fallback ({name}). */
+  greetingNameTexts?: readonly string[];
+  /** Opening heads ({name}) placed before a kind's fallback line. */
+  greetingHeads?: readonly string[];
 }
 
 export interface ProactiveRules {
@@ -67,6 +71,7 @@ const MOMENT_OF: Record<SilenceStep, Moment> = {
 };
 const TIERS: readonly ProactiveTier[] = ['quiet', 'moderate', 'active'];
 const TOPIC_KEY = 'topicCard';
+const NAME_KEY = 'greetingName';
 
 const isScored = (kind: string): kind is ScoredKind => (SCORED_KINDS as readonly string[]).includes(kind);
 const hasAny = (text: string, phrases: readonly string[]) => phrases.some((phrase) => containsPhrase(text, phrase));
@@ -85,7 +90,7 @@ interface InFlight {
   planned: PlannedIntent;
   threadId?: string;
   language: Language;
-  line: { key: FallbackKey; index: number; text: string };
+  line: { key: string; index: number; text: string };
   topicIndex: number | null;
   /** The fallback line itself is what gets spoken. */
   spokeFallback: boolean;
@@ -112,11 +117,62 @@ export class ProactiveRuntime {
   private exhaustedOk = false;
   private inFlight: InFlight | null = null;
   private live: InFlight | null = null;
+  private opening: { language: Language; request: ProactiveRequest } | null = null;
   private readonly acceptance: AcceptanceTracker;
 
   constructor(private readonly deps: ProactiveRuntimeDeps) {
     this.tier = deps.cfg.defaultTier;
     this.acceptance = new AcceptanceTracker(deps.cfg.acceptance.windowMs);
+  }
+
+  /** Spec 连接期间预取: read the decision context before the opening is needed. */
+  prefetch(): void {
+    this.ensureLoaded();
+  }
+
+  familiarityTier(): Familiarity {
+    this.ensureLoaded();
+    return this.familiarity;
+  }
+
+  /** Known-name opening (spec 开场, Q15). The same request is returned for a retry in the same language. */
+  openingLine(input: { language: Language; name: string | null; firstMeet: boolean }): ProactiveRequest | null {
+    if (input.firstMeet || !input.name) return null;
+    const copy = this.deps.copy(input.language);
+    const names = copy.greetingNameTexts ?? [];
+    const heads = copy.greetingHeads ?? [];
+    if (!copy.intents || !copy.fallbacks || names.length === 0 || heads.length === 0) return null;
+    if (this.opening?.language === input.language) return this.opening.request;
+    this.ensureLoaded();
+    const now = this.deps.now();
+    const name = input.name;
+    const ctx = this.context('sessionStart', { low: false, crisis: false, stage: 'explore' }, { openLoop: false, interest: false, family: false }, this.threads);
+    const { decision, decideMs } = this.timedDecide(ctx);
+    const planned = buildIntent(decision, {
+      moment: 'sessionStart', now, language: input.language, familiarity: this.familiarity, affect: { low: false, stage: 'explore' },
+      material: { thread: this.threads.find((t) => t.id === decision.threadId) }, cfg: this.deps.cfg, saidWords: copy.intents.saidWhen,
+    });
+    this.logDecision('sessionStart', decision, planned, decideMs);
+    if (!planned) return null;
+    let line: InFlight['line'];
+    if (planned.intent.kind === 'greetingPlain') {
+      const index = pickFallback(names.length, this.recentFor(NAME_KEY, names.length));
+      line = { key: NAME_KEY, index, text: names[index]!.replaceAll('{name}', () => name) };
+    } else {
+      const key = planned.intent.fallbackKey as FallbackKey;
+      const lines = copy.fallbacks[key];
+      const index = pickFallback(lines.length, this.recentFor(key, this.deps.cfg.fallbackKeep));
+      const head = heads[pickFallback(heads.length, [])]!;
+      line = { key, index, text: composeOpening(head, name, lines[index]!) };
+    }
+    // The opening keeps the greeting cue: Mock scripts and response kinds key on it.
+    const request: ProactiveRequest = { ...renderIntent(planned, copy.intents, line.text, { name }), cue: 'greeting' };
+    this.inFlight = {
+      request, planned, language: input.language, line, topicIndex: null, spokeFallback: planned.fallbackOnly,
+      ...(decision.threadId ? { threadId: decision.threadId } : {}),
+    };
+    this.opening = { language: input.language, request };
+    return request;
   }
 
   silenceLine(input: SilenceInput): ProactiveLineResult {
@@ -222,7 +278,7 @@ export class ProactiveRuntime {
     const intents = this.deps.copy(f.language).intents;
     if (!intents) return null;
     f.spokeFallback = true;
-    f.request = speakLineRequest(intents, f.line.text);
+    f.request = { ...speakLineRequest(intents, f.line.text), cue: f.request.cue };
     this.deps.logger.warn('proactive_fallback', { kind: f.planned.intent.kind, code: 'no_audio' });
     return f.request;
   }

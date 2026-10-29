@@ -31,6 +31,7 @@ describe('zh intent copy', () => {
     expect(zh.intents!.withTopic).toContain('{material}');
     expect(zh.intents!.speakLine).toContain('{line}');
     expect(zh.intents!.saidWhen.days).toHaveLength(5);
+    expect(zh.intents!.opening).toContain('{name}');
   });
 
   it('has at least five distinct fallback lines per key', () => {

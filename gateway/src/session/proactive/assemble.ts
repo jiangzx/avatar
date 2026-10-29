@@ -79,7 +79,7 @@ function threadPurpose(thread: ThreadRecord, now: number): IntentPurpose {
   return thread.kind === 'concern' ? 'threadConcern' : 'threadPlan';
 }
 
-type Shape = { purpose: IntentPurpose; fallbackKey: FallbackKey; quotes: Array<{ text: string; said: string | null }>; facts: string[]; fallbackOnly?: boolean };
+type Shape = { purpose: IntentPurpose; fallbackKey: FallbackKey | 'greetingPlain'; quotes: Array<{ text: string; said: string | null }>; facts: string[]; fallbackOnly?: boolean };
 
 function shapeFor(decision: Decision, input: BuildInput): Shape | null {
   const m = input.material;
@@ -113,13 +113,15 @@ function shapeFor(decision: Decision, input: BuildInput): Shape | null {
       return { purpose: 'presenceCheck', fallbackKey: 'presenceCheck', quotes: [], facts: [] };
     case 'restQuiet':
       return { purpose: 'restQuiet', fallbackKey: 'restQuiet', quotes: [], facts: [] };
-    case 'quiet':
     case 'greetingPlain':
+      // The opening's fallback is composed from greetingNameTexts by the runtime.
+      return { purpose: 'greetingPlain', fallbackKey: 'greetingPlain', quotes: [], facts: [] };
+    case 'quiet':
       return null;
   }
 }
 
-/** Null = do not speak (quiet, the opening, or the material the decision needs is missing). */
+/** Null = do not speak (quiet, or the material the decision needs is missing). */
 export function buildIntent(decision: Decision, input: BuildInput): PlannedIntent | null {
   const shape = shapeFor(decision, input);
   if (!shape) return null;

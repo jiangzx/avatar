@@ -196,6 +196,7 @@ const DirectorSchema = z.object({
   companyAfterMs: z.number().int().positive().optional(),
   intents: z.object({
     frame: z.string().includes('{maxChars}').includes('{purpose}'),
+    opening: z.string().includes('{maxChars}').includes('{name}').includes('{purpose}'),
     withQuote: z.string().includes('{said}').includes('{material}'),
     withTopic: z.string().includes('{material}'),
     withoutMaterial: z.string().min(1),

@@ -3,7 +3,7 @@ import type { PolicySpec } from '../reliability/policy.ts';
 /** What a proactive line is for; each has one zh purpose sentence (spec 意图渲染). */
 export const INTENT_PURPOSES = ['threadEventBefore', 'threadEventAfter', 'threadConcern', 'threadPlan',
   'moodCheckNow', 'moodCheckEarlier', 'routineMorning', 'routineNoon', 'routineEvening', 'routineNight',
-  'continueThread', 'interestTopic', 'humanConnection', 'selfShare', 'presenceCheck', 'restQuiet'] as const;
+  'continueThread', 'interestTopic', 'humanConnection', 'selfShare', 'presenceCheck', 'restQuiet', 'greetingPlain'] as const;
 export type IntentPurpose = (typeof INTENT_PURPOSES)[number];
 
 /** Fallback line groups; threadSensitive is spoken instead of rendering a health thread (2026-10-29). */
@@ -14,6 +14,8 @@ export type FallbackKey = (typeof FALLBACK_KEYS)[number];
 /** Plan-A instruction fragments (P3-T0 probe). Repo only; never in the admin console. */
 export interface IntentCopy {
   frame: string;
+  /** Opening frame (P4): {maxChars} {name} {purpose}. Says the name once, then the purpose. */
+  opening: string;
   withQuote: string;
   withTopic: string;
   withoutMaterial: string;
