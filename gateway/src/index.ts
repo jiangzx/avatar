@@ -38,6 +38,7 @@ import { SqliteSecretStore, parseMasterKey } from './config-store/secrets.ts';
 import { fixedConfigSource, SqliteConfigStore, type ConfigSource } from './config-store/store.ts';
 import { buildConfigSnapshot, type ConfigSnapshot } from './session/configSnapshot.ts';
 import { makeSessionFactory } from './session/snapshotDeps.ts';
+import { expireThreads } from './session/proactive/lifecycle.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
@@ -376,12 +377,12 @@ async function expireTranscripts(): Promise<void> {
       if (deleted < limit) break;
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
-    // Quotes older than the care window can never be asked about; drop them even when care is off (data minimization).
+    // Threads that can never be raised again are closed, which clears their quotes (data minimization).
     try {
-      const cleared = store.clearStaleCareQuotes(ownerId, Date.now() - current.affect.care.maxAgeDays * DAY_MS);
-      if (cleared > 0) log.info('care_quote_retention', { cleared });
+      const closed = expireThreads(store, ownerId, Date.now(), current.proactivity);
+      if (closed > 0) log.info('thread_retention', { closed });
     } catch {
-      log.error('care_quote_retention_failed');
+      log.error('thread_retention_failed');
     }
   }
 }

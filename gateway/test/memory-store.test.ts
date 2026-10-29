@@ -786,20 +786,4 @@ describe('care followups', () => {
     expect(count(db, 'SELECT count(*) AS n FROM followups')).toBe(0);
   });
 
-  it('clears quotes that aged out of the care window, keeps the followup, and stays owner-scoped', () => {
-    const db = open();
-    const store = new SqliteMemoryStore(db);
-    const a = seedOwner(store, 'care-expire');
-    const b = seedOwner(store, 'care-expire-other');
-    addFollowup(store, a, 's-old', { text: 'old', quote: '我要去爬山', createdAt: NOW - WEEK - 1 });
-    addFollowup(store, a, 's-fresh', { text: 'fresh', quote: '我明天去医院复查腰', createdAt: NOW - DAY });
-    addFollowup(store, b, 's-b-old', { text: 'b-old', quote: '我下周去看牙', createdAt: NOW - WEEK - 1 });
-    expect(store.clearStaleCareQuotes(a.ownerId, NOW - WEEK)).toBe(1);
-    expect(db.prepare('SELECT text, quote FROM followups ORDER BY text').all()).toEqual([
-      { text: 'b-old', quote: '我下周去看牙' },
-      { text: 'fresh', quote: '我明天去医院复查腰' },
-      { text: 'old', quote: null },
-    ]);
-    expect(store.clearStaleCareQuotes(a.ownerId, NOW - WEEK)).toBe(0);
-  });
 });

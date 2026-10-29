@@ -209,8 +209,6 @@ export interface MemoryStore {
   careFollowup(ownerId: string, agentId: string, currentSessionId: string, now: number, maxAgeMs: number): { id: string; quote: string; createdAt: number } | undefined;
   /** Marks the followup done and clears its quote; the audit diff never carries the quote. */
   closeCareFollowup(ownerId: string, id: string, now: number): void;
-  /** Daily retention: clears quotes created before `olderThan`. Returns rows changed. */
-  clearStaleCareQuotes(ownerId: string, olderThan: number): number;
   /** Open threads of this agent (quoted, not done), newest first. */
   listOpenThreads(ownerId: string, agentId: string): ThreadRecord[];
   /** Counts one proactive mention. False when the thread is closed or foreign. */
@@ -527,7 +525,6 @@ function prepareStatements(db: DatabaseSync) {
       ORDER BY f.created_at DESC, f.rowid DESC
       LIMIT 1`),
     closeCareFollowup: p('UPDATE followups SET done_at = ?, quote = NULL WHERE id = ? AND owner_id = ? AND done_at IS NULL'),
-    clearStaleCareQuotes: p('UPDATE followups SET quote = NULL WHERE owner_id = ? AND quote IS NOT NULL AND created_at < ?'),
     listOpenThreads: p(`SELECT id, kind, quote, due_at, sensitive, mention_count, last_mentioned_at, created_at, source_session_id
       FROM followups WHERE owner_id = ? AND agent_id = ? AND done_at IS NULL AND quote IS NOT NULL
       ORDER BY created_at DESC, rowid DESC`),
@@ -1032,10 +1029,6 @@ export class SqliteMemoryStore implements MemoryStore {
         this.audit(ownerId, (owner?.agent_id as string | undefined) ?? null, 'followups', id, 'close', '', 'care', now);
       }
     });
-  }
-
-  clearStaleCareQuotes(ownerId: string, olderThan: number): number {
-    return Number(this.q.clearStaleCareQuotes.run(ownerId, olderThan).changes);
   }
 
   listOpenThreads(ownerId: string, agentId: string): ThreadRecord[] {
