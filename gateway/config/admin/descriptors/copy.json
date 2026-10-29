@@ -61,6 +61,88 @@
       "impact": { "characters": "all", "stage": "断线恢复", "effective": "next_session" },
       "control": "text", "maxChars": { "zh": 30, "ja": 50, "en": 100 },
       "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/zh/director.fallbacks.threadFollowup",
+      "label": "回访老人说过的事：备用话（中文）",
+      "purpose": "AI 想回访老人前几天说过的事、但这次没能自己说出来时，从这几句里挑一句，不重复。不要写具体的事，因为备用话不知道是哪件事。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/zh/director.fallbacks.threadSensitive",
+      "label": "回访身体方面的事：备用话（中文）",
+      "purpose": "老人说过的身体、健康方面的事，AI 一律只说这里的话，不复述原话。不要写吃药、看病、去医院之类的建议。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "这里的话会直接说给老人听，不能出现用药、就医建议。"
+    },
+    {
+      "key": "role:elder-companion/zh/director.fallbacks.moodCheck",
+      "label": "关心心情：备用话（中文）",
+      "purpose": "老人心情不好时，AI 没能自己说出来就用这几句。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/zh/director.fallbacks.routine",
+      "label": "作息问候：备用话（中文）",
+      "purpose": "早上、中午、傍晚、晚上的问候，没能自己说出来时用。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/zh/director.fallbacks.continueThread",
+      "label": "接着刚才的话：备用话（中文）",
+      "purpose": "老人话说到一半停了，AI 没能自己接上时用。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/zh/director.fallbacks.interestTopic",
+      "label": "起个小话题：备用话（中文）",
+      "purpose": "AI 想起个轻松话题、没能自己说出来时用。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/zh/director.fallbacks.humanConnection",
+      "label": "鼓励联系家人：备用话（中文）",
+      "purpose": "引导老人和家里人多联系，没能自己说出来时用。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/zh/director.fallbacks.selfShare",
+      "label": "AI 说自己的小事：备用话（中文）",
+      "purpose": "AI 说一件自己的小事，没能自己说出来时用。不要写成老人的事。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/zh/director.fallbacks.presenceCheck",
+      "label": "问「还在听吗」：备用话（中文）",
+      "purpose": "每句都要问老人还在不在听，并说随时可以接着聊。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "medium",
+      "riskNote": "改坏了老人会以为 AI 不理他。"
+    },
+    {
+      "key": "role:elder-companion/zh/director.fallbacks.restQuiet",
+      "label": "安静陪着：备用话（中文）",
+      "purpose": "老人安静了几分钟后说的话，不要问问题。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
     }
   ],
   "readonly": [

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { DEFAULT_CHARACTER_ID, LANGUAGES, type CharacterId, type Language } from '@anyidea/protocol';
 import type { CharacterRegistry } from '../characters/registry.ts';
-import { DirectorSchema } from '../config.ts';
+import { DirectorSchema, checkIntentPair } from '../config.ts';
 import type { RoleCatalog } from './catalog.ts';
 import { PROMPT_LABELS } from './labels.ts';
 import type { DirectorConfig } from './types.ts';
@@ -27,7 +27,8 @@ const ActivitiesSchema = z.object({
   }).strict()).max(12),
 }).strict();
 
-const RoleDirectorSchema = DirectorSchema.extend({ topicInstruction: z.string().includes('{topic}') }).strict();
+const RoleDirectorSchema = DirectorSchema.extend({ topicInstruction: z.string().includes('{topic}') }).strict()
+  .refine(checkIntentPair, { message: 'intents_fallbacks_together' });
 const TopicsSchema = z.array(z.object({
   id: Id,
   prompt: z.string().min(1).max(40),

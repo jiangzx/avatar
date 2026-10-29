@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import type { Language } from '@anyidea/protocol';
-import type { DirectorConfig } from './roles/types.ts';
+import { FALLBACK_KEYS, INTENT_PURPOSES, type DirectorConfig } from './roles/types.ts';
 import type { LedgerOptions } from './session/ledger.ts';
 import { parseLogLevel } from './log/levels.ts';
 import type { LogLevel } from './log/logger.ts';
@@ -194,6 +194,25 @@ const DirectorSchema = z.object({
   maxPerWindow: z.number().int().min(0),
   windowMs: z.number().int().positive(),
   companyAfterMs: z.number().int().positive().optional(),
+  intents: z.object({
+    frame: z.string().includes('{maxChars}').includes('{purpose}'),
+    withQuote: z.string().includes('{said}').includes('{material}'),
+    withTopic: z.string().includes('{material}'),
+    withoutMaterial: z.string().min(1),
+    noQuestion: z.string().min(1),
+    speakLine: z.string().includes('{line}'),
+    purposes: z.object(Object.fromEntries(INTENT_PURPOSES.map((p) => [p, z.string().min(1).max(80)])) as Record<(typeof INTENT_PURPOSES)[number], z.ZodString>).strict(),
+    tones: z.object({
+      new: z.string().min(1), familiar: z.string().min(1), oldFriend: z.string().min(1),
+      explore: z.string().min(1), comfort: z.string().min(1), suggest: z.string().min(1),
+    }).strict(),
+    saidWhen: z.object({
+      justNow: z.string().min(1), today: z.string().min(1), yesterday: z.string().min(1), days: z.array(z.string().min(1)).length(5),
+      lastWeek: z.string().min(1), earlier: z.string().min(1),
+    }).strict(),
+  }).strict().optional(),
+  fallbacks: z.object(Object.fromEntries(FALLBACK_KEYS.map((k) => [k, z.array(z.string().trim().min(1).max(60)).min(5).max(10)
+    .refine((lines) => new Set(lines).size === lines.length, { message: 'fallback_lines_duplicate' })])) as unknown as Record<(typeof FALLBACK_KEYS)[number], z.ZodType<string[]>>).strict().optional(),
   /** Role catalogs require `{topic}` here; the shared schema only checks the shape is present. */
   topicInstruction: z.string().optional(),
   contextAfterMs: z.number().int().positive().optional(),
@@ -247,8 +266,12 @@ const DirectorSchema = z.object({
   memoryNoticeText: z.string().min(1),
 }).strict();
 
+/** Both-or-neither: a role pack cannot ship intent copy without fallback groups. */
+export const checkIntentPair = (d: { intents?: unknown; fallbacks?: unknown }) =>
+  (d.intents === undefined) === (d.fallbacks === undefined);
+
 export function loadDirectorConfig(path: string): DirectorConfig {
-  return DirectorSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+  return DirectorSchema.refine(checkIntentPair, { message: 'intents_fallbacks_together' }).parse(JSON.parse(readFileSync(path, 'utf8')));
 }
 
 /** Device identity and memory store settings (Plan 3 B). Env only; never in files. */

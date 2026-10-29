@@ -13,6 +13,10 @@ const zhRules: SilenceRules = {
   listening: ['还在听', '在听', '听着', '听到', '还在吗', '在吗'],
   anytime: ['随时', '都可以', '接着聊', '想聊', '都在'],
   maxCheckinChars: 30,
+  tierDown: ['少说点', '别老问我', '话少一点', '别总找我说话', '少说两句'],
+  tierUp: ['多跟我聊聊', '多说说话', '多陪我说说话', '多找我聊天'],
+  farewell: ['再见', '拜拜', '我去睡了', '我要睡了', '先不聊了', '回头再聊', '明天再聊', '我出门了', '我要出门'],
+  familyWords: ['女儿', '闺女', '儿子', '孙子', '孙女', '外孙', '老伴', '儿媳', '女婿', '孩子', '家里人'],
 };
 const jaRules = silence.ja;
 const enRules = silence.en;

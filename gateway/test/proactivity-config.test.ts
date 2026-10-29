@@ -20,6 +20,7 @@ describe('proactivity.json', () => {
       const w = cfg.kinds[kind].weights;
       expect(w.relevance + w.urgency + w.importance + w.novelty, kind).toBe(100);
     }
+    expect(cfg.material.familyLookback).toBe(30);
   });
 
   it('rejects weights that do not sum to 100, unknown keys and out-of-range values', () => {
@@ -33,6 +34,9 @@ describe('proactivity.json', () => {
     const window = raw();
     window.routine.morning = { start: 10, end: 6 };
     expect(ProactivitySchema.safeParse(window).success).toBe(false);
+    const lookback = raw();
+    lookback.material.familyLookback = 0;
+    expect(ProactivitySchema.safeParse(lookback).success).toBe(false);
   });
 
   it('is part of the config snapshot and can be overlaid', () => {

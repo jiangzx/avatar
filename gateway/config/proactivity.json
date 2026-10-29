@@ -24,6 +24,7 @@
     "night": { "start": 20, "end": 22 }
   },
   "humanConnection": { "lowRelevance": 70 },
+  "material": { "familyLookback": 30 },
   "kinds": {
     "threadFollowup": { "enabled": true, "priority": 1, "weights": { "relevance": 15, "urgency": 40, "importance": 30, "novelty": 15 }, "base": { "relevance": 50, "urgency": 0, "importance": 0 } },
     "moodCheck": { "enabled": true, "priority": 2, "weights": { "relevance": 40, "urgency": 25, "importance": 25, "novelty": 10 }, "base": { "relevance": 100, "urgency": 100, "importance": 60 } },

@@ -118,6 +118,18 @@ describe('loadI18n', () => {
     writeFileSync(path, JSON.stringify(value));
     expect(() => loadI18n(dir)).toThrow(/i18n_pattern_invalid:en:explicitRequestPatterns/);
   });
+
+  it('loads proactive phrase lists for every language', () => {
+    for (const language of ['zh', 'ja', 'en'] as const) {
+      const rules = i18n.silence[language];
+      expect(rules.tierDown.length, language).toBeGreaterThan(0);
+      expect(rules.tierUp.length, language).toBeGreaterThan(0);
+      expect(rules.farewell.length, language).toBeGreaterThan(0);
+      expect(rules.familyWords.length, language).toBeGreaterThan(0);
+    }
+    expect(i18n.silence.zh.tierDown).toContain('少说点');
+    expect(i18n.silence.zh.familyWords).toContain('女儿');
+  });
 });
 
 describe('affect copy', () => {

@@ -142,6 +142,7 @@ const SilenceFileSchema = z.object({
   listening: PhraseList,
   anytime: PhraseList,
   maxCheckinChars: z.number().int().min(1).max(500),
+  tierDown: PhraseList, tierUp: PhraseList, farewell: PhraseList, familyWords: PhraseList,
 }).strict();
 
 const AffectLine = z.string().min(1).max(200);

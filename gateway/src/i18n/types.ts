@@ -129,6 +129,13 @@ export interface SilenceRules {
   listening: readonly string[];
   anytime: readonly string[];
   maxCheckinChars: number;
+  /** Lower / raise the proactivity tier by voice (spec 三档主动程度). */
+  tierDown: readonly string[];
+  tierUp: readonly string[];
+  /** The user is saying goodbye: the silence ladder stops, nothing is said to hold them (Q6). */
+  farewell: readonly string[];
+  /** A remembered user line with one of these may ground humanConnection. */
+  familyWords: readonly string[];
 }
 
 /** Fixed state-card copy and time words for one language (config/i18n/<lang>/affect.json). */

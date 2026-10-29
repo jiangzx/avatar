@@ -62,6 +62,8 @@ export const ProactivitySchema = z.object({
   }).strict(),
   routine: z.object({ morning: Window, noon: Window, evening: Window, night: Window }).strict(),
   humanConnection: z.object({ lowRelevance: Pct }).strict(),
+  /** How far back (user lines of ended sessions) a family line is looked for. */
+  material: z.object({ familyLookback: z.number().int().min(1).max(200) }).strict(),
   kinds: z.object({
     threadFollowup: Kind, moodCheck: Kind, continueThread: Kind, routine: Kind,
     humanConnection: Kind, interestTopic: Kind, selfShare: Kind,

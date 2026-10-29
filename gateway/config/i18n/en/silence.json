@@ -2,5 +2,9 @@
   "greeting": ["hello", "hi", "good morning", "good afternoon", "good evening", "nice to see", "welcome back", "hey"],
   "listening": ["still there", "are you there", "can you hear", "listening", "with me"],
   "anytime": ["anytime", "any time", "whenever", "no rush", "happy to talk"],
-  "maxCheckinChars": 80
+  "maxCheckinChars": 80,
+  "tierDown": ["talk less", "stop asking me", "fewer questions"],
+  "tierUp": ["talk to me more", "chat with me more"],
+  "farewell": ["goodbye", "bye", "good night", "talk tomorrow", "see you", "heading out"],
+  "familyWords": ["daughter", "son", "grandson", "granddaughter", "grandchild", "husband", "wife", "family"]
 }

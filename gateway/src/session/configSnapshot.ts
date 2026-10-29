@@ -81,6 +81,15 @@ export function buildConfigSnapshot(input: SnapshotInput): ConfigSnapshot {
     if (affect.enabled && affect.care.timeoutMs >= input.sessionStartTimeoutMs) {
       throw new Error(`care_timeout_exceeds_session_start: ${affect.care.timeoutMs} >= ${input.sessionStartTimeoutMs}`);
     }
+    // A fallback that waits longer than the shortest silence step would land on top of the next step.
+    for (const pair of roles.characterLanguagePairs()) {
+      const d = roles.director(pair.characterId, pair.language);
+      const steps = [d.contextAfterMs, d.checkAfterMs, d.leaveAfterMs, d.checkinAfterMs].filter((v): v is number => v !== undefined);
+      const shortest = Math.min(...steps);
+      if (steps.length > 0 && proactivity.fallbackAfterMs > shortest) {
+        throw new Error(`proactive_fallback_exceeds_silence: ${proactivity.fallbackAfterMs} > ${shortest}`);
+      }
+    }
     return {
       version: input.version,
       pacing,
@@ -112,6 +121,7 @@ const CODE_MESSAGES: ReadonlyArray<[RegExp, string]> = [
   [/^character_foreign_name/, '角色的性格描述或开场白里出现了其他角色的名字。'],
   [/^character_card_invalid/, '角色设置的格式不对。'],
   [/^care_timeout_exceeds_session_start/, '关怀开场的等待时间超过了通话启动时间。'],
+  [/^proactive_fallback_exceeds_silence/, '主动开口的兜底等待时间比最短的沉默等待还长，请调短兜底等待或调长沉默等待。'],
   [/^all_characters_disabled/, '至少要留一个角色开着。'],
   [/^overlay_key_invalid/, '有一项配置的名字无法识别'],
   [/^overlay_target_missing/, '有一项配置在当前版本的默认配置里已经不存在'],

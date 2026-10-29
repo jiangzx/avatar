@@ -1,5 +1,32 @@
 import type { PolicySpec } from '../reliability/policy.ts';
 
+/** What a proactive line is for; each has one zh purpose sentence (spec 意图渲染). */
+export const INTENT_PURPOSES = ['threadEventBefore', 'threadEventAfter', 'threadConcern', 'threadPlan',
+  'moodCheckNow', 'moodCheckEarlier', 'routineMorning', 'routineNoon', 'routineEvening', 'routineNight',
+  'continueThread', 'interestTopic', 'humanConnection', 'selfShare', 'presenceCheck', 'restQuiet'] as const;
+export type IntentPurpose = (typeof INTENT_PURPOSES)[number];
+
+/** Fallback line groups; threadSensitive is spoken instead of rendering a health thread (2026-10-29). */
+export const FALLBACK_KEYS = ['threadFollowup', 'threadSensitive', 'moodCheck', 'routine', 'continueThread',
+  'interestTopic', 'humanConnection', 'selfShare', 'presenceCheck', 'restQuiet'] as const;
+export type FallbackKey = (typeof FALLBACK_KEYS)[number];
+
+/** Plan-A instruction fragments (P3-T0 probe). Repo only; never in the admin console. */
+export interface IntentCopy {
+  frame: string;
+  withQuote: string;
+  withTopic: string;
+  withoutMaterial: string;
+  noQuestion: string;
+  speakLine: string;
+  purposes: Record<IntentPurpose, string>;
+  tones: { new: string; familiar: string; oldFriend: string; explore: string; comfort: string; suggest: string };
+  /** When the user said it; justNow = this session; days[i] is (i + 2) days ago. */
+  saidWhen: { justNow: string; today: string; yesterday: string; days: readonly string[]; lastWeek: string; earlier: string };
+}
+
+export type FallbackGroups = Record<FallbackKey, readonly string[]>;
+
 export interface SilenceDecisionConfig {
   instruction: string;
   speakInstruction: string;
@@ -106,4 +133,8 @@ export interface DirectorConfig {
   /** Silence-topic template; `{topic}` is replaced by the card prompt. */
   topicInstruction?: string;
   topics?: readonly TopicCard[];
+  /** Proactive intent instructions (P3). Present together with `fallbacks`; absent = configured stage copy. */
+  intents?: IntentCopy;
+  /** Fallback line groups, at least five lines each; admin-editable. */
+  fallbacks?: FallbackGroups;
 }
