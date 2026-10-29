@@ -213,3 +213,9 @@
 - Step 6（真机沉默，核对 3 秒兜底是否在用户开口前说出，以及 `response.created` 是否把窗口内的另一条 followup 算成引擎那句）跳过：用户确认了停网关、备份和重启，当时不在手机旁。
 - 网关已重新监听，`healthz` 200。备份后缀 `.bak-v7-20261029`，源库和备份当时都已是 `user_version` 8。没有改代码。
 - 旅程评测未过 P3 不退步门槛（编造 2、共情低于基线）。记录在 `docs/testing/2026-10-29-p3-silence-engine-acceptance.md`。P4-T1 未开始。
+
+## 2026-10-30 Web 真人说话头 spike：用户前置未就位
+
+- 计划 `docs/superpowers/plans/2026-10-30-web-photoreal-demo/` 的 T1b 需要 `build/photoreal/wav2lip_gan.pth`（Wav2Lip GAN 官方 checkpoint，仅研究用）。worktree `.worktrees/photoreal-spike` 下缺失，因此 ONNX、frames/faces、`manifest.json`、`speech-24k.pcm`、mel filterbank/fixture 和资产 lock 都未生成。
+- 目标机只装了 Safari；ORT WebGPU 只支持桌面 Chrome/Edge。T1a 只用 `curl` 验证了页面 HTML 与模块转换，WebGPU、S1–S5 和 T7 基准都未验证。
+- 解除条件：用户手动下载 checkpoint 到 `build/photoreal/wav2lip_gan.pth`，并安装 Chrome/Edge；之后继续 T1b，再跑 T3/T5/T7。
