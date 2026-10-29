@@ -5,6 +5,7 @@ import { chooseFrame } from './frameScheduler.ts';
 import { drawComposite } from './compositor.ts';
 import { DEFAULT_PHOTOREAL_CONFIG } from './config.ts';
 import { packFace, patchToRgba } from './face.ts';
+import { interruptedAt } from './interrupt.ts';
 import { melWindow, MelSpectrogram } from './mel.ts';
 import filterbank from './mel-filterbank.json';
 import { Metrics } from './metrics.ts';
@@ -33,9 +34,11 @@ export async function startPage(): Promise<void> {
   const startBtn = el<HTMLButtonElement>('start');
   const interruptBtn = el<HTMLButtonElement>('interrupt');
   const copyBtn = el<HTMLButtonElement>('copy');
+  const downloadBtn = el<HTMLButtonElement>('download');
   startBtn.disabled = true;
   interruptBtn.disabled = true;
   copyBtn.disabled = true;
+  downloadBtn.disabled = true;
 
   const stats = new Metrics();
   const forceWasm = new URLSearchParams(location.search).get('ep') === 'wasm';
@@ -44,6 +47,7 @@ export async function startPage(): Promise<void> {
 
   status.textContent = 'loading manifest...';
   const manifest = await fetchManifest('/spike/photoreal/manifest.json');
+  if (manifest.fps !== cfg.fps) throw new Error('photoreal: manifest fps mismatch');
   canvas.width = manifest.width;
   canvas.height = manifest.height;
 
@@ -76,6 +80,8 @@ export async function startPage(): Promise<void> {
   stats.modelLoadMs = performance.now() - modelStart;
   stats.provider = runner.provider;
   startBtn.disabled = false;
+  window.addEventListener('offline', () => stats.markOffline());
+  if (!navigator.onLine) stats.markOffline();
 
   const total = manifest.frames.length;
   const patches: (ImageData | null)[] = new Array(total).fill(null);
@@ -183,6 +189,7 @@ export async function startPage(): Promise<void> {
     startBtn.disabled = false;
     interruptBtn.disabled = true;
     copyBtn.disabled = false;
+    downloadBtn.disabled = false;
     status.textContent = JSON.stringify(stats.toJSON(), null, 2);
   }
 
@@ -191,9 +198,11 @@ export async function startPage(): Promise<void> {
     running = true;
     finished = false;
     interrupted = false;
+    lastShown = -1;
     startBtn.disabled = true;
     interruptBtn.disabled = false;
     copyBtn.disabled = true;
+    downloadBtn.disabled = true;
     audioCtx = new AudioContext({ sampleRate: manifest.pcmSampleRate, latencyHint: 'interactive' });
     clock = new AudioClock(cfg.fps);
     const waitStart = performance.now();
@@ -229,22 +238,22 @@ export async function startPage(): Promise<void> {
   function interrupt(): void {
     if (!running || interrupted || !audioCtx || !clock) return;
     const started = performance.now();
-    const playedMs = clock.mediaMsAt(audioCtx.currentTime);
-    const frame = Math.max(0, Math.min(total - 1, clock.frameAt(audioCtx.currentTime)));
+    const frozen = interruptedAt(clock, audioCtx.currentTime, total);
     interrupted = true;
     source?.stop();
-    draw(frame, null);
+    draw(frozen.frame, null);
     let ticks = 0;
     const closeMouth = (): void => {
-      draw(frame, null);
+      draw(frozen.frame, null);
       if (++ticks < 2) requestAnimationFrame(closeMouth);
       else {
         stats.interrupt(performance.now() - started);
-        status.textContent = `interrupted at ${Math.round(playedMs)} ms\n${JSON.stringify(stats.toJSON(), null, 2)}`;
+        status.textContent = `interrupted at ${Math.round(frozen.playedMs)} ms\n${JSON.stringify(stats.toJSON(), null, 2)}`;
         running = false;
         startBtn.disabled = false;
         interruptBtn.disabled = true;
         copyBtn.disabled = false;
+        downloadBtn.disabled = false;
       }
     };
     requestAnimationFrame(closeMouth);
@@ -261,6 +270,15 @@ export async function startPage(): Promise<void> {
   interruptBtn.addEventListener('click', interrupt);
   copyBtn.addEventListener('click', () => {
     void navigator.clipboard.writeText(JSON.stringify(stats.toJSON(), null, 2));
+  });
+  downloadBtn.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(stats.toJSON(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'photoreal-metrics.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
   });
 
   void fill().catch((error) => {

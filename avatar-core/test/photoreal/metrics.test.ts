@@ -24,4 +24,10 @@ describe('Metrics', () => {
     m.interrupt(99);
     expect(m.toJSON().interruptLatencyMs).toBe(42);
   });
+
+  it('records the offline check', () => {
+    const m = new Metrics();
+    m.markOffline();
+    expect(m.toJSON().offline).toBe(true);
+  });
 });

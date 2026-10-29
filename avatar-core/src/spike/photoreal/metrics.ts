@@ -13,6 +13,7 @@ export class Metrics {
   inferenceMaxMs = 0;
   interruptLatencyMs: number | null = null;
   lastAudioMs = 0;
+  offline = false;
 
   recordInference(ms: number): void {
     this.inferenceCount++;
@@ -32,6 +33,10 @@ export class Metrics {
     if (this.interruptLatencyMs === null) this.interruptLatencyMs = ms;
   }
 
+  markOffline(): void {
+    this.offline = true;
+  }
+
   toJSON(): Record<string, unknown> {
     const fps = this.lastAudioMs > 0 ? (this.framesShown * 1000) / this.lastAudioMs : 0;
     return {
@@ -48,6 +53,7 @@ export class Metrics {
       inferenceAvgMs: this.inferenceCount === 0 ? 0 : Number((this.inferenceTotalMs / this.inferenceCount).toFixed(2)),
       inferenceMaxMs: Number(this.inferenceMaxMs.toFixed(2)),
       interruptLatencyMs: this.interruptLatencyMs === null ? null : Math.round(this.interruptLatencyMs),
+      offline: this.offline,
     };
   }
 }
