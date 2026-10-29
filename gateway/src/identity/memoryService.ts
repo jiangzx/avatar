@@ -26,10 +26,18 @@ export interface MemoryServiceDeps {
 /** Upper bound on lines one fallback match may delete; the FTS match is already all-tokens. */
 const FALLBACK_MATCH_LIMIT = 200;
 
+/** Newest rows listed per character for reflections and moods; threads are few and all listed. */
+const MAX_LISTED = 50;
+
+const shanghaiDay = (at: number): string => new Date(at + 8 * 3_600_000).toISOString().slice(0, 10);
+
 const TABLE_OF: Record<DeletedItem['kind'], string> = {
   profile: 'profile_facts',
   agent_fact: 'agent_facts',
   pinned: 'pinned_memories',
+  thread: 'followups',
+  reflection: 'reflections',
+  mood: 'mood_summaries',
 };
 
 export function createMemoryService(deps: MemoryServiceDeps): MemoryService {
@@ -42,6 +50,8 @@ export function createMemoryService(deps: MemoryServiceDeps): MemoryService {
 
   /** Q35/Q36: source ids first; no ids → the forget-style match. Private → its agent, shared → every agent. */
   const deleteSources = (ownerId: string, item: DeletedItem): { deleted: number; fallback: boolean } => {
+    // A mood row has no source line; a fallback match on label words could hit unrelated lines.
+    if (item.kind === 'mood') return { deleted: 0, fallback: false };
     const scope = item.kind === 'profile' ? null : item.agentId;
     if (item.sourceMessageIds.length > 0) {
       // Dangling ids (forgotten or expired lines) simply match nothing.
@@ -70,12 +80,17 @@ export function createMemoryService(deps: MemoryServiceDeps): MemoryService {
         // Every character in display order; one never met has empty lists.
         characters: CHARACTER_IDS.map((character) => {
           const agent = agents.find((row) => row.characterId === character);
-          if (!agent) return { character, pinned: [], facts: [] };
+          if (!agent) return { character, pinned: [], facts: [], threads: [], reflections: [], moods: [] };
           return {
             character,
             pinned: store.listPinned(ownerId, agent.id).map((row) => ({ id: row.id, text: row.text, sensitive: row.sensitive })),
             facts: store.listAgentFacts(ownerId, agent.id)
               .map((row) => ({ id: row.id, text: row.text, category: row.category, sensitive: row.sensitive })),
+            threads: store.listOpenThreads(ownerId, agent.id).map((row) => ({ id: row.id, text: row.quote, kind: row.kind, sensitive: row.sensitive })),
+            reflections: store.listReflections(ownerId, agent.id, MAX_LISTED).map((row) => ({ id: row.id, text: row.text })),
+            moods: store.listMoodSummaries(ownerId, agent.id, MAX_LISTED).map((row) => ({
+              id: row.id, day: shanghaiDay(row.createdAt), emotion: row.dominant, peak: row.peakIntensity,
+            })),
           };
         }),
       };

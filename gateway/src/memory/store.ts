@@ -96,7 +96,7 @@ export function relationshipStatsOf(rows: ReadonlyArray<{ startedAt: number; end
   };
 }
 
-export interface DeletedItem { kind: 'profile' | 'agent_fact' | 'pinned'; agentId: string | null; text: string; sourceMessageIds: string[] }
+export interface DeletedItem { kind: 'profile' | 'agent_fact' | 'pinned' | 'thread' | 'reflection' | 'mood'; agentId: string | null; text: string; sourceMessageIds: string[] }
 
 export const PROFILE_CATEGORIES: readonly ProfileCategory[] = ['addressing', 'profile'];
 export const AGENT_FACT_CATEGORIES: readonly AgentFactCategory[] = ['preference', 'person', 'health', 'other', 'safety'];
@@ -186,7 +186,7 @@ export interface MemoryStore {
   forgetMatches(ownerId: string, agentId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): ForgetResult;
   /** Settings name: the single addressing row, stored as a plain name. */
   setAddressing(ownerId: string, name: string, now: number): void;
-  /** Deletes one profile, agent fact or pinned row of this owner. Undefined when absent or foreign. */
+  /** Deletes one profile, agent fact, pinned, thread, reflection or mood row of this owner. Undefined when absent or foreign. */
   deleteMemoryItem(ownerId: string, itemId: string): DeletedItem | undefined;
   /** Hard-deletes messages by id; agentId null = any agent of the owner. Dangling ids are ignored. */
   deleteMessagesByIds(ownerId: string, agentId: string | null, ids: readonly string[]): number;
@@ -483,6 +483,12 @@ function prepareStatements(db: DatabaseSync) {
     listPinned: p('SELECT id, text, sensitive, created_at FROM pinned_memories WHERE owner_id = ? AND agent_id = ? ORDER BY created_at DESC, rowid DESC'),
     getPinned: p('SELECT id, agent_id, text, source_message_id FROM pinned_memories WHERE id = ? AND owner_id = ?'),
     deletePinnedById: p('DELETE FROM pinned_memories WHERE id = ? AND owner_id = ?'),
+    getThreadById: p('SELECT agent_id, quote, text, source_message_ids FROM followups WHERE id = ? AND owner_id = ? AND quote IS NOT NULL AND done_at IS NULL'),
+    deleteFollowupById: p('DELETE FROM followups WHERE id = ? AND owner_id = ?'),
+    getReflectionById: p('SELECT agent_id, text, evidence_message_ids FROM reflections WHERE id = ? AND owner_id = ?'),
+    deleteReflectionById: p('DELETE FROM reflections WHERE id = ? AND owner_id = ?'),
+    getMoodById: p('SELECT agent_id FROM mood_summaries WHERE id = ? AND owner_id = ?'),
+    deleteMoodById: p('DELETE FROM mood_summaries WHERE id = ? AND owner_id = ?'),
     deletePinnedInstr: p('DELETE FROM pinned_memories WHERE owner_id = ? AND agent_id = ? AND instr(text, ?) > 0'),
     deleteAllPinned: p('DELETE FROM pinned_memories WHERE owner_id = ? AND agent_id = ?'),
     listNoteRows: p('SELECT id, kind, text FROM relationship_notes WHERE owner_id = ? AND agent_id = ? ORDER BY updated_at, rowid'),
@@ -893,6 +899,24 @@ export class SqliteMemoryStore implements MemoryStore {
         this.forgetRow(ownerId, pin.agent_id as string, 'pinned_memories', itemId, now);
         const source = pin.source_message_id as string | null;
         return { kind: 'pinned', agentId: pin.agent_id as string, text: pin.text as string, sourceMessageIds: source ? [source] : [] };
+      }
+      const thread = this.q.getThreadById.get(itemId, ownerId);
+      if (thread) {
+        this.q.deleteFollowupById.run(itemId, ownerId);
+        this.forgetRow(ownerId, thread.agent_id as string, 'followups', itemId, now);
+        return { kind: 'thread', agentId: thread.agent_id as string, text: thread.quote as string, sourceMessageIds: parseIds(thread.source_message_ids) };
+      }
+      const reflection = this.q.getReflectionById.get(itemId, ownerId);
+      if (reflection) {
+        this.q.deleteReflectionById.run(itemId, ownerId);
+        this.forgetRow(ownerId, reflection.agent_id as string, 'reflections', itemId, now);
+        return { kind: 'reflection', agentId: reflection.agent_id as string, text: reflection.text as string, sourceMessageIds: parseIds(reflection.evidence_message_ids) };
+      }
+      const mood = this.q.getMoodById.get(itemId, ownerId);
+      if (mood) {
+        this.q.deleteMoodById.run(itemId, ownerId);
+        this.forgetRow(ownerId, mood.agent_id as string, 'mood_summaries', itemId, now);
+        return { kind: 'mood', agentId: mood.agent_id as string, text: '', sourceMessageIds: [] };
       }
       return undefined;
     });

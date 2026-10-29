@@ -86,9 +86,10 @@ describe('MemoryService.ownerOf / overview', () => {
       character: 'xiaonuan',
       pinned: [{ id: pinA, text: '我有高血压', sensitive: true }],
       facts: [{ id: factA, text: '膝盖不好', category: 'health', sensitive: true }],
+      threads: [], reflections: [], moods: [],
     });
-    expect(view.characters[1]).toEqual({ character: 'xiaokai', pinned: [], facts: [] });
-    expect(view.characters[2]).toEqual({ character: 'xiaoxin', pinned: [], facts: [] });
+    expect(view.characters[1]).toEqual({ character: 'xiaokai', pinned: [], facts: [], threads: [], reflections: [], moods: [] });
+    expect(view.characters[2]).toEqual({ character: 'xiaoxin', pinned: [], facts: [], threads: [], reflections: [], moods: [] });
     expect(JSON.stringify(view)).not.toContain('别人的事');
   });
 });
@@ -269,5 +270,55 @@ describe('MemoryService.clear', () => {
     expect(s.store.deleteOrphanOwners(1 + 30 * DAY_MS, 100)).toBe(0);
     expect(s.store.getOwner(s.ownerId)).toBeDefined();
     expect(dirtyDiffs(s)).toBe(0);
+  });
+});
+
+describe('settings view of relational memory', () => {
+  function threadRow(s: Seed, id: string, quote: string | null, kind: string, sources: string[], doneAt: number | null = null): void {
+    s.db.prepare(`INSERT INTO followups (id, owner_id, agent_id, text, due_at, done_at, source_session_id, quote, sensitive, created_at, kind, source_message_ids)
+      VALUES (?, ?, ?, 'summary', 9, ?, 's0', ?, 1, 10, ?, ?)`).run(id, s.ownerId, s.a, doneAt, quote, kind, JSON.stringify(sources));
+  }
+  function userLine(s: Seed, id: string, text: string): void {
+    s.store.insertMessage({ id, sessionId: 's0', ownerId: s.ownerId, agentId: s.a, role: 'user', text, bigrams: bigrams(text), now: 5 });
+  }
+
+  it('lists open threads, reflections and moods per character', () => {
+    const s = seed();
+    threadRow(s, 't1', '我后天去复查', 'event', []);
+    threadRow(s, 'plain', null, 'concern', []);
+    threadRow(s, 'closed', '想学太极', 'plan', [], 20);
+    s.store.insertReflections(s.ownerId, s.a, 's0', [{ text: '常一个人吃午饭', evidenceMessageIds: [] }], 30);
+    s.store.recordMoodSummary(s.ownerId, s.a, { sessionId: 's0', dominant: 'sad', peakIntensity: 2, endEmotion: 'sad', endIntensity: 1, endTrend: 'flat', crisis: false }, Date.parse('2026-11-02T23:30:00+08:00'));
+    const view = s.service.overview(s.ownerId);
+    expect(view.characters[0]).toMatchObject({
+      threads: [{ id: 't1', text: '我后天去复查', kind: 'event', sensitive: true }],
+      reflections: [{ id: expect.any(String), text: '常一个人吃午饭' }],
+      moods: [{ id: expect.any(String), day: '2026-11-02', emotion: 'sad', peak: 2 }],
+    });
+  });
+
+  it('deletes a thread with its source line, a reflection with its evidence, and a mood without touching any line', () => {
+    const s = seed();
+    userLine(s, 'm1', '我后天去复查腰');
+    userLine(s, 'm2', '中午都是我一个人吃饭');
+    userLine(s, 'm3', '今天心里有点闷');
+    threadRow(s, 't1', '我后天去复查腰', 'event', ['m1']);
+    s.store.insertReflections(s.ownerId, s.a, 's0', [{ text: '常一个人吃午饭', evidenceMessageIds: ['m2'] }], 30);
+    s.store.recordMoodSummary(s.ownerId, s.a, { sessionId: 's0', dominant: 'sad', peakIntensity: 2, endEmotion: 'sad', endIntensity: 1, endTrend: 'flat', crisis: false }, 40);
+    const reflectionId = s.store.listReflections(s.ownerId, s.a, 1)[0]!.id;
+    const moodId = s.store.listMoodSummaries(s.ownerId, s.a, 1)[0]!.id;
+    const lines = () => s.db.prepare('SELECT id FROM messages ORDER BY id').all().map((r) => (r as { id: string }).id);
+
+    expect(s.service.deleteItem(s.ownerId, 't1')).toBe(true);
+    expect(lines()).toEqual(['m2', 'm3']);
+    expect(s.service.deleteItem(s.ownerId, reflectionId)).toBe(true);
+    expect(lines()).toEqual(['m3']);
+    expect(s.service.deleteItem(s.ownerId, moodId)).toBe(true);
+    expect(lines()).toEqual(['m3']);
+    const view = s.service.overview(s.ownerId);
+    expect(view.characters[0]).toMatchObject({ threads: [], reflections: [], moods: [] });
+    // Another owner cannot delete them.
+    threadRow(s, 't2', '我腿疼', 'concern', []);
+    expect(s.service.deleteItem(s.other, 't2')).toBe(false);
   });
 });

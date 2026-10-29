@@ -117,6 +117,18 @@ describe('owners', () => {
     expect(q.ownerIdFor(OA)).toBe(OWNER_A);
     expect(q.ownerIdFor('ffffffffffff')).toBeNull();
   });
+
+  it('counts open threads and reflections as memory items, never their text', () => {
+    seedStandard(db);
+    db.prepare(`INSERT INTO followups (id, owner_id, agent_id, text, due_at, source_session_id, quote, sensitive, created_at)
+      VALUES ('t-open', ?, ?, 'x', 1, 's', '我后天复查', 1, 1), ('t-plain', ?, ?, 'x', 1, 's', NULL, 0, 1)`).run(OWNER_A, AGENT_A, OWNER_A, AGENT_A);
+    db.prepare(`INSERT INTO reflections (id, owner_id, agent_id, text, evidence_message_ids, session_id, created_at)
+      VALUES ('r1', ?, ?, '常一个人吃午饭', '[]', 's', 1)`).run(OWNER_A, AGENT_A);
+    const page = q.owners({ includeMock: false, offset: 0, limit: 50 });
+    expect(page.items.find((o) => o.oid === OA)!.memoryItems).toBe(6);
+    expect(q.owner(OA, false)!.characters[0]!.memoryItems).toBe(5);
+    expect(JSON.stringify(page)).not.toContain('复查');
+  });
 });
 
 describe('sessions', () => {

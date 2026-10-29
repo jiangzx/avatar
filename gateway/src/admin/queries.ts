@@ -46,13 +46,17 @@ const SQL = {
       (SELECT COUNT(*) FROM sessions s JOIN agents a ON a.id = s.agent_id WHERE a.owner_id = o.id AND ${SESSION_MOCK}) AS sessions,
       (SELECT COUNT(*) FROM profile_facts f WHERE f.owner_id = o.id)
         + (SELECT COUNT(*) FROM agent_facts f WHERE f.owner_id = o.id)
-        + (SELECT COUNT(*) FROM pinned_memories p WHERE p.owner_id = o.id) AS memoryItems,
+        + (SELECT COUNT(*) FROM pinned_memories p WHERE p.owner_id = o.id)
+        + (SELECT COUNT(*) FROM followups t WHERE t.owner_id = o.id AND t.quote IS NOT NULL AND t.done_at IS NULL)
+        + (SELECT COUNT(*) FROM reflections r WHERE r.owner_id = o.id) AS memoryItems,
       ${money(`u.owner_id = o.id AND ${USAGE_MOCK}`)}
     FROM owners o WHERE ($owner IS NULL OR o.id = $owner)
     ORDER BY o.last_seen_at DESC, o.id DESC LIMIT $limit OFFSET $offset`,
   ownerCharacters: `SELECT a.character_id AS character,
       (SELECT COUNT(*) FROM sessions s WHERE s.agent_id = a.id AND ${SESSION_MOCK}) AS sessions,
-      (SELECT COUNT(*) FROM agent_facts f WHERE f.agent_id = a.id) + (SELECT COUNT(*) FROM pinned_memories p WHERE p.agent_id = a.id) AS memoryItems,
+      (SELECT COUNT(*) FROM agent_facts f WHERE f.agent_id = a.id) + (SELECT COUNT(*) FROM pinned_memories p WHERE p.agent_id = a.id)
+        + (SELECT COUNT(*) FROM followups t WHERE t.agent_id = a.id AND t.quote IS NOT NULL AND t.done_at IS NULL)
+        + (SELECT COUNT(*) FROM reflections r WHERE r.agent_id = a.id) AS memoryItems,
       ${money(`u.agent_id = a.id AND ${USAGE_MOCK}`)}
     FROM agents a WHERE a.owner_id = $owner ORDER BY a.created_at, a.id`,
   ownerDaily: `SELECT ${sqlShanghaiDay('u.ts')} AS day, COALESCE(SUM(${TOKENS}), 0) AS tokens, COALESCE(SUM(u.cost_micro_yuan), 0) AS cost
