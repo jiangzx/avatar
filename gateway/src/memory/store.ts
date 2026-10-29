@@ -31,6 +31,19 @@ export interface PinnedRow { id: string; text: string; sensitive: boolean; creat
 /** A followup with a quote and no done_at is a thread (spec 2026-10-28). */
 export const THREAD_KINDS = ['event', 'concern', 'plan'] as const;
 export type ThreadKind = (typeof THREAD_KINDS)[number];
+export interface ThreadRecord {
+  id: string;
+  kind: ThreadKind;
+  /** Verbatim user words; the only material a thread may put in a model instruction. */
+  quote: string;
+  dueAt: number;
+  sensitive: boolean;
+  mentionCount: number;
+  lastMentionedAt: number | null;
+  createdAt: number;
+  sourceSessionId: string | null;
+}
+export type ThreadCloseReason = 'resolved' | 'declined' | 'expired';
 export interface DeletedItem { kind: 'profile' | 'agent_fact' | 'pinned'; agentId: string | null; text: string; sourceMessageIds: string[] }
 
 export const PROFILE_CATEGORIES: readonly ProfileCategory[] = ['addressing', 'profile'];
@@ -146,6 +159,12 @@ export interface MemoryStore {
   closeCareFollowup(ownerId: string, id: string, now: number): void;
   /** Daily retention: clears quotes created before `olderThan`. Returns rows changed. */
   clearStaleCareQuotes(ownerId: string, olderThan: number): number;
+  /** Open threads of this agent (quoted, not done), newest first. */
+  listOpenThreads(ownerId: string, agentId: string): ThreadRecord[];
+  /** Counts one proactive mention. False when the thread is closed or foreign. */
+  markThreadMentioned(ownerId: string, id: string, now: number): boolean;
+  /** Closes a thread and clears its quote; the audit row is content-free. False when closed or foreign. */
+  closeThread(ownerId: string, id: string, reason: ThreadCloseReason, now: number): boolean;
   /** Agent rows of one owner, one per character met. */
   listAgents(ownerId: string): AgentRecord[];
   /** Ids of this owner's live messages whose FTS tokens all match; agentId null = any agent of the owner. */
@@ -424,6 +443,12 @@ function prepareStatements(db: DatabaseSync) {
       LIMIT 1`),
     closeCareFollowup: p('UPDATE followups SET done_at = ?, quote = NULL WHERE id = ? AND owner_id = ? AND done_at IS NULL'),
     clearStaleCareQuotes: p('UPDATE followups SET quote = NULL WHERE owner_id = ? AND quote IS NOT NULL AND created_at < ?'),
+    listOpenThreads: p(`SELECT id, kind, quote, due_at, sensitive, mention_count, last_mentioned_at, created_at, source_session_id
+      FROM followups WHERE owner_id = ? AND agent_id = ? AND done_at IS NULL AND quote IS NOT NULL
+      ORDER BY created_at DESC, rowid DESC`),
+    markThreadMentioned: p(`UPDATE followups SET mention_count = mention_count + 1, last_mentioned_at = ?
+      WHERE id = ? AND owner_id = ? AND done_at IS NULL AND quote IS NOT NULL`),
+    closeThread: p('UPDATE followups SET done_at = ?, close_reason = ?, quote = NULL WHERE id = ? AND owner_id = ? AND done_at IS NULL'),
 
     // Audit
     insertChange: p(`INSERT INTO memory_changes (id, owner_id, agent_id, table_name, row_id, op, diff, actor, created_at)
@@ -877,6 +902,33 @@ export class SqliteMemoryStore implements MemoryStore {
 
   clearStaleCareQuotes(ownerId: string, olderThan: number): number {
     return Number(this.q.clearStaleCareQuotes.run(ownerId, olderThan).changes);
+  }
+
+  listOpenThreads(ownerId: string, agentId: string): ThreadRecord[] {
+    return this.q.listOpenThreads.all(ownerId, agentId).map((r) => ({
+      id: r.id as string,
+      kind: r.kind as ThreadKind,
+      quote: r.quote as string,
+      dueAt: r.due_at as number,
+      sensitive: r.sensitive === 1,
+      mentionCount: r.mention_count as number,
+      lastMentionedAt: (r.last_mentioned_at as number | null) ?? null,
+      createdAt: r.created_at as number,
+      sourceSessionId: (r.source_session_id as string | null) ?? null,
+    }));
+  }
+
+  markThreadMentioned(ownerId: string, id: string, now: number): boolean {
+    return this.q.markThreadMentioned.run(now, id, ownerId).changes === 1;
+  }
+
+  closeThread(ownerId: string, id: string, reason: ThreadCloseReason, now: number): boolean {
+    return this.tx<boolean>(() => {
+      const owner = this.q.followupAgent.get(id, ownerId);
+      if (this.q.closeThread.run(now, reason, id, ownerId).changes !== 1) return false;
+      this.audit(ownerId, (owner?.agent_id as string | undefined) ?? null, 'followups', id, 'close', '', 'proactive', now);
+      return true;
+    });
   }
 
   writeExtraction(ownerId: string, agentId: string, change: ExtractionChange): void {
