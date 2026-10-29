@@ -52,7 +52,7 @@ export interface DirectorConfig {
   checkinAfterMs?: number;
   /** After the final check-in, wait this long still silent, then one looser line. Default 180000. */
   restAfterMs?: number;
-  /** Step 1 instruction for the configured path (ja/en, no name yet). */
+  /** Step 1 instruction after the user has spoken, when the engine does not handle this step. */
   contextInstruction?: string;
   /** Step 1 spoken fallback when the judged continuation is declined. Defaults to followupText. */
   contextText?: string;
