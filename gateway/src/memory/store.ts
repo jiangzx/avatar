@@ -70,6 +70,8 @@ export interface RelationshipStats {
 
 export interface ReflectionRecord { id: string; text: string; evidenceMessageIds: string[]; createdAt: number }
 
+export type ProactiveTier = 'quiet' | 'moderate' | 'active';
+
 const SHANGHAI_OFFSET_MS = 8 * 3_600_000;
 
 /** Pure fold over ended sessions sorted by start. */
@@ -227,6 +229,19 @@ export interface MemoryStore {
   insertReflections(ownerId: string, agentId: string, sessionId: string, items: ReadonlyArray<{ text: string; evidenceMessageIds: readonly string[] }>, now: number): number;
   /** Newest first. */
   listReflections(ownerId: string, agentId: string, limit: number): ReflectionRecord[];
+  /** Per-character proactivity tier the user chose by voice; undefined = the role default. */
+  getProactiveTier(ownerId: string, agentId: string): ProactiveTier | undefined;
+  setProactiveTier(ownerId: string, agentId: string, tier: ProactiveTier, now: number): void;
+  /** Q25 counters per intent kind; content-free. */
+  recordProactiveOutcome(ownerId: string, agentId: string, kind: string, outcome: 'accepted' | 'rejected', now: number): void;
+  proactiveStats(ownerId: string, agentId: string): Array<{ kind: string; accepted: number; rejected: number }>;
+  /** Proactive lines on one Beijing day (YYYY-MM-DD from the caller). Returns the new count; 0 when foreign. */
+  incrementProactiveDaily(ownerId: string, agentId: string, day: string): number;
+  proactiveDaily(ownerId: string, agentId: string, day: string): number;
+  /** Indexes of recently used fallback lines for one key, newest first. */
+  recentFallbackLines(ownerId: string, agentId: string, key: string, limit: number): number[];
+  /** Records a used fallback line and keeps only the newest `keep` for that key. */
+  recordFallbackLine(ownerId: string, agentId: string, key: string, line: number, now: number, keep: number): void;
   /** Agent rows of one owner, one per character met. */
   listAgents(ownerId: string): AgentRecord[];
   /** Ids of this owner's live messages whose FTS tokens all match; agentId null = any agent of the owner. */
@@ -523,6 +538,27 @@ function prepareStatements(db: DatabaseSync) {
     insertReflection: p('INSERT INTO reflections (id, owner_id, agent_id, text, evidence_message_ids, session_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
     listReflections: p(`SELECT id, text, evidence_message_ids, created_at FROM reflections
       WHERE owner_id = ? AND agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?`),
+    getTier: p('SELECT tier FROM proactive_prefs WHERE owner_id = ? AND agent_id = ?'),
+    setTier: p(`INSERT INTO proactive_prefs (owner_id, agent_id, tier, updated_at)
+      SELECT owner_id, id, ?, ? FROM agents WHERE id = ? AND owner_id = ?
+      ON CONFLICT (owner_id, agent_id) DO UPDATE SET tier = excluded.tier, updated_at = excluded.updated_at`),
+    recordOutcome: p(`INSERT INTO proactive_stats (owner_id, agent_id, kind, accepted, rejected, updated_at)
+      SELECT owner_id, id, ?, ?, ?, ? FROM agents WHERE id = ? AND owner_id = ?
+      ON CONFLICT (owner_id, agent_id, kind) DO UPDATE SET
+        accepted = accepted + excluded.accepted, rejected = rejected + excluded.rejected, updated_at = excluded.updated_at`),
+    listStats: p('SELECT kind, accepted, rejected FROM proactive_stats WHERE owner_id = ? AND agent_id = ? ORDER BY kind'),
+    bumpDaily: p(`INSERT INTO proactive_daily (owner_id, agent_id, day, count)
+      SELECT owner_id, id, ?, 1 FROM agents WHERE id = ? AND owner_id = ?
+      ON CONFLICT (owner_id, agent_id, day) DO UPDATE SET count = count + 1`),
+    getDaily: p('SELECT count FROM proactive_daily WHERE owner_id = ? AND agent_id = ? AND day = ?'),
+    recentFallbacks: p(`SELECT line FROM proactive_fallbacks WHERE owner_id = ? AND agent_id = ? AND fallback_key = ?
+      ORDER BY used_at DESC, line LIMIT ?`),
+    useFallback: p(`INSERT INTO proactive_fallbacks (owner_id, agent_id, fallback_key, line, used_at)
+      SELECT owner_id, id, ?, ?, ? FROM agents WHERE id = ? AND owner_id = ?
+      ON CONFLICT (owner_id, agent_id, fallback_key, line) DO UPDATE SET used_at = excluded.used_at`),
+    trimFallbacks: p(`DELETE FROM proactive_fallbacks WHERE owner_id = ? AND agent_id = ? AND fallback_key = ?
+      AND line NOT IN (SELECT line FROM proactive_fallbacks WHERE owner_id = ? AND agent_id = ? AND fallback_key = ?
+        ORDER BY used_at DESC, line LIMIT ?)`),
 
     // Audit
     insertChange: p(`INSERT INTO memory_changes (id, owner_id, agent_id, table_name, row_id, op, diff, actor, created_at)
@@ -1057,6 +1093,45 @@ export class SqliteMemoryStore implements MemoryStore {
       evidenceMessageIds: parseIds(r.evidence_message_ids),
       createdAt: r.created_at as number,
     }));
+  }
+
+  getProactiveTier(ownerId: string, agentId: string): ProactiveTier | undefined {
+    const row = this.q.getTier.get(ownerId, agentId);
+    return row ? (row.tier as ProactiveTier) : undefined;
+  }
+
+  setProactiveTier(ownerId: string, agentId: string, tier: ProactiveTier, now: number): void {
+    this.q.setTier.run(tier, now, agentId, ownerId);
+  }
+
+  recordProactiveOutcome(ownerId: string, agentId: string, kind: string, outcome: 'accepted' | 'rejected', now: number): void {
+    this.q.recordOutcome.run(kind, outcome === 'accepted' ? 1 : 0, outcome === 'rejected' ? 1 : 0, now, agentId, ownerId);
+  }
+
+  proactiveStats(ownerId: string, agentId: string): Array<{ kind: string; accepted: number; rejected: number }> {
+    return this.q.listStats.all(ownerId, agentId).map((r) => ({ kind: r.kind as string, accepted: r.accepted as number, rejected: r.rejected as number }));
+  }
+
+  incrementProactiveDaily(ownerId: string, agentId: string, day: string): number {
+    return this.tx<number>(() => {
+      if (this.q.bumpDaily.run(day, agentId, ownerId).changes === 0) return 0;
+      return this.proactiveDaily(ownerId, agentId, day);
+    });
+  }
+
+  proactiveDaily(ownerId: string, agentId: string, day: string): number {
+    return (this.q.getDaily.get(ownerId, agentId, day)?.count as number | undefined) ?? 0;
+  }
+
+  recentFallbackLines(ownerId: string, agentId: string, key: string, limit: number): number[] {
+    return this.q.recentFallbacks.all(ownerId, agentId, key, limit).map((r) => r.line as number);
+  }
+
+  recordFallbackLine(ownerId: string, agentId: string, key: string, line: number, now: number, keep: number): void {
+    this.tx(() => {
+      if (this.q.useFallback.run(key, line, now, agentId, ownerId).changes === 0) return;
+      this.q.trimFallbacks.run(ownerId, agentId, key, ownerId, agentId, key, keep);
+    });
   }
 
   writeExtraction(ownerId: string, agentId: string, change: ExtractionChange): void {
