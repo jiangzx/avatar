@@ -17,7 +17,7 @@ const ScoresSchema = z.object(
 ).strict();
 
 /** JSON mode should give bare JSON; tolerate a code fence or stray prose around it. */
-function parseJudgeJson(raw: string): unknown {
+export function parseJudgeJson(raw: string): unknown {
   const text = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
