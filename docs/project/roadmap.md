@@ -22,13 +22,13 @@
 
 ## 关系连续的主动互动（2026-10-28 设计）
 
-状态：**P0 完成（2026-10-29）**。验收：[记录](../testing/2026-10-28-p0-seeduplex-removal.md)。回归 protocol 3 文件 16 项、gateway 107 文件 1332 项、admin 24 文件 129 项通过；三个 typecheck、admin build、`generate-character-ids --check` 通过。
+状态：**P1 完成（2026-10-29）**。P0 验收仍是 [记录](../testing/2026-10-28-p0-seeduplex-removal.md)。基线提交 `b34519a`，`dirty:false`；命令是 `eval-journey.ts --adapter qwen --runs 3`，结果在 [results-baseline.json](../testing/relational-eval/results-baseline.json)。中位数 continuity 3.65、naturalness 4.53、noRepetition 4、empathyFit 4.41、noIntrusion 4.82；`fabricationsTotal` 1、`retentionPressureTotal` 0。三轮各 17 个会话全部评分，`failures` 0，没有 `judge_failed`。抽查：唯一的编造计数没有对应新事实，用户原话里已有的事被多计了一次；小凯那次会话没有提到另一角色的事；危机会话三次都劝联系家人或热线。回归 protocol 3 文件 16 项、gateway 111 文件 1358 项、typecheck 通过；真实库召回中文三句 true/true/false，`newTitleFlag` 全 false。
 - 设计：[spec](../superpowers/specs/2026-10-28-relational-proactivity-design.md)（grilling 决策 Q1–Q26，附竞品与学术调研）。
 - spec 已批准（2026-10-28，用户）。
 - 计划：[overview](../superpowers/plans/2026-10-28-relational-proactivity/00-overview.md)，P0（下架 Seeduplex，4 个任务）与 P1（多会话剧本评测与基线，6 个任务），subagent-driven-development。编写时已在临时 worktree 里试跑 P0-T1/T2 与 P1-T1–T5 的代码：gateway 111 文件 1358 项、typecheck 通过，推送闸门变异验证有效，旅程 CLI 在 Mock 下跑通 5 个旅程；admin 部分未试跑（本机 `admin` 依赖未安装，执行前需根目录 `npm ci`）。P2–P5 计划在 P1 基线完成后再写。
 - 计划已获用户同意（2026-10-28），将在另一台机器上执行；分支 `dev-proactivity`（基于 `dev-admin` `bf49c4f`）已推送。
 - 2026-10-29 追加 P2（数据层，9 个任务）与 P3 前半（Qwen 服从度探针、`proactivity.json` 与后台场景、决策引擎，3 个任务）计划；用户已定开放项 1（敏感原话直接进 Qwen 指令）与 2（熟悉度影响被动回复语气）。编写时在临时 worktree 试跑 P1+P2+P3 前半代码：gateway 123 文件 1433 项、typecheck 通过（admin、App 未试跑）。P3 后半、P4、P5 待 P3-T0 探针结论后再写。
-- 下一步：P1-T1（`p1-01-clock-injection.md`）。
+- 下一步：P2-T1（`p2-01-schema-v8.md`）。用户于 2026-10-29 要求不在计划交界停顿，P2 与 P3 前半继续执行。
 - 坑位第 7、12 条已在 P0 改写（2026-10-29）。第 4、5、8 条仍按 spec「坑位契约修订」在对应计划中改写；在那之前这三条照旧有效。
 
 ## 多角色与分层记忆（2026-10-26 起）
