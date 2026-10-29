@@ -17,8 +17,6 @@ export interface RoleCatalog {
   reflectPrompt(language?: Language): string;
   /** Recall-phrasing system prompt for this character. */
   recallPrompt(characterId: CharacterId, language?: Language): string;
-  /** Care-opening system prompt for this character. */
-  carePrompt(characterId: CharacterId, language?: Language): string;
   /** Affect-analyzer system prompt for this character. */
   affectPrompt(characterId: CharacterId, language?: Language): string;
 }
@@ -65,7 +63,6 @@ export function fixedRoleCatalog(
     extractPrompt: () => 'FIXTURE EXTRACT',
     reflectPrompt: () => 'FIXTURE REFLECT',
     recallPrompt: () => 'FIXTURE RECALL',
-    carePrompt: () => 'FIXTURE CARE',
     affectPrompt: () => 'FIXTURE AFFECT',
   };
 }

@@ -330,12 +330,14 @@ export class ProactiveRuntime {
     this.lastMood = null;
     this.stats = [];
     this.familiarity = 'new';
+    this.opening = null;
   }
 
   end(): void {
     this.settle(this.acceptance.flush(), false);
     this.inFlight = null;
     this.live = null;
+    this.opening = null;
   }
 
   private context(moment: Moment, affect: DecisionContext['affect'], has: DecisionContext['has'], threads: readonly ThreadRecord[]): DecisionContext {

@@ -35,7 +35,7 @@ const TopicsSchema = z.array(z.object({
   fallbackText: z.string().min(1).max(60),
 }).strict()).min(1).max(50);
 
-export interface SharedText { safety: string; actions: string; extract: string; recall: string; affect: string; care: string; reflect: string }
+export interface SharedText { safety: string; actions: string; extract: string; recall: string; affect: string; reflect: string }
 interface LoadedActivity { title: string; summary: string; text: string }
 interface LoadedLanguage {
   /** persona.md with its placeholders still in place. */
@@ -50,7 +50,7 @@ interface LoadedRole {
   languages: Map<Language, LoadedLanguage>;
 }
 /** One character in one language, placeholders replaced. Built at startup, immutable afterwards. */
-interface RenderedPack { persona: string; director: DirectorConfig; recall: string; care: string; affect: string }
+interface RenderedPack { persona: string; director: DirectorConfig; recall: string; affect: string }
 
 const TIMING_FIELDS = [
   'followupAfterMs', 'idleNoticeAfterMs', 'maxConsecutive', 'maxPerWindow', 'windowMs',
@@ -126,10 +126,6 @@ export class FileRoleCatalog implements RoleCatalog {
     return this.pack(characterId, language).recall;
   }
 
-  carePrompt(characterId: CharacterId, language = this.characterLanguage(characterId)): string {
-    return this.pack(characterId, language).care;
-  }
-
   affectPrompt(characterId: CharacterId, language = this.characterLanguage(characterId)): string {
     return this.pack(characterId, language).affect;
   }
@@ -195,7 +191,6 @@ function loadShared(rootDir: string): Map<Language, SharedText> {
       actions: read('actions'),
       extract: read('extract'),
       recall: read('recall'),
-      care: read('care'),
       affect: read('affect'),
       reflect: read('reflect'),
     };
@@ -229,7 +224,6 @@ function renderPack(
     persona: render([text.safety, pack.persona, text.actions, pack.activityDirectory].join('\n\n'), 'persona'),
     director: renderStrings(pack.director, (source) => render(source, 'director')),
     recall: render(text.recall, 'recall'),
-    care: render(text.care, 'care'),
     affect: render(text.affect, 'affect'),
   };
 }
@@ -327,7 +321,7 @@ function validateTimings(roleId: string, languages: Map<Language, LoadedLanguage
   }
 }
 
-/** Care openings exist in every language or in none, so care never turns off silently for one language. */
+/** Opening heads exist in every language or in none. */
 function validateCareTexts(roleId: string, languages: Map<Language, LoadedLanguage>): void {
   const entries = [...languages.entries()];
   const has = ([, pack]: [Language, LoadedLanguage]) => (pack.director.greetingCareTexts?.length ?? 0) > 0;

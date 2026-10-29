@@ -179,8 +179,9 @@ describe('silence ladder through the decision engine', () => {
     const thread: ThreadRecord = { id: 't1', kind: 'concern', quote, dueAt: AFTERNOON, sensitive: true, mentionCount: 0, lastMentionedAt: null, createdAt: AFTERNOON - 3 * DAY, sourceSessionId: 's-old' };
     const t = boot(fakeStore({ listOpenThreads: vi.fn(() => [thread]) }));
     await t.open();
-    await vi.advanceTimersByTimeAsync(director.contextAfterMs!);
-    expect(t.followups().at(-1)).toEqual(speakLineRequest(director.intents!, director.fallbacks!.threadSensitive[0]!));
+    const opening = t.adapter.requests.find((r) => r.cue === 'greeting')!;
+    expect(opening.fallbackText.startsWith('王叔')).toBe(true);
+    expect(director.fallbacks!.threadSensitive.some((line) => opening.fallbackText.endsWith(line))).toBe(true);
     expect(t.store.markThreadMentioned).toHaveBeenCalledWith('o1', 't1', expect.any(Number));
     const everything = [...t.adapter.requests.map((r) => r.instruction), ...t.adapter.connects.map((c) => c.instructions)].join('\n');
     expect(everything).not.toContain('高血压');
@@ -201,5 +202,48 @@ describe('silence ladder through the decision engine', () => {
     await t.userTurn('好了，我去睡了，明天再聊。', '好的，晚安。');
     await vi.advanceTimersByTimeAsync(director.contextAfterMs! + director.checkAfterMs! + director.leaveAfterMs! + director.checkinAfterMs!);
     expect(t.followups()).toEqual([]);
+  });
+});
+
+describe('opening through the decision engine (P4)', () => {
+  const MORNING = Date.parse('2026-11-03T08:30:00+08:00');
+  const quote = '我后天上午要去公园参加合唱团演出。';
+  const event = (sensitive: boolean, text = quote): ThreadRecord => ({
+    id: 't1', kind: 'event', quote: text, dueAt: MORNING - 5 * 3_600_000, sensitive, mentionCount: 0,
+    lastMentionedAt: null, createdAt: MORNING - 2 * DAY, sourceSessionId: 's-old',
+  });
+  const greetings = (t: ReturnType<typeof boot>) => t.adapter.requests.filter((r) => r.cue === 'greeting');
+
+  it('opens on a due event with the name and the locked quote, as a greeting', async () => {
+    vi.setSystemTime(MORNING);
+    const t = boot(fakeStore({ listOpenThreads: vi.fn(() => [event(false)]) }));
+    await t.session.start({ send: (m: ServerMessage) => { t.sent.push(m); }, sendAudio: () => {} });
+    const opening = greetings(t)[0]!;
+    expect(opening.instruction).toContain('「王叔」');
+    expect(opening.instruction).toContain(`【${quote}】`);
+    expect(t.sent).toContainEqual({ type: 'response.start', responseSeq: 1, kind: 'greeting' });
+    expect(t.store.markThreadMentioned).toHaveBeenCalledWith('o1', 't1', expect.any(Number));
+  });
+
+  it('reads a composed line for a health event', async () => {
+    vi.setSystemTime(MORNING);
+    const t = boot(fakeStore({ listOpenThreads: vi.fn(() => [event(true, '我后天上午去医院复查腰。')]) }));
+    await t.session.start({ send: (m: ServerMessage) => { t.sent.push(m); }, sendAudio: () => {} });
+    const opening = greetings(t)[0]!;
+    expect(opening.fallbackText.startsWith('王叔')).toBe(true);
+    expect(director.fallbacks!.threadSensitive.some((line) => opening.fallbackText.endsWith(line))).toBe(true);
+    expect(opening.instruction).not.toContain('复查');
+  });
+
+  it('reads the fallback opening once when the model does not start in time', async () => {
+    vi.setSystemTime(AFTERNOON);
+    const t = boot();
+    t.adapter.silentNext = true;
+    await t.session.start({ send: (m: ServerMessage) => { t.sent.push(m); }, sendAudio: () => {} });
+    expect(greetings(t)).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(proactivity.fallbackAfterMs);
+    expect(greetings(t)).toHaveLength(2);
+    expect(greetings(t)[1]!.instruction).toContain(director.greetingNameTexts![0]!.replaceAll('{name}', '王叔'));
+    expect(t.sent).toContainEqual({ type: 'response.start', responseSeq: 1, kind: 'greeting' });
   });
 });

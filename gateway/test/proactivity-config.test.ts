@@ -21,6 +21,7 @@ describe('proactivity.json', () => {
       expect(w.relevance + w.urgency + w.importance + w.novelty, kind).toBe(100);
     }
     expect(cfg.material.familyLookback).toBe(30);
+    expect(cfg.threads.quoteMaxChars).toBe(80);
   });
 
   it('rejects weights that do not sum to 100, unknown keys and out-of-range values', () => {
@@ -44,5 +45,7 @@ describe('proactivity.json', () => {
     const snap = buildConfigSnapshot({ gatewayRoot: root, overlay: { 'proactivity:tiers.quiet.threshold': 80 }, version: 3, ledger, sessionStartTimeoutMs: 10_000, models });
     expect(snap.proactivity.tiers.quiet.threshold).toBe(80);
     expect(() => buildConfigSnapshot({ gatewayRoot: root, overlay: { 'proactivity:tiers.quiet.missing': 1 }, version: 4, ledger, sessionStartTimeoutMs: 10_000, models })).toThrow();
+    // affect.care is retired but kept: a stored overlay that still sets it must keep building.
+    expect(() => buildConfigSnapshot({ gatewayRoot: root, overlay: { 'affect:care.maxAgeDays': 5 }, version: 5, ledger, sessionStartTimeoutMs: 10_000, models })).not.toThrow();
   });
 });

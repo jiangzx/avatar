@@ -50,7 +50,9 @@ export interface DirectorDeps {
   getPlanExtras?(): Pick<SilenceContext, 'affect' | 'openLoop' | 'timeOfDay' | 'season' | 'solarTerm'>;
   /** First meeting with a known name: a card template with {name} filled in; undefined otherwise. Checked before safeGreeting. */
   firstMeetGreeting?(): string | undefined;
-  /** Deterministic opening when the name is known; never let the planner invent a past topic. */
+  /** Known-name opening from the decision engine (P4); null hands over to safeGreeting. Same request on a retry. */
+  openingRequest?(): ProactiveRequest | null;
+  /** Name-template opening when the engine has none; null when no name is known. */
   safeGreeting?(): string | null;
   /** Once per quiet stretch, when silence reaches the rest step. */
   onQuietRest?(): void;
@@ -619,8 +621,18 @@ export class Director {
   /** The opening is planned like every other conversational line; configured copy is the failure fallback. */
   private requestGreeting(): void {
     if (this.blocked() || this.left || this.opened) return;
-    // A known name never goes to the planner: first-meet template first, then the met-before name greeting.
-    const safe = this.deps.firstMeetGreeting?.() ?? this.deps.safeGreeting?.();
+    // A known name never goes to the planner: first-meet template, then the engine, then the name template.
+    const firstMeet = this.deps.firstMeetGreeting?.();
+    if (firstMeet) {
+      this.deps.requestResponse('greeting', { cue: 'greeting', instruction: firstMeet, fallbackText: firstMeet });
+      return;
+    }
+    const engine = this.deps.openingRequest?.();
+    if (engine) {
+      this.deps.requestResponse('greeting', engine);
+      return;
+    }
+    const safe = this.deps.safeGreeting?.();
     if (safe) {
       this.deps.requestResponse('greeting', { cue: 'greeting', instruction: safe, fallbackText: safe });
       return;

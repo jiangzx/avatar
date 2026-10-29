@@ -9,6 +9,7 @@
   "acceptance": { "priorAccepted": 2, "priorRejected": 2, "windowMs": 15000 },
   "familiarity": { "familiarMinSessions": 3, "familiarMinDays": 2, "oldFriendMinSessions": 15, "oldFriendMinDays": 10 },
   "threads": {
+    "quoteMaxChars": 80,
     "maxPerSession": 2,
     "event": { "preDays": 1, "postDays": 7, "maxMentions": 2 },
     "concern": { "intervalDays": 3, "maxMentions": 3, "expireDays": 14 },

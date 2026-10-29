@@ -223,11 +223,11 @@ describe('Plan C memory acceptance', () => {
     const mark = requests.length;
     const remembered = instructions.length;
     const sessionMemory = await open(again);
-    expect(requests.slice(mark).find((request) => request.cue === 'greeting')).toEqual({
-      cue: 'greeting',
-      instruction: director.greetingMemoryInstruction,
-      fallbackText: director.greetingMemoryText,
-    });
+    const namedOpening = requests.slice(mark).find((request) => request.cue === 'greeting');
+    const nameLines = (director.greetingNameTexts ?? []).map((line) => line.replaceAll('{name}', '王叔'));
+    expect(namedOpening?.cue).toBe('greeting');
+    expect(namedOpening?.instruction).toBe(namedOpening?.fallbackText);
+    expect(nameLines).toContain(namedOpening?.fallbackText);
     expect(director.greetingMemoryInstruction).not.toBe(director.greetingInstruction);
     expect(instructions[remembered]).toContain('## 记忆参考（可能不准确，注意「用户」与「助手」的区别）');
     expect(instructions[remembered]).toContain('称呼：王叔');

@@ -24,7 +24,6 @@ import type { UsageAttribution, UsageKind, UsageRecorder } from '../usage/types.
 import { MemoryWorker, type MemoryExtractor } from '../memory/worker.ts';
 import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
-import { composeCareGreeting, generateCareLine } from './care.ts';
 import { AffectTracker, affectSummaryFields, isLow, type AffectCard, type AffectConfig, type AffectSummary } from './affect.ts';
 import type { ProactivityConfig } from './proactive/config.ts';
 import { ProactiveRuntime } from './proactive/runtime.ts';
@@ -186,7 +185,6 @@ const BARGE_PREROLL_RMS = 200;
 
 /** Used only when no policy is injected (tests); production reads gateway/config/pacing.json. */
 const DEFAULT_SUMMARIZE_POLICY: PolicySpec = { timeoutMs: 15_000, retries: 0, backoffMs: 1_000, maxBackoffMs: 1_000 };
-const DAY_MS = 24 * 60 * 60_000;
 
 /** Used only when SessionDeps.push is omitted (tests); production reads gateway/config/pacing.json. */
 const DEFAULT_PUSH: PacingConfig['push'] = { minIntervalMs: 0, noResponseAfterMs: 5_000 };
@@ -307,14 +305,6 @@ export class Session {
   private readonly dropTranscriptSeqs = new Set<number>();
   /** A forget/decline rebuild arrived while another rebuild was in progress. */
   private rebuildAgain: 'forget' | 'decline' | null = null;
-  /** safeGreeting is wired into the Director (a text client and a silence planner). */
-  private readonly safeGreetingWired: boolean;
-  /** Composed care opening; every opening retry in this session repeats it. */
-  private careOpening: { followupId: string; text: string; language: Language } | null = null;
-  /** The care followup is closed once, on the first start of its opening. */
-  private careClosed = false;
-  /** fallbackText of the latest greeting request that reached the adapter. */
-  private greetingText: string | null = null;
   /** Latest accepted analyzer card; session memory only, never logged. */
   private affectCard: AffectCard | null = null;
   /** Highest card intensity this session; feeds the end-of-session mood summary. */
@@ -380,6 +370,8 @@ export class Session {
           ...(d.fallbacks ? { fallbacks: d.fallbacks } : {}),
           topics: d.topics ?? [],
           quietPhrases: d.quietPhrases,
+          ...(d.greetingNameTexts ? { greetingNameTexts: d.greetingNameTexts } : {}),
+          ...(d.greetingCareTexts ? { greetingHeads: d.greetingCareTexts } : {}),
         };
       },
       rules: (language) => ({
@@ -391,20 +383,20 @@ export class Session {
       logger: this.log,
     }) : null;
     const textPlanner = Boolean(deps.textClient) && hasSilencePlanner;
-    this.safeGreetingWired = Boolean(deps.textClient) && hasSilencePlanner;
     this.director = new Director(
       (language) => this.directorConfig(language),
       {
         requestResponse: (kind, request) => this.requestResponse(kind, request),
         restReminderRequest: () => this.restReminderRequest(),
         firstMeetGreeting: () => this.firstMeetGreeting(),
+        openingRequest: () => this.proactive?.openingLine({ language: this.language, name: this.greetingName(), firstMeet: this.context.firstMeet }) ?? null,
+        safeGreeting: () => this.safeGreeting(),
         ...(textPlanner || this.proactive ? { planProactiveLine: (context, signal) => this.planProactiveLine(context, signal) } : {}),
         ...(textPlanner ? {
           getMemorySnapshot: (stage) => stage === 'greeting'
             // A first meeting must not sound like a reunion: the greeting planner sees no memory.
             ? (this.context.firstMeet ? '' : this.context.greetingMemorySnapshot ?? '')
             : this.context.proactiveMemorySnapshot ?? '',
-          safeGreeting: () => this.safeGreeting(),
           ...(deps.affect?.enabled ? { getPlanExtras: () => this.planExtras() } : {}),
         } : {}),
         ...(extractor && ownerId && agentId ? { onQuietRest: () => { void extractor.enqueue(ownerId, agentId, 'silence', this.language); } } : {}),
@@ -448,14 +440,12 @@ export class Session {
 
   async start(transport: Transport): Promise<void> {
     this.transport = transport;
-    // Starts before connect so the bounded wait overlaps the connect time.
-    const care = this.startCareOpening();
+    // Spec 连接期间预取: the opening decision reads the store now, not after connect.
+    this.proactive?.prefetch();
     await this.adapter.connect(this.sessionConfig());
     // connect() already carried the latest instructions and voice.
     this.adapterReady = true;
     this.gate.clearPending();
-    // No followup to revisit: care is null and the opening timing is unchanged.
-    if (care) await care;
     if (this.ended) {
       this.adapter.close();
       return;
@@ -1025,20 +1015,18 @@ export class Session {
       this.noticeFallback = request.fallbackText;
       this.noticeVerbatim = this.adapter.verbatimFallback;
     }
-    // Remember which opening text actually went out; only the care one closes its followup.
-    if (kind === 'greeting') this.greetingText = request.fallbackText;
     this.pendingKind = kind;
     // Last seam before the proactive line; the watch keeps it shut until that line starts.
     this.gate.flush();
     // Watch before createResponse: an adapter that emits responseStarted synchronously clears it at once.
     this.watchReply(false);
     // Before createResponse: an adapter may start the response synchronously.
-    if (this.proactive?.owns(request)) this.watchProactive(request);
+    if (this.proactive?.owns(request)) this.watchProactive(request, kind);
     this.adapter.createResponse(request);
   }
 
   /** Spec 兜底: no response.created within fallbackAfterMs → read the fallback line once. */
-  private watchProactive(request: ProactiveRequest): void {
+  private watchProactive(request: ProactiveRequest, kind: ResponseKind): void {
     this.clearProactiveTimer();
     this.proactiveRequest = request;
     const waitMs = this.deps.proactivity?.fallbackAfterMs ?? 3_000;
@@ -1055,7 +1043,7 @@ export class Session {
         return;
       }
       this.proactiveRequest = fallback;
-      this.pendingKind = 'followup';
+      this.pendingKind = kind;
       this.watchReply(false);
       this.adapter.createResponse(fallback);
     }, waitMs);
@@ -1139,7 +1127,7 @@ export class Session {
       const s: ResponseState = { seq: ++this.seqCounter, kind: this.pendingKind ?? 'reply', text: '', audioMs: 0, playedMs: 0, finalized: false, flushed: false, responseDone: false, playbackEnded: false };
       this.pendingKind = null;
       const engineRequest = this.proactiveRequest;
-      if (engineRequest && s.kind === 'followup') {
+      if (engineRequest && (s.kind === 'followup' || s.kind === 'greeting')) {
         this.proactiveRequest = null;
         this.clearProactiveTimer();
         this.proactiveSeq = s.seq;
@@ -1159,7 +1147,6 @@ export class Session {
         this.noticePendingRequest = false;
         this.noticeSeq = s.seq;
       }
-      if (s.kind === 'greeting') this.closeCareIfSpoken();
       this.log.child({ seq: s.seq }).info('response_start', { kind: s.kind });
       this.clearReplyWatch();
       this.responseSinceSpeech = true;
@@ -1840,17 +1827,10 @@ export class Session {
     return !(this.context.firstMeet && !this.greetingName());
   }
 
-  /** Safe name-based opening; null lets the planner handle the no-memory case (ask for a name). */
+  /** Name-template opening when the engine has none; null when no name is known. */
   private safeGreeting(): string | null {
     const name = this.greetingName();
     if (!name) return null;
-    // A ready care opening is reused on every retry; one composed in another language is dropped.
-    const care = this.careOpening;
-    if (care && care.language === this.language) return care.text;
-    if (care) {
-      this.careOpening = null;
-      this.log.info('care_opening', { outcome: 'language_mismatch' });
-    }
     const config = this.deps.roles.director(this.context.characterId, this.language);
     const templates = config.greetingNameTexts;
     if (!templates || templates.length === 0) return config.greetingMemoryText ?? null;
@@ -1865,77 +1845,6 @@ export class Session {
     const namePrefix = `${labels.addressing}${labels.separator}`;
     const nameLine = snapshot.split('\n').find((line) => line.startsWith(namePrefix));
     return nameLine?.slice(namePrefix.length).trim() || null;
-  }
-
-  /**
-   * High-risk opening contract (spec §5): starts the care line beside connect.
-   * Null = nothing to revisit or care is off, so the opening does not wait at all.
-   */
-  private startCareOpening(): Promise<void> | null {
-    // A new character has nothing left over to ask about.
-    if (this.context.firstMeet) return null;
-    const care = this.deps.affect?.enabled ? this.deps.affect.care : undefined;
-    const store = this.deps.store;
-    const client = this.textFor('care');
-    const ownerId = this.context.ownerId;
-    const agentId = this.context.agentId;
-    if (!care || !store || !client || !ownerId || !agentId || !this.safeGreetingWired) return null;
-    const language = this.language;
-    const templates = this.deps.roles.director(this.context.characterId, language).greetingCareTexts ?? [];
-    const name = this.greetingName();
-    // Without a name there is no safe greeting to attach to; skip care rather than guess.
-    if (templates.length === 0 || !name) return null;
-    const startedAt = this.now();
-    let followup: { id: string; quote: string; createdAt: number } | undefined;
-    try {
-      followup = store.careFollowup(ownerId, agentId, this.sessionId, startedAt, care.maxAgeDays * DAY_MS);
-    } catch {
-      this.log.warn('care_opening', { outcome: 'store_failed' });
-      return null;
-    }
-    if (!followup) return null;
-    const { id, quote, createdAt } = followup;
-    const daysAgo = Math.max(0, Math.floor((startedAt - createdAt) / DAY_MS));
-    return generateCareLine(
-      client,
-      this.deps.roles.carePrompt(this.context.characterId, language),
-      { userLine: quote, daysAgo },
-      { timeoutMs: care.timeoutMs, maxChars: care.maxChars[language], maxTokens: care.maxTokens, temperature: care.temperature },
-      this.i18n.safety,
-      this.log,
-    ).then((line) => {
-      // end() may race the model: never touch a disposed session.
-      if (this.ended) return;
-      const ms = this.now() - startedAt;
-      if (!line) {
-        this.log.warn('care_opening', { outcome: 'failed', ms });
-        return;
-      }
-      // An opening already reached the adapter (the user spoke during the wait): retries must
-      // repeat that same sentence, so a late care line is dropped and the followup stays open.
-      if (this.greetingText !== null) {
-        this.log.info('care_opening', { outcome: 'late', ms });
-        return;
-      }
-      const template = templates[Math.floor(Math.random() * templates.length)]!;
-      this.careOpening = { followupId: id, text: composeCareGreeting(template, name, line), language };
-      this.log.info('care_opening', { outcome: 'ready', ms });
-    });
-  }
-
-  /** The first start of the care opening closes its followup and drops the quote. */
-  private closeCareIfSpoken(): void {
-    const care = this.careOpening;
-    const store = this.deps.store;
-    const ownerId = this.context.ownerId;
-    if (!care || this.careClosed || !store || !ownerId || this.greetingText !== care.text) return;
-    this.careClosed = true;
-    try {
-      store.closeCareFollowup(ownerId, care.followupId, this.now());
-      this.log.info('care_opening', { outcome: 'closed' });
-    } catch {
-      this.log.warn('care_opening', { outcome: 'close_failed' });
-    }
   }
 
   private scheduleRebuild(reason: RebuildReason): void {

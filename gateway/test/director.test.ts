@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResponseKind } from '@anyidea/protocol';
 import type { ProactiveRequest } from '../src/adapters/types.ts';
-import { Director, type DirectorConfig, type SilenceContext, type SilencePlan } from '../src/session/director.ts';
+import { Director, type DirectorConfig, type DirectorDeps, type SilenceContext, type SilencePlan } from '../src/session/director.ts';
 
 const cfg: DirectorConfig = {
   followupAfterMs: 8000,
@@ -792,5 +792,39 @@ describe('Director light-reply check', () => {
     expect(d.isLightFinal('ok.')).toBe(true);
     expect(d.isLightFinal('Got it')).toBe(false); // the Director check is case-sensitive; unchanged
     expect(d.isLightFinal('got it')).toBe(true);
+  });
+});
+
+describe('opening order (P4)', () => {
+  const engine: ProactiveRequest = { cue: 'greeting', instruction: 'ENGINE OPENING', fallbackText: '王叔，又见面啦。今天过得怎么样？' };
+
+  it('uses the first-meet template, then the engine, then the name template', () => {
+    const run = (deps: Partial<DirectorDeps>) => {
+      const requests: ProactiveRequest[] = [];
+      const d = new Director(cfg, { requestResponse: (_k, r) => requests.push(r), ...deps });
+      d.onSessionStart(true);
+      d.stop();
+      return requests;
+    };
+    expect(run({ firstMeetGreeting: () => '初次见面，王叔。', openingRequest: () => engine, safeGreeting: () => '王叔，又见面了。' }))
+      .toEqual([{ cue: 'greeting', instruction: '初次见面，王叔。', fallbackText: '初次见面，王叔。' }]);
+    expect(run({ openingRequest: () => engine, safeGreeting: () => '王叔，又见面了。' })).toEqual([engine]);
+    expect(run({ openingRequest: () => null, safeGreeting: () => '王叔，又见面了。' }))
+      .toEqual([{ cue: 'greeting', instruction: '王叔，又见面了。', fallbackText: '王叔，又见面了。' }]);
+  });
+
+  it('repeats the engine opening after a cut-off', async () => {
+    vi.useFakeTimers();
+    const requests: ProactiveRequest[] = [];
+    let calls = 0;
+    const d = new Director(cfg, { requestResponse: (_k, r) => requests.push(r), openingRequest: () => { calls++; return engine; } });
+    d.onSessionStart(true);
+    d.onAiTurnStarted();
+    d.onAssistantInterrupted();
+    await vi.advanceTimersByTimeAsync(cfg.greetingRetryMs ?? 800);
+    expect(requests).toEqual([engine, engine]);
+    expect(calls).toBe(2);
+    d.stop();
+    vi.useRealTimers();
   });
 });

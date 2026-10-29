@@ -45,6 +45,7 @@ export const ProactivitySchema = z.object({
     oldFriendMinDays: Count(1_000),
   }).strict().refine((f) => f.oldFriendMinSessions >= f.familiarMinSessions && f.oldFriendMinDays >= f.familiarMinDays, { message: 'old friend thresholds must not be below familiar ones' }),
   threads: z.object({
+    quoteMaxChars: z.number().int().min(20).max(200),
     maxPerSession: Count(5),
     event: z.object({ preDays: Days(0, 7), postDays: Days(1, 30), maxMentions: Days(1, 5) }).strict(),
     concern: z.object({ intervalDays: Days(1, 30), maxMentions: Days(1, 10), expireDays: Days(1, 90) }).strict(),

@@ -202,13 +202,6 @@ export interface MemoryStore {
   deleteExpiredMessages(ownerId: string, olderThan: number, limit: number): number;
   /** Owner ids for the daily retention pass. */
   ownerIds(): string[];
-  /**
-   * Newest open followup of this agent with a verbatim quote, created within maxAgeMs, whose source session
-   * has ended and is not the current one. The only path that reads followup quotes.
-   */
-  careFollowup(ownerId: string, agentId: string, currentSessionId: string, now: number, maxAgeMs: number): { id: string; quote: string; createdAt: number } | undefined;
-  /** Marks the followup done and clears its quote; the audit diff never carries the quote. */
-  closeCareFollowup(ownerId: string, id: string, now: number): void;
   /** Open threads of this agent (quoted, not done), newest first. */
   listOpenThreads(ownerId: string, agentId: string): ThreadRecord[];
   /** Counts one proactive mention. False when the thread is closed or foreign. */
@@ -518,13 +511,6 @@ function prepareStatements(db: DatabaseSync) {
     deleteAllProactiveFallbacks: p('DELETE FROM proactive_fallbacks WHERE owner_id = ? AND agent_id = ?'),
     deleteReflectionsInstr: p('DELETE FROM reflections WHERE owner_id = ? AND agent_id = ? AND instr(text, ?) > 0'),
     followupAgent: p('SELECT agent_id FROM followups WHERE id = ? AND owner_id = ?'),
-    careFollowup: p(`SELECT f.id, f.quote, f.created_at FROM followups f
-      JOIN sessions s ON s.id = f.source_session_id AND s.agent_id = f.agent_id
-      WHERE f.owner_id = ? AND f.agent_id = ? AND f.done_at IS NULL AND f.quote IS NOT NULL
-        AND f.created_at >= ? AND s.ended_at IS NOT NULL AND s.id != ?
-      ORDER BY f.created_at DESC, f.rowid DESC
-      LIMIT 1`),
-    closeCareFollowup: p('UPDATE followups SET done_at = ?, quote = NULL WHERE id = ? AND owner_id = ? AND done_at IS NULL'),
     listOpenThreads: p(`SELECT id, kind, quote, due_at, sensitive, mention_count, last_mentioned_at, created_at, source_session_id
       FROM followups WHERE owner_id = ? AND agent_id = ? AND done_at IS NULL AND quote IS NOT NULL
       ORDER BY created_at DESC, rowid DESC`),
@@ -1015,20 +1001,6 @@ export class SqliteMemoryStore implements MemoryStore {
 
   ownerIds(): string[] {
     return this.q.ownerIds.all().map((r) => r.id as string);
-  }
-
-  careFollowup(ownerId: string, agentId: string, currentSessionId: string, now: number, maxAgeMs: number): { id: string; quote: string; createdAt: number } | undefined {
-    const row = this.q.careFollowup.get(ownerId, agentId, now - maxAgeMs, currentSessionId);
-    return row ? { id: row.id as string, quote: row.quote as string, createdAt: row.created_at as number } : undefined;
-  }
-
-  closeCareFollowup(ownerId: string, id: string, now: number): void {
-    this.tx(() => {
-      const owner = this.q.followupAgent.get(id, ownerId);
-      if (this.q.closeCareFollowup.run(now, id, ownerId).changes === 1) {
-        this.audit(ownerId, (owner?.agent_id as string | undefined) ?? null, 'followups', id, 'close', '', 'care', now);
-      }
-    });
   }
 
   listOpenThreads(ownerId: string, agentId: string): ThreadRecord[] {

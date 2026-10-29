@@ -12,7 +12,6 @@ const director = {
 describe('fixedRoleCatalog', () => {
   it('stubs the shared prompts for any character', () => {
     const roles = fixedRoleCatalog('P', director);
-    expect(roles.carePrompt('xiaokai')).toBe('FIXTURE CARE');
     expect(roles.recallPrompt('xiaonuan')).toBe('FIXTURE RECALL');
     expect(roles.affectPrompt('xiaoxin')).toBe('FIXTURE AFFECT');
     expect(roles.extractPrompt()).toBe('FIXTURE EXTRACT');

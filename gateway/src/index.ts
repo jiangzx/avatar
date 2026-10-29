@@ -189,9 +189,9 @@ const worker = store && workerClient
       policy: boot.memory.extractPolicy ?? boot.pacing.policies.summarize,
       transcriptMaxChars: boot.memory.extractTranscriptMaxChars ?? 6_000,
       contextMaxChars: boot.memory.extractContextMaxChars ?? 4_000,
-      // Care quotes are stored only while the care feature is on (data minimization).
-      quote: { maxChars: boot.affect.care.quoteMaxChars, safety: boot.i18n.safety, evidence: boot.i18n.evidence },
-      quoteEnabled: () => configSource.snapshot().affect.enabled,
+      // Thread quotes are stored only while proactivity is on (data minimization).
+      quote: { maxChars: boot.proactivity.threads.quoteMaxChars, safety: boot.i18n.safety, evidence: boot.i18n.evidence },
+      quoteEnabled: () => configSource.snapshot().proactivity.enabled,
       reflectPrompts: byLanguage((language) => boot.roles.reflectPrompt(language)),
       ...(boot.memory.reflect ? { reflect: boot.memory.reflect } : {}),
       logger,

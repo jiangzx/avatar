@@ -1,21 +1,16 @@
-import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHARACTER_IDS } from '@anyidea/protocol';
 import { MockAdapter, type MockScript } from '../src/adapters/mock.ts';
 import type { SessionConfig } from '../src/adapters/types.ts';
 import type { CharacterRegistry } from '../src/characters/registry.ts';
-import type { MemoryStore } from '../src/memory/store.ts';
 import type { TextModelClient } from '../src/memory/textClient.ts';
 import { fixedRoleCatalog } from '../src/roles/catalog.ts';
-import { loadAffectConfig } from '../src/session/affect.ts';
 import type { SessionContext } from '../src/session/context.ts';
 import type { DirectorConfig } from '../src/session/director.ts';
 import { MockSummarizer } from '../src/session/ledger.ts';
 import { Session, type SessionDeps, type Transport } from '../src/session/session.ts';
 import { shippedCharacters, shippedRoles } from './support/shipped.ts';
 
-const root = fileURLToPath(new URL('..', import.meta.url));
-const affect = loadAffectConfig(`${root}config/affect.json`);
 const script: MockScript = { greeting: '你好呀', followup: '还在吗', fallbackReply: '我在听', turns: [] };
 
 const director: DirectorConfig = {
@@ -146,18 +141,6 @@ describe('opening by first meeting and addressing', () => {
     expect(inputs).toEqual([]);
     expect(greetingCalls(s.creates)).toEqual([{ cue: 'greeting', instruction: '王叔，又见面了。', fallbackText: '王叔，又见面了。' }]);
     s.session.end();
-  });
-
-  it('skips the care opening at a first meeting only', async () => {
-    const roles = fixedRoleCatalog('P', { ...director, greetingCareTexts: ['{name}，又见面啦。'] });
-    for (const firstMeet of [true, false]) {
-      const careFollowup = vi.fn(() => undefined);
-      const store = { careFollowup } as unknown as MemoryStore;
-      const s = open({ ...owned, firstMeet, memorySnapshot: NAMED, greetingMemorySnapshot: NAMED }, planner().client, { roles, store, affect });
-      await s.session.start(s.transport);
-      expect(careFollowup).toHaveBeenCalledTimes(firstMeet ? 0 : 1);
-      s.session.end();
-    }
   });
 });
 

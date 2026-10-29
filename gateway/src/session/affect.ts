@@ -61,6 +61,7 @@ export interface AffectConfig {
   policy: PolicySpec;
   lowIntensity: number;
   exhausted: { shortMaxChars: number; shortStreakTrigger: number; cooldownTurns: number; declineCooldownTurns: number };
+  /** Retired in P4 (care opening removed); kept so stored overlays that set affect:care.* still build. */
   care: { maxAgeDays: number; timeoutMs: number; maxChars: Record<Language, number>; quoteMaxChars: number; maxTokens: number; temperature: number };
   timeZone: string;
   solarTermWindowDays: number;
@@ -97,6 +98,7 @@ const AffectConfigSchema = z.object({
     cooldownTurns: z.number().int().min(0).max(50),
     declineCooldownTurns: z.number().int().min(0).max(100),
   }).strict(),
+  /** Retired in P4 (care opening removed); kept so stored overlays that set affect:care.* still build. */
   care: z.object({
     maxAgeDays: z.number().int().min(1).max(30),
     // The opening waits for this; keep it short regardless of the analyzer policy.

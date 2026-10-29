@@ -698,7 +698,6 @@ describe('forgetMatches scope', () => {
 });
 
 describe('care followups', () => {
-  const WEEK = 7 * DAY;
   const NOW = 100 * DAY;
 
   /** One session (ended unless told otherwise) whose user line produced one followup through the extract write path. */
@@ -724,8 +723,6 @@ describe('care followups', () => {
     })));
   }
 
-  const idOf = (db: DatabaseSync, text: string): string => (db.prepare('SELECT id FROM followups WHERE text = ?').get(text) as { id: string }).id;
-
   it('stores the quote as sensitive, stamps created_at, and keeps the quote out of the audit diff', () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
@@ -738,43 +735,6 @@ describe('care followups', () => {
     ]);
     expect(db.prepare("SELECT diff FROM memory_changes WHERE table_name = 'followups' AND op = 'add' ORDER BY created_at").all())
       .toEqual([{ diff: '问问腰部复查' }, { diff: '问问旅行计划' }]);
-  });
-
-  it('picks the newest open quoted followup from an ended earlier session within maxAge', () => {
-    const db = open();
-    const store = new SqliteMemoryStore(db);
-    const a = seedOwner(store, 'care-pick');
-    const b = seedOwner(store, 'care-pick-other');
-    addFollowup(store, a, 's-older', { text: 'older', quote: '我下周去看牙', createdAt: NOW - 3 * DAY });
-    addFollowup(store, a, 's-newer', { text: 'newer', quote: '我明天去医院复查腰', createdAt: NOW - DAY });
-    addFollowup(store, a, 's-expired', { text: 'expired', quote: '我要去爬山', createdAt: NOW - WEEK - 1 });
-    addFollowup(store, a, 's-noquote', { text: 'noquote', createdAt: NOW - 100 });
-    addFollowup(store, a, 's-open', { text: 'open', quote: '我晚上去散步', createdAt: NOW - 90, ended: false });
-    addFollowup(store, a, 's-current', { text: 'current', quote: '我等会儿去买菜', createdAt: NOW - 80 });
-    addFollowup(store, a, 's-closed', { text: 'closed', quote: '我中午去取药', createdAt: NOW - 70 });
-    store.closeCareFollowup(a.ownerId, idOf(db, 'closed'), NOW - 60);
-    addFollowup(store, b, 's-b', { text: 'other-owner', quote: '我明天去复查', createdAt: NOW - 50 });
-    expect(store.careFollowup(a.ownerId, a.agentId, 's-current', NOW, WEEK)).toEqual({ id: idOf(db, 'newer'), quote: '我明天去医院复查腰', createdAt: NOW - DAY });
-    expect(store.careFollowup(a.ownerId, a.agentId, 's-current', NOW, DAY - 1)).toBeUndefined();
-  });
-
-  it('closes once: done_at set, quote cleared, audit without the quote, owner-scoped', () => {
-    const db = open();
-    const store = new SqliteMemoryStore(db);
-    const a = seedOwner(store, 'care-close');
-    const b = seedOwner(store, 'care-close-other');
-    addFollowup(store, a, 's-1', { text: '问问腰部复查', quote: '我明天去医院复查腰', createdAt: NOW - DAY });
-    const id = idOf(db, '问问腰部复查');
-    store.closeCareFollowup(b.ownerId, id, NOW);
-    expect(store.careFollowup(a.ownerId, a.agentId, 's-now', NOW, WEEK)?.id).toBe(id);
-    store.closeCareFollowup(a.ownerId, id, NOW);
-    store.closeCareFollowup(a.ownerId, id, NOW + 1);
-    expect(db.prepare('SELECT done_at, quote FROM followups WHERE id = ?').get(id)).toEqual({ done_at: NOW, quote: null });
-    expect(db.prepare('SELECT op, diff, actor, agent_id FROM memory_changes WHERE row_id = ? ORDER BY created_at, rowid').all(id)).toEqual([
-      { op: 'add', diff: '问问腰部复查', actor: 'extract', agent_id: a.agentId },
-      { op: 'close', diff: '', actor: 'care', agent_id: a.agentId },
-    ]);
-    expect(store.careFollowup(a.ownerId, a.agentId, 's-now', NOW, WEEK)).toBeUndefined();
   });
 
   it('forgets a followup whose keyword appears only in its quote', () => {

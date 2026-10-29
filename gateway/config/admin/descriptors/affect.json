@@ -23,15 +23,6 @@
       "riskNote": "调到 3 时，老人有些难过 AI 也会照常找新话题。"
     },
     {
-      "key": "affect:care.maxAgeDays",
-      "label": "关怀开场最多提起几天前的事",
-      "purpose": "开场时，AI 只会关心老人这几天内说过的事，太久以前的不再提。",
-      "impact": { "characters": "all", "stage": "关怀开场", "effective": "next_session" },
-      "control": "number", "unit": "day", "storageUnit": "day", "min": 1, "max": 14, "step": 1,
-      "complianceNote": null, "risk": "high",
-      "riskNote": "这也决定这些原话保存多久；调小后，更早的会在当晚清理中删除，删除后找不回来。"
-    },
-    {
       "key": "affect:exhausted.shortStreakTrigger",
       "label": "连着几次只答一两个字就换话题",
       "purpose": "老人连着这么多次只回「嗯」「好」，AI 就知道这个话题聊不下去了，换一个。",

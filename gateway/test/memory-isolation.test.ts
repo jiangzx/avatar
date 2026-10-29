@@ -59,16 +59,6 @@ describe('per-character isolation: A writes, B reads nothing', () => {
     expect(store.agentsPendingExtraction()).toEqual([{ ownerId: a.ownerId, agentId: a.agentId }]);
   });
 
-  it('care followup', () => {
-    const { store, a, b } = setup();
-    store.recordSessionStart('s-a', a.agentId, 1);
-    say(store, a, 'a1', '我明天去医院复查腰', 2, 's-a');
-    store.recordSessionEnd('s-a', a.agentId, 3);
-    store.writeExtraction(a.ownerId, a.agentId, change({ now: 4, messageIds: ['a1'], followups: [{ op: 'add', text: '问问复查', dueAt: 99, quote: '我明天去医院复查腰' }] }));
-    expect(store.careFollowup(a.ownerId, a.agentId, 's-now', 10, 1_000)?.quote).toBe('我明天去医院复查腰');
-    expect(store.careFollowup(b.ownerId, b.agentId, 's-now', 10, 1_000)).toBeUndefined();
-  });
-
   it('agent facts and pinned memories', () => {
     const { store, a, b } = setup();
     store.writeExtraction(a.ownerId, a.agentId, change({ facts: [{ op: 'add', category: 'preference', text: '喜欢喝茶' }, { op: 'add', category: 'health', text: '膝盖不好' }] }));

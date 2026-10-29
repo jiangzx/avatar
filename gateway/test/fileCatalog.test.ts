@@ -42,7 +42,6 @@ describe('FileRoleCatalog', () => {
     expect(roles.director('xiaonuan', 'zh').greetingInstruction).toBe('G 阿甲');
     expect(roles.director('xiaokai', 'zh').greetingInstruction).toBe('G 阿乙');
     expect(roles.recallPrompt('xiaokai', 'zh')).toBe('FIXTURE RECALL ZH 阿乙');
-    expect(roles.carePrompt('xiaonuan', 'zh')).toBe('FIXTURE CARE ZH');
     expect(roles.characterLanguagePairs()).toHaveLength(6);
     expect(() => roles.defaultLanguage('other')).toThrow('unknown_role:other');
     expect(() => roles.supportedLanguages('other')).toThrow('unknown_role:other');
@@ -126,7 +125,6 @@ describe('FileRoleCatalog', () => {
           roles.buildPersona(id, language),
           JSON.stringify(roles.director(id, language)),
           roles.recallPrompt(id, language),
-          roles.carePrompt(id, language),
           roles.affectPrompt(id, language),
         ];
         for (const text of texts) expect(text, `${id}:${language}`).not.toContain('{{');
@@ -146,7 +144,6 @@ describe('FileRoleCatalog', () => {
     expect(roles.director('xiaonuan', 'zh').silenceDecision?.instruction).toContain('你是小暖，正在陪一位长辈聊天。');
     expect(roles.director('xiaonuan', 'zh').silenceDecision?.instruction).toContain('标成「基本情况」的记忆是已知的基本资料');
     expect(roles.recallPrompt('xiaoxin', 'en').startsWith('You are Xiaoxin,')).toBe(true);
-    expect(roles.carePrompt('xiaokai', 'ja').startsWith('あなたは小凯（シャオカイ）です。')).toBe(true);
     expect(roles.affectPrompt('xiaonuan', 'zh').startsWith('你是小暖的情绪分析器')).toBe(true);
     expect(roles.buildPersona('xiaokai', 'ja')).toContain('自分の名前を口にするときは「シャオカイ」と言います。');
     expect(roles.buildPersona('xiaoxin', 'en')).toContain('Xiaoxin is your name; never use it to address the user.');
@@ -185,20 +182,6 @@ describe('FileRoleCatalog', () => {
     const dir = copyFixtures();
     rmSync(join(dir, '_shared', 'ja', 'extract.md'));
     expect(() => loadRoleCatalog(dir, fixtureCharacters())).toThrow(/shared_missing:ja:extract/);
-  });
-
-  it('rejects a missing shared care prompt', () => {
-    const dir = copyFixtures();
-    rmSync(join(dir, '_shared', 'ja', 'care.md'));
-    expect(() => loadRoleCatalog(dir, fixtureCharacters())).toThrow(/shared_missing:ja:care/);
-  });
-
-  it('reads the care prompt per language', () => {
-    const fixture = loadRoleCatalog(fixtures, fixtureCharacters());
-    expect(fixture.carePrompt('xiaonuan', 'zh')).toBe('FIXTURE CARE ZH');
-    expect(fixture.carePrompt('xiaonuan', 'ja')).toBe('FIXTURE CARE JA');
-    const shipped = shippedRoles();
-    for (const language of LANGUAGES) expect(shipped.carePrompt('xiaonuan', language)).toContain('userLine');
   });
 
   it('reports a missing shared directory with the language', () => {
