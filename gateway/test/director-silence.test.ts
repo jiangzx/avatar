@@ -433,3 +433,50 @@ describe('substantive conversation silence', () => {
     d.stop();
   });
 });
+
+describe('engine plans on the ladder (P3)', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('speaks a ready request as-is and remembers its fallback text', async () => {
+    const request: ProactiveRequest = { cue: 'followup', instruction: 'ENGINE', fallbackText: '您刚才说的，我还想接着听听。' };
+    const contexts: SilenceContext[] = [];
+    const s = setup((context) => { contexts.push(context); return context.stage === 'context' ? { text: request.fallbackText, request } : null; });
+    s.answer();
+    await vi.advanceTimersByTimeAsync(cfg.contextAfterMs);
+    expect(s.requests).toEqual([request]);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('随便什么');
+    await vi.advanceTimersByTimeAsync(cfg.checkAfterMs);
+    expect(contexts.at(-1)).toMatchObject({ stage: 'check', previousTexts: [request.fallbackText] });
+    s.d.stop();
+  });
+
+  it('a quiet plan says nothing and moves to the next step on time', async () => {
+    const stages: string[] = [];
+    const s = setup((context) => { stages.push(context.stage); return context.stage === 'checkin' ? null : { text: null, quiet: true }; });
+    s.answer();
+    await vi.advanceTimersByTimeAsync(cfg.contextAfterMs);
+    expect(s.requests).toEqual([]);
+    await vi.advanceTimersByTimeAsync(cfg.checkAfterMs - 1);
+    expect(stages).toEqual(['context']);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(stages).toEqual(['context', 'check']);
+    await vi.advanceTimersByTimeAsync(cfg.leaveAfterMs);
+    await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
+    expect(stages).toEqual(['context', 'check', 'leave', 'checkin']);
+    // checkin returned null: the configured check-in copy is spoken.
+    expect(s.requests.map((r) => r.fallbackText)).toEqual([cfg.checkinText]);
+    s.d.stop();
+  });
+
+  it('a quiet rest step still ends the ladder', async () => {
+    const s = setup(() => ({ text: null, quiet: true }));
+    s.answer();
+    await vi.advanceTimersByTimeAsync(cfg.contextAfterMs + cfg.checkAfterMs + cfg.leaveAfterMs + cfg.checkinAfterMs + cfg.restAfterMs);
+    expect(s.restCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(cfg.restAfterMs * 2);
+    expect(s.requests).toEqual([]);
+    s.d.stop();
+  });
+});

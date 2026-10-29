@@ -27,6 +27,7 @@ import { ActionRouter } from './actions.ts';
 import { composeCareGreeting, generateCareLine } from './care.ts';
 import { AffectTracker, affectSummaryFields, isLow, type AffectCard, type AffectConfig, type AffectSummary } from './affect.ts';
 import type { ProactivityConfig } from './proactive/config.ts';
+import { ProactiveRuntime } from './proactive/runtime.ts';
 import { summarizeMood } from './mood.ts';
 import { renderAffect } from './affectRender.ts';
 import type { TranscriptWriter } from '../memory/writer.ts';
@@ -217,6 +218,13 @@ export class Session {
   private adapter: RealtimeAdapter;
   private transport: Transport | null = null;
   private readonly director: Director;
+  /** Decision engine runtime (P3); null when proactivity.json is not injected (most tests). */
+  private readonly proactive: ProactiveRuntime | null;
+  /** Engine request sent but not started yet; its fallback timer runs. */
+  private proactiveRequest: ProactiveRequest | null = null;
+  private proactiveTimer: NodeJS.Timeout | null = null;
+  /** Seq of the engine line on air, for the post-hoc check. */
+  private proactiveSeq: number | null = null;
   private readonly emotion: EmotionTagger | null;
   /** Null without a text model client or when affect.json disables it: lexicon-only emotion, as before. */
   private readonly affect: AffectTracker | null;
@@ -357,6 +365,32 @@ export class Session {
     const agentId = ctx.agentId;
     const hasSilencePlanner = deps.roles.supportedLanguages(this.roleId)
       .some((language) => deps.roles.director(ctx.characterId, language).silenceDecision !== undefined);
+    this.proactive = deps.proactivity ? new ProactiveRuntime({
+      cfg: deps.proactivity,
+      sessionId,
+      ...(deps.store ? { store: deps.store } : {}),
+      ...(ownerId ? { ownerId } : {}),
+      ...(agentId ? { agentId } : {}),
+      now: () => this.now(),
+      canPersist: () => this.memoryGate() === 'ok',
+      copy: (language) => {
+        const d = this.directorConfig(language);
+        return {
+          ...(d.intents ? { intents: d.intents } : {}),
+          ...(d.fallbacks ? { fallbacks: d.fallbacks } : {}),
+          topics: d.topics ?? [],
+          quietPhrases: d.quietPhrases,
+        };
+      },
+      rules: (language) => ({
+        silence: this.i18n.silence[language],
+        healthWords: this.i18n.memory[language].healthWords,
+        declinePhrases: this.i18n.affect[language].declinePhrases,
+        evidence: this.i18n.evidence,
+      }),
+      logger: this.log,
+    }) : null;
+    const textPlanner = Boolean(deps.textClient) && hasSilencePlanner;
     this.safeGreetingWired = Boolean(deps.textClient) && hasSilencePlanner;
     this.director = new Director(
       (language) => this.directorConfig(language),
@@ -364,8 +398,8 @@ export class Session {
         requestResponse: (kind, request) => this.requestResponse(kind, request),
         restReminderRequest: () => this.restReminderRequest(),
         firstMeetGreeting: () => this.firstMeetGreeting(),
-        ...(deps.textClient && hasSilencePlanner ? {
-          planProactiveLine: (context, signal) => this.planProactiveLine(context, signal),
+        ...(textPlanner || this.proactive ? { planProactiveLine: (context, signal) => this.planProactiveLine(context, signal) } : {}),
+        ...(textPlanner ? {
           getMemorySnapshot: (stage) => stage === 'greeting'
             // A first meeting must not sound like a reunion: the greeting planner sees no memory.
             ? (this.context.firstMeet ? '' : this.context.greetingMemorySnapshot ?? '')
@@ -645,6 +679,9 @@ export class Session {
     this.rebuildMicBuffer.length = 0;
     this.stopKeepalive();
     this.director.stop();
+    this.clearProactiveTimer();
+    this.proactiveRequest = null;
+    this.proactive?.end();
     this.emotion?.dispose();
     if (this.affect) {
       const summary = this.affect.summary();
@@ -733,6 +770,26 @@ export class Session {
   }
 
   private planProactiveLine(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null> {
+    if (context.stage !== 'greeting' && this.proactive) {
+      const line = this.proactive.silenceLine({
+        step: context.stage,
+        language: this.language,
+        hadContent: context.userText !== '',
+        lastUtterance: context.userText,
+        knownName: this.greetingName() !== null,
+        card: this.affectCard,
+        lowIntensity: this.deps.affect?.lowIntensity ?? Number.POSITIVE_INFINITY,
+        ...(this.openLoop ? { openLoop: this.openLoop } : {}),
+      });
+      if (line && 'request' in line) return { text: line.request.fallbackText, request: line.request };
+      if (line && 'quiet' in line) return { text: null, quiet: true };
+      if (line && 'close' in line) return { text: null, close: true };
+    }
+    return this.textPlan(context, signal);
+  }
+
+  /** The text-model planner: the opening, and silence steps the engine does not handle. */
+  private textPlan(context: SilenceContext, signal: AbortSignal): Promise<SilencePlan | null> | null {
     const config = this.deps.roles.director(this.context.characterId, this.language).silenceDecision;
     const client = this.textFor('silence_plan');
     if (!config || !client) return null;
@@ -768,8 +825,11 @@ export class Session {
   private affectSection(): string {
     const config = this.deps.affect;
     if (!config || !this.affect) return '';
+    // Topic exhaustion is a proactive moment (spec 话题聊干): the hint only rides along when the engine approves.
+    const armed = this.affect.exhaustedArmed
+      && (this.proactive?.approveExhausted(this.affect.exhaustedArmedCount, { language: this.language, card: this.affectCard, lowIntensity: config.lowIntensity }) ?? true);
     return renderAffect(this.affectCard, this.i18n.affect[this.language], {
-      exhaustedArmed: this.affect.exhaustedArmed,
+      exhaustedArmed: armed,
       lowIntensity: config.lowIntensity,
     });
   }
@@ -806,6 +866,7 @@ export class Session {
     // The open loop is the user's own words; forget/decline must drop it too (spec §8).
     this.openLoop = undefined;
     this.emotion?.releaseHold();
+    this.proactive?.reload();
   }
 
   /** End of session: one labels-only mood row (spec 情绪轨迹). The store applies the notice/consent gate. */
@@ -955,6 +1016,7 @@ export class Session {
     if (this.toolTurn.active || this.ended || this.interrupt.active !== null || this.modelGenerating) {
       if (request.cue === 'memoryNotice') this.director.onNoticeMissed();
       if (request.cue === 'restReminder') this.director.onReminderMissed();
+      if (this.proactive?.owns(request)) this.proactive.onRequestRefused(request);
       return;
     }
     if (request.cue === 'memoryNotice') {
@@ -970,7 +1032,39 @@ export class Session {
     this.gate.flush();
     // Watch before createResponse: an adapter that emits responseStarted synchronously clears it at once.
     this.watchReply(false);
+    // Before createResponse: an adapter may start the response synchronously.
+    if (this.proactive?.owns(request)) this.watchProactive(request);
     this.adapter.createResponse(request);
+  }
+
+  /** Spec 兜底: no response.created within fallbackAfterMs → read the fallback line once. */
+  private watchProactive(request: ProactiveRequest): void {
+    this.clearProactiveTimer();
+    this.proactiveRequest = request;
+    const waitMs = this.deps.proactivity?.fallbackAfterMs ?? 3_000;
+    this.proactiveTimer = setTimeout(() => {
+      this.proactiveTimer = null;
+      if (this.proactiveRequest !== request || !this.proactive) return;
+      const busy = this.ended || !this.adapterReady || this.modelGenerating || this.responseLive
+        || this.userSpeaking || this.toolTurn.active || this.interrupt.active !== null;
+      // No response.cancel here (pitfall 打断与沉默 #6): we only add a line when nothing is on air.
+      const fallback = busy ? null : this.proactive.fallbackFor(request);
+      if (!fallback) {
+        this.proactive.onRequestRefused(request);
+        this.proactiveRequest = null;
+        return;
+      }
+      this.proactiveRequest = fallback;
+      this.pendingKind = 'followup';
+      this.watchReply(false);
+      this.adapter.createResponse(fallback);
+    }, waitMs);
+    this.proactiveTimer.unref?.();
+  }
+
+  private clearProactiveTimer(): void {
+    if (this.proactiveTimer) clearTimeout(this.proactiveTimer);
+    this.proactiveTimer = null;
   }
 
   /** Playback ended for the notice seq is the only completion signal. */
@@ -1044,6 +1138,13 @@ export class Session {
       if (!current()) return;
       const s: ResponseState = { seq: ++this.seqCounter, kind: this.pendingKind ?? 'reply', text: '', audioMs: 0, playedMs: 0, finalized: false, flushed: false, responseDone: false, playbackEnded: false };
       this.pendingKind = null;
+      const engineRequest = this.proactiveRequest;
+      if (engineRequest && s.kind === 'followup') {
+        this.proactiveRequest = null;
+        this.clearProactiveTimer();
+        this.proactiveSeq = s.seq;
+        this.proactive?.onLineStarted(engineRequest);
+      }
       this.byId.set(id, s);
       this.bySeq.set(s.seq, s);
       // Keep recent finalized ids so a late tool call can still see its cancelled state,
@@ -1187,6 +1288,10 @@ export class Session {
     }
       const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
     s.text = text;
+    if (s.seq === this.proactiveSeq) {
+      this.proactiveSeq = null;
+      this.proactive?.onLineEnded(text, interrupted);
+    }
     if (!this.dropTranscriptSeqs.has(s.seq)) this.ledger.addAssistant(text, Date.now(), interrupted);
     this.turnUserText = null;
     this.turns.onTurnClosed();
@@ -1242,6 +1347,7 @@ export class Session {
       if (this.userTurns % every === 0) void extractor.enqueue(ownerId, agentId, 'turns', this.language);
     }
     this.director.onUserFinal(text);
+    this.proactive?.onUserFinal(text, this.director.isLightFinal(text), this.language);
     this.emotion?.onUserFinal(text);
     // Same whole-utterance light check as the Director; light replies never cost a model call.
     if (this.affect) {

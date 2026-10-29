@@ -228,6 +228,11 @@ export class AffectTracker {
     return this.exhaustion.armed;
   }
 
+  /** Times the topic-exhaustion hint has been armed; changes once per arming. */
+  get exhaustedArmedCount(): number {
+    return this.exhaustion.armedCount;
+  }
+
   /** Non-light user final. Starts one analysis; aborts the previous one. */
   onUserFinal(text: string, language: Language): void {
     if (this.disposed) return;

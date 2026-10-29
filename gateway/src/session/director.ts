@@ -34,11 +34,15 @@ export interface SilencePlan {
   text: string | null;
   /** The user clearly ended the conversation; stop the ladder instead of speaking. */
   close?: boolean;
+  /** A ready request from the decision engine (P3); sent as-is, `text` is its fallback line. */
+  request?: ProactiveRequest;
+  /** The engine chose silence for this step: move on as if it had been said. */
+  quiet?: boolean;
 }
 
 export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
-  /** Plans any conversational proactive line from memory and context; all stages fall back to configured copy. */
+  /** Plans the opening and each silence step. The session asks the decision engine first (P3); configured copy is the failure fallback. */
   planProactiveLine?(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null>;
   /** Current rendered memory for this session, read at planning time; proactive stages get the safe view. */
   getMemorySnapshot?(stage: ProactivePlanStage): string;
@@ -565,6 +569,17 @@ export class Director {
         this.left = true;
         return;
       }
+      if (plan?.quiet) {
+        this.skipStep(step);
+        return;
+      }
+      if (plan?.request) {
+        // Engine lines are already rendered; novelty is the engine's job, so no duplicate check here.
+        this.pending = step;
+        if (step !== 'rest') this.rememberLadderText(plan.request.fallbackText);
+        this.deps.requestResponse('followup', plan.request);
+        return;
+      }
       const text = plan?.text?.trim();
       if (!text) {
         // A declined or failed plan still speaks the configured stage copy.
@@ -673,6 +688,12 @@ export class Director {
     return stage === 'greeting'
       ? (c.greetingInstruction ?? this.silence().contextInstruction)
       : this.silence().contextInstruction;
+  }
+
+  /** A quiet decision: advance exactly as if this step had been spoken. */
+  private skipStep(step: SilenceStep): void {
+    this.pending = step;
+    this.onAiTurnEnded();
   }
 
   private requestSilenceStep(step: SilenceStep): void {
