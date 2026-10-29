@@ -68,3 +68,36 @@ export function evalExitCode(o: EvalOutcome): 0 | 1 {
   if (o.gated && !(o.pass.questionRatio && o.pass.avgChars)) return 1;
   return 0;
 }
+
+export interface JourneyArgs { adapter?: string; journeys?: string; judge?: string; runs?: number; only?: string[]; out?: string; compare?: [string, string] }
+
+const JOURNEY_FLAGS = new Set(['adapter', 'journeys', 'judge', 'runs', 'only', 'out', 'compare']);
+
+// Strict parser for scripts/eval-journey.ts: every flag needs a value; --compare takes two.
+export function parseJourneyArgs(argv: readonly string[]): JourneyArgs {
+  const out: JourneyArgs = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]!;
+    if (!a.startsWith('--')) throw new Error(`unexpected argument ${a}`);
+    const name = a.slice(2);
+    if (!JOURNEY_FLAGS.has(name)) throw new Error(`unknown flag ${a}`);
+    const v = argv[i + 1];
+    if (v === undefined || v.startsWith('--')) throw new Error(`flag ${a} requires a value`);
+    i++;
+    if (name === 'compare') {
+      const w = argv[i + 1];
+      if (w === undefined || w.startsWith('--')) throw new Error('--compare needs two files: before and after');
+      out.compare = [v, w];
+      i++;
+    } else if (name === 'runs') {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1 || n > 10) throw new Error('--runs must be an integer from 1 to 10');
+      out.runs = n;
+    } else if (name === 'only') {
+      out.only = v.split(',');
+    } else {
+      out[name as 'adapter' | 'journeys' | 'judge' | 'out'] = v;
+    }
+  }
+  return out;
+}
