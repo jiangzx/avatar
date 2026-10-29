@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { BASELINE_VERSION, MIGRATIONS, migrate } from '../src/memory/migrations.ts';
+import { MIGRATIONS, migrate } from '../src/memory/migrations.ts';
 import { SqliteMemoryStore } from '../src/memory/store.ts';
 import { seedOwner } from './helpers/memory.ts';
 
@@ -21,13 +21,9 @@ const names = (db: DatabaseSync, type: 'table' | 'index'): string[] =>
 const count = (db: DatabaseSync, sql: string, ...args: (string | number)[]): number => (db.prepare(sql).get(...args) as { n: number }).n;
 
 describe('schema v7', () => {
-  it('is the latest version', () => {
-    expect(BASELINE_VERSION + MIGRATIONS.length - 1).toBe(7);
-  });
-
   it('creates every admin and observability table with its columns and indexes', () => {
     const db = rawDb();
-    expect(migrate(db)).toBe(7);
+    expect(migrate(db, MIGRATIONS.slice(0, 2))).toBe(7);
     expect(names(db, 'table')).toEqual(expect.arrayContaining(['usage_events', 'price_entries', 'log_events', 'config_versions', 'secrets', 'admin_audit']));
     expect(columns(db, 'usage_events')).toEqual([
       'id', 'ts', 'owner_id', 'agent_id', 'session_id', 'character_id', 'kind', 'adapter', 'model',
@@ -59,8 +55,8 @@ describe('schema v7', () => {
     db.prepare('INSERT INTO devices (id, owner_id, token_hash, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)').run(deviceId, ownerId, 'h-v6', 1_000, 1_000);
     db.prepare('INSERT INTO agents (id, owner_id, character_id, created_at) VALUES (?, ?, ?, ?)').run(agentId, ownerId, 'xiaonuan', 1_000);
     db.prepare('INSERT INTO sessions (id, agent_id, started_at) VALUES (?, ?, ?)').run('s-v6', agentId, 2_000);
-    expect(migrate(db)).toBe(7);
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 });
+    expect(migrate(db)).toBe(8);
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 });
     expect(new SqliteMemoryStore(db).findDevice('h-v6')).toEqual({ deviceId, ownerId });
     expect(db.prepare('SELECT end_reason, adapter FROM sessions WHERE id = ?').get('s-v6')).toEqual({ end_reason: null, adapter: null });
     expect(db.prepare('SELECT banned_at FROM owners WHERE id = ?').get(ownerId)).toEqual({ banned_at: null });

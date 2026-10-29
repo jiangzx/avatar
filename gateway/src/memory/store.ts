@@ -111,7 +111,7 @@ export interface MemoryStore {
   kanaBackfillCursor(): number;
   setKanaBackfillCursor(rowid: number): void;
   /**
-   * Voice forget: this agent's facts, pins, notes, episodes and followups, plus the shared layer,
+   * Voice forget: this agent's facts, pins, notes, episodes, followups and reflections, plus the shared layer,
    * whose text contains `query`. Blanks this agent's FTS hits and the triggering user line.
    * Never touches another character's private rows.
    */
@@ -171,6 +171,8 @@ export interface ForgetResult {
   pinned: number;
   /** Shared profile rows: every character forgets these. */
   profile: number;
+  /** This agent's reflections whose text contains the query. */
+  reflections: number;
 }
 
 export interface ExtractMemory {
@@ -404,6 +406,12 @@ function prepareStatements(db: DatabaseSync) {
     deleteFollowup: p('DELETE FROM followups WHERE id = ? AND owner_id = ? AND agent_id = ?'),
     deleteFollowupsInstr: p("DELETE FROM followups WHERE owner_id = ? AND agent_id = ? AND (instr(text, ?) > 0 OR instr(COALESCE(quote, ''), ?) > 0)"),
     deleteAllFollowups: p('DELETE FROM followups WHERE owner_id = ? AND agent_id = ?'),
+    deleteAllReflections: p('DELETE FROM reflections WHERE owner_id = ? AND agent_id = ?'),
+    deleteAllMoods: p('DELETE FROM mood_summaries WHERE owner_id = ? AND agent_id = ?'),
+    deleteAllProactiveStats: p('DELETE FROM proactive_stats WHERE owner_id = ? AND agent_id = ?'),
+    deleteAllProactiveDaily: p('DELETE FROM proactive_daily WHERE owner_id = ? AND agent_id = ?'),
+    deleteAllProactiveFallbacks: p('DELETE FROM proactive_fallbacks WHERE owner_id = ? AND agent_id = ?'),
+    deleteReflectionsInstr: p('DELETE FROM reflections WHERE owner_id = ? AND agent_id = ? AND instr(text, ?) > 0'),
     followupAgent: p('SELECT agent_id FROM followups WHERE id = ? AND owner_id = ?'),
     careFollowup: p(`SELECT f.id, f.quote, f.created_at FROM followups f
       JOIN sessions s ON s.id = f.source_session_id AND s.agent_id = f.agent_id
@@ -703,8 +711,9 @@ export class SqliteMemoryStore implements MemoryStore {
       const notes = Number(this.q.deleteNotesInstr.run(ownerId, agentId, query).changes);
       const episodes = Number(this.q.deleteEpisodesInstr.run(ownerId, agentId, query).changes);
       const followups = Number(this.q.deleteFollowupsInstr.run(ownerId, agentId, query, query).changes);
+      const reflections = Number(this.q.deleteReflectionsInstr.run(ownerId, agentId, query).changes);
       this.q.blankDiffsScoped.run(ownerId, agentId, query);
-      return { messages, facts, notes, episodes, followups, pinned, profile };
+      return { messages, facts, notes, episodes, followups, pinned, profile, reflections };
     });
   }
 
@@ -796,6 +805,11 @@ export class SqliteMemoryStore implements MemoryStore {
       this.q.deleteAllNotes.run(ownerId, agentId);
       this.q.deleteAllEpisodes.run(ownerId, agentId);
       this.q.deleteAllFollowups.run(ownerId, agentId);
+      this.q.deleteAllReflections.run(ownerId, agentId);
+      this.q.deleteAllMoods.run(ownerId, agentId);
+      this.q.deleteAllProactiveStats.run(ownerId, agentId);
+      this.q.deleteAllProactiveDaily.run(ownerId, agentId);
+      this.q.deleteAllProactiveFallbacks.run(ownerId, agentId);
       this.q.deleteAgentSessions.run(agentId);
       this.q.deleteAgentChanges.run(ownerId, agentId);
       this.audit(ownerId, agentId, 'agents', agentId, 'clear', '', 'user', Date.now());

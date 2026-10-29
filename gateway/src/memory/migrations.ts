@@ -8,6 +8,7 @@ export const LEGACY_SCHEMA_ERROR = 'memory db predates multi-character schema; d
  * Ordered schema steps. Step i brings PRAGMA user_version to BASELINE_VERSION + i.
  * Append only: never edit a shipped step. Step 0 is the multi-character baseline (spec 技术设计 §4);
  * step 1 (v7) adds the admin console and observability tables (admin-console spec, additive only).
+ * step 2 (v8) evolves followups into threads and adds the relational proactivity tables (spec 2026-10-28).
  */
 export const MIGRATIONS: readonly string[] = [
   `
@@ -255,6 +256,92 @@ export const MIGRATIONS: readonly string[] = [
   ALTER TABLE sessions ADD COLUMN end_reason TEXT;
   ALTER TABLE sessions ADD COLUMN adapter TEXT;
   ALTER TABLE owners ADD COLUMN banned_at INTEGER;
+  `,
+  `
+  -- v8: relational proactivity (spec 2026-10-28-relational-proactivity-design.md). Additive only.
+  -- A followup with a quote and no done_at is a thread (event / concern / plan).
+  ALTER TABLE followups ADD COLUMN kind TEXT NOT NULL DEFAULT 'concern' CHECK (kind IN ('event', 'concern', 'plan'));
+  ALTER TABLE followups ADD COLUMN source_message_ids TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE followups ADD COLUMN mention_count INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE followups ADD COLUMN last_mentioned_at INTEGER;
+  ALTER TABLE followups ADD COLUMN close_reason TEXT;
+  -- Best effort: link each existing quote to the user line it was copied from.
+  UPDATE followups SET source_message_ids = COALESCE((
+    SELECT json_group_array(m.id) FROM messages m
+    WHERE m.owner_id = followups.owner_id AND m.agent_id = followups.agent_id
+      AND m.session_id = followups.source_session_id AND m.role = 'user' AND m.excluded = 0
+      AND instr(m.text, followups.quote) > 0
+  ), '[]') WHERE quote IS NOT NULL;
+  -- Decision-layer inferences; never spoken, never in prompts (pitfall #4).
+  CREATE TABLE reflections (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    evidence_message_ids TEXT NOT NULL,
+    session_id TEXT,
+    created_at INTEGER NOT NULL
+  ) STRICT;
+  CREATE INDEX reflections_agent ON reflections (agent_id, created_at);
+  -- One row per session with affect cards; labels only.
+  CREATE TABLE mood_summaries (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL,
+    dominant TEXT NOT NULL CHECK (dominant IN ('neutral', 'happy', 'sad', 'love')),
+    peak_intensity INTEGER NOT NULL CHECK (peak_intensity BETWEEN 1 AND 3),
+    end_emotion TEXT NOT NULL CHECK (end_emotion IN ('neutral', 'happy', 'sad', 'love')),
+    end_intensity INTEGER NOT NULL CHECK (end_intensity BETWEEN 1 AND 3),
+    end_trend TEXT NOT NULL CHECK (end_trend IN ('better', 'worse', 'flat')),
+    crisis INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  ) STRICT;
+  CREATE INDEX mood_summaries_agent ON mood_summaries (agent_id, created_at);
+  CREATE TABLE proactive_prefs (
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
+    tier TEXT NOT NULL CHECK (tier IN ('quiet', 'moderate', 'active')),
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, agent_id)
+  ) STRICT;
+  CREATE TABLE proactive_stats (
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    accepted INTEGER NOT NULL DEFAULT 0,
+    rejected INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, agent_id, kind)
+  ) STRICT;
+  CREATE TABLE proactive_daily (
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
+    day TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (owner_id, agent_id, day)
+  ) STRICT;
+  CREATE TABLE proactive_fallbacks (
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
+    fallback_key TEXT NOT NULL,
+    line INTEGER NOT NULL,
+    used_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, agent_id, fallback_key, line)
+  ) STRICT;
+  -- Deleting or blanking a user line drops the threads and reflections that cite it (spec Q24).
+  CREATE TRIGGER messages_cite_ad AFTER DELETE ON messages BEGIN
+    DELETE FROM followups WHERE owner_id = old.owner_id
+      AND EXISTS (SELECT 1 FROM json_each(followups.source_message_ids) WHERE value = old.id);
+    DELETE FROM reflections WHERE owner_id = old.owner_id
+      AND EXISTS (SELECT 1 FROM json_each(reflections.evidence_message_ids) WHERE value = old.id);
+  END;
+  CREATE TRIGGER messages_cite_au AFTER UPDATE OF excluded ON messages WHEN new.excluded = 1 AND old.excluded = 0 BEGIN
+    DELETE FROM followups WHERE owner_id = new.owner_id
+      AND EXISTS (SELECT 1 FROM json_each(followups.source_message_ids) WHERE value = new.id);
+    DELETE FROM reflections WHERE owner_id = new.owner_id
+      AND EXISTS (SELECT 1 FROM json_each(reflections.evidence_message_ids) WHERE value = new.id);
+  END;
   `,
 ];
 

@@ -90,7 +90,7 @@ describe('migrate', () => {
   it('builds the v6 baseline tables (later steps only add)', () => {
     const db = open();
     expect(BASELINE_VERSION).toBe(6);
-    expect(MIGRATIONS).toHaveLength(2);
+    expect(MIGRATIONS).toHaveLength(3);
     const tables = column(db, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name");
     expect(tables).toEqual(expect.arrayContaining([
       'owners', 'devices', 'agents', 'sessions', 'messages', 'messages_fts', 'profile_facts', 'agent_facts',
@@ -117,9 +117,9 @@ describe('migrate', () => {
   it('applies steps appended after the baseline in order and is idempotent', () => {
     const db = open();
     const steps = [...MIGRATIONS, 'CREATE TABLE plan_probe (id TEXT PRIMARY KEY) STRICT'];
-    expect(migrate(db, steps)).toBe(8);
-    expect(migrate(db, steps)).toBe(8);
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 });
+    expect(migrate(db, steps)).toBe(LATEST + 1);
+    expect(migrate(db, steps)).toBe(LATEST + 1);
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: LATEST + 1 });
     expect(count(db, "SELECT count(*) AS n FROM sqlite_master WHERE name = 'plan_probe'")).toBe(1);
   });
 
@@ -685,7 +685,7 @@ describe('forgetMatches scope', () => {
 
     const result = store.forgetMatches(a.ownerId, a.agentId, '王叔', '"王叔"', 's-a');
 
-    expect(result).toEqual({ messages: 1, facts: 1, notes: 1, episodes: 0, followups: 1, pinned: 1, profile: 1 });
+    expect(result).toEqual({ messages: 1, facts: 1, notes: 1, episodes: 0, followups: 1, pinned: 1, profile: 1, reflections: 0 });
     expect(store.listProfileFacts(a.ownerId)).toEqual([]);
     expect(store.listAgentFacts(a.ownerId, a.agentId)).toEqual([]);
     expect(store.listPinned(a.ownerId, a.agentId)).toEqual([]);
