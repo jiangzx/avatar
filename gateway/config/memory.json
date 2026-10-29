@@ -1,5 +1,5 @@
 {
-  "instructions": { "budgetRatio": 0.4, "languageBudgetRatio": { "zh": 0.49, "ja": 0.59, "en": 0.9 }, "snapshotMaxChars": 600, "summaryMaxChars": 800, "minHistoryChars": 400, "affectMaxChars": 150, "languageAffectMaxChars": { "ja": 210, "en": 250 } },
+  "instructions": { "budgetRatio": 0.4, "languageBudgetRatio": { "zh": 0.50, "ja": 0.59, "en": 0.9 }, "snapshotMaxChars": 600, "summaryMaxChars": 800, "minHistoryChars": 400, "affectMaxChars": 150, "languageAffectMaxChars": { "ja": 210, "en": 250 } },
   "pinMaxPerCharacter": 10,
   "pinMaxChars": { "zh": 40, "ja": 50, "en": 50 },
   "pinFinalWaitMs": 4000,

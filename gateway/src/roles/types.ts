@@ -139,4 +139,6 @@ export interface DirectorConfig {
   intents?: IntentCopy;
   /** Fallback line groups, at least five lines each; admin-editable. */
   fallbacks?: FallbackGroups;
+  /** Open item 2: one fixed tone line per familiarity tier, appended to the persona for the whole session. */
+  familiarityTones?: { new: string; familiar: string; oldFriend: string };
 }

@@ -194,6 +194,7 @@ const DirectorSchema = z.object({
   maxPerWindow: z.number().int().min(0),
   windowMs: z.number().int().positive(),
   companyAfterMs: z.number().int().positive().optional(),
+  familiarityTones: z.object({ new: z.string().min(1).max(2_000), familiar: z.string().min(1).max(2_000), oldFriend: z.string().min(1).max(2_000) }).strict().optional(),
   intents: z.object({
     frame: z.string().includes('{maxChars}').includes('{purpose}'),
     opening: z.string().includes('{maxChars}').includes('{name}').includes('{purpose}'),

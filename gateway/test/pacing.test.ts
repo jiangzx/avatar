@@ -62,7 +62,7 @@ describe('pacing and budget config', () => {
     const report = validateBudgets(pacing, memory, ledger, {
       zh: ['中'.repeat(1800)], ja: ['日'.repeat(1900)], en: ['E'.repeat(3200)],
     });
-    expect(report.budgets.zh!.totalChars).toBe(4704);
+    expect(report.budgets.zh!.totalChars).toBe(4800);
     expect(report.budgets.ja!.totalChars).toBe(5664);
     expect(report.budgets.en!.totalChars).toBe(8640);
     expect(report.budgets.en!.totalChars).toBeGreaterThan(report.budgets.zh!.totalChars);
@@ -290,7 +290,7 @@ describe('pinned budget', () => {
     expect(memory.pinMaxChars).toEqual({ zh: 40, ja: 50, en: 50 });
     expect(memory.pinFinalWaitMs).toBe(4000);
     expect(memory.listMaxItems).toBe(5);
-    expect(memory.instructions.languageBudgetRatio).toEqual({ zh: 0.49, ja: 0.59, en: 0.9 });
+    expect(memory.instructions.languageBudgetRatio).toEqual({ zh: 0.50, ja: 0.59, en: 0.9 });
     // 10 × (pin + label + separator + newline)
     expect(pinnedMaxCharsFor(memory, 'zh')).toBe(10 * (40 + 6 + 1 + 1));
     expect(pinnedMaxCharsFor(memory, 'ja')).toBe(10 * (50 + 14 + 1 + 1));

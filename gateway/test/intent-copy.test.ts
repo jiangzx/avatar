@@ -111,3 +111,22 @@ describe('fallbackAfterMs cross-check', () => {
     })).not.toThrow();
   });
 });
+
+describe('familiarity tones', () => {
+  it('ships three zh tones and counts the longest in the startup budget', () => {
+    const zh = loadDirectorConfig(zhPath);
+    expect(Object.keys(zh.familiarityTones!).sort()).toEqual(['familiar', 'new', 'oldFriend']);
+    try {
+      buildConfigSnapshot({
+        gatewayRoot: root,
+        overlay: { 'role:elder-companion/zh/director.familiarityTones.oldFriend': '很长的语气说明。'.repeat(250) },
+        version: 9, ledger, sessionStartTimeoutMs: 10_000, models,
+      });
+      expect.fail('expected ConfigInvalidError');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigInvalidError);
+      expect((error as ConfigInvalidError).issues.map((issue) => issue.message).join('\n')).toMatch(/提示词太长/);
+    }
+  });
+});
+

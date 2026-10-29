@@ -338,29 +338,12 @@ export class Session {
       now: () => this.now(),
       minIntervalMs: this.push.minIntervalMs,
     });
-    this.language = this.resolveLanguage(ctx.language ?? deps.roles.defaultLanguage(this.roleId));
-    // The resolver rendered with the role's default language; render again in the session language.
-    this.refreshMemorySnapshot();
-    const initialPersona = this.personaFor(this.language);
-    const ledgerOpts = deps.ledger ?? DEFAULT_LEDGER_OPTIONS;
-    // Summarize before the instruction budget would have to drop unsummarized turns.
-    const initialBudget = this.budgetFor(this.language);
-    const languageRoom = initialBudget
-      ? historyBudget(initialPersona, initialBudget, PROMPT_LABELS[this.language])
-      : undefined;
-    const history = languageRoom ?? deps.maxHistoryChars ?? Number.POSITIVE_INFINITY;
-    this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
-    const extractor = deps.worker;
-    const ownerId = ctx.ownerId;
-    const agentId = ctx.agentId;
-    const hasSilencePlanner = deps.roles.supportedLanguages(this.roleId)
-      .some((language) => deps.roles.director(ctx.characterId, language).silenceDecision !== undefined);
     this.proactive = deps.proactivity ? new ProactiveRuntime({
       cfg: deps.proactivity,
       sessionId,
       ...(deps.store ? { store: deps.store } : {}),
-      ...(ownerId ? { ownerId } : {}),
-      ...(agentId ? { agentId } : {}),
+      ...(ctx.ownerId ? { ownerId: ctx.ownerId } : {}),
+      ...(ctx.agentId ? { agentId: ctx.agentId } : {}),
       now: () => this.now(),
       canPersist: () => this.memoryGate() === 'ok',
       copy: (language) => {
@@ -382,6 +365,23 @@ export class Session {
       }),
       logger: this.log,
     }) : null;
+    this.language = this.resolveLanguage(ctx.language ?? deps.roles.defaultLanguage(this.roleId));
+    // The resolver rendered with the role's default language; render again in the session language.
+    this.refreshMemorySnapshot();
+    const initialPersona = this.personaFor(this.language);
+    const ledgerOpts = deps.ledger ?? DEFAULT_LEDGER_OPTIONS;
+    // Summarize before the instruction budget would have to drop unsummarized turns.
+    const initialBudget = this.budgetFor(this.language);
+    const languageRoom = initialBudget
+      ? historyBudget(initialPersona, initialBudget, PROMPT_LABELS[this.language])
+      : undefined;
+    const history = languageRoom ?? deps.maxHistoryChars ?? Number.POSITIVE_INFINITY;
+    this.ledger = new ConversationLedger({ ...ledgerOpts, summarizeAfterTokens: Math.min(ledgerOpts.summarizeAfterTokens, history) });
+    const extractor = deps.worker;
+    const ownerId = ctx.ownerId;
+    const agentId = ctx.agentId;
+    const hasSilencePlanner = deps.roles.supportedLanguages(this.roleId)
+      .some((language) => deps.roles.director(ctx.characterId, language).silenceDecision !== undefined);
     const textPlanner = Boolean(deps.textClient) && hasSilencePlanner;
     this.director = new Director(
       (language) => this.directorConfig(language),
@@ -723,7 +723,11 @@ export class Session {
   private personaFor(language: Language): string {
     const cached = this.personas.get(language);
     if (cached !== undefined) return cached;
-    const persona = this.deps.roles.buildPersona(this.context.characterId, language);
+    const base = this.deps.roles.buildPersona(this.context.characterId, language);
+    // Open item 2: familiarity is fixed for the session, so the tone rides on the cached persona.
+    const tones = this.directorConfig(language).familiarityTones;
+    const tone = tones && this.proactive ? tones[this.proactive.familiarityTier()] : '';
+    const persona = tone ? `${base}\n\n${tone}` : base;
     this.personas.set(language, persona);
     return persona;
   }

@@ -247,3 +247,21 @@ describe('opening through the decision engine (P4)', () => {
     expect(t.sent).toContainEqual({ type: 'response.start', responseSeq: 1, kind: 'greeting' });
   });
 });
+
+describe('familiarity tone (open item 2)', () => {
+  const statsOf = (sessions: number, activeDays: number) => ({ firstMetAt: 1, sessions, totalMinutes: 0, activeDays, lastSessionAt: 1, hourHistogram: Array(24).fill(0) });
+
+  it('adds the tone for this character’s familiarity to every instruction', async () => {
+    const t = boot(fakeStore({ relationshipStats: vi.fn(() => statsOf(3, 2)) }));
+    await t.open();
+    expect(t.adapter.connects[0]!.instructions).toContain(director.familiarityTones!.familiar);
+    expect(t.adapter.connects[0]!.instructions).not.toContain(director.familiarityTones!.new);
+  });
+
+  it('a new acquaintance gets the new tone', async () => {
+    const t = boot();
+    await t.open();
+    expect(t.adapter.connects[0]!.instructions).toContain(director.familiarityTones!.new);
+  });
+});
+

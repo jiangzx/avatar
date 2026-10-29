@@ -69,7 +69,11 @@ export function buildConfigSnapshot(input: SnapshotInput): ConfigSnapshot {
     const proactivity = loadProactivity(`${root}/config/proactivity.json`);
     const personas: Partial<Record<Language, string[]>> = {};
     for (const pair of roles.characterLanguagePairs()) {
-      (personas[pair.language] ??= []).push(roles.buildPersona(pair.characterId, pair.language));
+      const persona = roles.buildPersona(pair.characterId, pair.language);
+      // The longest familiarity tone rides on the persona at run time; budget for it here.
+      const tones = roles.director(pair.characterId, pair.language).familiarityTones;
+      const tone = tones ? [tones.new, tones.familiar, tones.oldFriend].reduce((a, b) => (b.length > a.length ? b : a)) : '';
+      (personas[pair.language] ??= []).push(tone ? `${persona}\n\n${tone}` : persona);
     }
     const budgets = validateBudgets(pacing, memory, input.ledger, personas);
     checkAffectBudgets(budgets.budgets, i18n.affect);
