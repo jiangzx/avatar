@@ -39,6 +39,15 @@ describe('proactive store', () => {
     ]);
   });
 
+  it('reads when an intent kind last had an outcome', () => {
+    const { store, a, b } = setup();
+    expect(store.proactiveLastAt(a.ownerId, a.agentId, 'humanConnection')).toBeNull();
+    store.recordProactiveOutcome(a.ownerId, a.agentId, 'humanConnection', 'accepted', 5);
+    store.recordProactiveOutcome(a.ownerId, a.agentId, 'humanConnection', 'rejected', 9);
+    expect(store.proactiveLastAt(a.ownerId, a.agentId, 'humanConnection')).toBe(9);
+    expect(store.proactiveLastAt(a.ownerId, b.agentId, 'humanConnection')).toBeNull();
+  });
+
   it('counts proactive lines per day', () => {
     const { store, a } = setup();
     expect(store.proactiveDaily(a.ownerId, a.agentId, '2026-11-02')).toBe(0);

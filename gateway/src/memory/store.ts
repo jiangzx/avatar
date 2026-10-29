@@ -226,6 +226,8 @@ export interface MemoryStore {
   /** Q25 counters per intent kind; content-free. */
   recordProactiveOutcome(ownerId: string, agentId: string, kind: string, outcome: 'accepted' | 'rejected', now: number): void;
   proactiveStats(ownerId: string, agentId: string): Array<{ kind: string; accepted: number; rejected: number }>;
+  /** When this intent kind last had an outcome recorded (≈ last spoken); null when never. */
+  proactiveLastAt(ownerId: string, agentId: string, kind: string): number | null;
   /** Proactive lines on one Beijing day (YYYY-MM-DD from the caller). Returns the new count; 0 when foreign. */
   incrementProactiveDaily(ownerId: string, agentId: string, day: string): number;
   proactiveDaily(ownerId: string, agentId: string, day: string): number;
@@ -536,6 +538,7 @@ function prepareStatements(db: DatabaseSync) {
       ON CONFLICT (owner_id, agent_id, kind) DO UPDATE SET
         accepted = accepted + excluded.accepted, rejected = rejected + excluded.rejected, updated_at = excluded.updated_at`),
     listStats: p('SELECT kind, accepted, rejected FROM proactive_stats WHERE owner_id = ? AND agent_id = ? ORDER BY kind'),
+    lastOutcome: p('SELECT updated_at FROM proactive_stats WHERE owner_id = ? AND agent_id = ? AND kind = ?'),
     bumpDaily: p(`INSERT INTO proactive_daily (owner_id, agent_id, day, count)
       SELECT owner_id, id, ?, 1 FROM agents WHERE id = ? AND owner_id = ?
       ON CONFLICT (owner_id, agent_id, day) DO UPDATE SET count = count + 1`),
@@ -1099,6 +1102,10 @@ export class SqliteMemoryStore implements MemoryStore {
 
   proactiveStats(ownerId: string, agentId: string): Array<{ kind: string; accepted: number; rejected: number }> {
     return this.q.listStats.all(ownerId, agentId).map((r) => ({ kind: r.kind as string, accepted: r.accepted as number, rejected: r.rejected as number }));
+  }
+
+  proactiveLastAt(ownerId: string, agentId: string, kind: string): number | null {
+    return (this.q.lastOutcome.get(ownerId, agentId, kind)?.updated_at as number | undefined) ?? null;
   }
 
   incrementProactiveDaily(ownerId: string, agentId: string, day: string): number {

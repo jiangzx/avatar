@@ -72,6 +72,7 @@ const MOMENT_OF: Record<SilenceStep, Moment> = {
 const TIERS: readonly ProactiveTier[] = ['quiet', 'moderate', 'active'];
 const TOPIC_KEY = 'topicCard';
 const NAME_KEY = 'greetingName';
+const DAY = 86_400_000;
 
 const isScored = (kind: string): kind is ScoredKind => (SCORED_KINDS as readonly string[]).includes(kind);
 const hasAny = (text: string, phrases: readonly string[]) => phrases.some((phrase) => containsPhrase(text, phrase));
@@ -106,6 +107,7 @@ export class ProactiveRuntime {
   private todaySpoken = 0;
   private threads: ThreadRecord[] = [];
   private lastMood: MoodSummaryRecord | null = null;
+  private lastHumanAt: number | null = null;
   private familiarity: Familiarity = 'new';
   private recentLines: string[] = [];
   private sessionSpoken = 0;
@@ -259,6 +261,7 @@ export class ProactiveRuntime {
     const now = this.deps.now();
     if (isScored(kind)) {
       this.countSpoken(kind);
+      if (kind === 'humanConnection') this.lastHumanAt = now;
       if (f.threadId) {
         this.mentioned.add(f.threadId);
         const id = f.threadId;
@@ -424,6 +427,7 @@ export class ProactiveRuntime {
       this.lastMood = store.listMoodSummaries(ownerId, agentId, 1)[0] ?? null;
       this.familiarity = familiarityOf(store.relationshipStats(ownerId, agentId), cfg);
       this.recentLines = store.recentUserMessages(ownerId, agentId, cfg.material.familyLookback).map((row) => row.text);
+      this.lastHumanAt = store.proactiveLastAt(ownerId, agentId, 'humanConnection');
       this.loaded = true;
     } catch {
       this.loaded = false;
@@ -447,6 +451,8 @@ export class ProactiveRuntime {
 
   /** Newest remembered statement naming family, without health words. */
   private familyLine(rules: ProactiveRules): string | undefined {
+    const last = this.lastHumanAt;
+    if (last !== null && this.deps.now() - last < this.deps.cfg.humanConnection.minIntervalDays * DAY) return undefined;
     return this.recentLines.find((line) => isMemoryEvidence(line, rules.evidence)
       && hasAny(line, rules.silence.familyWords) && !hasAny(line, rules.healthWords));
   }

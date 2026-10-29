@@ -25,6 +25,7 @@ function setup(at: number, over: Record<string, unknown> = {}, copyOver: Record<
     listOpenThreads: vi.fn(() => [] as ThreadRecord[]), markThreadMentioned: vi.fn(() => true), closeThread: vi.fn(() => true),
     listMoodSummaries: vi.fn(() => [] as MoodSummaryRecord[]), relationshipStats: vi.fn(() => stats(0, 0)),
     recentUserMessages: vi.fn(() => []), recentFallbackLines: vi.fn(() => [] as number[]), recordFallbackLine: vi.fn(),
+    proactiveLastAt: vi.fn(() => null),
     ...over,
   };
   const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), child: () => logger };

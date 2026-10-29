@@ -34,6 +34,7 @@ function fakeStore(over: Record<string, unknown> = {}) {
     recentUserMessages: vi.fn(() => [] as Array<{ text: string }>),
     recentFallbackLines: vi.fn(() => [] as number[]),
     recordFallbackLine: vi.fn(),
+    proactiveLastAt: vi.fn((): number | null => null),
     ...over,
   };
   return store;
@@ -115,6 +116,14 @@ describe('silenceLine', () => {
     expect(request.instruction).toContain('【闺女在深圳工作，一年也就回来一两趟。】');
     expect(request.instruction).toContain('之前');
     expect(store.recentUserMessages).toHaveBeenCalledWith('o1', 'a1', cfg.material.familyLookback);
+  });
+
+  it('nudges toward family at most once per minIntervalDays', () => {
+    const family = { recentUserMessages: vi.fn(() => [{ text: '闺女在深圳工作，一年也就回来一两趟。' }]) };
+    const recent = fakeStore({ ...family, proactiveLastAt: vi.fn(() => AFTERNOON - 3 * DAY) });
+    expect(setup({ store: recent, topics: [] }).runtime.silenceLine(input({ hadContent: false }))).toEqual({ quiet: true });
+    const old = fakeStore({ ...family, proactiveLastAt: vi.fn(() => AFTERNOON - 8 * DAY) });
+    expect(requestOf(setup({ store: old, topics: [] }).runtime.silenceLine(input({ hadContent: false })))!.instruction).toContain('闺女');
   });
 
   it('stays quiet in the quiet tier and in a crisis, but always checks in and rests', () => {

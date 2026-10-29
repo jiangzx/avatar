@@ -76,6 +76,7 @@ function fakeStore(over: Record<string, unknown> = {}) {
     relationshipStats: vi.fn(() => ({ firstMetAt: null, sessions: 0, totalMinutes: 0, activeDays: 0, lastSessionAt: null, hourHistogram: Array(24).fill(0) })),
     recentFallbackLines: vi.fn(() => [] as number[]),
     recordFallbackLine: vi.fn(),
+    proactiveLastAt: vi.fn(() => null),
     ...over,
   };
 }
