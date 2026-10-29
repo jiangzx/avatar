@@ -144,6 +144,18 @@ describe('silenceLine', () => {
     expect(requestOf(s.runtime.silenceLine(input({ lastUtterance: '上次聊到哪儿了？' })))!.instruction).toContain('今天吃了什么好吃的');
     expect(s.logger.warn).toHaveBeenCalledWith('proactive_prefetch_failed', { code: 'store_error' });
   });
+
+  it('retries prefetch after a store failure and then honours a saved quiet tier', () => {
+    const getProactiveTier = vi.fn()
+      .mockImplementationOnce(() => { throw new Error('sqlite_busy'); })
+      .mockReturnValueOnce('quiet');
+    const store = fakeStore({ getProactiveTier });
+    const s = setup({ store });
+    expect(s.runtime.silenceLine(input())).not.toEqual({ quiet: true });
+    expect(s.logger.warn).toHaveBeenCalledWith('proactive_prefetch_failed', { code: 'store_error' });
+    expect(s.runtime.silenceLine(input())).toEqual({ quiet: true });
+    expect(getProactiveTier).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('counting, mentions and persistence', () => {

@@ -37,7 +37,7 @@
 - 2026-10-29 用户确认 P4 的 10 条与 P5 的 4 条取舍，并同意把 P4-T1 提前到 P3-T7 之后执行。
 - 2026-10-29 P3-T3 完成：意图文案、兜底句组、i18n 短语与 `fallbackAfterMs` 交叉校验（只加配置，运行时尚未读取 `intents`/`fallbacks`）。RED：`npm test -w gateway -- test/intent-copy.test.ts test/i18n.test.ts test/proactivity-config.test.ts` 3 文件 9 失败（`intents`/`INTENT_PURPOSES`/`tierDown`/`material` 未定义，交叉校验未抛错）。GREEN：同命令 3 文件 27 项通过；Step 8 七个文件 101 项通过。`npm test -w gateway` 122 文件 1427 项通过；`npm run typecheck -w gateway` 通过。下一步：P3-T4。
 - 2026-10-29 P3-T4 完成：组装、渲染、兜底选句、事后核对纯函数（未接入 Director 或 Session）。RED：`npm test -w gateway -- test/proactive-render.test.ts` 1 文件失败（`assemble.ts`/`render.ts`/`fallback.ts`/`check.ts` 不存在）。GREEN：同命令 1 文件 16 项通过；`npm run typecheck -w gateway` 通过；`npm test -w gateway` 123 文件 1443 项通过。下一步：P3-T5。
-- 2026-10-29 P3-T5 完成：会话级 `ProactiveRuntime`（决策、计数、接受窗口、档位；未接入 Director 或 Session）。RED：`npm test -w gateway -- test/proactive-runtime.test.ts` 1 文件失败（`acceptance.ts`/`runtime.ts` 不存在）。GREEN：同命令 1 文件 21 项通过；`npm run typecheck -w gateway` 通过；`npm test -w gateway` 124 文件 1464 项通过。下一步：P3-T6。
+- 2026-10-29 P3-T5 完成：会话级 `ProactiveRuntime`（决策、计数、接受窗口、档位；未接入 Director 或 Session）。RED：`npm test -w gateway -- test/proactive-runtime.test.ts` 1 文件失败（`acceptance.ts`/`runtime.ts` 不存在）。GREEN：同命令 1 文件 21 项通过；`npm run typecheck -w gateway` 通过；`npm test -w gateway` 124 文件 1464 项通过。Round 1 裁决：预取失败按空上下文决策并下次重试（spec 覆盖计划里先置 `loaded=true` 的写法）；`reload` 同时丢掉 lastMood/stats/familiarity。下一步：P3-T6。
 - 下一步：P3-T6（接入四段沉默与话题聊干），然后 P3-T7 → P4-T1；P3-T7 的真实库备份与迁移两步须用户在场确认。P4 开工前先做 P4-T0 复核。
 - 坑位第 7、12 条已在 P0 改写（2026-10-29）。第 4、5、8 条仍按 spec「坑位契约修订」在对应计划中改写；在那之前这三条照旧有效。
 

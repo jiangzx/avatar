@@ -271,6 +271,9 @@ export class ProactiveRuntime {
     this.loaded = false;
     this.threads = [];
     this.recentLines = [];
+    this.lastMood = null;
+    this.stats = [];
+    this.familiarity = 'new';
   }
 
   end(): void {
@@ -343,16 +346,18 @@ export class ProactiveRuntime {
     }
   }
 
-  /** Prefetch once per Beijing day; a failure leaves an empty context (spec 失败处理与降级). */
+  /** Prefetch once per Beijing day; a failure is empty context for this decision and is retried next time. */
   private ensureLoaded(): void {
     const day = beijingDay(this.deps.now());
     if (this.loaded && day === this.day) return;
     if (day !== this.day) this.todaySpoken = 0;
-    this.loaded = true;
     this.day = day;
     const { store, ownerId, agentId, cfg } = this.deps;
     this.tier = this.tierChosen ?? cfg.defaultTier;
-    if (!store || !ownerId || !agentId) return;
+    if (!store || !ownerId || !agentId) {
+      this.loaded = true;
+      return;
+    }
     try {
       this.tier = this.tierChosen ?? store.getProactiveTier(ownerId, agentId) ?? cfg.defaultTier;
       this.stats = store.proactiveStats(ownerId, agentId);
@@ -361,9 +366,14 @@ export class ProactiveRuntime {
       this.lastMood = store.listMoodSummaries(ownerId, agentId, 1)[0] ?? null;
       this.familiarity = familiarityOf(store.relationshipStats(ownerId, agentId), cfg);
       this.recentLines = store.recentUserMessages(ownerId, agentId, cfg.material.familyLookback).map((row) => row.text);
+      this.loaded = true;
     } catch {
+      this.tier = this.tierChosen ?? cfg.defaultTier;
       this.threads = [];
       this.recentLines = [];
+      this.lastMood = null;
+      this.stats = [];
+      this.familiarity = 'new';
       this.deps.logger.warn('proactive_prefetch_failed', { code: 'store_error' });
     }
   }
