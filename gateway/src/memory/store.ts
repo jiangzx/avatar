@@ -68,6 +68,8 @@ export interface RelationshipStats {
   hourHistogram: number[];
 }
 
+export interface ReflectionRecord { id: string; text: string; evidenceMessageIds: string[]; createdAt: number }
+
 const SHANGHAI_OFFSET_MS = 8 * 3_600_000;
 
 /** Pure fold over ended sessions sorted by start. */
@@ -219,6 +221,12 @@ export interface MemoryStore {
   listMoodSummaries(ownerId: string, agentId: string, limit: number): MoodSummaryRecord[];
   /** Familiarity inputs from this agent's ended sessions. */
   relationshipStats(ownerId: string, agentId: string): RelationshipStats;
+  /** This agent's live user lines of one session, in order. */
+  listSessionUserLines(ownerId: string, agentId: string, sessionId: string): Array<{ id: string; text: string }>;
+  /** Stores reflection items; 0 when the agent is not this owner's. */
+  insertReflections(ownerId: string, agentId: string, sessionId: string, items: ReadonlyArray<{ text: string; evidenceMessageIds: readonly string[] }>, now: number): number;
+  /** Newest first. */
+  listReflections(ownerId: string, agentId: string, limit: number): ReflectionRecord[];
   /** Agent rows of one owner, one per character met. */
   listAgents(ownerId: string): AgentRecord[];
   /** Ids of this owner's live messages whose FTS tokens all match; agentId null = any agent of the owner. */
@@ -510,6 +518,11 @@ function prepareStatements(db: DatabaseSync) {
       WHERE o.id = ? AND a.id = ? AND o.notified_at IS NOT NULL AND o.memory_consent <> 'declined'`),
     listMoods: p(`SELECT id, session_id, dominant, peak_intensity, end_emotion, end_intensity, end_trend, crisis, created_at
       FROM mood_summaries WHERE owner_id = ? AND agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?`),
+    sessionUserLines: p(`SELECT id, text FROM messages
+      WHERE owner_id = ? AND agent_id = ? AND session_id = ? AND role = 'user' AND excluded = 0 ORDER BY rowid`),
+    insertReflection: p('INSERT INTO reflections (id, owner_id, agent_id, text, evidence_message_ids, session_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+    listReflections: p(`SELECT id, text, evidence_message_ids, created_at FROM reflections
+      WHERE owner_id = ? AND agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?`),
 
     // Audit
     insertChange: p(`INSERT INTO memory_changes (id, owner_id, agent_id, table_name, row_id, op, diff, actor, created_at)
@@ -1018,6 +1031,32 @@ export class SqliteMemoryStore implements MemoryStore {
       startedAt: r.started_at as number,
       endedAt: r.ended_at as number,
     })));
+  }
+
+  listSessionUserLines(ownerId: string, agentId: string, sessionId: string): Array<{ id: string; text: string }> {
+    return this.q.sessionUserLines.all(ownerId, agentId, sessionId).map((r) => ({ id: r.id as string, text: r.text as string }));
+  }
+
+  insertReflections(ownerId: string, agentId: string, sessionId: string, items: ReadonlyArray<{ text: string; evidenceMessageIds: readonly string[] }>, now: number): number {
+    return this.tx<number>(() => {
+      if (!this.q.agentOwned.get(ownerId, agentId)) return 0;
+      for (const item of items) {
+        const id = randomUUID();
+        this.q.insertReflection.run(id, ownerId, agentId, item.text, JSON.stringify(unionIds(item.evidenceMessageIds)), sessionId, now);
+        // Content-free audit: reflections are inferences, the diff never carries them.
+        this.audit(ownerId, agentId, 'reflections', id, 'add', '', 'reflect', now);
+      }
+      return items.length;
+    });
+  }
+
+  listReflections(ownerId: string, agentId: string, limit: number): ReflectionRecord[] {
+    return this.q.listReflections.all(ownerId, agentId, limit).map((r) => ({
+      id: r.id as string,
+      text: r.text as string,
+      evidenceMessageIds: parseIds(r.evidence_message_ids),
+      createdAt: r.created_at as number,
+    }));
   }
 
   writeExtraction(ownerId: string, agentId: string, change: ExtractionChange): void {

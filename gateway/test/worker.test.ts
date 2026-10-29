@@ -277,15 +277,20 @@ describe('MemoryWorker queue', () => {
   it('passes the session context agent and language to session-end extraction', () => {
     const seen: Array<{ ownerId: string; agentId: string; reason: string; language?: string }> = [];
     const base = { started() {}, ended() {}, extract() {} };
+    const reflected: Array<{ ownerId: string; agentId: string; sessionId: string; language?: string }> = [];
     const fake = {
       enqueue: async (ownerId: string, agentId: string, reason: string, language?: string) => {
         seen.push({ ownerId, agentId, reason, language });
+      },
+      reflectSession: async (ownerId: string, agentId: string, sessionId: string, language?: string) => {
+        reflected.push({ ownerId, agentId, sessionId, language });
       },
     };
     const lifecycle = withExtraction(base, fake as unknown as MemoryWorker);
     lifecycle.extract?.('s1', { ownerId: 'owner-1', agentId: 'agent-1', language: 'ja' } as SessionContext, 'client_end');
     lifecycle.extract?.('s2', { ownerId: 'owner-1', language: 'ja' } as SessionContext, 'client_end');
     expect(seen).toEqual([{ ownerId: 'owner-1', agentId: 'agent-1', reason: 'session_end', language: 'ja' }]);
+    expect(reflected).toEqual([{ ownerId: 'owner-1', agentId: 'agent-1', sessionId: 's1', language: 'ja' }]);
   });
 
   it('bills extraction to the owner and agent of the job', async () => {

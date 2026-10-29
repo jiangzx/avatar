@@ -127,6 +127,8 @@ function journeyWorker(env: JourneyEnv, store: SqliteMemoryStore, clock: SimCloc
     contextMaxChars: snapshot.memory.extractContextMaxChars ?? 4_000,
     quote: { maxChars: snapshot.affect.care.quoteMaxChars, safety: snapshot.i18n.safety, evidence: snapshot.i18n.evidence },
     quoteEnabled: () => snapshot.affect.enabled,
+    reflectPrompts: byLanguage((language) => snapshot.roles.reflectPrompt(language)),
+    ...(snapshot.memory.reflect ? { reflect: snapshot.memory.reflect } : {}),
     now: clock.now,
     ...(env.logger ? { logger: env.logger } : {}),
   });
@@ -211,7 +213,10 @@ export async function runJourney(env: JourneyEnv, journey: Journey, cfg: EvalCon
       registry.lifecycle.started(sessionId, ctx);
       const replies = await driveSession(session, script, cfg);
       registry.lifecycle.ended(sessionId, ctx, 'client_end');
-      if (worker && ctx.ownerId && ctx.agentId) await worker.enqueue(ctx.ownerId, ctx.agentId, 'session_end', ctx.language);
+      if (worker && ctx.ownerId && ctx.agentId) {
+        await worker.enqueue(ctx.ownerId, ctx.agentId, 'session_end', ctx.language);
+        await worker.reflectSession(ctx.ownerId, ctx.agentId, sessionId, ctx.language);
+      }
       sessions.push({ index, day: script.day, time: script.time, startedAt, character: characterId, firstMeet: ctx.firstMeet, replies });
     }
   } finally {

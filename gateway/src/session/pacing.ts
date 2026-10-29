@@ -88,6 +88,14 @@ const MemoryBudgetSchema = z.object({
   extractTranscriptMaxChars: z.number().int().min(100).max(50_000).optional(),
   extractContextMaxChars: z.number().int().min(100).max(20_000).optional(),
   extractPolicy: PolicySchema.optional(),
+  /** Post-session reflection (spec 2026-10-28 反思). Decision layer only; never spoken or put in a prompt. */
+  reflect: z.object({
+    enabled: z.boolean(),
+    maxTokens: z.number().int().min(32).max(2_000),
+    maxItems: z.number().int().min(0).max(10),
+    maxChars: z.number().int().min(10).max(200),
+    contextItems: z.number().int().min(0).max(50),
+  }).strict().optional(),
 }).strict();
 
 export type PacingConfig = z.infer<typeof PacingSchema>;

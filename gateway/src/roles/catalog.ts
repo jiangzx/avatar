@@ -13,6 +13,8 @@ export interface RoleCatalog {
   director(characterId: CharacterId, language?: Language): DirectorConfig;
   /** Shared extractor system prompt; it never names a character. */
   extractPrompt(language?: Language): string;
+  /** Shared post-session reflection prompt; it never names a character. */
+  reflectPrompt(language?: Language): string;
   /** Recall-phrasing system prompt for this character. */
   recallPrompt(characterId: CharacterId, language?: Language): string;
   /** Care-opening system prompt for this character. */
@@ -61,6 +63,7 @@ export function fixedRoleCatalog(
     activityText: () => undefined,
     director: (_characterId, language = defaultLanguage) => directors[language] ?? director,
     extractPrompt: () => 'FIXTURE EXTRACT',
+    reflectPrompt: () => 'FIXTURE REFLECT',
     recallPrompt: () => 'FIXTURE RECALL',
     carePrompt: () => 'FIXTURE CARE',
     affectPrompt: () => 'FIXTURE AFFECT',

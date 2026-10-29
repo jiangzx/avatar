@@ -34,7 +34,7 @@ const TopicsSchema = z.array(z.object({
   fallbackText: z.string().min(1).max(60),
 }).strict()).min(1).max(50);
 
-export interface SharedText { safety: string; actions: string; extract: string; recall: string; affect: string; care: string }
+export interface SharedText { safety: string; actions: string; extract: string; recall: string; affect: string; care: string; reflect: string }
 interface LoadedActivity { title: string; summary: string; text: string }
 interface LoadedLanguage {
   /** persona.md with its placeholders still in place. */
@@ -117,6 +117,10 @@ export class FileRoleCatalog implements RoleCatalog {
     return this.sharedFor(language).extract;
   }
 
+  reflectPrompt(language = this.defaultLanguage(this.fallbackRole)): string {
+    return this.sharedFor(language).reflect;
+  }
+
   recallPrompt(characterId: CharacterId, language = this.characterLanguage(characterId)): string {
     return this.pack(characterId, language).recall;
   }
@@ -192,9 +196,11 @@ function loadShared(rootDir: string): Map<Language, SharedText> {
       recall: read('recall'),
       care: read('care'),
       affect: read('affect'),
+      reflect: read('reflect'),
     };
     // The extractor prompt is not rendered per character, so it must not carry placeholders.
     if (text.extract.includes('{{')) throw new Error(`placeholder_unresolved:shared:${language}:extract`);
+    if (text.reflect.includes('{{')) throw new Error(`placeholder_unresolved:shared:${language}:reflect`);
     shared.set(language, text);
   }
   return shared;

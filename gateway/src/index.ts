@@ -191,6 +191,8 @@ const worker = store && workerClient
       // Care quotes are stored only while the care feature is on (data minimization).
       quote: { maxChars: boot.affect.care.quoteMaxChars, safety: boot.i18n.safety, evidence: boot.i18n.evidence },
       quoteEnabled: () => configSource.snapshot().affect.enabled,
+      reflectPrompts: byLanguage((language) => boot.roles.reflectPrompt(language)),
+      ...(boot.memory.reflect ? { reflect: boot.memory.reflect } : {}),
       logger,
     })
   : null;

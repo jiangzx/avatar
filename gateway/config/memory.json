@@ -17,5 +17,6 @@
   "extractDrainMs": 8000,
   "extractTranscriptMaxChars": 6000,
   "extractContextMaxChars": 4000,
-  "extractPolicy": { "timeoutMs": 20000, "retries": 1, "backoffMs": 500, "maxBackoffMs": 4000 }
+  "extractPolicy": { "timeoutMs": 20000, "retries": 1, "backoffMs": 500, "maxBackoffMs": 4000 },
+  "reflect": { "enabled": true, "maxTokens": 400, "maxItems": 3, "maxChars": 60, "contextItems": 10 }
 }

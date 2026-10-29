@@ -12,6 +12,8 @@ import {
   applyExtractOps, attachQuoteSources, normalizeAddressingOps, parseExtractBatch, resolveFactSources, vetFollowupQuotes,
   type ExtractBatch, type QuoteRules, type TextModelClient,
 } from './extract.ts';
+import { isMemoryEvidence } from './evidence.ts';
+import { parseReflections } from './reflect.ts';
 import type { ExtractMemory, MemoryStore, PendingMessage } from './store.ts';
 
 export type ExtractReason = 'session_end' | 'turns' | 'silence' | 'startup';
@@ -19,6 +21,17 @@ export type ExtractReason = 'session_end' | 'turns' | 'silence' | 'startup';
 export interface MemoryExtractor {
   /** Queues extraction of one agent's pending messages behind this owner's current work; settles when it finishes. */
   enqueue(ownerId: string, agentId: string, reason: ExtractReason, language?: Language): Promise<void>;
+}
+
+/** Same shape as memory.json `reflect`; defined here so memory/ never imports session/. */
+export interface ReflectConfig { enabled: boolean; maxTokens: number; maxItems: number; maxChars: number; contextItems: number }
+
+/** Rate limits and request timeouts are transient; other 4xx (bad auth/request) are not. */
+function classifyModelError(error: unknown): 'retryable' | 'fatal' {
+  const code = errorCodeOf(error);
+  if (['extract_http_408', 'extract_http_425', 'extract_http_429'].includes(code)) return 'retryable';
+  if (code.startsWith('extract_http_4') || code === 'extract_invalid_response' || code === 'extract_invalid_json') return 'fatal';
+  return 'retryable';
 }
 
 export interface MemoryWorkerOptions {
@@ -40,6 +53,10 @@ export interface MemoryWorkerOptions {
   quote?: QuoteRules;
   /** Read on every job; false drops every quote, so turning care off stops storing quotes at once. */
   quoteEnabled?: () => boolean;
+  /** Per-language reflection prompts; a missing language skips reflection with an error log. */
+  reflectPrompts?: Partial<Record<Language, string>>;
+  /** memory.json `reflect`; absent or disabled = no reflection. */
+  reflect?: ReflectConfig;
   /** Root logger. Omitted in tests: the stdout default. */
   logger?: Logger;
 }
@@ -101,6 +118,66 @@ export class MemoryWorker implements MemoryExtractor {
     });
   }
 
+  /** Reflects on one session behind this owner's current work (after its extraction). Settles when done. */
+  reflectSession(ownerId: string, agentId: string, sessionId: string, language?: Language): Promise<void> {
+    return new Promise((resolve) => {
+      this.schedule(ownerId, async () => {
+        try {
+          await this.reflect(ownerId, agentId, sessionId, language);
+        } finally {
+          resolve();
+        }
+      });
+    });
+  }
+
+  private async reflect(ownerId: string, agentId: string, sessionId: string, language?: Language): Promise<void> {
+    const cfg = this.opts.reflect;
+    if (!cfg?.enabled || cfg.maxItems === 0) return;
+    const store = this.opts.store;
+    const owner = store.getOwner(ownerId);
+    if (!owner || owner.memoryConsent === 'declined' || owner.notifiedAt == null) return;
+    const evidence = this.opts.quote?.evidence;
+    // Statements only, like every other memory path (pitfall #1).
+    const lines = takePrefix(
+      store.listSessionUserLines(ownerId, agentId, sessionId)
+        .filter((row) => !evidence || isMemoryEvidence(row.text, evidence))
+        .map((row) => ({ ...row, role: 'user' as const, sessionId })),
+      this.transcriptMaxChars,
+    );
+    if (lines.length === 0) return;
+    const log = this.logFor(ownerId, 'reflect');
+    const chosen = language ?? dominantLanguage(lines.map((row) => row.text));
+    const system = this.opts.reflectPrompts?.[chosen];
+    if (!system) {
+      log.error('memory_reflect_failed', { code: 'reflect_prompt_missing' });
+      return;
+    }
+    const refs = new Map(lines.map((row, index) => [`u${index + 1}`, row.id] as const));
+    const known = store.listReflections(ownerId, agentId, cfg.contextItems).map((row) => row.text);
+    const user = JSON.stringify({ known, lines: lines.map((row, index) => ({ ref: `u${index + 1}`, text: row.text })) });
+    const result = await runWithPolicy('reflect', this.opts.policy, (signal) => this.opts.client.complete({
+      system,
+      user,
+      maxTokens: cfg.maxTokens,
+      jsonMode: true,
+      signal,
+      usage: { kind: 'memory_extract', attribution: { ownerId, agentId, sessionId, characterId: null } },
+    }), { classify: classifyModelError, logger: log });
+    if (!result.ok) {
+      log.warn('memory_reflect_failed', { code: result.code });
+      return;
+    }
+    const parsed = parseReflections(result.value, refs, { maxItems: cfg.maxItems, maxChars: cfg.maxChars, known, ...(this.opts.quote ? { safety: this.opts.quote.safety } : {}) });
+    if (!parsed) {
+      log.warn('memory_reflect_failed', { code: 'reflect_parse' });
+      return;
+    }
+    const stored = parsed.items.length > 0 ? store.insertReflections(ownerId, agentId, sessionId, parsed.items, this.opts.now?.() ?? Date.now()) : 0;
+    // Counts only: never the text of a line or a reflection.
+    log.info('memory_reflect', { lines: lines.length, items: stored, dropped: parsed.dropped });
+  }
+
   /** Waits for queued jobs, then returns. A timeout lets shutdown continue. */
   async drain(timeoutMs: number): Promise<void> {
     const pending = [...this.tail.values()];
@@ -151,16 +228,7 @@ export class MemoryWorker implements MemoryExtractor {
       signal,
       // Character is not known here; admin queries join agents for it.
       usage: { kind: 'memory_extract', attribution: { ownerId, agentId, sessionId: null, characterId: null } },
-    }), {
-      classify: (error) => {
-        const code = errorCodeOf(error);
-        // Rate limits and request timeouts are transient; other 4xx (bad auth/request) are not.
-        if (['extract_http_408', 'extract_http_425', 'extract_http_429'].includes(code)) return 'retryable';
-        if (code.startsWith('extract_http_4') || code === 'extract_invalid_response' || code === 'extract_invalid_json') return 'fatal';
-        return 'retryable';
-      },
-      logger: log,
-    });
+    }), { classify: classifyModelError, logger: log });
     if (!result.ok) {
       log.warn('memory_extract_failed', { reason, code: result.code });
       return;
@@ -194,7 +262,7 @@ export class MemoryWorker implements MemoryExtractor {
     log.info('memory_extract', { reason, result: applied, ops: batch.ops.length, messages: consumed.length, ...counts });
   }
 
-  private logFor(ownerId: string, job: 'memory' | 'extract'): Logger {
+  private logFor(ownerId: string, job: 'memory' | 'extract' | 'reflect'): Logger {
     return (this.opts.logger ?? defaultLogger()).child({ oid: ownerShortId(ownerId), job });
   }
 }
@@ -204,9 +272,11 @@ export function withExtraction(base: SessionLifecycle, worker: MemoryWorker): Se
   return {
     started: (sessionId, ctx) => base.started(sessionId, ctx),
     ended: (sessionId, ctx, reason) => base.ended(sessionId, ctx, reason),
-    extract: (_sessionId, ctx: SessionContext) => {
+    extract: (sessionId, ctx: SessionContext) => {
       if (!ctx.ownerId || !ctx.agentId) return;
       void worker.enqueue(ctx.ownerId, ctx.agentId, 'session_end', ctx.language);
+      // Same owner queue: reflection runs after this extraction.
+      void worker.reflectSession(ctx.ownerId, ctx.agentId, sessionId, ctx.language);
     },
   };
 }
