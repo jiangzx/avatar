@@ -34,3 +34,9 @@ docs/seeduplex/*
 !docs/seeduplex/.gitkeep
 # local screenshots only; probe scripts and reports stay trackable
 docs/testing/*.png
+
+# photoreal spike build output and generated assets
+dist-photoreal/
+avatar-core/photoreal/public/spike/photoreal/
+__pycache__/
+*.pyc
