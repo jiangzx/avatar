@@ -125,8 +125,9 @@ function journeyWorker(env: JourneyEnv, store: SqliteMemoryStore, clock: SimCloc
     policy: snapshot.memory.extractPolicy ?? snapshot.pacing.policies.summarize,
     transcriptMaxChars: snapshot.memory.extractTranscriptMaxChars ?? 6_000,
     contextMaxChars: snapshot.memory.extractContextMaxChars ?? 4_000,
-    quote: { maxChars: snapshot.affect.care.quoteMaxChars, safety: snapshot.i18n.safety, evidence: snapshot.i18n.evidence },
-    quoteEnabled: () => snapshot.affect.enabled,
+    // Thread quotes are stored only while proactivity is on (data minimization).
+    quote: { maxChars: snapshot.proactivity.threads.quoteMaxChars, safety: snapshot.i18n.safety, evidence: snapshot.i18n.evidence },
+    quoteEnabled: () => snapshot.proactivity.enabled,
     reflectPrompts: byLanguage((language) => snapshot.roles.reflectPrompt(language)),
     ...(snapshot.memory.reflect ? { reflect: snapshot.memory.reflect } : {}),
     now: clock.now,
