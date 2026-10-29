@@ -368,6 +368,7 @@ export class ProactiveRuntime {
       this.recentLines = store.recentUserMessages(ownerId, agentId, cfg.material.familyLookback).map((row) => row.text);
       this.loaded = true;
     } catch {
+      this.loaded = false;
       this.tier = this.tierChosen ?? cfg.defaultTier;
       this.threads = [];
       this.recentLines = [];

@@ -156,6 +156,21 @@ describe('silenceLine', () => {
     expect(s.runtime.silenceLine(input())).toEqual({ quiet: true });
     expect(getProactiveTier).toHaveBeenCalledTimes(2);
   });
+
+  it('retries prefetch on the next Beijing day after a successful load then a store failure', () => {
+    const getProactiveTier = vi.fn()
+      .mockReturnValueOnce('quiet')
+      .mockImplementationOnce(() => { throw new Error('sqlite_busy'); })
+      .mockReturnValueOnce('quiet');
+    const store = fakeStore({ getProactiveTier });
+    const s = setup({ store });
+    expect(s.runtime.silenceLine(input())).toEqual({ quiet: true });
+    s.advance(DAY);
+    expect(s.runtime.silenceLine(input())).not.toEqual({ quiet: true });
+    expect(s.logger.warn).toHaveBeenCalledWith('proactive_prefetch_failed', { code: 'store_error' });
+    expect(s.runtime.silenceLine(input())).toEqual({ quiet: true });
+    expect(getProactiveTier).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe('counting, mentions and persistence', () => {
