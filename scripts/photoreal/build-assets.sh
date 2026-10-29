@@ -6,22 +6,43 @@ ROOT="$PWD"
 BUILD="$ROOT/build/photoreal"
 OUT="$ROOT/avatar-core/photoreal/public/spike/photoreal"
 COMMIT="bac9a81e63ecc153202353372e5724b83d9e6322"
-mkdir -p "$BUILD" "$OUT/frames" "$OUT/faces"
+SRC_URL="https://codeload.github.com/Rudrabha/Wav2Lip/tar.gz/$COMMIT"
+SRC_SHA256="3666768f1fafe854048f17f63a6d193c9c2a93f3f3214fab00e6155ef721f83a"
+PYTHON="${PYTHON:-$(command -v python3.11 || true)}"
+MODE="${1:-full}"
 
-if [[ ! -f "$BUILD/wav2lip_gan.pth" ]]; then
-  echo "missing $BUILD/wav2lip_gan.pth" >&2
-  echo "download it from https://drive.google.com/drive/folders/153HLrqlBNxzZcHi17PEvP09kkAfzRshM" >&2
+if [[ "$MODE" != "full" && "$MODE" != "--mel-only" ]]; then
+  echo "usage: $0 [--mel-only]" >&2
+  exit 2
+fi
+
+if [[ -z "$PYTHON" ]]; then
+  echo "python3.11 not found; install Python 3.11 or set PYTHON=/path/to/python3.11" >&2
   exit 1
 fi
+mkdir -p "$BUILD"
 
-if [[ ! -d "$BUILD/wav2lip/.git" ]]; then
-  git clone https://github.com/Rudrabha/Wav2Lip.git "$BUILD/wav2lip"
+# GitHub cloning is blocked on some networks; use the official archive at the pinned commit.
+if [[ ! -f "$BUILD/wav2lip/models/wav2lip.py" ]]; then
+  archive="$BUILD/wav2lip-src.tar.gz"
+  if [[ ! -f "$archive" ]]; then
+    curl -L --fail -o "$archive" "$SRC_URL"
+  fi
+  actual="$(shasum -a 256 "$archive" | awk '{print $1}')"
+  if [[ "$actual" != "$SRC_SHA256" ]]; then
+    echo "checksum mismatch for $archive: got $actual, want $SRC_SHA256" >&2
+    exit 1
+  fi
+  tmp="$BUILD/wav2lip-extract"
+  rm -rf "$tmp" "$BUILD/wav2lip"
+  mkdir -p "$tmp"
+  tar -xzf "$archive" -C "$tmp"
+  mv "$tmp/Wav2Lip-$COMMIT" "$BUILD/wav2lip"
+  rmdir "$tmp"
 fi
-git -C "$BUILD/wav2lip" fetch --all
-git -C "$BUILD/wav2lip" checkout "$COMMIT"
 
 # Wav2Lip is from 2020; modern numpy removed the np.float/np.int aliases.
-python3 - "$BUILD/wav2lip" <<'PY'
+"$PYTHON" -I - "$BUILD/wav2lip" <<'PY'
 import pathlib, re, sys
 root = pathlib.Path(sys.argv[1])
 for path in root.rglob("*.py"):
@@ -30,6 +51,31 @@ for path in root.rglob("*.py"):
     if fixed != text:
         path.write_text(fixed)
 PY
+
+if [[ "$MODE" == "--mel-only" ]]; then
+  VENV="$BUILD/venv-mel"
+  if [[ ! -x "$VENV/bin/python" ]]; then
+    "$PYTHON" -m venv "$VENV"
+    "$VENV/bin/pip" install --upgrade pip
+    "$VENV/bin/pip" install numpy==1.26.4 scipy==1.13.1 librosa==0.9.2
+  fi
+  mkdir -p "$OUT"
+  ./scripts/make-mock-speech.sh
+  head -c $((24000 * 2 * 10)) gateway/mock/speech-24k.pcm > "$OUT/speech-24k.pcm"
+  "$VENV/bin/python" scripts/photoreal/make_mel_fixture.py \
+    --wav2lip "$BUILD/wav2lip" \
+    --pcm "$OUT/speech-24k.pcm" \
+    --filterbank avatar-core/src/spike/photoreal/mel-filterbank.json \
+    --fixture avatar-core/test/fixtures/photoreal/mel-fixture.json
+  exit 0
+fi
+
+if [[ ! -f "$BUILD/wav2lip_gan.pth" ]]; then
+  echo "missing $BUILD/wav2lip_gan.pth" >&2
+  echo "download it from https://drive.google.com/drive/folders/153HLrqlBNxzZcHi17PEvP09kkAfzRshM" >&2
+  exit 1
+fi
+mkdir -p "$OUT/frames" "$OUT/faces"
 
 S3FD="$BUILD/wav2lip/face_detection/detection/sfd/s3fd.pth"
 mkdir -p "$(dirname "$S3FD")"
@@ -46,7 +92,7 @@ ffmpeg -y -i "$BUILD/sample.mp4" -t 10 -r 25 -an -c:v libx264 -pix_fmt yuv420p "
 head -c $((24000 * 2 * 10)) gateway/mock/speech-24k.pcm > "$OUT/speech-24k.pcm"
 
 if [[ ! -x "$BUILD/venv/bin/python" ]]; then
-  python3 -m venv "$BUILD/venv"
+  "$PYTHON" -m venv "$BUILD/venv"
   "$BUILD/venv/bin/pip" install --upgrade pip
   "$BUILD/venv/bin/pip" install -r scripts/photoreal/requirements.txt
 fi
@@ -68,7 +114,7 @@ fi
   --filterbank avatar-core/src/spike/photoreal/mel-filterbank.json \
   --fixture avatar-core/test/fixtures/photoreal/mel-fixture.json
 
-python3 - "$BUILD" "$OUT" "$ROOT/scripts/photoreal-assets.lock.json" <<'PY'
+"$PYTHON" - "$BUILD" "$OUT" "$ROOT/scripts/photoreal-assets.lock.json" <<'PY'
 import hashlib, json, pathlib, sys
 build = pathlib.Path(sys.argv[1])
 out = pathlib.Path(sys.argv[2])
