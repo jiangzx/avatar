@@ -235,6 +235,11 @@ export interface MemoryMoodItem { id: string; day: string; emotion: 'neutral' | 
 // MemoryOverview.characters[i] gains: threads?: MemoryThreadItem[]; reflections?: MemoryItem[]; moods?: MemoryMoodItem[]
 ```
 
+```ts
+// gateway/src/session/proactive/assemble.ts
+export interface PlannedIntent { intent: ProactiveIntent; purpose: IntentPurpose; fallbackOnly: boolean; allowCare: boolean }
+```
+
 ## 依赖与并行
 
 全部顺序执行，不并行。P1 依赖 P0 完成（P1-T3 的 runner 只支持 mock/qwen）；P2 依赖 P1（P2-T6 修改 P1 的 runner）；P3 前半依赖 P2（决策引擎读 P2 的数据形状）。每份计划结束时停下，等用户确认再开始下一份。
