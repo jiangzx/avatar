@@ -32,6 +32,7 @@ describe('zh intent copy', () => {
     expect(zh.intents!.speakLine).toContain('{line}');
     expect(zh.intents!.saidWhen.days).toHaveLength(5);
     expect(zh.intents!.opening).toContain('{name}');
+    expect(zh.intents!.withCare).toBe('在【】里的话之外，可以再加一句短的关心，范围只限休息或吃药。不要新添人名、地名、作品名、日期或数字。');
   });
 
   it('has at least five distinct fallback lines per key', () => {

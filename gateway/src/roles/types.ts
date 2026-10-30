@@ -15,6 +15,8 @@ export interface IntentCopy {
   /** Opening frame (P4): {maxChars} {name} {purpose}. Says the name once, then the purpose. */
   opening: string;
   withQuote: string;
+  /** Appended only when PlannedIntent.allowCare is true. No readable example sentence. */
+  withCare: string;
   withTopic: string;
   withoutMaterial: string;
   noQuestion: string;

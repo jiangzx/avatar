@@ -176,6 +176,7 @@ const DirectorSchema = z.object({
     frame: z.string().includes('{maxChars}').includes('{purpose}'),
     opening: z.string().includes('{maxChars}').includes('{name}').includes('{purpose}'),
     withQuote: z.string().includes('{said}').includes('{material}'),
+    withCare: z.string().min(1),
     withTopic: z.string().includes('{material}'),
     withoutMaterial: z.string().min(1),
     noQuestion: z.string().min(1),
