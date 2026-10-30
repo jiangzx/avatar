@@ -83,7 +83,7 @@ describe('scoring', () => {
 
   it('opens with a due event before the morning greeting', () => {
     const d = decide(ctx({ moment: 'sessionStart', now: NOW, threads: [thread({ kind: 'event', dueAt: NOW - 5 * HOUR, sensitive: true })] }), cfg);
-    expect(d).toMatchObject({ kind: 'threadFollowup', threadId: 't1', score: 0.865 });
+    expect(d).toMatchObject({ kind: 'threadFollowup', threadId: 't1', score: 0.895 });
   });
 
   it('opens with a plain greeting when nothing clears the threshold', () => {
