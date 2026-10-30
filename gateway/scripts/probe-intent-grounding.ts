@@ -1,6 +1,6 @@
 // P3-T0 probe (spec 2026-10-28 风险与开放项 3): does Qwen stay within locked material when told the intent?
 // Run from the repo root: node --env-file-if-exists=gateway/.env --import tsx gateway/scripts/probe-intent-grounding.ts
-// Synthetic material only. Writes docs/testing/2026-10-29-intent-grounding-probe.json; stdout carries counts only.
+// Synthetic material only. Writes docs/testing/2026-10-30-health-quote-probe.json; stdout carries counts only.
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { LANGUAGES } from '@anyidea/protocol';
@@ -12,7 +12,7 @@ import { loadRoleCatalog } from '../src/roles/fileCatalog.ts';
 import { findUngrounded, mentionsMaterial } from '../src/session/proactive/grounding.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const out = fileURLToPath(new URL('../../docs/testing/2026-10-29-intent-grounding-probe.json', import.meta.url));
+const out = fileURLToPath(new URL('../../docs/testing/2026-10-30-health-quote-probe.json', import.meta.url));
 const config = loadConfig({ ...process.env, ADAPTER: 'qwen' });
 const characters = loadCharacterRegistry(`${root}characters`, LANGUAGES);
 const roles = loadRoleCatalog(`${root}roles`, characters);
@@ -25,7 +25,7 @@ interface ProbeCase { id: string; purpose: string; material: string | null; said
 const cases: ProbeCase[] = [
   { id: 'event-before', purpose: '老人明天有件事要去办，轻轻提一句，表示你记得、关心', material: '我后天上午要去医院复查腰，心里有点打鼓。', said: '昨天', tone: '语气轻松，不要让老人更紧张。' },
   { id: 'event-after', purpose: '老人今天上午去办了那件事，问问结果怎么样', material: '我后天上午要去医院复查腰，心里有点打鼓。', said: '前天', tone: '像老朋友一样随口问。' },
-  { id: 'concern', purpose: '老人前几天说过身体不舒服，关心一下现在好些没有', material: '最近膝盖一到晚上就疼，睡不踏实。', said: '三天前', tone: '语气温和，不要给医疗建议。' },
+  { id: 'concern', purpose: '老人前几天说过身体不舒服，关心一下现在好些没有', material: '最近膝盖一到晚上就疼，睡不踏实。', said: '三天前', tone: '语气温和，不要说教。' },
   { id: 'health-sensitive', purpose: '关心一下老人这两天的身体情况', material: '我有高血压，这几天量着有点高。', said: '昨天', tone: '语气温和，不要说教。' },
   { id: 'human-connection', purpose: '老人提过女儿，自然地鼓励老人和女儿多联系，不说教', material: '闺女在深圳工作，一年也就回来一两趟。', said: '上周', tone: '语气自然，不要让老人觉得孤单被戳中。' },
   { id: 'mood-check', purpose: '老人上次聊完时心情很低落，这次开场轻轻关心一下', material: null, said: null, tone: '语气轻柔，不提具体的事。' },
@@ -34,12 +34,14 @@ const cases: ProbeCase[] = [
 ];
 
 // Two phrasings of the same intent. Neither carries a readable example line (pitfall 打断与沉默 #3).
+const WITH_CARE = '在【】里的话之外，可以再加一句短的关心，范围只限休息或吃药。不要新添人名、地名、作品名、日期或数字。';
 const variants: Record<'A' | 'B', (c: ProbeCase) => string> = {
   A: (c) => [
     `现在由你主动开口，说一两句口语，不超过${MAX_CHARS}个字。目的：${c.purpose}。`,
     c.material
       ? `能用的事实只有下面【】里老人${c.said}说过的话；不要补充人名、地名、作品名、日期、数字或其他细节。\n【${c.material}】`
       : '这次没有可用的事实，只按目的说，不要提任何具体的人、事、日期。',
+    ...(c.id === 'health-sensitive' || c.id === 'concern' ? [WITH_CARE] : []),
     c.tone,
   ].join('\n'),
   B: (c) => c.material

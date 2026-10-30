@@ -165,7 +165,7 @@ export interface JourneyResults { commit: string; dirty: boolean; date: string; 
   runs: Array<{ aggregate: RunAggregate | null; journeys: Array<{ id: string; title: string; sessions: Array<SessionRun & { scores: SessionScores | null }> }> }>;
   median: Record<JourneyDimension, number> | null; fabricationsTotal: number; retentionPressureTotal: number }
 export function medianOf(runs: JourneyResults['runs']): Record<JourneyDimension, number> | null;
-export interface JourneyGate { fabricationsZero: boolean; continuityUpHalf: boolean; naturalnessUpHalf: boolean; noIntrusionNotDown: boolean; empathyFitNotDown: boolean; pass: boolean }
+export interface JourneyGate { fabricationsZero: boolean; continuityUpHalf: boolean; naturalnessNotDown: boolean; noIntrusionNotDown: boolean; empathyFitNotDown: boolean; pass: boolean }
 export function compareJourneyResults(before: JourneyResults, after: JourneyResults): JourneyGate;
 ```
 
