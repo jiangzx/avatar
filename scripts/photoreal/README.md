@@ -44,5 +44,10 @@ The exported frames are scaled to 960 px wide (`--max-width`) because S3FD
 activations grow with input resolution and the page loads every frame as an
 `ImageBitmap`; face crops are still cut from the original frames.
 
+The ONNX face input is widened from 6 to 8 channels with zero weights. ONNX
+Runtime Web 1.30's WebGPU EP miscomputes a Conv with 6 input channels (verified
+against CPU: max abs diff 0.7 on the first layer); the padded model matches within
+1.7e-6. The runtime pads the two extra planes with zeros in `packBatch`.
+
 Sample video: https://assets.sync.so/docs/example-video.mp4 (10 s trim).
 S3FD weights: https://www.adrianbulat.com/downloads/python-fan/s3fd-619a316812.pth

@@ -11,6 +11,38 @@ import torch
 # wav2lip_gan.pth from the official release, hash-verified against multiple mirrors.
 EXPECTED_CHECKPOINT_SHA256 = "ca9ab7b7b812c0e80a6e70a5977c545a1e8a365a6c49d5e533023c034d7ac3d8"
 
+SOURCE_FACE_CHANNELS = 6
+MODEL_FACE_CHANNELS = 8
+
+
+def widen_face_input(path: str) -> None:
+    """Pad the face input to 8 channels; ORT WebGPU 1.30 miscomputes a 6-channel Conv."""
+    import onnx
+    from onnx import numpy_helper
+
+    model = onnx.load(path)
+    img = next(i for i in model.graph.input if i.name == "img")
+    dims = img.type.tensor_type.shape.dim
+    if dims[1].dim_value != SOURCE_FACE_CHANNELS:
+        raise SystemExit(f"unexpected img channels: {dims[1].dim_value}")
+    dims[1].dim_value = MODEL_FACE_CHANNELS
+
+    conv = next(n for n in model.graph.node if n.op_type == "Conv" and "img" in n.input)
+    weight_name = conv.input[1]
+    for init in model.graph.initializer:
+        if init.name != weight_name:
+            continue
+        weight = numpy_helper.to_array(init)
+        extra = MODEL_FACE_CHANNELS - SOURCE_FACE_CHANNELS
+        pad = np.zeros((weight.shape[0], extra, *weight.shape[2:]), dtype=weight.dtype)
+        init.CopyFrom(numpy_helper.from_array(np.concatenate([weight, pad], axis=1), weight_name))
+        break
+    else:
+        raise SystemExit(f"weight not found: {weight_name}")
+
+    onnx.checker.check_model(model)
+    onnx.save(model, path)
+
 
 def sha256_file(path: str) -> str:
     digest = hashlib.sha256()
@@ -63,13 +95,17 @@ def main() -> None:
         output_names=["out"],
         opset_version=args.opset,
         do_constant_folding=True,
+        # ORT Web cannot fetch the sidecar .data file from a URL.
+        external_data=False,
     )
 
     import onnx
     onnx.checker.check_model(args.out)
+    widen_face_input(args.out)
     import onnxruntime as ort
     session = ort.InferenceSession(args.out, providers=["CPUExecutionProvider"])
-    got = session.run(None, {"mel": mel.numpy(), "img": img.numpy()})[0]
+    extra = torch.zeros(args.batch, MODEL_FACE_CHANNELS - SOURCE_FACE_CHANNELS, 96, 96)
+    got = session.run(None, {"mel": mel.numpy(), "img": torch.cat([img, extra], dim=1).numpy()})[0]
     np.testing.assert_allclose(got, ref, rtol=1e-4, atol=1e-4)
     size = Path(args.out).stat().st_size
     print(f"ok onnx={args.out} bytes={size} max_abs_diff={np.max(np.abs(got - ref)):.6f}")

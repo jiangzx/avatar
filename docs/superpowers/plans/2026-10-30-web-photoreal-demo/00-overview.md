@@ -158,6 +158,7 @@ scripts/photoreal-assets.lock.json                     # urls + sha256 + bytes
 
 ## 风险
 
+- 2026-10-30 执行中发现：ORT WebGPU 1.30.0 的 Conv 在输入通道数为 6 时结果错误（CPU 对照 max abs diff 0.7；1/2/3/4/5/8 通道正常）。Wav2Lip 首层正是 6 通道。规避：导出时把 `img` 输入和首层卷积权重补零到 8 通道，`packBatch` 在运行时补两平面零；WebGPU 与 CPU 的 max abs diff 降到 1.7e-6。这是本计划唯一的接口实现偏差，模块签名不变。
 - Wav2Lip 的 96×96 嘴部块可能偏软，真人感可能不如 Duix。T7 先用不同源视频/checkpoint/batch/fp16 对比；仍不够则停 C。Ultralight/FeatherTalk 需要按人训练、不同输入前端和授权核实，另立计划评估，本计划不临时移植。
 - ORT WebGPU 仍是 experimental；算子缺口或性能不达标时回退 WASM，WASM 很可能低于 20 fps，按停止规则处理。
 - mel 的 JS 直接 DFT 可能偏慢；T3 先测，超过预算再做混合基 FFT 或 ONNX STFT，不在 T3 提前优化。

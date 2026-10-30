@@ -97,6 +97,7 @@ if [[ ! -x "$BUILD/venv/bin/python" ]]; then
   "$BUILD/venv/bin/pip" install -r scripts/photoreal/requirements.txt
 fi
 
+rm -f "$OUT/wav2lip.onnx.data"
 "$BUILD/venv/bin/python" scripts/photoreal/export_wav2lip.py \
   --wav2lip "$BUILD/wav2lip" \
   --checkpoint "$BUILD/wav2lip_gan.pth" \

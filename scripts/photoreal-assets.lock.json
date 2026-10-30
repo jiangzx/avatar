@@ -8,8 +8,8 @@
     "bytes": 14938569
   },
   "wav2lip_onnx": {
-    "sha256": "948178b93c2763dc434cc8cd260fddedd18806da9fbb1f962eb7aac5c6f916ac",
-    "bytes": 45675
+    "sha256": "01997b75d5fbdd458649e2447fe5a43718f4d9166c52602555048995142672c4",
+    "bytes": 145144287
   },
   "speech_pcm": {
     "sha256": "3a9bb64340502727c9c1e2ddf942e22217af8105802da91ca8cd118814ada6ae",
