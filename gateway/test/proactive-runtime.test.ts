@@ -88,6 +88,7 @@ describe('silenceLine', () => {
     expect(request.instruction).toContain('【我家那盆君子兰今年还没开花。】');
     expect(request.instruction).toContain('刚才');
     expect(zh.fallbacks!.continueThread).toContain(request.fallbackText);
+    expect(request.instruction).not.toContain(zh.intents!.withCare);
     expect(logger.info).toHaveBeenCalledWith('proactive_decision', expect.objectContaining({ moment: 'silenceContext', kind: 'continueThread', score: 0.68, tier: 'moderate', fallback: false }));
   });
 
@@ -97,17 +98,19 @@ describe('silenceLine', () => {
     expect(request.instruction).toContain('【今天吃了什么好吃的】');
   });
 
-  it('reads the sensitive group for a health thread; the quote goes nowhere', () => {
+  it('puts a health thread quote in the instruction and keeps the sensitive fallback', () => {
     const store = fakeStore({ listOpenThreads: vi.fn(() => [thread()]) });
     const request = requestOf(setup({ store }).runtime.silenceLine(input({ hadContent: false })))!;
-    expect(request).toEqual(speakLineRequest(zh.intents!, zh.fallbacks!.threadSensitive[0]!));
-    expect(request.instruction).not.toContain('高血压');
+    expect(request.instruction).toContain('【我有高血压，这几天量着有点高。】');
+    expect(request.instruction).toContain(zh.intents!.withCare);
+    expect(zh.fallbacks!.threadSensitive).toContain(request.fallbackText);
   });
 
-  it('reads the continue group when the user’s own line has a health word', () => {
+  it('puts a health open-loop quote in the instruction and keeps the continue fallback', () => {
     const request = requestOf(setup().runtime.silenceLine(input({ lastUtterance: '最近膝盖疼得睡不着。' })))!;
-    expect(request.instruction).not.toContain('膝盖');
-    expect(request).toEqual(speakLineRequest(zh.intents!, zh.fallbacks!.continueThread[0]!));
+    expect(request.instruction).toContain('【最近膝盖疼得睡不着。】');
+    expect(request.instruction).toContain(zh.intents!.withCare);
+    expect(zh.fallbacks!.continueThread).toContain(request.fallbackText);
   });
 
   it('grounds the family nudge in a remembered line without health words', () => {
@@ -191,7 +194,9 @@ describe('counting, mentions and persistence', () => {
     s.runtime.onLineStarted(request);
     expect(store.markThreadMentioned).toHaveBeenCalledWith('o1', 't1', AFTERNOON);
     expect(store.incrementProactiveDaily).toHaveBeenCalledWith('o1', 'a1', '2026-11-03');
-    expect(store.recordFallbackLine).toHaveBeenCalledWith('o1', 'a1', 'threadSensitive', 0, AFTERNOON, cfg.fallbackKeep);
+    // Health quotes are no longer fallbackOnly, so the line is recorded only if the timeout path speaks it.
+    expect(store.recordFallbackLine).not.toHaveBeenCalled();
+    expect(zh.fallbacks!.threadSensitive).toContain(request.fallbackText);
     s.runtime.onLineEnded(zh.fallbacks!.threadSensitive[0]!, false);
     const next = requestOf(s.runtime.silenceLine(input({ step: 'check', hadContent: false })))!;
     expect(next.instruction).toContain('今天吃了什么好吃的');

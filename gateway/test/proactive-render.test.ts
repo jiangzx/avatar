@@ -9,7 +9,7 @@ import { checkSpoken, violationsOf } from '../src/session/proactive/check.ts';
 import { loadProactivity } from '../src/session/proactive/config.ts';
 import type { Decision } from '../src/session/proactive/engine.ts';
 import { pickFallback } from '../src/session/proactive/fallback.ts';
-import { renderIntent, speakLineRequest } from '../src/session/proactive/render.ts';
+import { renderIntent } from '../src/session/proactive/render.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cfg = loadProactivity(`${root}config/proactivity.json`);
@@ -59,15 +59,17 @@ describe('buildIntent', () => {
     const planned = buildIntent(decision('threadFollowup', 't1'), input({ material: { thread: t } }))!;
     expect(planned.purpose).toBe('threadConcern');
     expect(planned.fallbackOnly).toBe(false);
+    expect(planned.allowCare).toBe(false);
     expect(planned.intent.material.quotes).toEqual([{ text: t.quote, said: '三天前' }]);
     expect(planned.intent.fallbackKey).toBe('threadFollowup');
   });
 
-  it('never puts a sensitive quote into the intent; it is spoken from the sensitive group', () => {
+  it('locks a sensitive quote and marks it for one care line', () => {
     const t = thread({ sensitive: true, quote: '我有高血压，这几天量着有点高。' });
     const planned = buildIntent(decision('threadFollowup', 't1'), input({ material: { thread: t } }))!;
-    expect(planned.fallbackOnly).toBe(true);
-    expect(planned.intent.material.quotes).toEqual([]);
+    expect(planned.fallbackOnly).toBe(false);
+    expect(planned.allowCare).toBe(true);
+    expect(planned.intent.material.quotes).toEqual([{ text: t.quote, said: '三天前' }]);
     expect(planned.intent.fallbackKey).toBe('threadSensitive');
   });
 
@@ -93,8 +95,10 @@ describe('buildIntent', () => {
       .toEqual([{ text: '我那盆君子兰今年还没开花', said: '刚才' }]);
     expect(buildIntent(decision('continueThread'), input())).toBeNull();
     const health = buildIntent(decision('continueThread'), input({ material: { openLoop: '最近膝盖疼得睡不着', openLoopSensitive: true } }))!;
-    expect(health.fallbackOnly).toBe(true);
-    expect(health.intent.material.quotes).toEqual([]);
+    expect(health.fallbackOnly).toBe(false);
+    expect(health.allowCare).toBe(true);
+    expect(health.intent.material.quotes).toEqual([{ text: '最近膝盖疼得睡不着', said: '刚才' }]);
+    expect(health.intent.fallbackKey).toBe('continueThread');
     expect(buildIntent(decision('interestTopic'), input({ material: { topic: '年轻时爱听的一首老歌' } }))!.intent.material.facts).toEqual(['年轻时爱听的一首老歌']);
     expect(buildIntent(decision('humanConnection'), input({ material: { family: '闺女在深圳工作，一年也就回来一两趟。' } }))!.intent.material.quotes)
       .toEqual([{ text: '闺女在深圳工作，一年也就回来一两趟。', said: '之前' }]);
@@ -128,16 +132,22 @@ describe('renderIntent', () => {
       `【${t.quote}】`,
       copy.tones.familiar,
     ]);
+    expect(request.instruction).not.toContain(copy.withCare);
   });
 
-  it('renders a sensitive thread as a line to read, with no quote anywhere', () => {
+  it('renders a sensitive thread with the quote and the care line; fallback text stays in the sensitive group', () => {
     const t = thread({ sensitive: true, quote: '我有高血压，这几天量着有点高。' });
     const planned = buildIntent(decision('threadFollowup', 't1'), input({ material: { thread: t } }))!;
     const line = zh.fallbacks!.threadSensitive[2]!;
     const request = renderIntent(planned, copy, line);
-    expect(request).toEqual(speakLineRequest(copy, line));
-    expect(request.instruction).toContain(line);
-    expect(request.instruction).not.toContain('高血压');
+    expect(request.fallbackText).toBe(line);
+    expect(request.instruction.split('\n')).toEqual([
+      `现在由你主动开口，说一两句口语，不超过${cfg.maxChars}个字。目的：${copy.purposes.threadConcern}。`,
+      '能用的事实只有下面【】里老人三天前说过的话；不要补充人名、地名、作品名、日期、数字或其他细节。',
+      `【${t.quote}】`,
+      copy.withCare,
+      copy.tones.familiar,
+    ]);
   });
 
   it('renders topics with withTopic, no material with withoutMaterial, and bans questions where needed', () => {

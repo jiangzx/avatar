@@ -173,17 +173,19 @@ describe('silence ladder through the decision engine', () => {
     expect(director.fallbacks!.presenceCheck).toContain(t.followups()[0]!.fallbackText);
   });
 
-  it('keeps a health thread out of every instruction and reads the sensitive group', async () => {
+  it('puts the health quote in the greeting only', async () => {
     const quote = '我有高血压，这几天量着有点高。';
     const thread: ThreadRecord = { id: 't1', kind: 'concern', quote, dueAt: AFTERNOON, sensitive: true, mentionCount: 0, lastMentionedAt: null, createdAt: AFTERNOON - 3 * DAY, sourceSessionId: 's-old' };
     const t = boot(fakeStore({ listOpenThreads: vi.fn(() => [thread]) }));
     await t.open();
     const opening = t.adapter.requests.find((r) => r.cue === 'greeting')!;
+    expect(opening.instruction).toContain(`【${quote}】`);
+    expect(opening.instruction).toContain(director.intents!.withCare);
     expect(opening.fallbackText.startsWith('王叔')).toBe(true);
     expect(director.fallbacks!.threadSensitive.some((line) => opening.fallbackText.endsWith(line))).toBe(true);
     expect(t.store.markThreadMentioned).toHaveBeenCalledWith('o1', 't1', expect.any(Number));
-    const everything = [...t.adapter.requests.map((r) => r.instruction), ...t.adapter.connects.map((c) => c.instructions)].join('\n');
-    expect(everything).not.toContain('高血压');
+    const standing = t.adapter.connects.map((c) => c.instructions).join('\n');
+    expect(standing).not.toContain('高血压');
   });
 
   it('writes nothing across sessions when memory was declined', async () => {
@@ -229,9 +231,12 @@ describe('opening through the decision engine (P4)', () => {
     const t = boot(fakeStore({ listOpenThreads: vi.fn(() => [event(true, '我后天上午去医院复查腰。')]) }));
     await t.session.start({ send: (m: ServerMessage) => { t.sent.push(m); }, sendAudio: () => {} });
     const opening = greetings(t)[0]!;
+    expect(opening.instruction).toContain('【我后天上午去医院复查腰。】');
+    expect(opening.instruction).toContain(director.intents!.withCare);
     expect(opening.fallbackText.startsWith('王叔')).toBe(true);
     expect(director.fallbacks!.threadSensitive.some((line) => opening.fallbackText.endsWith(line))).toBe(true);
-    expect(opening.instruction).not.toContain('复查');
+    const standing = t.adapter.connects.map((c) => c.instructions).join('\n');
+    expect(standing).not.toContain('复查');
   });
 
   it('reads the fallback opening once when the model does not start in time', async () => {

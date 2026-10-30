@@ -15,7 +15,7 @@ export interface IntentMaterial {
   thread?: ThreadRecord;
   /** The user's own unfinished line in this session (already evidence-checked). */
   openLoop?: string;
-  /** The open loop has a health word: read the fallback line instead (same rule as health threads). */
+  /** The open loop has a health word: lock the quote and append withCare (same as health threads). */
   openLoopSensitive?: boolean;
   /** Topic card prompt; not the user's words. */
   topic?: string;
@@ -26,8 +26,10 @@ export interface IntentMaterial {
 export interface PlannedIntent {
   intent: ProactiveIntent;
   purpose: IntentPurpose;
-  /** Health thread (2026-10-29): speak the fallback line, never render the quote. */
+  /** True only for the timeout path. Health quotes are false. */
   fallbackOnly: boolean;
+  /** Health quote: append IntentCopy.withCare. */
+  allowCare: boolean;
 }
 
 export interface BuildInput {
@@ -79,7 +81,7 @@ function threadPurpose(thread: ThreadRecord, now: number): IntentPurpose {
   return thread.kind === 'concern' ? 'threadConcern' : 'threadPlan';
 }
 
-type Shape = { purpose: IntentPurpose; fallbackKey: FallbackKey | 'greetingPlain'; quotes: Array<{ text: string; said: string | null }>; facts: string[]; fallbackOnly?: boolean };
+type Shape = { purpose: IntentPurpose; fallbackKey: FallbackKey | 'greetingPlain'; quotes: Array<{ text: string; said: string | null }>; facts: string[]; fallbackOnly?: boolean; allowCare?: boolean };
 
 function shapeFor(decision: Decision, input: BuildInput): Shape | null {
   const m = input.material;
@@ -89,8 +91,13 @@ function shapeFor(decision: Decision, input: BuildInput): Shape | null {
       const t = m.thread;
       if (!t || t.id !== decision.threadId) return null;
       const purpose = threadPurpose(t, input.now);
-      // Health quotes stay out of every instruction; the sensitive group is read instead.
-      if (t.sensitive) return { purpose, fallbackKey: 'threadSensitive', quotes: [], facts: [], fallbackOnly: true };
+      if (t.sensitive) {
+        return {
+          purpose, fallbackKey: 'threadSensitive',
+          quotes: [{ text: t.quote, said: saidWhen(t.createdAt, input.now, words) }],
+          facts: [], allowCare: true,
+        };
+      }
       return { purpose, fallbackKey: 'threadFollowup', quotes: [{ text: t.quote, said: saidWhen(t.createdAt, input.now, words) }], facts: [] };
     }
     case 'moodCheck':
@@ -101,7 +108,13 @@ function shapeFor(decision: Decision, input: BuildInput): Shape | null {
     }
     case 'continueThread':
       if (!m.openLoop) return null;
-      if (m.openLoopSensitive) return { purpose: 'continueThread', fallbackKey: 'continueThread', quotes: [], facts: [], fallbackOnly: true };
+      if (m.openLoopSensitive) {
+        return {
+          purpose: 'continueThread', fallbackKey: 'continueThread',
+          quotes: [{ text: m.openLoop, said: words.justNow }],
+          facts: [], allowCare: true,
+        };
+      }
       return { purpose: 'continueThread', fallbackKey: 'continueThread', quotes: [{ text: m.openLoop, said: words.justNow }], facts: [] };
     case 'interestTopic':
       return m.topic ? { purpose: 'interestTopic', fallbackKey: 'interestTopic', quotes: [], facts: [m.topic] } : null;
@@ -139,5 +152,5 @@ export function buildIntent(decision: Decision, input: BuildInput): PlannedInten
     language: input.language,
     fallbackKey: shape.fallbackKey,
   };
-  return { intent, purpose: shape.purpose, fallbackOnly: shape.fallbackOnly ?? false };
+  return { intent, purpose: shape.purpose, fallbackOnly: shape.fallbackOnly ?? false, allowCare: shape.allowCare ?? false };
 }

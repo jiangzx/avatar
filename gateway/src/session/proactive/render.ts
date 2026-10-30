@@ -24,6 +24,7 @@ export function renderIntent(planned: PlannedIntent, copy: IntentCopy, fallbackL
   if (quote) lines.push(fill(copy.withQuote, { '{said}': quote.said ?? copy.saidWhen.earlier, '{material}': quote.text }));
   else if (fact) lines.push(fill(copy.withTopic, { '{material}': fact }));
   else lines.push(copy.withoutMaterial);
+  if (planned.allowCare) lines.push(copy.withCare);
   // An old friend who is low gets the familiar tone: no jokes while comforting.
   const familiarity = intent.tone.familiarity === 'oldFriend' && !intent.tone.allowJoke ? 'familiar' : intent.tone.familiarity;
   lines.push(copy.tones[familiarity]);

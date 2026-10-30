@@ -5,7 +5,7 @@ import { loadI18n } from '../src/i18n/load.ts';
 import type { Logger } from '../src/log/logger.ts';
 import type { MemoryStore, MoodSummaryRecord, ThreadRecord } from '../src/memory/store.ts';
 import { loadProactivity } from '../src/session/proactive/config.ts';
-import { composeOpening, speakLineRequest } from '../src/session/proactive/render.ts';
+import { composeOpening } from '../src/session/proactive/render.ts';
 import { ProactiveRuntime } from '../src/session/proactive/runtime.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -85,13 +85,16 @@ describe('openingLine', () => {
     expect(store.incrementProactiveDaily).toHaveBeenCalledTimes(1);
   });
 
-  it('reads a composed line for a health event; the quote goes nowhere', () => {
+  it('opens a health event on the quote plus the care line; the fallback stays composed', () => {
     const quote = '我后天上午去医院复查腰。';
     const { runtime } = setup(MORNING, { listOpenThreads: vi.fn(() => [event({ sensitive: true, quote })]) });
     const request = runtime.openingLine(open)!;
-    const line = composeOpening(zh.greetingCareTexts![0]!, '王叔', zh.fallbacks!.threadSensitive[0]!);
-    expect(request).toEqual({ ...speakLineRequest(zh.intents!, line), cue: 'greeting' });
-    expect(request.instruction).not.toContain('复查');
+    expect(request.cue).toBe('greeting');
+    expect(request.instruction).toContain(`【${quote}】`);
+    expect(request.instruction).toContain(zh.intents!.withCare);
+    expect(request.instruction).toContain('「王叔」');
+    expect(request.fallbackText.startsWith('王叔')).toBe(true);
+    expect(zh.fallbacks!.threadSensitive.some((line) => request.fallbackText.endsWith(line))).toBe(true);
   });
 
   it('checks on a low last session ahead of the morning greeting', () => {
