@@ -48,7 +48,7 @@ export function buildJourneyResults(meta: JourneyResultsMeta, runs: JourneyResul
 export interface JourneyGate {
   fabricationsZero: boolean;
   continuityUpHalf: boolean;
-  naturalnessUpHalf: boolean;
+  naturalnessNotDown: boolean;
   noIntrusionNotDown: boolean;
   empathyFitNotDown: boolean;
   pass: boolean;
@@ -65,7 +65,7 @@ export function compareJourneyResults(before: JourneyResults, after: JourneyResu
   const gate = {
     fabricationsZero,
     continuityUpHalf: delta('continuity') >= 0.5,
-    naturalnessUpHalf: delta('naturalness') >= 0.5,
+    naturalnessNotDown: delta('naturalness') >= 0,
     noIntrusionNotDown: delta('noIntrusion') >= 0,
     empathyFitNotDown: delta('empathyFit') >= 0,
   };

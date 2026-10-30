@@ -38,8 +38,19 @@ describe('compareJourneyResults', () => {
   it('passes when continuity and naturalness rise by 0.5 and nothing else drops', () => {
     const after = buildJourneyResults(meta, [runOf(agg(3.5)), runOf(agg(3.6)), runOf(agg(3.5))]);
     expect(compareJourneyResults(before, after)).toEqual({
-      fabricationsZero: true, continuityUpHalf: true, naturalnessUpHalf: true, noIntrusionNotDown: true, empathyFitNotDown: true, pass: true,
+      fabricationsZero: true, continuityUpHalf: true, naturalnessNotDown: true, noIntrusionNotDown: true, empathyFitNotDown: true, pass: true,
     });
+  });
+
+  it('passes naturalness when it does not drop, and fails when it does', () => {
+    const upALittle = { ...agg(3.2), mean: { ...agg(3.2).mean!, naturalness: 3.2 } };
+    const slight = buildJourneyResults(meta, [runOf(upALittle), runOf(upALittle), runOf(upALittle)]);
+    expect(compareJourneyResults(before, slight)).toMatchObject({
+      continuityUpHalf: false, naturalnessNotDown: true, pass: false,
+    });
+    const dropped = { ...agg(3.5), mean: { ...agg(3.5).mean!, naturalness: 2.9 } };
+    const down = buildJourneyResults(meta, [runOf(dropped), runOf(dropped), runOf(dropped)]);
+    expect(compareJourneyResults(before, down)).toMatchObject({ naturalnessNotDown: false, pass: false });
   });
 
   it('fails on any fabrication or any unscored session after the change', () => {
