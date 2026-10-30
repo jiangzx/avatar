@@ -127,7 +127,7 @@ describe('tiers, mood and threads', () => {
     expect(decide(ctx({ ...start, threads: [fresh] }), cfg).kind).toBe('greetingPlain');
     expect(decide(ctx({ ...start, threads: [told], mentionedThreads: new Set(['told']) }), cfg).kind).toBe('greetingPlain');
     expect(decide(ctx({ ...start, threads: [thread({ id: 'other' })], mentionedThreads: new Set(['a', 'b']) }), cfg).kind).toBe('greetingPlain');
-    expect(decide(ctx({ ...start, threads: [thread({ id: 'other' })] }), cfg)).toMatchObject({ kind: 'threadFollowup', threadId: 'other', score: 0.615 });
+    expect(decide(ctx({ ...start, threads: [thread({ id: 'other' })] }), cfg)).toMatchObject({ kind: 'threadFollowup', threadId: 'other', score: 0.655 });
   });
 });
 
@@ -143,9 +143,9 @@ describe('threadUrgency', () => {
   });
 
   it('concerns: first mention right away, then every intervalDays, up to maxMentions and expireDays', () => {
-    expect(threadUrgency(thread(), NOW, cfg)).toBe(60);
+    expect(threadUrgency(thread(), NOW, cfg)).toBe(70);
     expect(threadUrgency(thread({ mentionCount: 1, lastMentionedAt: NOW - 2 * DAY }), NOW, cfg)).toBeNull();
-    expect(threadUrgency(thread({ mentionCount: 1, lastMentionedAt: NOW - 3 * DAY }), NOW, cfg)).toBe(60);
+    expect(threadUrgency(thread({ mentionCount: 1, lastMentionedAt: NOW - 3 * DAY }), NOW, cfg)).toBe(70);
     expect(threadUrgency(thread({ mentionCount: 3, lastMentionedAt: NOW - 5 * DAY }), NOW, cfg)).toBeNull();
     expect(threadUrgency(thread({ createdAt: NOW - 15 * DAY }), NOW, cfg)).toBeNull();
   });
