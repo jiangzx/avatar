@@ -12,7 +12,7 @@
     "quoteMaxChars": 80,
     "maxPerSession": 2,
     "event": { "preDays": 1, "postDays": 7, "maxMentions": 2 },
-    "concern": { "intervalDays": 3, "maxMentions": 3, "expireDays": 14 },
+    "concern": { "intervalDays": 2, "maxMentions": 3, "expireDays": 14 },
     "plan": { "minDays": 3, "maxDays": 7, "maxMentions": 1 },
     "urgency": { "eventAfter": 100, "eventBefore": 80, "concern": 70, "plan": 50 },
     "importance": { "sensitive": 90, "plain": 50 }
