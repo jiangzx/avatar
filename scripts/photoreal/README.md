@@ -40,5 +40,9 @@ faces, `manifest.json`, or the lock file.
 4. `scripts/photoreal-assets.lock.json` records the SHA-256 of the checkpoint,
    sample video, ONNX, and PCM. Commit the lock file; never commit the assets.
 
+The exported frames are scaled to 960 px wide (`--max-width`) because S3FD
+activations grow with input resolution and the page loads every frame as an
+`ImageBitmap`; face crops are still cut from the original frames.
+
 Sample video: https://assets.sync.so/docs/example-video.mp4 (10 s trim).
 S3FD weights: https://www.adrianbulat.com/downloads/python-fan/s3fd-619a316812.pth

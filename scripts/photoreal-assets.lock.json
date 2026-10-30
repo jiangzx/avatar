@@ -1,0 +1,22 @@
+{
+  "wav2lip_checkpoint": {
+    "sha256": "ca9ab7b7b812c0e80a6e70a5977c545a1e8a365a6c49d5e533023c034d7ac3d8",
+    "bytes": 435801865
+  },
+  "sample_video": {
+    "sha256": "d819e7b3c7265b19e727e188b0854dfab80cff9c6895f814aa8d4aea242e2e79",
+    "bytes": 14938569
+  },
+  "wav2lip_onnx": {
+    "sha256": "948178b93c2763dc434cc8cd260fddedd18806da9fbb1f962eb7aac5c6f916ac",
+    "bytes": 45675
+  },
+  "speech_pcm": {
+    "sha256": "3a9bb64340502727c9c1e2ddf942e22217af8105802da91ca8cd118814ada6ae",
+    "bytes": 480000
+  },
+  "manifest": {
+    "sha256": "7c961fd62d4bdfbbb92449edcfb146e16df3beb3330ca4ae01713e8a7f6ce39c",
+    "bytes": 62056
+  }
+}
