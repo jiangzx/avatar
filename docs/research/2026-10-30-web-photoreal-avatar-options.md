@@ -171,3 +171,16 @@ Web 要对齐，实质是同时满足：**真人感画面 + 音频驱动口型 +
 - [LivePortrait Web 移植笔记](https://github.com/MartinDelophy/ai-video-editor/blob/main/docs/liveportrait-web-port.md)
 - MuseTalk 实时讨论（原生 GPU，非浏览器）：[TMElyralab/MuseTalk#396](https://github.com/TMElyralab/MuseTalk/issues/396)
 - ONNX Runtime WebGPU：[Execution Provider 文档](https://onnxruntime.ai/docs/execution-providers/WebGPU-ExecutionProvider.html)
+
+## 2026-10-30 spike 结果（路线 C）
+
+- Wav2Lip 官方 README 明确禁止商用；本 spike 只用于研究 demo。产品化必须换许可干净的模型。
+- 公开检索没有找到 Wav2Lip / Ultralight / MuseTalk / LivePortrait / SadTalker 在浏览器 WebGPU 上 ≥20 fps 的 demo 或 benchmark。
+- ORT WebGPU 仍是 experimental；桌面 Chrome/Edge 可用，Safari/Firefox 不在支持范围。
+- 实测（M3 Max / Chrome 156.0.8078.74 / 10 s / 25 fps / batch 8 / fp32）：
+  - 中位 fps：25.09（250 帧，repeated 0，maxBehind 0）
+  - 音频起播→嘴动：5 ms（冷启动预缓冲 54 ms，合计 59 ms）
+  - 打断：10–13 ms；断网：pass（offline:true，25.09 fps）
+  - 推理均值：47.61 ms/批（WebGPU）；WASM 对照 2044.56 ms/批（约 3.9 帧/s）
+- 已知坑：ORT WebGPU 1.30.0 的 Conv 在输入通道数 = 6 时结果错误（CPU 对照 max abs diff 0.7）；把首层输入补零到 8 通道后与 CPU 相差 1.7e-6。详见 `docs/testing/2026-10-30-web-photoreal-spike.md`。
+- 结论：C 继续，进入 T8 盲测；96×96 嘴部块比源脸软，真人感由盲测判定。

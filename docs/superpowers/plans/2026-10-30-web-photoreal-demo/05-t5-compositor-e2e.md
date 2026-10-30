@@ -558,7 +558,7 @@ import { startPage } from '../../src/spike/photoreal/page.ts';
 void startPage();
 ```
 
-- [ ] **Step 11: 浏览器端到端手测**
+- [x] **Step 11: 浏览器端到端手测**
 
 ```bash
 npm run dev:photoreal -w avatar-core

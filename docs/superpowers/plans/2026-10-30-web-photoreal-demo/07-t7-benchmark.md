@@ -11,7 +11,7 @@
 
 背景：这一关决定路线 C 是否继续。不要用单次最好成绩；每个配置至少 3 次，取中位数。`fps` 是「不同帧数 / 播放秒数」，不是 rAF 次数；页面已按帧号变化计数。
 
-- [ ] **Step 1: 记录环境**
+- [x] **Step 1: 记录环境**
 
 ```bash
 system_profiler SPHardwareDataType | grep -E "Model Name|Chip|Memory"
@@ -20,7 +20,7 @@ sw_vers
 
 在 Chrome 打开 `chrome://version` 记录版本；打开 `chrome://gpu` 确认 `WebGPU: Hardware accelerated`。接通电源，关闭其他大应用，显示器用默认缩放。
 
-- [ ] **Step 2: 预热跑 3 次（WebGPU）**
+- [x] **Step 2: 预热跑 3 次（WebGPU）**
 
 每次：刷新 `http://127.0.0.1:5174/` → 等状态 `ready=总帧数/总帧数` → 点「开始」→ 播完 → 点「下载指标」，把文件依次另存为 `run-warm-1.json`、`run-warm-2.json`、`run-warm-3.json`（放 `/tmp/photoreal/`，不提交）。
 
@@ -30,23 +30,23 @@ mkdir -p /tmp/photoreal
 
 记录每次的：`fps`、`firstLipAfterAudioMs`、`prebufferWaitMs`、`inferenceAvgMs`、`inferenceMaxMs`、`repeatedFrames`、`maxBehind`、`modelLoadMs`、`melBuildMs`。
 
-- [ ] **Step 3: 冷启动跑 1 次（WebGPU）**
+- [x] **Step 3: 冷启动跑 1 次（WebGPU）**
 
 刷新后立刻点「开始」（不等 `ready`），记录 `prebufferWaitMs` 与 `firstLipAfterAudioMs`。这一次回答「用户点开始到嘴动要等多久」，S2 的体感以此为准。
 
-- [ ] **Step 4: WASM 对照 1 次**
+- [x] **Step 4: WASM 对照 1 次**
 
 打开 `http://127.0.0.1:5174/?ep=wasm`，等 `ready`，开始、播完、下载。记录 `fps` 与 `inferenceAvgMs`。WASM 只作为回退证据，不要求过 S1。
 
-- [ ] **Step 5: 打断 3 次**
+- [x] **Step 5: 打断 3 次**
 
 每次：开始，约 2 秒后点「打断」。记录 `interruptLatencyMs`、`playedMs`，并确认：声音立刻停；画面在 2 个 rAF 内回到源脸闭嘴；没有继续出嘴型。
 
-- [ ] **Step 6: 离线 1 次**
+- [x] **Step 6: 离线 1 次**
 
 刷新，等 `ready`；DevTools → Network → Offline；点「开始」；播完下载。确认 JSON 的 `offline: true`，且控制台没有新的网络请求失败。
 
-- [ ] **Step 7: 填报告**
+- [x] **Step 7: 填报告**
 
 `docs/testing/2026-10-30-web-photoreal-spike.md` 用下面的结构（把 `...` 换成真实值；没有跑的写 `NOT RUN`，不要写「通过」）：
 
@@ -116,7 +116,7 @@ mkdir -p /tmp/photoreal
 - ...
 ```
 
-- [ ] **Step 8: 判定与决策**
+- [x] **Step 8: 判定与决策**
 
 按中位数判定：
 
@@ -136,6 +136,8 @@ mkdir -p /tmp/photoreal
 
 - [ ] **Step 9: 允许的调参（最多 2 个工作日）**
 
+未触发：S1 与 S2 均通过，不做调参。
+
 只在 S1/S2 失败时做，按顺序，每次只改一个变量：
 
 1. **batch 大小**：把 `export_wav2lip.py --batch` 改成 4 或 16，重新导出到 `wav2lip-b4.onnx`/`wav2lip-b16.onnx`，页面通过 `?model=b4` 选择。`page.ts` 把创建 runner 的两行换成：
@@ -153,7 +155,7 @@ const runner = await Wav2LipRunner.create(modelFile, { webgpu });
 
 每次实验都要刷新页面、等 `ready`、跑 3 次。2 天后仍不过 S1/S2，停，不再扩展。
 
-- [ ] **Step 10: 更新研究文档**
+- [x] **Step 10: 更新研究文档**
 
 在 `docs/research/2026-10-30-web-photoreal-avatar-options.md` 末尾追加（不改原文的选项表）：
 
@@ -171,7 +173,7 @@ const runner = await Wav2LipRunner.create(modelFile, { webgpu });
 - 结论：...（C 继续 / 停止并评估 B / 换模型另立计划）
 ```
 
-- [ ] **Step 11: 提交**
+- [x] **Step 11: 提交**
 
 ```bash
 npm test -w avatar-core

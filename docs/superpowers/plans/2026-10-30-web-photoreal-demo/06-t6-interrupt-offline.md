@@ -209,7 +209,7 @@ import { interruptedAt } from './interrupt.ts';
   });
 ```
 
-- [ ] **Step 7: 浏览器手测打断**
+- [x] **Step 7: 浏览器手测打断**
 
 ```bash
 npm run dev:photoreal -w avatar-core
@@ -224,7 +224,7 @@ Expected:
 - `interruptLatencyMs` ≤ 100（若 100–200，记录为未达 S3，查是否被 `fill` 的长时间推理阻塞主线程）；
 - `playedMs` 与点打断时听到的时长一致（误差约一帧 40 ms）。
 
-- [ ] **Step 8: 浏览器手测离线**
+- [x] **Step 8: 浏览器手测离线**
 
 刷新页面，等状态显示 `ready`；Chrome DevTools → Network → Offline；点「开始」。
 
@@ -233,7 +233,7 @@ Expected:
 - 指标 JSON 的 `offline` 为 `true`；
 - 控制台没有新的网络请求失败（模型/帧/PCM 已在内存）。
 
-- [ ] **Step 9: 下载指标并回归**
+- [x] **Step 9: 下载指标并回归**
 
 点「下载指标」，确认 `photoreal-metrics.json` 包含 `provider`、`modelLoadMs`、`melBuildMs`、`prebufferWaitMs`、`firstLipAfterAudioMs`、`fps`、`repeatedFrames`、`inferenceAvgMs`、`interruptLatencyMs`、`offline`。
 
