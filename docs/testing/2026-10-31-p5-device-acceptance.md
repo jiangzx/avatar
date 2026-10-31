@@ -26,3 +26,10 @@
 - 测试：`proactive-render.test.ts` 断言 checkin 指令不含 `noQuestion`、`allowQuestion` 为 true；`proactive-runtime.test.ts` 断言 checkin 不含、rest 含 `noQuestion`。修复前两条断言失败。
 - 验证：`npm test -w gateway` 124 文件 / 1432 项通过；`npm run typecheck -w gateway` 无输出；真实记忆库召回三句 true / true / false，`newTitleFlag` 全 false。
 - 待办：重启 8787 后重跑第 5 项；`silenceContext` 的 `interestTopic` 与 6/8/10/10 秒阶梯是否调整另定。
+
+## 第 5 项复现：阶梯已跑通，当日主动上限先到（2026-10-31）
+
+- 无静音的一次复现（会话 `936fe79c-bf99-4c26-a581-3ae2cdfc2901`）：最后一句结束后，context / check / leave 的决策都是 `quiet`（`candidates: 0`），checkin 在第 34 秒开口；开口含「听着 + 随时」，事后核对没有 `presence` 违规。
+- 原因：该测试 owner / 小暖的 `proactive_daily` 当日计数为 15，超过 moderate 档 `maxPerDay` 10。到上限后引擎只保留 checkin 与 rest，所以前三段不主动开口。
+- 用户决定调高每日上限：`gateway/config/proactivity.json` 的 moderate `maxPerDay` 10→20、active 16→30（quiet 4 不变）。待重启后用新配置重跑第 5 项。
+- 另一次失败（会话 `c567a024-73dd-4b10-a356-dbaea5ff6e19`）：App 在 12:44:01 发送 `client.mute=true`，`setMuted(true)` 清掉了阶梯；App 里只有底部静音按钮会发这条消息，属于误触，不计入阶梯失败。
