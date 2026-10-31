@@ -309,6 +309,9 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
   List<Widget> _characterBlock(CharacterOption option, CharacterMemory? memory) {
     final pinned = memory?.pinned ?? const <MemoryPinnedItem>[];
     final facts = memory?.facts ?? const <MemoryFactItem>[];
+    final threads = memory?.threads ?? const <MemoryThreadItem>[];
+    final reflections = memory?.reflections ?? const <MemoryItem>[];
+    final moods = memory?.moods ?? const <MemoryMoodItem>[];
     return [
       _header(characterMemoryTitle(option.title)),
       _subheader(pinnedTitle),
@@ -317,6 +320,18 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
       _subheader(otherMemoryTitle),
       for (final item in facts) _itemRow(item),
       if (facts.isEmpty) _emptyLine(memoryListEmpty),
+      if (threads.isNotEmpty) ...[
+        _subheader(threadsTitle),
+        for (final item in threads) _itemRow(item, label: threadKindLabel(item.kind)),
+      ],
+      if (reflections.isNotEmpty) ...[
+        _subheader(reflectionsTitle),
+        for (final item in reflections) _itemRow(item),
+      ],
+      if (moods.isNotEmpty) ...[
+        _subheader(moodsTitle),
+        for (final mood in moods) _moodRow(mood),
+      ],
       _actionButton(
         key: Key('clear-character-${option.id}'),
         label: clearCharacterLabel(option.title),
@@ -350,11 +365,11 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
     ],
   );
 
-  Widget _itemRow(MemoryItem item) => Padding(
+  Widget _itemRow(MemoryItem item, {String? label}) => Padding(
     padding: const EdgeInsets.only(bottom: 4),
     child: Row(
       children: [
-        Expanded(child: Text(item.text, style: const TextStyle(color: Colors.white, fontSize: 20))),
+        Expanded(child: Text(label == null ? item.text : '$label：${item.text}', style: const TextStyle(color: Colors.white, fontSize: 20))),
         SizedBox(
           height: 60,
           child: TextButton(
@@ -363,6 +378,31 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
             onPressed: _writing
                 ? null
                 : () => unawaited(_confirmThen(deleteItemConfirm, deleteCancel, deleteOk, (api) => api.deleteItem(item.id))),
+            child: const Text(deleteLabel, style: TextStyle(fontSize: 20)),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _moodRow(MemoryMoodItem mood) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            '${mood.day} · ${moodEmotionLabel(mood.emotion)} · ${moodPeakLabel(mood.peak)}',
+            style: const TextStyle(color: Colors.white, fontSize: 20),
+          ),
+        ),
+        SizedBox(
+          height: 60,
+          child: TextButton(
+            key: Key('delete-${mood.id}'),
+            style: TextButton.styleFrom(minimumSize: const Size(72, 60)),
+            onPressed: _writing
+                ? null
+                : () => unawaited(_confirmThen(deleteItemConfirm, deleteCancel, deleteOk, (api) => api.deleteItem(mood.id))),
             child: const Text(deleteLabel, style: TextStyle(fontSize: 20)),
           ),
         ),

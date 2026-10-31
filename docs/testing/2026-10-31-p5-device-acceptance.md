@@ -63,3 +63,9 @@
 
 - 会话 `a263f9a8-9f2f-4efd-948a-bce1b9c3aa97`：checkin 播放中用户插话 → 本地 VAD 取消（`response_cancel local`）→ 修复句（10 字）→ 约 6 秒后从 context 重走阶梯（continueThread → check → leave quiet → checkin）。用户确认符合预期。
 - 轻回应会在 `onUserFinal` 清空 `pending`，因此这次从 context 重启；没有清空时 `Director.repairStep` 会重走被打断的那一步。
+
+## 第 12 项 App 设置页（2026-10-31 实现）
+
+- `app/lib/memory/memory_overview.dart` 解析 `threads` / `reflections` / `moods`；`companion_settings_page.dart` 在每个角色下新增「还没了结的事」「最近的感受」「情绪摘要」，复用 `DELETE /memory/items/:id` 单条删除；`memory_copy.dart` 加中文标签。
+- 测试：`flutter test` 351 项通过、`flutter analyze` 无问题；debug APK 已覆盖安装（保留 owner 数据）。
+- 待办：第 2/3 项事项线落库后，在设置页删除「合唱团」事项，再打小暖确认不再提；同时确认事项/反思/情绪摘要可见、可删。

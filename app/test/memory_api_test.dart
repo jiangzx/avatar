@@ -30,6 +30,14 @@ void main() {
     expect(nuan.pinned.single.sensitive, isTrue);
     expect(nuan.facts.map((f) => f.category), ['preference', 'health']);
     expect(nuan.facts.last.sensitive, isTrue);
+    expect(nuan.threads.single.text, '明天去社区合唱团排练');
+    expect(nuan.threads.single.kind, 'event');
+    expect(nuan.reflections.single.text, '最近常想起老同事');
+    expect(nuan.moods.single.day, '2026-10-31');
+    expect(nuan.moods.single.emotion, 'sad');
+    expect(nuan.moods.single.peak, 2);
+    expect(overview.forCharacter('xiaokai')!.threads, isEmpty);
+    expect(overview.forCharacter('xiaokai')!.moods, isEmpty);
     expect(overview.forCharacter('xiaokai')!.facts, isEmpty);
     expect(overview.forCharacter('lily'), isNull);
   });
@@ -49,6 +57,12 @@ void main() {
     final badPinned = sampleOverviewJson();
     ((badPinned['characters']! as List).first['pinned'] as List).first.remove('sensitive');
     expect(MemoryOverview.fromJson(badPinned), isNull);
+    final badThread = sampleOverviewJson();
+    (((badThread['characters']! as List).first['threads'] as List).first as Map)['kind'] = 'secret';
+    expect(MemoryOverview.fromJson(badThread), isNull);
+    final badMood = sampleOverviewJson();
+    (((badMood['characters']! as List).first['moods'] as List).first as Map)['peak'] = 4;
+    expect(MemoryOverview.fromJson(badMood), isNull);
     expect(MemoryOverview.fromJson('not a map'), isNull);
   });
 

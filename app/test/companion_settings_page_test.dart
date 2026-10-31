@@ -49,7 +49,8 @@ void main() {
     expect(y(find.text('小暖记得的事')), lessThan(y(find.text('小凯记得的事'))));
     expect(y(find.text('小凯记得的事')), lessThan(y(find.text('小欣记得的事'))));
     expect(y(find.text('小欣记得的事')), lessThan(y(find.byKey(const Key('clear-all')))));
-    for (final text in ['称呼：王叔', '家在天津', '周三去医院复查', '喜欢喝茉莉花茶', '有高血压', '爱听评书']) {
+    for (final text in ['称呼：王叔', '家在天津', '周三去医院复查', '喜欢喝茉莉花茶', '有高血压', '爱听评书',
+      '要办的事：明天去社区合唱团排练', '最近常想起老同事', '2026-10-31 · 低落 · 中']) {
       expect(find.text(text), findsOneWidget, reason: text);
     }
     expect(find.text('钉住的事'), findsNWidgets(3));
@@ -61,6 +62,21 @@ void main() {
     expect(tester.widget<Text>(find.text('小暖记得的事')).style!.color, Colors.tealAccent);
     expect(tester.getSize(find.byKey(const Key('delete-p1'))).height, greaterThanOrEqualTo(60));
     expect(tester.getSize(find.byKey(const Key('clear-all'))).height, greaterThanOrEqualTo(60));
+  });
+
+  testWidgets('shows and deletes threads, reflections and moods', (tester) async {
+    final transport = FakeMemoryTransport();
+    await open(tester, page(memory: api(transport)));
+    for (final text in ['还没了结的事', '要办的事：明天去社区合唱团排练', '最近的感受', '最近常想起老同事', '情绪摘要', '2026-10-31 · 低落 · 中']) {
+      expect(find.text(text), findsOneWidget, reason: text);
+    }
+    await reveal(tester, find.byKey(const Key('delete-n-thread')));
+    await tester.tap(find.byKey(const Key('delete-n-thread')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('memory-confirm-ok')));
+    await tester.pumpAndSettle();
+    expect(transport.calls, ['GET /memory', 'DELETE /memory/items/n-thread', 'GET /memory']);
+    expect(find.text('明天去社区合唱团排练'), findsNothing);
   });
 
   testWidgets('deleting an item asks first; cancel sends nothing; confirm deletes, reloads and reports once', (tester) async {

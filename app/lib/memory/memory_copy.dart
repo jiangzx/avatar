@@ -33,6 +33,28 @@ const deleteItemConfirm = '删除这一条吗？相关聊天原话会一起删�
 const deleteLabel = '删除';
 const deleteCancel = '先不删';
 const deleteOk = '确定删除';
+const threadsTitle = '还没了结的事';
+const reflectionsTitle = '最近的感受';
+const moodsTitle = '情绪摘要';
+String threadKindLabel(String kind) => switch (kind) {
+  'event' => '要办的事',
+  'concern' => '挂心的事',
+  'plan' => '打算',
+  _ => '事情',
+};
+String moodEmotionLabel(String emotion) => switch (emotion) {
+  'neutral' => '平静',
+  'happy' => '开心',
+  'sad' => '低落',
+  'love' => '温暖',
+  _ => '情绪',
+};
+String moodPeakLabel(int peak) => switch (peak) {
+  1 => '轻',
+  2 => '中',
+  3 => '强',
+  _ => '',
+};
 const memoryLoadFailedText = '记得的事暂时打不开，请稍后再试。';
 const memoryRetry = '重试';
 const dialogCancel = '取消';

@@ -481,3 +481,4 @@ score = (w_rel·情绪相关 + w_urg·紧迫度 + w_imp·重要性 + w_nov·新�
 - 2026-10-31 P5-T3 第 5 项第二轮：用户决定把 `presenceCheck` 提词改为「轻声问一句是否还在听，并说明随时可以接着聊，不催促」；check/leave/checkin 的等待先缩到 8/5/5，随后按用户要求把 **6/6/6 秒设为默认值**（后台版本 1/2 也是 6/6/6）。五种阶梯时长继续在后台「对话节奏」页配置（`pacing.json` 描述符已有）。回归 gateway 124 / 1432、admin 24 / 129、两个 typecheck 通过。见 `docs/testing/2026-10-31-p5-device-acceptance.md`。
 - 2026-10-31 后台：用户详情新增「今日主动次数」与「清零今日主动次数」（`proactive_daily_reset` 审计）；审计表列宽修复。主动互动页的简化方案待用户确认。
 - 2026-10-31 用户要求「没听清」修复后重新走被中断的沉默步（checkin 重新问；普通回复从 context 重启），不再直接 silent rest。`Director.repairStep` 记录被打断的步骤；测试改为 `re-runs the interrupted silence step after a noise-hearing repair`。
+- 2026-10-31 第 12 项 App 设置页：App 解析并展示事项、反思、情绪摘要，可单条删除；P2-T8 留下的 App 展示缺口已补齐。

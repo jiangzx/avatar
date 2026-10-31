@@ -495,3 +495,4 @@ Client/app: GatewayClient (idempotent close, stale-socket guard in onmessage, JS
 - 真实模型合成探针（qwen-plus，合成上下文，未用真实对话）：JSON 模式前 greeting 有记忆时返回纯文本、无法解析，退化为固定兜底；开启后 greeting 3/3、checkin 3/3 均通过内容校验，checkin 三句结构不同；rest 无问句样本 10/10。探针脚本为临时文件，验证后删除，不提交。
 - TDD/验证：`silence.test.ts` 覆盖无用户文本的 greeting 规划、记忆快照入参、checkin/rest/greeting 内容校验、快照预算、温度、JSON 模式与代码围栏、变化角度；`extract.test.ts` 覆盖 JSON 模式开关；`director.test.ts` 覆盖开场规划与回退、本地开口取消开场规划、模型侧噪声不取消、五段全规划、开场后按记忆找话头；`director-silence.test.ts`、`session.test.ts` 同步新输入形状与第四段规划。`npm test` → protocol 6、gateway 452、avatar-core 103 passed；`npm run typecheck -w gateway`、`git diff --check` 通过。
 - 待办：本轮只改 gateway，无需重装 APK；重启 8787 仍需征得用户同意。真机复验重点：连续两次重开 App 的问候是否不同、没有旧话题时是否自然找话题、第四段是否仍含“是否还在听、随时可以聊”。用户听感确认前不算完成。
+- 2026-10-31 第 12 项 App 设置页实现：`memory_overview.dart` 解析 `threads/reflections/moods`，设置页按角色显示「还没了结的事 / 最近的感受 / 情绪摘要」并复用 `DELETE /memory/items/:id` 单条删除；`flutter test` 351 项、`flutter analyze` 无问题，debug APK 已覆盖安装。待第 2/3 项事项线落库后做删除复验。

@@ -18,7 +18,10 @@ const _sample = '''
     {"character": "xiaonuan",
      "pinned": [{"id": "n-pin", "text": "周三去医院复查", "sensitive": true}],
      "facts": [{"id": "n-fact", "text": "喜欢喝茉莉花茶", "category": "preference", "sensitive": false},
-               {"id": "n-health", "text": "有高血压", "category": "health", "sensitive": true}]},
+               {"id": "n-health", "text": "有高血压", "category": "health", "sensitive": true}],
+     "threads": [{"id": "n-thread", "text": "明天去社区合唱团排练", "kind": "event", "sensitive": false}],
+     "reflections": [{"id": "n-reflection", "text": "最近常想起老同事"}],
+     "moods": [{"id": "n-mood", "day": "2026-10-31", "emotion": "sad", "peak": 2}]},
     {"character": "xiaokai", "pinned": [], "facts": []},
     {"character": "xiaoxin", "pinned": [],
      "facts": [{"id": "x-fact", "text": "爱听评书", "category": "preference", "sensitive": false}]}
@@ -73,8 +76,9 @@ class FakeMemoryTransport implements GatewayTransport {
         }
         for (final c in _characters) {
           if (scope == 'all' || (scope == 'character' && c['character'] == uri.queryParameters['character'])) {
-            c['pinned'] = <Object?>[];
-            c['facts'] = <Object?>[];
+            for (final key in ['pinned', 'facts', 'threads', 'reflections', 'moods']) {
+              c[key] = <Object?>[];
+            }
           }
         }
         return 204;
@@ -90,8 +94,10 @@ class FakeMemoryTransport implements GatewayTransport {
 
     (_profile['items']! as List).removeWhere(match);
     for (final c in _characters) {
-      (c['pinned']! as List).removeWhere(match);
-      (c['facts']! as List).removeWhere(match);
+      for (final key in ['pinned', 'facts', 'threads', 'reflections', 'moods']) {
+        final list = c[key];
+        if (list is List) list.removeWhere(match);
+      }
     }
     return removed;
   }
