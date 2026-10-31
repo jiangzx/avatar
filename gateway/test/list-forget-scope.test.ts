@@ -243,8 +243,9 @@ describe('recall_memory scope', () => {
     await expect(fromB('恐怖片')).resolves.toMatchObject({ spokenText: zh.recall.emptyText, spokenFound: false });
     await expect(fromB('茶')).resolves.toMatchObject({ spokenText: zh.recall.emptyText, spokenFound: false });
     const recent = await fromB('上次聊过什么');
-    expect(recent.spokenText).toContain('我周末去钓鱼了');
-    expect(recent.spokenText).not.toContain('恐怖片');
+    expect(recent.spokenText).toBe(zh.recall.recentConfirmText.replace('{line}', '我周末去钓鱼了'));
+    expect(recent.text).toContain('我周末去钓鱼了');
+    expect(recent.text).not.toContain('恐怖片');
     const fromA = await registry().handle('recall_memory', { query: '恐怖片' }, ctx(s, s.a, 'xiaonuan'));
     expect(fromA.spokenText).toContain('我一直想看恐怖片');
   });

@@ -248,11 +248,11 @@ const slimOn: NonNullable<PacingConfig['slim']> = {
   bridge: { zh: '我想想刚才聊到哪。', ja: 'さっきの続きを思い出すね。', en: 'Let me think about where we were.' },
 };
 
-function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessionId?: string, noticePending = false) {
+function setup(overrides: Partial<SessionDeps> = {}, ctx?: SessionContext, sessionId?: string, noticePending = false, mockScript: MockScript = script) {
   const mocks: MockAdapter[] = [];
   const session = new Session({
     adapterFactory: () => {
-      const m = new MockAdapter({ script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
+      const m = new MockAdapter({ script: mockScript, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1 });
       mocks.push(m);
       return m;
     },
@@ -307,6 +307,35 @@ describe('Session', () => {
     await s.session.start(s.transport);
     expect(plannerCalls).toBe(0);
     expect(creates).toHaveBeenCalledWith({ cue: 'greeting', instruction: '王叔，又见面了。', fallbackText: '王叔，又见面了。' });
+    s.session.end();
+  });
+
+  it('suppresses textual tool calls from the client, ledger and writer', async () => {
+    const code = '[call]\nset_memory_consent({"granted":"granted","confirmed":true})';
+    const writes: Array<{ role: string; text: string }> = [];
+    const writer: TranscriptWriter = {
+      append: (input) => {
+        writes.push({ role: input.role, text: input.text });
+        return { result: 'stored', messageId: 'm1' };
+      },
+      markNotified: () => {},
+    };
+    const s = setup(
+      { writer },
+      { ...ownedCtx },
+      'tool-syntax',
+      false,
+      { ...script, greeting: code },
+    );
+
+    await greetAndFinish(s);
+
+    expect(assistantText(s.sent, 1)).toBe('');
+    expect(of(s.sent, 'response.cancelled').some((message) => message.responseSeq === 1)).toBe(true);
+    expect(s.session.ledger.recent.some((entry) => entry.role === 'assistant' && entry.text.includes('[call]'))).toBe(false);
+    expect(s.session.ledger.recent.some((entry) => entry.role === 'assistant' && entry.text.includes('set_memory_consent'))).toBe(false);
+    s.session.flush();
+    expect(writes.filter((entry) => entry.role === 'assistant')).toEqual([]);
     s.session.end();
   });
 

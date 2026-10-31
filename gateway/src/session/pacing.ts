@@ -75,6 +75,16 @@ const MemoryBudgetSchema = z.object({
   recallClipChars: z.number().int().min(20).max(500),
   /** Natural recall phrasing deadline; failure falls back to the verbatim line. */
   recallPhraseTimeoutMs: z.number().int().min(300).max(5_000).optional(),
+  /** How long recall waits for a late user transcript before using the model query. */
+  recallFinalWaitMs: z.number().int().min(100).max(5_000).optional(),
+  /** Candidates read for a vague "what did we talk about" query; enough to skip test chatter. */
+  recallRecentWindow: z.number().int().min(10).max(200).optional(),
+  /** Short greetings/commands below this length are not recent memories. */
+  recallRecentMinChars: z.number().int().min(1).max(100).optional(),
+  /** Short action requests up to this length are not recent memories. */
+  recallActionCommandMaxChars: z.number().int().min(1).max(200).optional(),
+  /** Prefer a session with a statement this long over a newer session of test chatter. */
+  recallStrongChars: z.number().int().min(1).max(200).optional(),
   retentionDays: z.number().int().min(1).max(3_650),
   retentionBatch: z.number().int().min(1).max(10_000),
   /** Rows examined in the one startup pass that adds kana tokens to old messages. */

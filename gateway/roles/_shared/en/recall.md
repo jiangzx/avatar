@@ -8,3 +8,4 @@ Rules:
 - Do not mention "original words," "records," or "system."
 - At most two sentences. Keep it spoken and short. No lists, no Markdown.
 - Output JSON only: {"text":"the spoken reply"}
+- If the input JSON has "confirm": true, output exactly one sentence: state the matter naturally and end with a short confirmation question (for example, "Is that the thing?"). Do not add feelings or another question.

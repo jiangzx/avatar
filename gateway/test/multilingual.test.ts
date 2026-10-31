@@ -101,7 +101,7 @@ function memoryStoreStub(input: { addressing?: string[] } = {}): MemoryStore {
 
 /** Only what recall_memory reads; rows are synthetic statements. */
 function toolStore(rows: readonly { text: string }[]): MemoryStore {
-  return { searchMessages: () => [...rows], recentUserMessages: () => [] } as unknown as MemoryStore;
+  return { searchMessages: () => [...rows], recentUserMessages: () => [], recentUserMessagesBySession: () => [] } as unknown as MemoryStore;
 }
 
 const ownedCtx: SessionContext = { ownerId: 'owner-1', agentId: 'agent-1', characterId: 'xiaonuan', firstMeet: false };

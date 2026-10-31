@@ -1,4 +1,4 @@
-export type CancelSource = 'local' | 'model';
+export type CancelSource = 'local' | 'model' | 'tool_syntax';
 
 export interface InterruptDeps {
   cancel(seq: number, source: CancelSource): void;

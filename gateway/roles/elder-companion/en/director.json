@@ -34,7 +34,7 @@
   "idleNoticeText": "I'm here. No rush at all.",
   "resumeInstruction": "The network just came back. Say naturally, \"The connection dropped for a moment. Let's pick up where we left off,\" then continue the earlier topic.",
   "resumeText": "The connection dropped for a moment. Let's pick up where we left off.",
-  "toolContinueInstruction": "Continue the action or topic naturally in one sentence. Say the content directly, without a filler acknowledgement first, and do not describe the action step by step.",
+  "toolContinueInstruction": "Continue the topic naturally in one sentence. Say the content directly, without a filler acknowledgement first; do not name the action or describe the expression or motion.",
   "toolContinueText": "Let's keep going.",
   "memoryNoticeInstruction": "Use the line below to tell the user that what you talk about will be remembered, so you can pick it up next time. Do not add a question.",
   "memoryNoticeText": "I'll remember what we talk about, so we can pick it up next time.",

@@ -35,7 +35,7 @@
   "idleNoticeText": "我在呢，不着急，咱们慢慢待着。",
   "resumeInstruction": "网络刚恢复。请自然地说一句「刚才网络断了一下，我们接着聊」，然后接上之前的话题。",
   "resumeText": "刚才网络断了一下，我们接着聊吧。",
-  "toolContinueInstruction": "用一句话自然接上刚才的动作或话题。直接说内容，不先加应答词，也不描述动作过程。",
+  "toolContinueInstruction": "用一句话自然接上刚才的话题。直接说内容，不先加应答词，不要说出动作名，也不要描述表情或动作过程。",
   "toolContinueText": "来，咱们接着说。",
   "memoryNoticeInstruction": "用下面这句告诉对方，以后聊天的内容会记住，方便下次接着聊。不要加问题。",
   "memoryNoticeText": "之后咱们聊的事，我会记着，下次还能接着说。",

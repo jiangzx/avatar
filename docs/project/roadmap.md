@@ -1,5 +1,27 @@
 # Roadmap
 
+## 结束对话确认与重开（Call-end UX，2026-10-31）
+
+状态：**客户端实现完成；app 全量测试与 analyze 通过；真机连续 3 次「结束 → 接着聊天」通过（#76 已解除；主观听音待用户确认）；网关文本工具调用防护已上线并真机验证，音频取消已上线待复验（#77 部分解除）；动作续答 prompt 已改、网关已重启，待真机复验（#78）**。设计：[spec](../superpowers/specs/2026-10-31-call-end-ux-design.md)；[tool-syntax spec](../superpowers/specs/2026-10-31-tool-syntax-guard-design.md)；计划：[plan](../superpowers/plans/2026-10-31-call-end-ux.md)。
+- 交付：结束前大按钮确认（安全项「继续聊天」为填充主按钮，破坏项「结束聊天」为红色文字；点框外/返回=继续）；结束后中央「这次聊天结束了」卡片，主按钮「接着聊天」页内新开会话、次按钮「换个伙伴」打开设置；结束态隐藏静音/结束与字幕/顶部状态，关闭屏幕常亮；底部圆钮只显示图标（语义标签保留「静音/取消静音」「结束聊天」），2026-10-31 真机反馈后去掉圆内文字并恢复 `Colors.redAccent`；空字幕条不再显示。
+- 重开：`SessionStartGuard.reset()` 允许新会话；`_restart` 等旧会话 stop 和旧启动完成后再 reset，复用头像引擎，不重载 WebView/Duix、不重问权限；重开失败走现有错误+重试，不再回到死路。网关/协议未改；重开是新会话，会重新开场，记忆快照与告知行为保持原样。
+- 字幕代码防护（2026-10-31 真机反馈）：Qwen 3.1 把工具调用当文本输出（真机字幕出现 `[call] set_memory_consent(...)`，网关 `reply_metrics.tool_calls=0`；DB 另有 3 条以 `{` 开头的 assistant 文本）。客户端 `visibleAssistantLine` 隐藏以方括号、花括号、代码围栏等开头的 assistant 字幕，并记录 `assistant_code_hidden`；真机 19:17:58 捕获 `chars=1`。网关侧新增 [`textGuard`](../superpowers/specs/2026-10-31-tool-syntax-guard-design.md)：`Session.textDelta`/`finalize` 丢弃文本工具调用并记 `assistant_tool_syntax`，不执行该调用、不写 ledger/transcript；检测到即 `interrupt.cancelActive('tool_syntax')`，发送 `response.cancelled` 停止已缓冲音频，并通知 Director 按空回合推进；zh/ja/en 的 `consentToolDescription` 明确只在用户表态后调用。`npm test -w gateway` 1474 项、typecheck、真实记忆库召回探针通过。重启 8787 后真机 3 次重开：网关日志 2 次 `assistant_tool_syntax`（seq 1/2，chars=1），对应 `reply_chars=0`；客户端未再出现新的 `assistant_code_hidden`。真机开场仍听到含 `recall` 的代码，已加音频取消；待用户复验是否还会听到代码。
+- 动作续答（2026-10-31 真机反馈）：用户请求「点点头」后，`perform_action` 已执行（`tool_calls=1`），但续答里说出了动作名（如「点头」）。根因是 `_shared/*/actions.md` 的示例本身在念动作名（「来，挥挥手」「手を振りますね」）。已改 zh/ja/en 的 actions 示例、`performAction.toolDescription` 和 `toolContinueInstruction`：动作名、表情和动作过程都不许说，只接话题。`npm test -w gateway` 1474 项、typecheck、真实记忆库召回探针通过；网关已重启加载新提示。真机需用户说「点点头」复验；记 blocker #78。
+- 验证（2026-10-31）：`cd app && flutter test` 363 项通过（新增守卫 reset、确认框取消/结束/点外/返回、结束卡片与按钮、页内重开、重开失败重试、设置回调、字幕代码过滤）；`flutter analyze` no issues；`git diff --check` clean。
+- 真机（沿用现有 8787 网关，小米 22101317C / Android 13 / 1080×2400）：新建 debug APK 安装后连续 3 次「结束 → 接着聊天」。4 次 `session_ready`（首启 + 3 次重开），无 fail/error/timeout/closed 诊断，app 进程存活；结束后系统麦克风指示消失、重开后恢复；每次重开有 `duix_playback_start/end` 且 `lips=true`；确认框取消、结束卡片、接着聊天均按预期，「换个伙伴」可打开设置页。未做人工听音，主观音质/垫话自然度待用户确认。测试中 force-stop 触发 Duix crash guard；已只删除 `duix_crash_count`、`duix_inflight`、`character_hold_until.xiaoxin` 三个本地键恢复，保留 `device_token` / `character_id`，记忆未丢。
+- 未做：60 秒内 resume、通话摘要/时长。
+- 下一项：用户复验开场/对话不再听到代码音频（#77）；再说「点点头」确认只做动作、不念动作名（#78）；主观听音确认重开后的音质/垫话；再决定是否加 60 秒内 resume。
+
+## 模糊回忆召回修复（2026-10-31）
+
+状态：**已修复并通过 gateway 1476 项、typecheck、真实记忆库召回探针；用户选定「先确认再引用」（A）并已实现；重启 8787 后待用户真机复验（#79）**。设计：[spec](../superpowers/specs/2026-10-31-vague-recall-fix-design.md)。
+- 问题：用户问「上次的事你还记得吗」，模型调用了 `recall_memory`，但工具返回空，AI 说「找不到」。数据存在；根因是模糊分支只看模型 query（模型可能缩短成「上次的事」），且旧实现取全库最近 12 条用户消息，最近测试短句会挤掉真正陈述。
+- 修复：`recall_memory` 用 `ctx.triggerText`（用户原话）判定模糊回忆；新增 `recentUserMessagesBySession`，按会话分组，优先最近含 ≥15 字强陈述的已结束会话，取最近 3 条；过滤空/问句/轻回应/短动作指令（≥5 字、`matchKeyword` 且 ≤20 字的排除）；配置项 `recallRecentWindow`/`recallRecentMinChars`/`recallActionCommandMaxChars`/`recallStrongChars` 写入 `gateway/config/memory.json` 并经 snapshot 传入；每次召回记内容无关 `recall_path`。
+- 确认句带出原话并自然改写（2026-10-31 用户选择 A + 两次反馈）：模糊回忆第一句说出第一条原话的具体内容，并以确认问句结尾。先由共享文本模型（`recall.md` 的 `confirm` 模式）自然改写，沿用 FTS 包装的 grounding/长度/1.5s 超时校验，并要求必须以问句结尾；失败或不合规回退到逐字模板 `recentConfirmText`（`{line}` 替换为去句末标点的原话）。原话全集与「用户确认后接着聊、不要补原话没有的细节」的说明放在模型可见的工具文本里。具体问题（FTS 分支）仍直接引用原话。文案进 zh/ja/en `config/i18n/*/memory.json`，zod 校验模板必须含 `{line}`。此前「只问是这件吗、不带内容」的真机结果不符合预期（用户无从确认），已废弃；逐字引用虽然正确但生硬，也已改为自然改写。
+- 转写迟到修复（2026-10-31 真机回归）：用户再问「上次的事你还记得吗」又听到「找不到记录」。日志 `recall_path path=fts query_chars=2 trigger=0 hits=0` 说明这次 Qwen 先调工具、转写还没下发，`triggerText` 为空，模糊判定落空。已修：`recall_memory` 在缺 `triggerText` 时先等本回合用户终稿（`turn.currentFinal`，`recallFinalWaitMs` 默认 1000ms）；仍没有才用模型 query，并给 zh 补精确模糊词（上次/上次的事/之前的事等）；FTS 分支的当前句排除也改用等的终稿。配置经 snapshot 传入。`npm test -w gateway` 1479 项、typecheck、真实库三路径探针（trigger-present 1074ms/31 字自然句；late-final 153ms；bare-query 1ms）通过。
+- 验证：新增 store/召回/自然改写/迟到终稿/裸 query 测试；`npm test -w gateway` 127 文件、1479 项通过；typecheck 通过；真实库探针（VACUUM INTO 只读副本）三条路径均 `quotedLines=2`，其中 trigger-present 有文本模型时 `spokenIsPhrased=true`、31 字、1074ms；此前 `上次聊到哪儿了`/`上次聊过电影吗` 命中且 `newTitleFlag=false`，`我说过喜欢喝茶吗` 无命中。真机需重启 8787 后由用户复验自然确认句 → 确认后接着聊。
+- 风险：15 字/5 字阈值是启发式；真实短陈述可能被跳过（称呼/事实快照仍保留）；测试话若较长仍可能入选。配置已可调。
+
 ## 实时模型切换与每模型音色（路线 A 语音补偿，2026-10-31）
 
 状态：**T1–T8 完成（带 #74 开放项）；`qwen-audio-3.1-realtime-flash` 已是默认模型，3.8 保留可切回**。设计：[spec](../superpowers/specs/2026-10-31-realtime-model-switch-design.md)；计划：[overview](../superpowers/plans/2026-10-31-realtime-model-switch/00-overview.md)；冒烟：[记录](../testing/2026-10-31-realtime-model-switch-smoke.md)。
@@ -190,6 +212,7 @@ Plan 4 写 spec 前完成 4 个最小探针，只新增 `gateway/scripts/probe-e
 12. 所有 session 变更（指令、音色、状态卡、摘要、换语言）只能经过 `PushGate`（`gateway/src/session/pushGate.ts`）在缝隙推送，不要直接调用 `adapter.updateInstructions` / `updateVoice`。回复进行中做 `session.update` 可能让下一轮不再响应且没有 error（#48，最早在 Seeduplex 上发现；回归测试 `push-seam.test.ts` 现在跑在本地 Qwen 上游上）。
 13. **私有记忆一律按 `agent_id` 划分。** 作用域键只来自服务端 `SessionContext`（`ownerId`/`agentId`/`characterId`），绝不取自工具参数、模型输出或 HTTP body。FTS 和最近陈述查询都必须带 `agent_id`；跨角色隔离测试（`iso_*`）不能删。
 14. **钉住的敏感项只进完整快照。** 第 4 条按 Q33 修订：用户明确钉住的敏感记忆（如健康）可以进完整快照，不进开场快照和主动接话快照；设置页能看到，语音列表只给一句「在设置里能看到」。
+15. **模糊回忆以用户原话判定、按会话取实质陈述（2026-10-31）。** 不能只看模型传入的 `query`；`ctx.triggerText` 存在时优先用它；没有时要先等本回合用户终稿（`turn.currentFinal`），因为 Qwen 可能先调工具、后下发转写——2026-10-31 真机回归就是 `trigger=0` 导致又答「找不到」。等待超时（`recallFinalWaitMs`，默认 1000ms）后才回退模型 query，zh 另有精确模糊词（上次/上次的事等）。候选按会话分组，优先最近含 ≥15 字强陈述的已结束会话，回退最近含普通实质陈述的会话；过滤空消息、问句、轻回应、短动作指令（≥5 字且 `matchKeyword` ≤20 字的排除）。窗口/阈值在 `gateway/config/memory.json` 的 `recallRecentWindow`/`recallRecentMinChars`/`recallActionCommandMaxChars`/`recallStrongChars`。模糊回忆的确认句**要带出具体内容并自然改写**（用户选择 A + 两次反馈）：只问不带内容用户无从确认；逐字引用又太生硬。先走 `recall.md` 的 `confirm` 模式自然改写（grounding + 必须问句结尾 + 1.5s 超时），失败回退逐字模板 `recentConfirmText`。原话全集留在模型可见的工具文本里，确认后由模型接着聊。详见 [spec](../superpowers/specs/2026-10-31-vague-recall-fix-design.md)；真机复验前不要改回只看 query 或全局 12 条窗口。
 
 ## 沉默话术（2026-10-18，已由 2026-10-21 四段式取代）
 

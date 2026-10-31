@@ -243,6 +243,16 @@ void main() {
     expect(store.values[characterKey], 'xiaokai');
   });
 
+  testWidgets('the ended card can open settings through its change-partner callback', (tester) async {
+    final store = MemoryCredentialStore(returning('xiaonuan'));
+    await tester.pumpWidget(app(DeviceIdentity(store: store, backend: FakeBackend()), engines: engines(store, FakeDuixBridge())));
+    await tester.pumpAndSettle();
+    expect(lastRequest!.onChangePartner, isNotNull);
+    lastRequest!.onChangePartner!();
+    await tester.pumpAndSettle();
+    expect(find.text('聊天伙伴设置'), findsOneWidget);
+  });
+
   testWidgets('settings greys Duix characters on an unsupported phone', (tester) async {
     final store = MemoryCredentialStore(returning('xiaoxin'));
     final bridge = FakeDuixBridge(support: const DuixSupport(supported: false, reason: 'low_memory'));

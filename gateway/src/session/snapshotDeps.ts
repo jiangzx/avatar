@@ -9,7 +9,9 @@ import { Session, type SessionDeps } from './session.ts';
 
 /** SessionDeps fields that come from the config snapshot. Every other field passes through from the runtime. */
 export type SnapshotSessionKey = 'adapterFactory' | 'summarizer' | 'roles' | 'characters' | 'textClient' | 'voiceFor'
-  | 'budget' | 'budgets' | 'i18n' | 'recallClipChars' | 'recallPhraseTimeoutMs' | 'noticeKeywordsByLanguage'
+  | 'budget' | 'budgets' | 'i18n' | 'recallClipChars' | 'recallPhraseTimeoutMs' | 'recallFinalWaitMs'
+  | 'recallRecentWindow' | 'recallRecentMinChars' | 'recallActionCommandMaxChars' | 'recallStrongChars'
+  | 'noticeKeywordsByLanguage'
   | 'modelContextTokenLimit' | 'rebuildTriggerRatio' | 'rebuildAfterTurns' | 'summarizePolicy' | 'maxOutputTokens'
   | 'tailGuardMs' | 'slim' | 'push' | 'restReminder' | 'toolTurnTimeoutMs' | 'pin' | 'listMaxItems' | 'emotion'
   | 'affect' | 'proactivity' | 'languageRules' | 'extractEveryUserTurns' | 'extractSilenceMs' | 'realtime';
@@ -56,6 +58,11 @@ export function sessionDepsFromSnapshot(
     i18n,
     ...(memory.recallClipChars !== undefined ? { recallClipChars: memory.recallClipChars } : {}),
     ...(memory.recallPhraseTimeoutMs !== undefined ? { recallPhraseTimeoutMs: memory.recallPhraseTimeoutMs } : {}),
+    ...(memory.recallFinalWaitMs !== undefined ? { recallFinalWaitMs: memory.recallFinalWaitMs } : {}),
+    ...(memory.recallRecentWindow !== undefined ? { recallRecentWindow: memory.recallRecentWindow } : {}),
+    ...(memory.recallRecentMinChars !== undefined ? { recallRecentMinChars: memory.recallRecentMinChars } : {}),
+    ...(memory.recallActionCommandMaxChars !== undefined ? { recallActionCommandMaxChars: memory.recallActionCommandMaxChars } : {}),
+    ...(memory.recallStrongChars !== undefined ? { recallStrongChars: memory.recallStrongChars } : {}),
     noticeKeywordsByLanguage: Object.fromEntries(
       LANGUAGES.map((language) => [language, i18n.memory[language].noticeKeywords]),
     ) as Record<Language, readonly string[]>,

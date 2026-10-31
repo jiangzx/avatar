@@ -36,7 +36,7 @@ describe('loadI18n', () => {
       expect(i18n.memory[language].performAction.toolDescription.length).toBeGreaterThan(0);
       expect(i18n.memory[language].performAction.actionDescription).toContain('wave=');
     }
-    expect(i18n.memory.zh.performAction.toolDescription).toBe('当用户请求虚拟人做动作时调用。只能做列出的动作；调用后用一句话自然回应，不要描述动作过程。');
+    expect(i18n.memory.zh.performAction.toolDescription).toBe('当用户请求虚拟人做动作时调用。只能做列出的动作；调用后用一句与话题相关的话自然回应，不要说出动作名，也不要描述表情或动作过程。');
     expect(i18n.memory.zh.performAction.actionDescription).toBe('wave=挥手, nod=点头, smile=微笑, turn=转身, heart=比心');
     expect(i18n.memory.ja.performAction.toolDescription).not.toBe(i18n.memory.zh.performAction.toolDescription);
     expect(i18n.memory.en.performAction.toolDescription).not.toBe(i18n.memory.zh.performAction.toolDescription);

@@ -191,6 +191,22 @@ describe('identity rows', () => {
     expect(store.closeOpenSessions(30)).toBe(0);
   });
 
+  it('returns recent user messages with their session', () => {
+    const store = new SqliteMemoryStore(open());
+    const a = seedOwner(store, 'ha');
+    store.recordSessionStart('s-old', a.agentId, 1);
+    say(store, a, 'm-old', '昨天去了公园', 2, { sessionId: 's-old' });
+    store.recordSessionEnd('s-old', a.agentId, 3);
+    store.recordSessionStart('s-new', a.agentId, 4);
+    say(store, a, 'm-new', '今天吃了饺子', 5, { sessionId: 's-new' });
+    store.recordSessionEnd('s-new', a.agentId, 6);
+
+    expect(store.recentUserMessagesBySession(a.ownerId, a.agentId, 10)).toEqual([
+      { text: '今天吃了饺子', sessionId: 's-new' },
+      { text: '昨天去了公园', sessionId: 's-old' },
+    ]);
+  });
+
   it('touches device and owner last-seen times', () => {
     const db = open();
     const store = new SqliteMemoryStore(db);

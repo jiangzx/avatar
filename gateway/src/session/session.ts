@@ -48,6 +48,7 @@ import { ReplyMetricsTracker, metricFields, type ReplyMetrics } from './metrics.
 import { DEFAULT_TOOL_TURN_TIMEOUT_MS, loadMemoryBudget, type PacingConfig } from './pacing.ts';
 import { PushGate, type PushRequest } from './pushGate.ts';
 import { shouldSpeakBridge, slimClockAction } from './slim.ts';
+import { isTextualToolCall, stripTextualToolCall } from './textGuard.ts';
 import { ToolTurn } from './toolTurn.ts';
 import { TurnFinals } from './turnAccess.ts';
 import { createToolRegistry, type ToolOutcome, type ToolRegistry } from './tools/registry.ts';
@@ -123,6 +124,16 @@ export interface SessionDeps {
   recallClipChars?: number;
   /** Recall phrasing deadline (gateway/config/memory.json). Defaults to 1500. */
   recallPhraseTimeoutMs?: number;
+  /** How long recall waits for this turn's user final when the transcript is late. Defaults to 1000. */
+  recallFinalWaitMs?: number;
+  /** Vague-recall candidate window (gateway/config/memory.json). Defaults to 50. */
+  recallRecentWindow?: number;
+  /** Shortest line treated as a recent memory (gateway/config/memory.json). Defaults to 5. */
+  recallRecentMinChars?: number;
+  /** Longest short action request ignored by vague recall (gateway/config/memory.json). Defaults to 20. */
+  recallActionCommandMaxChars?: number;
+  /** Prefer a session with a statement this long (gateway/config/memory.json). Defaults to 15. */
+  recallStrongChars?: number;
   /** The memory notice is verified by these words in its transcript (or verbatim fallback). */
   noticeKeywords?: readonly string[];
   /** Per-language notice keywords; a notice is verified in the language it was requested in. */
@@ -176,6 +187,8 @@ interface ResponseState {
   responseDone: boolean;
   /** Set when playback.stopped reason=ended arrives for this seq. */
   playbackEnded: boolean;
+  /** Qwen printed a tool call as text; drop it from the client, ledger and transcript. */
+  textSuppressed?: boolean;
 }
 
 const MAX_REBUILD_MIC_FRAMES = 25;
@@ -901,6 +914,11 @@ export class Session {
         safety: i18n.safety,
         clipChars: this.deps.recallClipChars ?? 80,
         phraseTimeoutMs: this.deps.recallPhraseTimeoutMs ?? 1_500,
+        recallFinalWaitMs: this.deps.recallFinalWaitMs ?? MEMORY_DEFAULTS.recallFinalWaitMs ?? 1_000,
+        recentWindow: this.deps.recallRecentWindow ?? MEMORY_DEFAULTS.recallRecentWindow ?? 50,
+        recentMinChars: this.deps.recallRecentMinChars ?? MEMORY_DEFAULTS.recallRecentMinChars ?? 5,
+        actionCommandMaxChars: this.deps.recallActionCommandMaxChars ?? MEMORY_DEFAULTS.recallActionCommandMaxChars ?? 20,
+        strongChars: this.deps.recallStrongChars ?? MEMORY_DEFAULTS.recallStrongChars ?? 15,
         pinLimits: this.deps.pin
           ? { maxPerCharacter: this.deps.pin.maxPerCharacter, maxChars: this.deps.pin.maxChars[language] }
           : undefined,
@@ -1167,8 +1185,21 @@ export class Session {
     });
     a.on('textDelta', (id, text) => {
       const s = this.live(a, id);
-      if (!s) return;
-      s.text += text;
+      if (!s || s.textSuppressed) return;
+      const next = s.text + text;
+      const stripped = stripTextualToolCall(next);
+      if (stripped !== next) {
+        s.textSuppressed = true;
+        s.text = stripped;
+        this.log.child({ seq: s.seq }).warn('assistant_tool_syntax', { chars: next.length });
+        if (this.interrupt.active === s.seq) {
+          // Stop the audio too: the model may already have spoken the tool-call text.
+          this.interrupt.cancelActive('tool_syntax');
+          this.director.onAiTurnEnded(s.text);
+        }
+        return;
+      }
+      s.text = next;
       this.metrics.onText(s.seq, text.length);
       this.emotion?.onAssistantDelta(s.seq, text);
       this.charsSinceRebuild += text.length;
@@ -1265,8 +1296,13 @@ export class Session {
       this.deps.onReplyMetrics?.(m);
       this.recordReplyUsage(m);
     }
-      const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
-    s.text = text;
+    const text = interrupted ? truncateByPlayback(s.text, s.playedMs, s.audioMs) : s.text;
+    const safeText = stripTextualToolCall(text);
+    if (safeText !== text && !s.textSuppressed) {
+      s.textSuppressed = true;
+      this.log.child({ seq: s.seq }).warn('assistant_tool_syntax', { chars: text.length });
+    }
+    s.text = safeText;
     if (s.seq === this.proactiveSeq) {
       this.proactiveSeq = null;
       this.proactive?.onLineEnded(text, interrupted);

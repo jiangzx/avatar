@@ -37,6 +37,10 @@ export interface RecallTextCopy {
   emptyText: string;
   foundPrefix: string;
   wrapText: string;
+  /** One-line confirmation template for a vague recollection; `{line}` is the verbatim hit. */
+  recentConfirmText: string;
+  /** Tells the model the gateway already quoted the line and asked for confirmation. */
+  recentConfirmInstruction: string;
   toolDescription: string;
   queryDescription: string;
   forgetToolDescription: string;

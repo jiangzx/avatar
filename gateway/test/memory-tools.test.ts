@@ -150,6 +150,12 @@ describe('memory tool registry', () => {
     expect(specs.find((spec) => spec.name === 'set_memory_consent')?.description).toBe(i18n.memory.zh.recall.consentToolDescription);
   });
 
+  it('tells the model not to name avatar actions', () => {
+    expect(i18n.memory.zh.performAction.toolDescription).toContain('不要说出动作名');
+    expect(i18n.memory.ja.performAction.toolDescription).toContain('動作名を言わず');
+    expect(i18n.memory.en.performAction.toolDescription).toContain('Never name the action');
+  });
+
   it('answers recall in the active language and uses kana tokens', async () => {
     const store = new SqliteMemoryStore(open());
     const a = owner(store, 'recall-ja');
@@ -291,6 +297,8 @@ describe('memory tool registry', () => {
 
     const result = await registryFor('en').handle('recall_memory', { query: 'What did we talk about?' }, ctxFor(store, worker(store), a));
     expect(result.spokenFound).toBe(true);
+    expect(result.spokenText).toBe(i18n.memory.en.recall.recentConfirmText.replace('{line}', 'I like watching old movies'));
+    expect(result.text).toContain(i18n.memory.en.recall.recentConfirmInstruction);
     expect(result.text).toContain('I like watching old movies.');
     expect(result.text).not.toContain('This is still the active session.');
   });
@@ -511,7 +519,85 @@ describe('memory tool registry', () => {
     store.recordSessionEnd('s-old', a.agentId, 3);
     const result = await registryFor('zh').handle('recall_memory', { query: '上次咱们聊过什么' }, ctxFor(store, worker(store), a));
     expect(result.spokenFound).toBe(true);
-    expect(result.spokenText).toBe('我这边记着，您之前说过：我记得我之前看过一部电影叫咒怨。');
+    // Vague recall reads the verbatim line back and asks whether it is the right thing.
+    expect(result.spokenText).toBe(i18n.memory.zh.recall.recentConfirmText.replace('{line}', '我记得我之前看过一部电影叫咒怨'));
+    expect(result.text).toContain('我记得我之前看过一部电影叫咒怨。');
+    expect(result.text).toContain(i18n.memory.zh.recall.recentConfirmInstruction);
+  });
+
+  it('phrases the vague confirmation naturally and keeps the verbatim fallback', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-confirm-phrase');
+    store.recordSessionStart('s-old', a.agentId, 1);
+    say(store, a.ownerId, 'm1', '我女儿在深圳工作，一年也就回来一两次。', 2, 's-old');
+    store.recordSessionEnd('s-old', a.agentId, 3);
+
+    const good: TextModelClient = {
+      complete: async (input) => {
+        expect(JSON.parse(input.user)).toMatchObject({ confirm: true });
+        return JSON.stringify({ text: '您上次说女儿在深圳工作，一年也就回来一两次，是这件事吗？' });
+      },
+    };
+    const natural = await registryFor('zh').handle('recall_memory', { query: '上次聊过什么' }, { ...ctxFor(store, worker(store), a), textClient: good });
+    expect(natural.spokenText).toBe('您上次说女儿在深圳工作，一年也就回来一两次，是这件事吗？');
+
+    // A phrasing without a question cannot be confirmed; fall back to the verbatim template.
+    const noQuestion: TextModelClient = { complete: async () => JSON.stringify({ text: '您上次说女儿在深圳工作。' }) };
+    const fallback = await registryFor('zh').handle('recall_memory', { query: '上次聊过什么' }, { ...ctxFor(store, worker(store), a), textClient: noQuestion });
+    expect(fallback.spokenText).toBe(i18n.memory.zh.recall.recentConfirmText.replace('{line}', '我女儿在深圳工作，一年也就回来一两次'));
+  });
+
+  it('waits for a late user final before deciding vague recall', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-late-final');
+    store.recordSessionStart('s-old', a.agentId, 1);
+    say(store, a.ownerId, 'm1', '我女儿在深圳工作，一年也就回来一两次。', 2, 's-old');
+    store.recordSessionEnd('s-old', a.agentId, 3);
+    // Qwen called the tool before its transcript arrived; the query alone is not vague.
+    const turn = {
+      currentFinal: async () => ({ text: '上次的事你还记得吗', messageId: null }),
+      previousFinal: () => null,
+    };
+    const result = await registryFor('zh').handle('recall_memory', { query: '那件事' }, { ...ctxFor(store, worker(store), a), turn });
+    expect(result.spokenFound).toBe(true);
+    expect(result.text).toContain('我女儿在深圳工作，一年也就回来一两次。');
+  });
+
+  it('treats a bare vague query as vague when no user line is available', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-bare-query');
+    store.recordSessionStart('s-old', a.agentId, 1);
+    say(store, a.ownerId, 'm1', '我女儿在深圳工作，一年也就回来一两次。', 2, 's-old');
+    store.recordSessionEnd('s-old', a.agentId, 3);
+    const result = await registryFor('zh').handle('recall_memory', { query: '上次' }, ctxFor(store, worker(store), a));
+    expect(result.spokenFound).toBe(true);
+    expect(result.text).toContain('我女儿在深圳工作，一年也就回来一两次。');
+  });
+
+  it('uses the user line for vague recall and skips a newer session of test chatter', async () => {
+    const store = new SqliteMemoryStore(open());
+    const a = owner(store, 'recall-vague-command');
+    store.recordSessionStart('s-old', a.agentId, 1);
+    say(store, a.ownerId, 'old-1', '我最近一直在看老电影，昨晚又看了一遍。', 2, 's-old');
+    say(store, a.ownerId, 'old-2', '我女儿在深圳工作，一年也就回来一两次。', 3, 's-old');
+    store.recordSessionEnd('s-old', a.agentId, 4);
+    store.recordSessionStart('s-new', a.agentId, 5);
+    say(store, a.ownerId, 'new-0', '你刚才说了一句', 6, 's-new');
+    say(store, a.ownerId, 'new-1', '你点点头。', 7, 's-new');
+    say(store, a.ownerId, 'new-2', '上次的事你还记得吗？', 8, 's-new');
+    store.recordSessionEnd('s-new', a.agentId, 9);
+
+    const result = await registryFor('zh').handle('recall_memory', { query: '上次的事' }, {
+      ...ctxFor(store, worker(store), a),
+      triggerText: '上次的事你还记得吗',
+    });
+    expect(result.spokenFound).toBe(true);
+    expect(result.spokenText).toBe(i18n.memory.zh.recall.recentConfirmText.replace('{line}', '我女儿在深圳工作，一年也就回来一两次'));
+    expect(result.text).toContain('我最近一直在看老电影，昨晚又看了一遍。');
+    expect(result.text).toContain('我女儿在深圳工作，一年也就回来一两次。');
+    expect(result.text).not.toContain('你刚才说了一句');
+    expect(result.text).not.toContain('你点点头。');
+    expect(result.text).not.toContain('上次的事你还记得吗？');
   });
 
   it('does not quote a question as past evidence', async () => {
@@ -807,12 +893,14 @@ describe('session memory tools', () => {
     session.end();
   });
 
-  it('speaks the recalled user line instead of the generic tool continue copy', async () => {
+  it('asks before quoting a vague recall instead of the generic tool continue copy', async () => {
     const db = open();
     const store = new SqliteMemoryStore(db);
     const a = owner(store, 'h-recall-live');
     store.markNotified(a.ownerId, 2);
+    store.recordSessionStart('s1', a.agentId, 1);
     say(store, a.ownerId, 'mem', '我一直想看恐怖片', 10);
+    store.recordSessionEnd('s1', a.agentId, 11);
     const calls: Array<{ cue?: string; instruction?: string; fallbackText?: string }> = [];
     const session = new Session({
       adapterFactory: () => {
@@ -844,10 +932,11 @@ describe('session memory tools', () => {
     session.handleClientMessage({ type: 'debug.userText', text: '上次聊过电影吗' });
     await vi.advanceTimersByTimeAsync(1000);
 
+    const confirm = i18n.memory.zh.recall.recentConfirmText.replace('{line}', '我一直想看恐怖片');
     expect(calls).toContainEqual({
       cue: 'toolContinue',
-      instruction: `请直接说下面这句话，不要改写：我这边记着，您之前说过：我一直想看恐怖片`,
-      fallbackText: '我这边记着，您之前说过：我一直想看恐怖片',
+      instruction: `请直接说下面这句话，不要改写：${confirm}`,
+      fallbackText: confirm,
     });
     session.end();
   });

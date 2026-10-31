@@ -78,6 +78,16 @@ export interface ToolRegistryOptions {
   safety: SafetyRules;
   clipChars: number;
   phraseTimeoutMs: number;
+  /** Wait this long for the turn's user final when the transcript is late; omitted = shipped default. */
+  recallFinalWaitMs?: number;
+  /** Vague-recall candidate window; omitted = gateway/config/memory.json. */
+  recentWindow?: number;
+  /** Shortest recent-memory line; omitted = gateway/config/memory.json. */
+  recentMinChars?: number;
+  /** Longest short action request ignored by vague recall; omitted = gateway/config/memory.json. */
+  actionCommandMaxChars?: number;
+  /** Prefer a session with a statement this long; omitted = gateway/config/memory.json. */
+  strongChars?: number;
   /** Test double. Production uses global fetch. */
   weatherFetch?: WeatherFetch;
   /** pin_memory limits for this language; omitted = gateway/config/memory.json. */
@@ -131,6 +141,8 @@ export function createToolRegistry(options: ToolRegistryOptions): ToolRegistry {
       emptyText: options.memory.recall.emptyText,
       foundPrefix: options.memory.recall.foundPrefix,
       wrapText: options.memory.recall.wrapText,
+      recentConfirmText: options.memory.recall.recentConfirmText,
+      recentConfirmInstruction: options.memory.recall.recentConfirmInstruction,
       toolDescription: options.memory.recall.toolDescription,
       queryDescription: options.memory.recall.queryDescription,
       skipPatterns: options.evidence.skipPatterns,
@@ -144,7 +156,11 @@ export function createToolRegistry(options: ToolRegistryOptions): ToolRegistry {
       phraseInstruction: options.recallPrompt,
       phraseMaxChars: options.memory.recall.phraseMaxChars,
       phraseTimeoutMs: options.phraseTimeoutMs,
-    }),
+      ...(options.recentWindow !== undefined ? { recentWindow: options.recentWindow } : {}),
+      ...(options.recentMinChars !== undefined ? { recentMinChars: options.recentMinChars } : {}),
+      ...(options.actionCommandMaxChars !== undefined ? { actionCommandMaxChars: options.actionCommandMaxChars } : {}),
+      ...(options.strongChars !== undefined ? { strongChars: options.strongChars } : {}),
+    }, options.recallFinalWaitMs ?? MEMORY_DEFAULTS.recallFinalWaitMs ?? 1_000),
     forgetTool(options.memory.forgetConfirmText, {
       toolDescription: options.memory.recall.forgetToolDescription,
       queryDescription: options.memory.recall.forgetQueryDescription,

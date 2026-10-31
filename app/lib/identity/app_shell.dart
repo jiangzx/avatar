@@ -28,6 +28,7 @@ class AvatarPageRequest {
     this.onUnknownCharacter,
     this.onSessionRejected,
     this.onDiagCode,
+    this.onChangePartner,
   });
 
   final Key key;
@@ -46,6 +47,9 @@ class AvatarPageRequest {
 
   /// The chat page reports the diag code of each ready session.
   final ValueChanged<String>? onDiagCode;
+
+  /// Opens the settings/character switcher from the chat page's ended card.
+  final VoidCallback? onChangePartner;
 }
 
 /// First launch: character picker + registration. Afterwards: the saved character's chat.
@@ -316,6 +320,7 @@ class _AppShellState extends State<AppShell> {
                   onUnknownCharacter: _onUnknownCharacter,
                   onSessionRejected: (rejection) => unawaited(_onSessionRejected(character, rejection)),
                   onDiagCode: (code) => _diagCode = code,
+                  onChangePartner: _openSettings,
                 ),
               ),
       ),

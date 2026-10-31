@@ -22,4 +22,18 @@ void main() {
     expect(guard.isCurrent(first), isFalse);
     expect(guard.isCurrent(second), isTrue);
   });
+
+  test('reset allows a new session and invalidates the old token', () {
+    final guard = SessionStartGuard();
+    final old = guard.begin();
+    guard.end();
+
+    guard.reset();
+
+    expect(guard.ended, isFalse);
+    expect(guard.isCurrent(old), isFalse);
+    final next = guard.begin();
+    expect(next, greaterThan(0));
+    expect(guard.isCurrent(next), isTrue);
+  });
 }

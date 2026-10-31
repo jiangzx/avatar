@@ -15,4 +15,10 @@ class SessionStartGuard {
     _ended = true;
     _epoch++;
   }
+
+  /// A new session after the user ends and taps "keep chatting".
+  void reset() {
+    _ended = false;
+    _epoch++;
+  }
 }

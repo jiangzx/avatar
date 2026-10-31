@@ -155,6 +155,8 @@ export interface MemoryStore {
   insertPinned(row: { id: string; ownerId: string; agentId: string; text: string; sensitive: boolean; sourceSessionId: string; sourceMessageId: string | null; now: number }): void;
   /** Newest user messages of this agent from ended sessions only; the active session never becomes memory here. */
   recentUserMessages(ownerId: string, agentId: string, limit: number): { text: string }[];
+  /** Same rows as recentUserMessages, with their session id; vague recall picks the newest session with a real statement. */
+  recentUserMessagesBySession(ownerId: string, agentId: string, limit: number): { text: string; sessionId: string }[];
   /** Runs `body` inside one immediate write transaction. */
   immediate<T>(body: () => T): T;
   /** Unextracted, non-excluded messages of this agent in watermark order. */
@@ -409,6 +411,11 @@ function prepareStatements(db: DatabaseSync) {
       SELECT ?, ?, ?, ?, ?, ?, ?, ?
       WHERE EXISTS (SELECT 1 FROM agents WHERE id = ? AND owner_id = ?)`),
     recentUserMessages: p(`SELECT m.text AS text FROM messages m
+      JOIN sessions s ON s.id = m.session_id AND s.agent_id = m.agent_id
+      WHERE m.owner_id = ? AND m.agent_id = ? AND m.role = 'user' AND m.excluded = 0 AND s.ended_at IS NOT NULL
+      ORDER BY m.created_at DESC, m.rowid DESC
+      LIMIT ?`),
+    recentUserMessagesBySession: p(`SELECT m.text AS text, m.session_id AS sessionId FROM messages m
       JOIN sessions s ON s.id = m.session_id AND s.agent_id = m.agent_id
       WHERE m.owner_id = ? AND m.agent_id = ? AND m.role = 'user' AND m.excluded = 0 AND s.ended_at IS NOT NULL
       ORDER BY m.created_at DESC, m.rowid DESC
@@ -766,6 +773,13 @@ export class SqliteMemoryStore implements MemoryStore {
 
   recentUserMessages(ownerId: string, agentId: string, limit: number): { text: string }[] {
     return this.q.recentUserMessages.all(ownerId, agentId, limit).map((r) => ({ text: r.text as string }));
+  }
+
+  recentUserMessagesBySession(ownerId: string, agentId: string, limit: number): { text: string; sessionId: string }[] {
+    return this.q.recentUserMessagesBySession.all(ownerId, agentId, limit).map((r) => ({
+      text: r.text as string,
+      sessionId: r.sessionId as string,
+    }));
   }
 
   immediate<T>(body: () => T): T {

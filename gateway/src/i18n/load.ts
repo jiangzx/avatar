@@ -47,6 +47,8 @@ const MemoryFileSchema = z.object({
     emptyText: z.string().min(1),
     foundPrefix: z.string().min(1),
     wrapText: z.string().min(1),
+    recentConfirmText: z.string().min(1).refine((value) => value.includes('{line}'), { message: 'missing {line}' }),
+    recentConfirmInstruction: z.string().min(1),
     toolDescription: z.string().min(1),
     queryDescription: z.string().min(1),
     forgetToolDescription: z.string().min(1),

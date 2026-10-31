@@ -13,6 +13,7 @@ import 'avatar_engine/presence_chip.dart';
 import 'companion_config.dart';
 import 'config.dart';
 import 'diag_log.dart';
+import 'end_chat_dialog.dart';
 import 'identity/session_rejection.dart';
 import 'metrics.dart';
 import 'native_audio/filler_clips.dart';
@@ -48,6 +49,20 @@ String aiLineAfterState(String state, String current) => switch (state) {
   _ => current,
 };
 
+/// Qwen 3.1 can print a tool call as plain text. Never show that syntax in the subtitle.
+String visibleAssistantLine(String text) {
+  final lines = text.split('\n');
+  final index = lines.indexWhere(_startsWithToolSyntax);
+  return index == -1 ? text : lines.take(index).join('\n').trimRight();
+}
+
+const _toolSyntaxPrefixes = ['[', '{', '```', '<tool', 'set_memory_consent('];
+
+bool _startsWithToolSyntax(String line) {
+  final leading = line.trimLeft();
+  return _toolSyntaxPrefixes.any(leading.startsWith);
+}
+
 String _errorLabel(String code) => switch (code) {
   'NotAllowedError' => '麦克风被拒绝，请在设置中允许',
   'NotFoundError' => '没有找到麦克风',
@@ -78,6 +93,8 @@ class AvatarPage extends StatefulWidget {
     this.onUnknownCharacter,
     this.onSessionRejected,
     this.onDiagCode,
+    this.onChangePartner,
+    this.gatewayClientFactory,
     this.characterId,
     this.displayName = '',
     this.companion,
@@ -103,6 +120,12 @@ class AvatarPage extends StatefulWidget {
   /// Receives `<sessionId>-<diagId>` each time a session is ready (settings copies it).
   final ValueChanged<String>? onDiagCode;
 
+  /// Opens the settings/character switcher from the ended card.
+  final VoidCallback? onChangePartner;
+
+  /// Test seam: null builds the real gateway client.
+  final GatewayClientLike Function()? gatewayClientFactory;
+
   /// Chosen character: sent on POST /session and picks the filler clips. Null = gateway default (dev).
   final String? characterId;
 
@@ -126,6 +149,15 @@ class _AvatarPageState extends State<AvatarPage> {
   final _diag = <String, String>{};
   final _debugText = TextEditingController();
   NativeSessionController? _session;
+  /// The chat ended and the page shows the ended card.
+  bool _ended = false;
+  bool _restarting = false;
+  /// The in-flight stop after ending; restart waits for the mic/player release.
+  Future<void>? _ending;
+  /// The in-flight session start; restart waits so two starts cannot overlap.
+  Completer<void>? _startDone;
+  /// Responses whose textual tool syntax was already logged once.
+  final _hiddenCodeSeqs = <int>{};
   bool _engineStarted = false;
   bool _engineFailed = false;
   bool _startingEngine = false;
@@ -237,46 +269,58 @@ class _AvatarPageState extends State<AvatarPage> {
     final token = _sessionGuard.begin();
     if (token < 0) return;
     _startingSession = true;
-    final thinking = await _loadThinking();
-    final clips = thinking == null
-        ? const <String, Int16List>{}
-        : await loadFillerClips(rootBundle, thinking, fillerCharacter(thinking, widget.characterId));
-    if (!mounted || !_sessionGuard.isCurrent(token)) {
-      _startingSession = false;
-      return; // ended or restarted while loading
-    }
-    final session = NativeSessionController(
-      audio: _engine.createAudio(thinking?.audio),
-      detector: _engine.createDetector(),
-      client: NativeGatewayClient(
-        baseUri: Uri.parse(AppConfig.gatewayUrl),
-        appSecret: AppConfig.appSecret,
-        transport: const IoGatewayTransport(),
-        events: _UnwiredGatewayEvents(),
-        audioPath: AppConfig.audioPath,
-        language: _deviceLanguage(),
-        characterId: widget.characterId,
-        identity: widget.identity,
-      ),
-      emit: _onNativeEvent,
-      thinking: thinking,
-      fillerPcm: clips,
-    );
-    _session = session;
+    final done = Completer<void>();
+    _startDone = done;
+    _hiddenCodeSeqs.clear();
     try {
-      await session.start();
+      final thinking = await _loadThinking();
+      final clips = thinking == null
+          ? const <String, Int16List>{}
+          : await loadFillerClips(rootBundle, thinking, fillerCharacter(thinking, widget.characterId));
+      if (!mounted || !_sessionGuard.isCurrent(token)) return; // ended or restarted while loading
+      final session = NativeSessionController(
+        audio: _engine.createAudio(thinking?.audio),
+        detector: _engine.createDetector(),
+        client: widget.gatewayClientFactory?.call() ??
+            NativeGatewayClient(
+              baseUri: Uri.parse(AppConfig.gatewayUrl),
+              appSecret: AppConfig.appSecret,
+              transport: const IoGatewayTransport(),
+              events: _UnwiredGatewayEvents(),
+              audioPath: AppConfig.audioPath,
+              language: _deviceLanguage(),
+              characterId: widget.characterId,
+              identity: widget.identity,
+            ),
+        emit: _onNativeEvent,
+        thinking: thinking,
+        fillerPcm: clips,
+      );
+      _session = session;
+      try {
+        await session.start();
+      } catch (_) {
+        if (identical(_session, session)) _session = null;
+      }
+      if (!mounted || !_sessionGuard.isCurrent(token)) {
+        if (identical(_session, session)) _session = null;
+        await session.stop(); // End/dispose won the race: release the mic and gateway
+      }
     } catch (_) {
-      if (identical(_session, session)) _session = null;
+      // Audio/renderer setup or asset loading failed before the session could report.
+      if (mounted && !_sessionGuard.ended) _update(() => _error = '初始化失败，请重试');
     } finally {
       _startingSession = false;
-    }
-    if (!mounted || !_sessionGuard.isCurrent(token)) {
-      if (identical(_session, session)) _session = null;
-      await session.stop(); // End/dispose won the race: release the mic and gateway
+      if (identical(_startDone, done)) _startDone = null;
+      if (!done.isCompleted) done.complete();
     }
   }
 
   void _retry() {
+    if (_ended) {
+      unawaited(_restart());
+      return;
+    }
     if (_startingSession || _sessionGuard.ended) return;
     setState(() => _error = null);
     if (!_engineStarted) {
@@ -308,12 +352,14 @@ class _AvatarPageState extends State<AvatarPage> {
   void _onNativeEvent(NativeUiEvent event) {
     if (!mounted) return;
     if (event is UiDiag) {
+      if (_ended) return;
       if (event.key == diagCodeKey) widget.onDiagCode?.call(event.value);
       setState(() => _diag[event.key] = event.value);
       return;
     }
     _toast?.onEvent(event);
     _engine.onSessionEvent(event);
+    if (_ended) return; // the engine still gets the final stop state; the ended UI stays quiet
     switch (event) {
       case UiStatus(:final status):
         setState(() {
@@ -325,8 +371,12 @@ class _AvatarPageState extends State<AvatarPage> {
           _state = state;
           _aiLine = aiLineAfterState(state, _aiLine);
         });
-      case UiSubtitle(:final role, :final text):
-        setState(() => role == 'user' ? _userLine = text : _aiLine = text);
+      case UiSubtitle(:final role, :final text, :final responseSeq):
+        final shown = role == 'assistant' ? visibleAssistantLine(text) : text;
+        setState(() => role == 'user' ? _userLine = text : _aiLine = shown);
+        if (role == 'assistant' && shown.isEmpty && text.trim().isNotEmpty && responseSeq != null && _hiddenCodeSeqs.add(responseSeq)) {
+          logcatDiagSink(formatDiag('assistant_code_hidden', {'chars': text.length}));
+        }
       case UiMetric(:final name, :final ms):
         setState(() => _metrics.add(name, ms.toDouble()));
       case UiError(:final code):
@@ -363,17 +413,100 @@ class _AvatarPageState extends State<AvatarPage> {
     }
   }
 
-  void _end() {
+  void _requestEnd() {
+    unawaited(_confirmEnd());
+  }
+
+  Future<void> _confirmEnd() async {
+    if (_ended || _ending != null || _restarting || !mounted) return;
+    final end = await confirmEndChat(context);
+    if (!mounted || !end) return;
+    await _endNow();
+  }
+
+  Future<void> _endNow() async {
+    if (_ended) return;
     _sessionGuard.end();
-    final legacy = _legacy;
-    if (legacy == null) {
-      unawaited(_session?.stop() ?? Future<void>.value());
-    } else {
-      legacy.legacyEnd();
-    }
+    final stop = _stopSession();
+    _ending = stop;
     setState(() {
-      _status = _statusLabels['closed']!;
-      _error = null; // the session is over; a retry button must not stay active
+      _ended = true;
+      _status = '';
+      _error = null;
+      _userLine = '';
+      _aiLine = '';
+    });
+    widget.platform.setWakelock(false);
+    try {
+      await stop;
+    } finally {
+      if (identical(_ending, stop)) _ending = null;
+    }
+  }
+
+  Future<void> _stopSession() async {
+    final legacy = _legacy;
+    if (legacy != null) {
+      try {
+        legacy.legacyEnd();
+      } catch (_) {
+        // The ended UI must still be reachable if the legacy bridge misbehaves.
+      }
+      return;
+    }
+    final session = _session;
+    _session = null;
+    try {
+      await session?.stop();
+    } catch (_) {
+      // The UI is already ended; a failed release must not block restart.
+    }
+  }
+
+  Future<void> _restart() async {
+    if (!_ended || _restarting) return;
+    _restarting = true;
+    try {
+      final ending = _ending;
+      if (ending != null) await ending;
+      final starting = _startDone?.future;
+      if (starting != null) await starting;
+      if (!mounted) return;
+      _sessionGuard.reset();
+      final legacy = _legacy;
+      if (legacy != null) {
+        _showConnecting();
+        widget.platform.setWakelock(true);
+        legacy.legacyRestart();
+        return;
+      }
+      if (!_engineStarted) {
+        setState(() {
+          _ended = false;
+          _error = null;
+          _status = _statusLabels['loading']!;
+          _userLine = '';
+          _aiLine = '';
+        });
+        widget.platform.setWakelock(true);
+        await _init();
+        return;
+      }
+      _showConnecting();
+      widget.platform.setWakelock(true);
+      await _startNativeSession();
+    } finally {
+      _restarting = false;
+    }
+  }
+
+  void _showConnecting() {
+    setState(() {
+      _ended = false;
+      _error = null;
+      _status = _statusLabels['connecting']!;
+      _userLine = '';
+      _aiLine = '';
     });
   }
 
@@ -473,6 +606,8 @@ class _AvatarPageState extends State<AvatarPage> {
     final session = _session;
     _session = null;
     try {
+      final ending = _ending;
+      if (ending != null) await ending;
       await session?.stop();
     } catch (_) {
       // the page is gone; the renderer still has to be released
@@ -496,8 +631,11 @@ class _AvatarPageState extends State<AvatarPage> {
             muted: _muted,
             name: widget.displayName,
             onMute: _toggleMute,
-            onEnd: _end,
+            onEnd: _requestEnd,
             onRetry: _retry,
+            onRestart: _ended ? () => unawaited(_restart()) : null,
+            onChangePartner: widget.onChangePartner,
+            ended: _ended,
             onToggleDebug: () => setState(() => _debug = !_debug),
             debugPanel: _debug ? _debugPanel() : null,
             presence: hint == null ? null : PresenceChip(hint: hint),

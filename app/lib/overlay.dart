@@ -14,6 +14,9 @@ class AvatarOverlay extends StatelessWidget {
     required this.onEnd,
     required this.onToggleDebug,
     this.onRetry,
+    this.onRestart,
+    this.onChangePartner,
+    this.ended = false,
     this.debugPanel,
     this.presence,
     this.caption,
@@ -32,6 +35,15 @@ class AvatarOverlay extends StatelessWidget {
   final VoidCallback onEnd;
   final VoidCallback onToggleDebug;
   final VoidCallback? onRetry;
+
+  /// Shown in the ended card; null disables the primary action.
+  final VoidCallback? onRestart;
+
+  /// Opens the settings/character switcher from the ended card; null hides it.
+  final VoidCallback? onChangePartner;
+
+  /// The chat ended: call controls and subtitles are replaced by the ended card.
+  final bool ended;
   final Widget? debugPanel;
 
   /// Optional status pill shown just above the subtitle card.
@@ -65,7 +77,7 @@ class AvatarOverlay extends StatelessWidget {
               ),
             ),
           ),
-          if (status.isNotEmpty)
+          if (!ended && status.isNotEmpty)
             Positioned(
               top: 16,
               right: 12,
@@ -93,7 +105,8 @@ class AvatarOverlay extends StatelessWidget {
                 ),
               ),
             ),
-          Positioned(
+          if (!ended)
+            Positioned(
             left: 16,
             right: 16,
             bottom: 104,
@@ -118,34 +131,51 @@ class AvatarOverlay extends StatelessWidget {
                   Align(alignment: Alignment.centerLeft, child: presence),
                   const SizedBox(height: 8),
                 ],
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (userLine.isNotEmpty) Text(userLine, style: const TextStyle(color: Colors.white70, fontSize: 18)),
-                      if (aiLine.isNotEmpty) Text(aiLine, style: const TextStyle(color: Colors.white, fontSize: 20)),
-                    ],
+                if (userLine.isNotEmpty || aiLine.isNotEmpty)
+                  Container(
+                    key: const Key('subtitle-card'),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (userLine.isNotEmpty) Text(userLine, style: const TextStyle(color: Colors.white70, fontSize: 18)),
+                        if (aiLine.isNotEmpty) Text(aiLine, style: const TextStyle(color: Colors.white, fontSize: 20)),
+                      ],
+                    ),
                   ),
-                ),
               ],
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 24,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _RoundButton(key: const Key('mute'), icon: muted ? Icons.mic_off : Icons.mic, color: Colors.white24, onTap: onMute),
-                const SizedBox(width: 40),
-                _RoundButton(key: const Key('end'), icon: Icons.call_end, color: Colors.redAccent, onTap: onEnd),
-              ],
+          if (!ended)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 24,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _RoundButton(
+                    key: const Key('mute'),
+                    icon: muted ? Icons.mic_off : Icons.mic,
+                    color: Colors.white24,
+                    semanticsLabel: muted ? '取消静音' : '静音',
+                    onTap: onMute,
+                  ),
+                  const SizedBox(width: 40),
+                  _RoundButton(
+                    key: const Key('end'),
+                    icon: Icons.call_end,
+                    color: Colors.redAccent,
+                    semanticsLabel: '结束聊天',
+                    onTap: onEnd,
+                  ),
+                ],
+              ),
             ),
-          ),
+          if (ended)
+            Positioned.fill(child: _EndedCard(onRestart: onRestart, onChangePartner: onChangePartner)),
           if (error != null)
             Center(
               child: Container(
@@ -172,21 +202,100 @@ class AvatarOverlay extends StatelessWidget {
 }
 
 class _RoundButton extends StatelessWidget {
-  const _RoundButton({super.key, required this.icon, required this.color, required this.onTap});
+  const _RoundButton({
+    super.key,
+    required this.icon,
+    required this.color,
+    required this.semanticsLabel,
+    required this.onTap,
+  });
 
   final IconData icon;
   final Color color;
+  final String semanticsLabel;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: color,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(width: 64, height: 64, child: Icon(icon, color: Colors.white, size: 32)),
+    return Semantics(
+      button: true,
+      label: semanticsLabel,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Material(
+        color: color,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(width: 64, height: 64, child: Icon(icon, color: Colors.white, size: 32)),
+        ),
+      ),
+    );
+  }
+}
+
+/// The post-call landing: one obvious way back into a new session, one way out.
+class _EndedCard extends StatelessWidget {
+  const _EndedCard({required this.onRestart, this.onChangePartner});
+
+  final VoidCallback? onRestart;
+  final VoidCallback? onChangePartner;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Container(
+            key: const Key('ended-card'),
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(12)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(
+                  header: true,
+                  child: const Text(
+                    '这次聊天结束了',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  '想聊的时候，随时接着聊。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 18, height: 1.4),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  height: 64,
+                  child: FilledButton(
+                    key: const Key('restart'),
+                    onPressed: onRestart,
+                    child: const Text('接着聊天', style: TextStyle(fontSize: 22)),
+                  ),
+                ),
+                if (onChangePartner != null) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 60,
+                    child: TextButton(
+                      key: const Key('change-partner'),
+                      onPressed: onChangePartner,
+                      child: const Text('换个伙伴', style: TextStyle(fontSize: 20)),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
