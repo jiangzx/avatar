@@ -334,11 +334,14 @@ describe('substantive conversation silence', () => {
   it('does not restart the silence ladder after a noise-hearing repair', async () => {
     const s = setup();
     s.d.onAiTurnEnded();
-    for (const wait of [cfg.contextAfterMs, cfg.checkAfterMs, cfg.leaveAfterMs]) {
-      await vi.advanceTimersByTimeAsync(wait);
-      s.d.onAiTurnStarted();
-      if (wait === cfg.contextAfterMs || s.requests.length < 3) s.d.onAiTurnEnded();
-    }
+    await vi.advanceTimersByTimeAsync(cfg.contextAfterMs);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded();
+    await vi.advanceTimersByTimeAsync(cfg.checkAfterMs);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded();
+    await vi.advanceTimersByTimeAsync(cfg.leaveAfterMs);
+    s.d.onAiTurnStarted();
     expect(s.requests).toHaveLength(3);
     s.d.onUserSpeech(true);
     s.d.onUserSpeech(false);
