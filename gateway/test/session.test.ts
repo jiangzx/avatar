@@ -94,6 +94,60 @@ describe('Session context', () => {
     }
   });
 
+  it('reconnects when a connect-only model needs a different voice for the new language', async () => {
+    vi.useFakeTimers();
+    try {
+      const created: MockAdapter[] = [];
+      const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'ja', 'en'], defaultLanguage: 'zh' });
+      const s = setup({
+        roles,
+        voiceFor: (language) => language === 'zh' ? 'Ryan' : 'Evan',
+        adapterFactory: () => {
+          const m = new MockAdapter({
+            script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1, supportsVoiceUpdate: false,
+          });
+          created.push(m);
+          return m;
+        },
+      }, { characterId: 'xiaokai', firstMeet: false, language: 'zh' });
+      await greetAndFinish(s);
+      s.session.setInitialLanguage('ja');
+      await vi.advanceTimersByTimeAsync(50);
+      expect(created).toHaveLength(2);
+      expect(created[1]!.voice).toBe('Evan');
+      expect(of(s.sent, 'error')).toEqual([]);
+      s.session.end();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reconnect when both languages use the same voice', async () => {
+    vi.useFakeTimers();
+    try {
+      const created: MockAdapter[] = [];
+      const roles = fixedRoleCatalog('P', director, { languages: ['zh', 'ja', 'en'], defaultLanguage: 'zh' });
+      const s = setup({
+        roles,
+        voiceFor: () => 'Ryan',
+        adapterFactory: () => {
+          const m = new MockAdapter({
+            script, replyDelayMs: 50, charMs: 100, chunkMs: 100, paceFactor: 1, supportsVoiceUpdate: false,
+          });
+          created.push(m);
+          return m;
+        },
+      }, { characterId: 'xiaokai', firstMeet: false, language: 'zh' });
+      await greetAndFinish(s);
+      s.session.setInitialLanguage('ja');
+      await vi.advanceTimersByTimeAsync(50);
+      expect(created).toHaveLength(1);
+      s.session.end();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('uses the session language for persona and voice', async () => {
     const configs: SessionConfig[] = [];
     const roles = fixedRoleCatalog('P-zh', director, {

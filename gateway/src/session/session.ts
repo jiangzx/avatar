@@ -59,7 +59,7 @@ export interface Transport {
 
 export type { TranscriptWriter };
 
-type RebuildReason = 'error' | 'closed' | 'slim' | 'forget' | 'decline';
+type RebuildReason = 'error' | 'closed' | 'slim' | 'forget' | 'decline' | 'language';
 
 function waitsForMemoryJob(name: string, args: unknown): boolean {
   if (name === 'forget_memory') return true;
@@ -691,6 +691,7 @@ export class Session {
   }
 
   private applyLanguage(language: Language): void {
+    const previousVoice = this.voiceFor(this.language);
     const next = this.resolveLanguage(language);
     // Session-end extraction reads this context, so it must track the latest language.
     this.context.language = next;
@@ -704,8 +705,14 @@ export class Session {
     }
     // Same store data, new labels, addressing patterns, and evidence rules.
     this.refreshMemorySnapshot();
+    const nextVoice = this.voiceFor(next);
+    if (nextVoice !== previousVoice && this.adapter.supportsVoiceUpdate === false) {
+      // 3.1 only applies voice at connect time; reconnect with the new language's voice.
+      void this.rebuild('language');
+      return;
+    }
     // Voice and instructions travel together at the next seam. Undefined voice = adapter default.
-    this.gate.request({ instructions: true, voice: { value: this.voiceFor(next) } });
+    this.gate.request({ instructions: true, voice: { value: nextVoice } });
   }
 
   private resolveLanguage(language: Language): Language {
@@ -1591,7 +1598,7 @@ export class Session {
     this.rebuilding = true;
     const startedAt = this.now();
     if (reason === 'slim') this.send({ type: 'presence', phase: 'refreshing' });
-    else if (reason !== 'forget' && reason !== 'decline') {
+    else if (reason !== 'forget' && reason !== 'decline' && reason !== 'language') {
       this.send({ type: 'error', code: 'model_reconnecting', retryable: true });
     }
     this.interrupt.cancelActive('local'); // uses the old adapter
