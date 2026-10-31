@@ -2126,6 +2126,36 @@ describe('Session affect tracker', () => {
     expect(s.mocks[0]!.sessionUpdates.every((update) => update.speechRate === undefined)).toBe(true);
     s.session.end();
   });
+
+  it('accepts a card slower than the old 2.5s budget and pushes the low rate', async () => {
+    let calls = 0;
+    const slow: TextModelClient = {
+      complete: async () => {
+        calls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 3_500));
+        return sadCard;
+      },
+    };
+    const s = setup({ textClient: slow, affect: affectConfig, realtime: lowRealtime });
+    await greetAndFinish(s);
+    s.mocks[0]!.emit('userTranscript', '今天腰有点疼，心里也闷', true);
+    await vi.advanceTimersByTimeAsync(3_600);
+    const internals = s.session as unknown as {
+      gate: PushGate;
+      affect: { card: unknown };
+      speechRate: number;
+    };
+    expect(calls).toBe(1);
+    expect(internals.affect.card).not.toBeNull();
+    expect(internals.speechRate).toBe(0.8);
+    internals.gate.onUserFinal();
+    internals.gate.flush();
+    const update = s.mocks[0]!.sessionUpdates.at(-1);
+    // The card may arrive while the reply seam is closed; then the rate stays queued.
+    if (update) expect(update).toMatchObject({ speechRate: 0.8 });
+    else expect(internals.gate.hasPending).toBe(true);
+    s.session.end();
+  });
 });
 
 const affectFixture = loadAffectConfig(`${fileURLToPath(new URL('..', import.meta.url))}config/affect.json`);
