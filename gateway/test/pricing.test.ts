@@ -32,12 +32,13 @@ const realtime: PriceEntry = {
 describe('loadPricingBaseline', () => {
   it('loads the shipped baseline with generated ids', () => {
     const entries = loadPricingBaseline(baselinePath);
-    expect(entries.map((e) => e.model)).toEqual(['qwen3.8-omni-flash-realtime', 'qwen-plus', 'qwen-flash']);
+    expect(entries.map((e) => e.model)).toEqual([
+      'qwen3.8-omni-flash-realtime', 'qwen-plus', 'qwen-flash', 'qwen-audio-3.1-realtime-flash',
+    ]);
     expect(entries[0]).toMatchObject({ id: `qwen3.8-omni-flash-realtime@${JAN_1}`, inputText: 1_500_000, outputAudio: 12_000_000, cached: null });
-    for (const e of entries) {
-      expect(e.source.startsWith('https://')).toBe(true);
-      expect(e.checkedAt).toBe('2026-10-27');
-    }
+    for (const e of entries) expect(e.source.startsWith('https://')).toBe(true);
+    expect(entries[0]!.checkedAt).toBe('2026-10-27');
+    expect(entries.at(-1)!.checkedAt).toBe('2026-10-31');
   });
 
   it('rejects bad files', () => {
