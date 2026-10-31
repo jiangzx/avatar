@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CHARACTER_IDS, LANGUAGES } from '@anyidea/protocol';
 import { loadDescriptorCatalog, extractPlaceholders, type ConcreteItem } from '../src/config-store/descriptors.ts';
 import { getJsonPath, parseOverlayKey, readTargetValue, setJsonPath, targetFiles, type ModelDefaults } from '../src/config-store/keys.ts';
-import { loadQwenOptions, optionsFor } from '../src/config-store/options.ts';
+import { loadAdminOptions, optionsFor } from '../src/config-store/options.ts';
 import { toDisplay, toStored } from '../src/config-store/units.ts';
 import { validateDisplayValue } from '../src/config-store/validate.ts';
 import { loadI18n } from '../src/i18n/load.ts';
@@ -15,8 +15,12 @@ const models: ModelDefaults = {
   textEndpoint: 'https://example.invalid/compatible-mode/v1/chat/completions',
   summarizerModel: 'qwen-flash',
 };
-const catalog = loadDescriptorCatalog(`${root}config/admin/descriptors`, { languages: LANGUAGES, characters: CHARACTER_IDS });
-const options = loadQwenOptions(`${root}config/admin/qwen-options.json`);
+const options = loadAdminOptions(root);
+const catalog = loadDescriptorCatalog(`${root}config/admin/descriptors`, {
+  languages: LANGUAGES,
+  characters: CHARACTER_IDS,
+  models: options.realtimeModels.map((option) => option.value),
+});
 const silence = loadI18n(`${root}config`).silence;
 
 function baseline(item: ConcreteItem) {
@@ -32,6 +36,9 @@ describe('overlay keys', () => {
     expect(parseOverlayKey('character:xiaonuan.enabled')).toEqual({ kind: 'characterEnabled', characterId: 'xiaonuan' });
     expect(parseOverlayKey('character:xiaokai.voices.qwen.zh')).toEqual({ kind: 'json', file: 'characters/xiaokai.json', path: ['voices', 'qwen', 'zh'] });
     expect(parseOverlayKey('model:qwen.realtimeModel')).toEqual({ kind: 'model', field: 'realtimeModel' });
+    expect(parseOverlayKey('voice:qwen-audio-3.1-realtime-flash/xiaonuan.zh')).toEqual({
+      kind: 'voice', model: 'qwen-audio-3.1-realtime-flash', character: 'xiaonuan', language: 'zh',
+    });
   });
 
   it('rejects malformed, unknown and prototype keys', () => {
@@ -76,6 +83,16 @@ describe('descriptor catalog', () => {
     expect(identity.descriptorKey).toBe('character:{char}.identity.{lang}');
   });
 
+  it('expands {model} and resolves voices from that model catalog', () => {
+    const item = catalog.find('voice:qwen-audio-3.1-realtime-flash/xiaonuan.zh')!;
+    expect(item.model).toBe('qwen-audio-3.1-realtime-flash');
+    expect(item.character).toBe('xiaonuan');
+    expect(item.language).toBe('zh');
+    expect(item.descriptorKey).toBe('voice:{model}/{char}.{lang}');
+    expect(optionsFor(options, item.options!, 'zh', item.model).map((option) => option.value)).toContain('longanlingxin_v3.1');
+    expect(catalog.find('character:xiaonuan.voices.qwen.zh')).toBeUndefined();
+  });
+
   it('never whitelists technical or safety fields', () => {
     const forbidden = [/^pacing:(rebuild|tailGuardMs|slim|policies|push|output)/, /safety/, /_shared/, /director\.\w*Instruction/, /bargeMiss/, /memoryNotice/, /pinMaxPerCharacter/];
     for (const item of catalog.all()) for (const pattern of forbidden) expect(item.key, item.key).not.toMatch(pattern);
@@ -109,7 +126,7 @@ describe('descriptor catalog', () => {
 
   it('select items offer the current value', () => {
     for (const item of catalog.all().filter((i) => i.control === 'select')) {
-      const values = optionsFor(options, item.options!, item.language).map((o) => o.value);
+      const values = optionsFor(options, item.options!, item.language, item.model).map((o) => o.value);
       expect(values, item.key).toContain(baseline(item));
     }
   });
@@ -170,6 +187,12 @@ describe('validateDisplayValue', () => {
     expect(validateDisplayValue(ws, 'http://example.com', ctx(ws))).toEqual({ ok: false, message: '地址必须以 wss:// 开头。' });
     const http = catalog.find('model:qwen.textEndpoint')!;
     expect(validateDisplayValue(http, 'ftp://example.com', ctx(http))).toEqual({ ok: false, message: '地址必须以 https:// 开头。' });
+  });
+
+  it('accepts only voices in the model catalog', () => {
+    const item = catalog.find('voice:qwen-audio-3.1-realtime-flash/xiaonuan.zh')!;
+    expect(validateDisplayValue(item, 'longanlingxin_v3.1', ctx(item)).ok).toBe(true);
+    expect(validateDisplayValue(item, 'Tina', ctx(item)).ok).toBe(false);
   });
 
   it('extracts both placeholder styles once each', () => {

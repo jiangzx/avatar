@@ -40,7 +40,7 @@ export function validateDisplayValue(item: ConcreteItem, value: unknown, ctx: Va
       return typeof value === 'boolean' ? { ok: true, stored: value } : fail(`${label}只能是开或关。`);
     case 'select': {
       if (typeof value !== 'string') return fail(`${label}只能从列表里选。`);
-      const allowed = optionsFor(ctx.options, item.options!, item.language).map((option) => option.value);
+      const allowed = optionsFor(ctx.options, item.options!, item.language, item.model).map((option) => option.value);
       return allowed.includes(value) ? { ok: true, stored: value } : fail(`${label}只能从列表里选。`);
     }
     case 'text':

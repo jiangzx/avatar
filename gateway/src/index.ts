@@ -34,7 +34,7 @@ import { SqliteUsageRecorder } from './usage/recorder.ts';
 import { purgeExpiredUsage } from './usage/retention.ts';
 import type { ModelDefaults, Overlay } from './config-store/keys.ts';
 import { loadDescriptorCatalog } from './config-store/descriptors.ts';
-import { loadQwenOptions } from './config-store/options.ts';
+import { loadAdminOptions } from './config-store/options.ts';
 import { SqliteSecretStore, parseMasterKey } from './config-store/secrets.ts';
 import { fixedConfigSource, SqliteConfigStore, type ConfigSource } from './config-store/store.ts';
 import { buildConfigSnapshot, type ConfigSnapshot } from './session/configSnapshot.ts';
@@ -294,12 +294,17 @@ if (!adminEnv.enabled) {
   logger.info('admin_disabled', { reason: 'memory_db_unset' });
 } else {
   // Admin config API: only with a database (versioned overlays) and when the admin server runs.
+  const adminOptions = loadAdminOptions(root);
   const configAdmin = configSource instanceof SqliteConfigStore && memoryDb && prices
     ? new ConfigAdminApi({
         db: memoryDb,
         store: configSource,
-        catalog: loadDescriptorCatalog(`${root}config/admin/descriptors`, { languages: LANGUAGES, characters: CHARACTER_IDS }),
-        options: loadQwenOptions(`${root}config/admin/qwen-options.json`),
+        catalog: loadDescriptorCatalog(`${root}config/admin/descriptors`, {
+          languages: LANGUAGES,
+          characters: CHARACTER_IDS,
+          models: adminOptions.realtimeModels.map((option) => option.value),
+        }),
+        options: adminOptions,
         secrets,
         prices,
         audit: new AdminAudit(memoryDb, logger),

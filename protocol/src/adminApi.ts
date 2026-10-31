@@ -57,6 +57,8 @@ export interface AdminConfigItem {
   options: AdminConfigOption[]; pattern: 'wss_url' | 'https_url' | null;
   complianceNote: string | null; risk: AdminConfigRisk; riskNote: string | null;
   language: 'zh' | 'ja' | 'en' | null; character: string | null;
+  /** Realtime model id for per-model voice items; null for all other items. */
+  model: string | null;
   baseline: AdminConfigValue; current: AdminConfigValue; changed: boolean;
 }
 export interface AdminConfigReadonlyNote { label: string; purpose: string; note: string }

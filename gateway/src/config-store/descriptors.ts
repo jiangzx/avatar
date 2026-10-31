@@ -54,6 +54,7 @@ export const DescriptorItemSchema = z.object({
   if (item.control === 'select') need(item.options !== undefined, 'select needs options');
   if (item.risk === 'high') need(item.riskNote !== null, 'high risk needs riskNote');
   need(item.key.includes('{char}') === (item.impact.characters === 'each'), '{char} keys must use impact.characters=each');
+  if (item.key.includes('{model}')) need(item.key.includes('{char}'), '{model} keys must be per character');
 });
 
 export type DescriptorItem = z.infer<typeof DescriptorItemSchema>;
@@ -74,6 +75,7 @@ export interface ConcreteItem extends DescriptorItem {
   scene: SceneId;
   language: Language | null;
   character: CharacterId | null;
+  model: string | null;
 }
 export interface ReadonlyNote { label: string; purpose: string; note: string }
 export interface SceneDescriptor {
@@ -94,7 +96,7 @@ export interface DescriptorCatalog {
 /** Loads gateway/config/admin/descriptors/*.json. Anything without a card is not editable from the admin. */
 export function loadDescriptorCatalog(
   dir: string,
-  opts: { languages: readonly Language[]; characters: readonly CharacterId[] },
+  opts: { languages: readonly Language[]; characters: readonly CharacterId[]; models: readonly string[] },
 ): DescriptorCatalog {
   const scenes: SceneDescriptor[] = [];
   const byKey = new Map<string, ConcreteItem>();
@@ -105,15 +107,21 @@ export function loadDescriptorCatalog(
     for (const item of parsed.items) {
       const languages: Array<Language | null> = item.key.includes('{lang}') ? [...opts.languages] : [null];
       const characters: Array<CharacterId | null> = item.key.includes('{char}') ? [...opts.characters] : [null];
-      for (const character of characters) {
-        for (const language of languages) {
-          let key = item.key;
-          if (language) key = key.replaceAll('{lang}', language);
-          if (character) key = key.replaceAll('{char}', character);
-          if (byKey.has(key)) throw new Error(`descriptor_key_duplicate:${key}`);
-          const concrete: ConcreteItem = { ...item, key, descriptorKey: item.key, scene: parsed.scene, language, character };
-          byKey.set(key, concrete);
-          items.push(concrete);
+      const models: Array<string | null> = item.key.includes('{model}') ? [...opts.models] : [null];
+      for (const model of models) {
+        for (const character of characters) {
+          for (const language of languages) {
+            let key = item.key;
+            if (model) key = key.replaceAll('{model}', model);
+            if (language) key = key.replaceAll('{lang}', language);
+            if (character) key = key.replaceAll('{char}', character);
+            if (byKey.has(key)) throw new Error(`descriptor_key_duplicate:${key}`);
+            const concrete: ConcreteItem = {
+              ...item, key, descriptorKey: item.key, scene: parsed.scene, language, character, model,
+            };
+            byKey.set(key, concrete);
+            items.push(concrete);
+          }
         }
       }
     }

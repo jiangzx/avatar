@@ -273,7 +273,7 @@ export class ConfigAdminApi {
     return {
       key: item.key,
       descriptorKey: item.descriptorKey,
-      label: item.label,
+      label: this.itemLabel(item),
       purpose: item.purpose,
       impact: { characters: this.characterText(item), stage: item.impact.stage, effective: 'next_session' },
       control: item.control,
@@ -290,7 +290,8 @@ export class ConfigAdminApi {
       requiredTokens: tokens,
       tokenMeanings: Object.fromEntries(tokens.map((token) => [token, TOKEN_MEANINGS[token] ?? '程序要用的内容'])),
       options: item.options
-        ? optionsFor(this.deps.options, item.options, item.language).map((option) => ({ ...option, priceNote: this.priceNote(item, option.value) }))
+        ? optionsFor(this.deps.options, item.options, item.language, item.model)
+            .map((option) => ({ ...option, priceNote: this.priceNote(item, option.value) }))
         : [],
       pattern: item.pattern ?? null,
       complianceNote: item.complianceNote,
@@ -298,6 +299,7 @@ export class ConfigAdminApi {
       riskNote: item.riskNote,
       language: item.language,
       character: item.character,
+      model: item.model,
       baseline: viewValue(item, baseline),
       current: viewValue(item, current),
       changed: Object.hasOwn(overlay, item.key),
@@ -318,17 +320,23 @@ export class ConfigAdminApi {
     };
   }
 
+  private itemLabel(item: ConcreteItem): string {
+    if (!item.model) return item.label;
+    const model = this.deps.options.realtimeModels.find((option) => option.value === item.model)?.label ?? item.model;
+    return `${item.label}（${model}）`;
+  }
+
   private lineLabel(item: ConcreteItem): string {
     const who = item.character ? `（${this.deps.store.snapshot().characters.name(item.character, 'zh')}）` : '';
     const language = item.language ? `（${LANGUAGE_NAMES[item.language]}）` : '';
-    return `${item.label}${who}${language}`;
+    return `${this.itemLabel(item)}${who}${language}`;
   }
 
   private display(item: ConcreteItem, value: OverlayValue): string {
     switch (item.control) {
       case 'number': return `${toDisplay(item, value) as number} ${UNIT_WORDS[item.unit!] ?? ''}`.trim();
       case 'switch': return value ? '开' : '关';
-      case 'select': return optionsFor(this.deps.options, item.options!, item.language).find((o) => o.value === value)?.label ?? String(value);
+      case 'select': return optionsFor(this.deps.options, item.options!, item.language, item.model).find((o) => o.value === value)?.label ?? String(value);
       case 'list': return `${(value as readonly string[]).length} 条`;
       case 'textarea': return `${chars(value)} 字`;
       case 'text': return item.pattern ? String(value) : `「${String(value)}」`;

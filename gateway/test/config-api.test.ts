@@ -69,7 +69,24 @@ describe('reading', () => {
     const item = api.scene('model').items.find((i) => i.key === 'memory:extractModel')!;
     const plus = item.options.find((o) => o.value === 'qwen-plus')!;
     expect(plus.priceNote === '未定价' || /^输入 .+ \/ 输出 .+ 元每百万 token$/.test(plus.priceNote!)).toBe(true);
-    expect(api.scene('characters').items.find((i) => i.key === 'character:xiaonuan.voices.qwen.zh')!.options[0]!.priceNote).toBeNull();
+    expect(api.scene('characters').items.find((i) => i.key === 'voice:qwen-audio-3.1-realtime-flash/xiaonuan.zh')!.options[0]!.priceNote).toBeNull();
+  });
+
+  it('shows per-model voice rows with model-scoped options', () => {
+    const scene = api.scene('characters');
+    const item = scene.items.find((i) => i.key === 'voice:qwen-audio-3.1-realtime-flash/xiaonuan.zh')!;
+    expect(item.model).toBe('qwen-audio-3.1-realtime-flash');
+    expect(item.label).toContain('Qwen-Audio 3.1');
+    expect(item.options.map((option) => option.value)).toContain('longanlingxin_v3.1');
+    expect(scene.items.find((i) => i.key === 'character:xiaonuan.voices.qwen.zh')).toBeUndefined();
+  });
+
+  it('publishes a per-model voice and the next snapshot uses it', () => {
+    const key = 'voice:qwen3.8-omni-flash-realtime/xiaonuan.zh';
+    api.publish({ baseVersion: 0, changes: [{ key, value: 'Ryan' }], resets: [] }, 'admin');
+    const item = api.scene('characters').items.find((i) => i.key === key)!;
+    expect(item.current).toBe('Ryan');
+    expect(store.snapshot().realtime.voices.xiaonuan.zh).toBe('Ryan');
   });
 
   it('rejects unknown scenes', () => {

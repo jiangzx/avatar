@@ -40,9 +40,9 @@
       "complianceNote": null, "risk": "low", "riskNote": null
     },
     {
-      "key": "character:{char}.voices.qwen.{lang}",
+      "key": "voice:{model}/{char}.{lang}",
       "label": "声音",
-      "purpose": "这个角色说话用的声音。",
+      "purpose": "这个角色在这个模型下说话用的声音。",
       "impact": { "characters": "each", "stage": "声音", "effective": "next_session" },
       "control": "select", "options": "voices.{lang}",
       "complianceNote": null, "risk": "medium",

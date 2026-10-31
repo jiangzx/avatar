@@ -8,7 +8,7 @@ import { loadConfig } from '../src/config.ts';
 import { extractPlaceholders, loadDescriptorCatalog, type ConcreteItem } from '../src/config-store/descriptors.ts';
 import { ConfigInvalidError } from '../src/config-store/errors.ts';
 import { parseOverlayKey, readTargetValue, type ModelDefaults, type Overlay, type OverlayValue } from '../src/config-store/keys.ts';
-import { loadQwenOptions } from '../src/config-store/options.ts';
+import { loadAdminOptions } from '../src/config-store/options.ts';
 import { toStored } from '../src/config-store/units.ts';
 import { validateDisplayValue } from '../src/config-store/validate.ts';
 import { loadI18n } from '../src/i18n/load.ts';
@@ -19,6 +19,8 @@ import { loadMemoryBudget, loadPacing } from '../src/session/pacing.ts';
 import { shippedRoles } from './support/shipped.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
+const adminOptions = loadAdminOptions(root);
+const adminModels = adminOptions.realtimeModels.map((option) => option.value);
 const env = loadConfig({ APP_SECRET: 'test-secret-0123456789' });
 const models: ModelDefaults = {
   realtimeEndpoint: 'wss://example.invalid/api-ws/v1/realtime',
@@ -128,7 +130,7 @@ describe('buildConfigSnapshot', () => {
   });
 
   it('every numeric descriptor builds at its min and max', { timeout: 120_000 }, () => {
-    const catalog = loadDescriptorCatalog(`${root}config/admin/descriptors`, { languages: LANGUAGES, characters: CHARACTER_IDS });
+    const catalog = loadDescriptorCatalog(`${root}config/admin/descriptors`, { languages: LANGUAGES, characters: CHARACTER_IDS, models: adminModels });
     for (const item of catalog.all().filter((i) => i.control === 'number')) {
       for (const shown of [item.min!, item.max!]) {
         expect(() => build({ [item.key]: toStored(item, shown) }), `${item.key}=${shown}`).not.toThrow();
@@ -137,9 +139,9 @@ describe('buildConfigSnapshot', () => {
   });
 
   it('every text and list descriptor builds at its cap', { timeout: 120_000 }, () => {
-    const catalog = loadDescriptorCatalog(`${root}config/admin/descriptors`, { languages: LANGUAGES, characters: CHARACTER_IDS });
+    const catalog = loadDescriptorCatalog(`${root}config/admin/descriptors`, { languages: LANGUAGES, characters: CHARACTER_IDS, models: adminModels });
     const i18n = loadI18n(`${root}config`);
-    const options = loadQwenOptions(`${root}config/admin/qwen-options.json`);
+    const options = adminOptions;
     for (const item of catalog.all()) {
       const language = item.language ?? 'zh';
       if (item.control === 'text' || item.control === 'textarea') {

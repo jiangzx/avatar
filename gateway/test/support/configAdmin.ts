@@ -7,7 +7,7 @@ import { ConfigAdminApi } from '../../src/admin/configApi.ts';
 import { loadConfig } from '../../src/config.ts';
 import { loadDescriptorCatalog } from '../../src/config-store/descriptors.ts';
 import type { ModelDefaults, Overlay } from '../../src/config-store/keys.ts';
-import { loadQwenOptions } from '../../src/config-store/options.ts';
+import { loadAdminOptions } from '../../src/config-store/options.ts';
 import { SqliteSecretStore } from '../../src/config-store/secrets.ts';
 import { SqliteConfigStore } from '../../src/config-store/store.ts';
 import { defaultLogger } from '../../src/log/logger.ts';
@@ -22,8 +22,12 @@ export const TEST_MODELS: ModelDefaults = {
   textEndpoint: 'https://example.invalid/chat',
   summarizerModel: 'qwen-flash',
 };
-const catalog = loadDescriptorCatalog(`${root}config/admin/descriptors`, { languages: LANGUAGES, characters: CHARACTER_IDS });
-const options = loadQwenOptions(`${root}config/admin/qwen-options.json`);
+const options = loadAdminOptions(root);
+const catalog = loadDescriptorCatalog(`${root}config/admin/descriptors`, {
+  languages: LANGUAGES,
+  characters: CHARACTER_IDS,
+  models: options.realtimeModels.map((option) => option.value),
+});
 
 export interface BuildConfigAdminOptions {
   activeSessions?: () => number;

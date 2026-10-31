@@ -1,25 +1,6 @@
 {
-  "realtimeModels": [
-    { "value": "qwen3.8-omni-flash-realtime", "label": "Qwen3.8 Omni Flash 实时版" }
-  ],
   "textModels": [
     { "value": "qwen-plus", "label": "通义千问 Plus" },
     { "value": "qwen-flash", "label": "通义千问 Flash" }
-  ],
-  "voices": {
-    "zh": [
-      { "value": "longanlingxin", "label": "龙安灵心（温柔女声）" },
-      { "value": "Tina", "label": "Tina（女声）" },
-      { "value": "Evan", "label": "Evan（男声）" },
-      { "value": "Ryan", "label": "Ryan（男声）" }
-    ],
-    "ja": [
-      { "value": "Tina", "label": "Tina（女声）" },
-      { "value": "Evan", "label": "Evan（男声）" }
-    ],
-    "en": [
-      { "value": "Tina", "label": "Tina（女声）" },
-      { "value": "Evan", "label": "Evan（男声）" }
-    ]
-  }
+  ]
 }
