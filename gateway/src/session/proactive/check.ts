@@ -2,11 +2,19 @@
 import { containsPhrase } from '../../i18n/text.ts';
 import type { SilenceRules } from '../../i18n/types.ts';
 import { findUngrounded } from './grounding.ts';
+import type { QuestionMode } from './intent.ts';
 
-export interface CheckSpec { material: readonly string[]; allowQuestion: boolean; mustExpress: 'presence' | null }
+export interface CheckSpec { material: readonly string[]; question: QuestionMode; mustExpress: 'presence' | null }
 export interface CheckRules { healthWords: readonly string[]; silence: Pick<SilenceRules, 'listening' | 'anytime'> }
-export interface SpokenCheck { titles: number; numbers: number; health: number; question: boolean; presenceMissing: boolean }
-export type ViolationKind = 'title' | 'number' | 'health' | 'question' | 'presence';
+export interface SpokenCheck {
+  titles: number;
+  numbers: number;
+  health: number;
+  question: boolean;
+  questionMissing: boolean;
+  presenceMissing: boolean;
+}
+export type ViolationKind = 'title' | 'number' | 'health' | 'question' | 'questionMissing' | 'presence';
 
 const QUESTION = /[？?]/;
 
@@ -19,7 +27,8 @@ export function checkSpoken(text: string, spec: CheckSpec, rules: CheckRules): S
     titles: titles.length,
     numbers: numbers.length,
     health,
-    question: !spec.allowQuestion && QUESTION.test(text),
+    question: spec.question === 'forbidden' && QUESTION.test(text),
+    questionMissing: spec.question === 'required' && !QUESTION.test(text),
     presenceMissing: spec.mustExpress === 'presence' && !(has(rules.silence.listening) && has(rules.silence.anytime)),
   };
 }
@@ -31,6 +40,7 @@ export function violationsOf(check: SpokenCheck): Array<{ kind: ViolationKind; c
   if (check.numbers > 0) out.push({ kind: 'number', count: check.numbers });
   if (check.health > 0) out.push({ kind: 'health', count: check.health });
   if (check.question) out.push({ kind: 'question', count: 1 });
+  if (check.questionMissing) out.push({ kind: 'questionMissing', count: 1 });
   if (check.presenceMissing) out.push({ kind: 'presence', count: 1 });
   return out;
 }

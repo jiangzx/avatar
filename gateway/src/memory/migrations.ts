@@ -343,6 +343,19 @@ export const MIGRATIONS: readonly string[] = [
       AND EXISTS (SELECT 1 FROM json_each(reflections.evidence_message_ids) WHERE value = new.id);
   END;
   `,
+  `
+  -- v9: proactive topic-question negative preferences (2026-10-31 spec). Additive only.
+  -- Keys are ids/hashes, never conversation text; deleted with the memory they refer to.
+  CREATE TABLE proactive_topic_avoid (
+    owner_id TEXT NOT NULL REFERENCES owners (id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
+    topic_key TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('card', 'fact', 'pin', 'thread', 'stmt')),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, agent_id, topic_key)
+  ) STRICT;
+  CREATE INDEX proactive_topic_avoid_agent ON proactive_topic_avoid (agent_id, created_at);
+  `,
 ];
 
 /**

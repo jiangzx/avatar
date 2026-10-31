@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CharacterId } from '@anyidea/protocol';
 import { ownerShortId } from '../log/ownerId.ts';
+import { statementKey } from './evidence.ts';
 
 export type MemoryConsent = 'unknown' | 'granted' | 'declined';
 
@@ -239,6 +240,16 @@ export interface MemoryStore {
   recentFallbackLines(ownerId: string, agentId: string, key: string, limit: number): number[];
   /** Records a used fallback line and keeps only the newest `keep` for that key. */
   recordFallbackLine(ownerId: string, agentId: string, key: string, line: number, now: number, keep: number): void;
+  /** Declined topic keys of this agent with their decline time; `since` null = all. */
+  listTopicAvoid(ownerId: string, agentId: string, since: number | null): Map<string, number>;
+  /** Upserts one declined topic key; no-op when the agent is not this owner's. */
+  recordTopicAvoid(ownerId: string, agentId: string, key: string, source: TopicAvoidSource, now: number): void;
+  /** Removes every avoidance row of this agent. */
+  clearTopicAvoid(ownerId: string, agentId: string): void;
+  /** Removes specific avoidance keys of this agent; returns rows removed. */
+  deleteTopicAvoidKeys(ownerId: string, agentId: string, keys: readonly string[]): number;
+  /** Removes `fact:<id>` keys for shared profile facts across every agent of the owner. */
+  deleteTopicAvoidForProfile(ownerId: string, factIds: readonly string[]): number;
   /** Agent rows of one owner, one per character met. */
   listAgents(ownerId: string): AgentRecord[];
   /** Ids of this owner's live messages whose FTS tokens all match; agentId null = any agent of the owner. */
@@ -269,7 +280,12 @@ export interface ForgetResult {
   profile: number;
   /** This agent's reflections whose text contains the query. */
   reflections: number;
+  /** Derived topic-avoidance rows removed with the memory (no text). */
+  topicAvoid: number;
 }
+
+/** Derived negative-preference key prefixes; the value after the colon is an id or a statement hash. */
+export type TopicAvoidSource = 'card' | 'fact' | 'pin' | 'thread' | 'stmt';
 
 export interface ExtractMemory {
   agents: { id: string }[];
@@ -561,6 +577,22 @@ function prepareStatements(db: DatabaseSync) {
     trimFallbacks: p(`DELETE FROM proactive_fallbacks WHERE owner_id = ? AND agent_id = ? AND fallback_key = ?
       AND line NOT IN (SELECT line FROM proactive_fallbacks WHERE owner_id = ? AND agent_id = ? AND fallback_key = ?
         ORDER BY used_at DESC, line LIMIT ?)`),
+    listTopicAvoid: p(`SELECT topic_key, created_at FROM proactive_topic_avoid
+      WHERE owner_id = ? AND agent_id = ? AND (? IS NULL OR created_at > ?)`),
+    recordTopicAvoid: p(`INSERT INTO proactive_topic_avoid (owner_id, agent_id, topic_key, source, created_at)
+      SELECT owner_id, id, ?, ?, ? FROM agents WHERE id = ? AND owner_id = ?
+      ON CONFLICT (owner_id, agent_id, topic_key) DO UPDATE SET source = excluded.source, created_at = excluded.created_at`),
+    deleteAllTopicAvoid: p('DELETE FROM proactive_topic_avoid WHERE owner_id = ? AND agent_id = ?'),
+    deleteTopicAvoidKey: p('DELETE FROM proactive_topic_avoid WHERE owner_id = ? AND agent_id = ? AND topic_key = ?'),
+    deleteTopicAvoidProfileKey: p('DELETE FROM proactive_topic_avoid WHERE owner_id = ? AND topic_key = ?'),
+    listAgentFactIdsInstr: p('SELECT id FROM agent_facts WHERE owner_id = ? AND agent_id = ? AND instr(text, ?) > 0'),
+    listPinnedIdsInstr: p('SELECT id FROM pinned_memories WHERE owner_id = ? AND agent_id = ? AND instr(text, ?) > 0'),
+    listFollowupIdsInstr: p("SELECT id FROM followups WHERE owner_id = ? AND agent_id = ? AND (instr(text, ?) > 0 OR instr(COALESCE(quote, ''), ?) > 0)"),
+    listProfileIdsInstr: p('SELECT id FROM profile_facts WHERE owner_id = ? AND instr(text, ?) > 0'),
+    listProfileIds: p('SELECT id FROM profile_facts WHERE owner_id = ?'),
+    messageTextByRowid: p('SELECT text FROM messages WHERE owner_id = ? AND agent_id = ? AND rowid = ?'),
+    messageTextById: p('SELECT text FROM messages WHERE owner_id = ? AND agent_id = ? AND id = ?'),
+    messageAgentTextById: p('SELECT agent_id, text FROM messages WHERE owner_id = ? AND id = ?'),
 
     // Audit
     insertChange: p(`INSERT INTO memory_changes (id, owner_id, agent_id, table_name, row_id, op, diff, actor, created_at)
@@ -848,6 +880,17 @@ export class SqliteMemoryStore implements MemoryStore {
 
   forgetMatches(ownerId: string, agentId: string, query: string, match: string | null, sessionId: string, triggerText?: string | null): ForgetResult {
     const rowids = match ? this.matchRowids(ownerId, agentId, match) : [];
+    // Gather the ids/texts before deleting: topic-avoidance keys are derived from them.
+    const factIds = this.q.listAgentFactIdsInstr.all(ownerId, agentId, query).map((row) => row.id as string);
+    const pinnedIds = this.q.listPinnedIdsInstr.all(ownerId, agentId, query).map((row) => row.id as string);
+    const followupIds = this.q.listFollowupIdsInstr.all(ownerId, agentId, query, query).map((row) => row.id as string);
+    const profileIds = this.q.listProfileIdsInstr.all(ownerId, query).map((row) => row.id as string);
+    const statementKeys = new Set<string>();
+    for (const rowid of rowids) {
+      const row = this.q.messageTextByRowid.get(ownerId, agentId, rowid) as { text: string } | undefined;
+      if (row?.text) statementKeys.add(statementKey(row.text));
+    }
+    if (triggerText) statementKeys.add(statementKey(triggerText));
     return this.tx<ForgetResult>(() => {
       let messages = 0;
       for (const rowid of rowids) messages += Number(this.q.blankMessage.run(ownerId, agentId, rowid).changes);
@@ -859,8 +902,15 @@ export class SqliteMemoryStore implements MemoryStore {
       const episodes = Number(this.q.deleteEpisodesInstr.run(ownerId, agentId, query).changes);
       const followups = Number(this.q.deleteFollowupsInstr.run(ownerId, agentId, query, query).changes);
       const reflections = Number(this.q.deleteReflectionsInstr.run(ownerId, agentId, query).changes);
+      let topicAvoid = this.deleteTopicAvoidKeys(ownerId, agentId, [
+        ...factIds.map((id) => `fact:${id}`),
+        ...pinnedIds.map((id) => `pin:${id}`),
+        ...followupIds.map((id) => `thread:${id}`),
+        ...statementKeys,
+      ]);
+      topicAvoid += this.deleteTopicAvoidForProfile(ownerId, profileIds);
       this.q.blankDiffsScoped.run(ownerId, agentId, query);
-      return { messages, facts, notes, episodes, followups, pinned, profile, reflections };
+      return { messages, facts, notes, episodes, followups, pinned, profile, reflections, topicAvoid };
     });
   }
 
@@ -887,18 +937,21 @@ export class SqliteMemoryStore implements MemoryStore {
       const shared = this.q.getProfile.get(itemId, ownerId);
       if (shared) {
         this.q.deleteProfile.run(itemId, ownerId);
+        this.q.deleteTopicAvoidProfileKey.run(ownerId, `fact:${itemId}`);
         this.forgetRow(ownerId, null, 'profile_facts', itemId, now);
         return { kind: 'profile', agentId: null, text: shared.text as string, sourceMessageIds: parseIds(shared.source_message_ids) };
       }
       const fact = this.q.getAgentFactAnyAgent.get(itemId, ownerId);
       if (fact) {
         this.q.deleteAgentFactById.run(itemId, ownerId);
+        this.q.deleteTopicAvoidKey.run(ownerId, fact.agent_id as string, `fact:${itemId}`);
         this.forgetRow(ownerId, fact.agent_id as string, 'agent_facts', itemId, now);
         return { kind: 'agent_fact', agentId: fact.agent_id as string, text: fact.text as string, sourceMessageIds: parseIds(fact.source_message_ids) };
       }
       const pin = this.q.getPinned.get(itemId, ownerId);
       if (pin) {
         this.q.deletePinnedById.run(itemId, ownerId);
+        this.q.deleteTopicAvoidKey.run(ownerId, pin.agent_id as string, `pin:${itemId}`);
         this.forgetRow(ownerId, pin.agent_id as string, 'pinned_memories', itemId, now);
         const source = pin.source_message_id as string | null;
         return { kind: 'pinned', agentId: pin.agent_id as string, text: pin.text as string, sourceMessageIds: source ? [source] : [] };
@@ -906,6 +959,7 @@ export class SqliteMemoryStore implements MemoryStore {
       const thread = this.q.getThreadById.get(itemId, ownerId);
       if (thread) {
         this.q.deleteFollowupById.run(itemId, ownerId);
+        this.q.deleteTopicAvoidKey.run(ownerId, thread.agent_id as string, `thread:${itemId}`);
         this.forgetRow(ownerId, thread.agent_id as string, 'followups', itemId, now);
         return { kind: 'thread', agentId: thread.agent_id as string, text: thread.quote as string, sourceMessageIds: parseIds(thread.source_message_ids) };
       }
@@ -926,6 +980,17 @@ export class SqliteMemoryStore implements MemoryStore {
   }
 
   deleteMessagesByIds(ownerId: string, agentId: string | null, ids: readonly string[]): number {
+    // Read the texts before deleting so their derived statement keys can be removed too.
+    const statementKeys: Array<{ agentId: string; key: string }> = [];
+    for (const id of new Set(ids)) {
+      if (agentId === null) {
+        const row = this.q.messageAgentTextById.get(ownerId, id) as { agent_id: string; text: string } | undefined;
+        if (row?.text) statementKeys.push({ agentId: row.agent_id, key: statementKey(row.text) });
+      } else {
+        const row = this.q.messageTextById.get(ownerId, agentId, id) as { text: string } | undefined;
+        if (row?.text) statementKeys.push({ agentId, key: statementKey(row.text) });
+      }
+    }
     return this.tx(() => {
       let deleted = 0;
       for (const id of new Set(ids)) {
@@ -933,6 +998,7 @@ export class SqliteMemoryStore implements MemoryStore {
           ? this.q.deleteMessageById.run(ownerId, id)
           : this.q.deleteAgentMessageById.run(ownerId, agentId, id)).changes);
       }
+      for (const entry of statementKeys) this.q.deleteTopicAvoidKey.run(ownerId, entry.agentId, entry.key);
       return deleted;
     });
   }
@@ -975,6 +1041,7 @@ export class SqliteMemoryStore implements MemoryStore {
       this.q.deleteAllProactiveStats.run(ownerId, agentId);
       this.q.deleteAllProactiveDaily.run(ownerId, agentId);
       this.q.deleteAllProactiveFallbacks.run(ownerId, agentId);
+      this.q.deleteAllTopicAvoid.run(ownerId, agentId);
       this.q.deleteAgentSessions.run(agentId);
       this.q.deleteAgentChanges.run(ownerId, agentId);
       this.audit(ownerId, agentId, 'agents', agentId, 'clear', '', 'user', Date.now());
@@ -983,6 +1050,8 @@ export class SqliteMemoryStore implements MemoryStore {
 
   clearProfile(ownerId: string): void {
     this.tx(() => {
+      const profileIds = this.q.listProfileIds.all(ownerId).map((row) => row.id as string);
+      this.deleteTopicAvoidForProfile(ownerId, profileIds);
       this.q.deleteAllProfile.run(ownerId);
       this.q.deleteProfileChanges.run(ownerId);
       this.audit(ownerId, null, 'profile_facts', ownerId, 'clear', '', 'user', Date.now());
@@ -1149,6 +1218,31 @@ export class SqliteMemoryStore implements MemoryStore {
       if (this.q.useFallback.run(key, line, now, agentId, ownerId).changes === 0) return;
       this.q.trimFallbacks.run(ownerId, agentId, key, ownerId, agentId, key, keep);
     });
+  }
+
+  listTopicAvoid(ownerId: string, agentId: string, since: number | null): Map<string, number> {
+    const rows = this.q.listTopicAvoid.all(ownerId, agentId, since, since) as Array<{ topic_key: string; created_at: number }>;
+    return new Map(rows.map((row) => [row.topic_key, row.created_at]));
+  }
+
+  recordTopicAvoid(ownerId: string, agentId: string, key: string, source: TopicAvoidSource, now: number): void {
+    this.q.recordTopicAvoid.run(key, source, now, agentId, ownerId);
+  }
+
+  clearTopicAvoid(ownerId: string, agentId: string): void {
+    this.q.deleteAllTopicAvoid.run(ownerId, agentId);
+  }
+
+  deleteTopicAvoidKeys(ownerId: string, agentId: string, keys: readonly string[]): number {
+    let removed = 0;
+    for (const key of new Set(keys)) removed += Number(this.q.deleteTopicAvoidKey.run(ownerId, agentId, key).changes);
+    return removed;
+  }
+
+  deleteTopicAvoidForProfile(ownerId: string, factIds: readonly string[]): number {
+    let removed = 0;
+    for (const id of new Set(factIds)) removed += Number(this.q.deleteTopicAvoidProfileKey.run(ownerId, `fact:${id}`).changes);
+    return removed;
   }
 
   writeExtraction(ownerId: string, agentId: string, change: ExtractionChange): void {

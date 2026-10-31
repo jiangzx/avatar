@@ -41,8 +41,8 @@ function reflection(db: DatabaseSync, w: { ownerId: string; agentId: string }, i
 
 describe('schema v8', () => {
   it('is the latest version', () => {
-    expect(BASELINE_VERSION + MIGRATIONS.length - 1).toBe(8);
-    expect(migrate(rawDb())).toBe(8);
+    expect(BASELINE_VERSION + MIGRATIONS.length - 1).toBe(9);
+    expect(migrate(rawDb())).toBe(9);
   });
 
   it('turns followups into threads and adds the proactivity tables and citation triggers', () => {
@@ -73,7 +73,7 @@ describe('schema v8', () => {
     db.prepare("INSERT INTO messages (id, session_id, owner_id, agent_id, role, text, bigrams, created_at) VALUES ('m2', 's7', 'o7', 'a7', 'assistant', '我明天要去医院复查腰', '', 2)").run();
     db.prepare(`INSERT INTO followups (id, owner_id, agent_id, text, due_at, source_session_id, quote, sensitive, created_at)
       VALUES ('f1', 'o7', 'a7', '问问复查', 9, 's7', '我明天要去医院复查腰', 1, 3), ('f2', 'o7', 'a7', '接着聊', 9, 's7', NULL, 0, 3)`).run();
-    expect(migrate(db)).toBe(8);
+    expect(migrate(db)).toBe(9);
     const rows = db.prepare('SELECT id, kind, source_message_ids AS src, mention_count AS mentions FROM followups ORDER BY id').all();
     expect(rows).toEqual([
       { id: 'f1', kind: 'concern', src: '["m1"]', mentions: 0 },

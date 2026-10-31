@@ -18,7 +18,7 @@ export interface DecisionContext {
   lastMood: MoodSummaryRecord | null;
   threads: readonly ThreadRecord[];
   /** Whether usable material exists; P3 back half gathers it. */
-  has: { openLoop: boolean; interest: boolean; family: boolean };
+  has: { openLoop: boolean; interest: boolean; family: boolean; question?: boolean };
   /** Scored proactive lines so far this session / today (structural lines do not count). */
   sessionSpoken: number;
   todaySpoken: number;
@@ -135,6 +135,9 @@ function allowed(kind: ScoredKind, ctx: DecisionContext, cfg: ProactivityConfig)
   if (!cfg.kinds[kind].enabled) return false;
   if (ctx.tier === 'quiet' && !(ctx.moment === 'sessionStart' && kind === 'threadFollowup')) return false;
   if (kind === 'threadFollowup' && ctx.mentionedThreads.size >= cfg.threads.maxPerSession) return false;
+  // selfShare needs a locked question material at the two question-bearing silence moments.
+  if (kind === 'selfShare' && (ctx.moment === 'silenceContext' || ctx.moment === 'silenceCheck')
+    && !(ctx.has.question ?? ctx.has.interest)) return false;
   if (ctx.affect.low) {
     if (kind === 'interestTopic' || kind === 'selfShare') return false;
     if (kind === 'humanConnection' && ctx.affect.stage !== 'suggest') return false;

@@ -112,6 +112,14 @@
       "complianceNote": null, "risk": "low", "riskNote": null
     },
     {
+      "key": "role:elder-companion/zh/director.fallbacks.interestTopicStatement",
+      "label": "收尾时留话头：备用话（中文）",
+      "purpose": "leave 段只留一句陈述或话头、不提问，AI 没能自己说出来时用。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
       "key": "role:elder-companion/zh/director.fallbacks.humanConnection",
       "label": "鼓励联系家人：备用话（中文）",
       "purpose": "引导老人和家里人多联系，没能自己说出来时用。",
@@ -123,6 +131,14 @@
       "key": "role:elder-companion/zh/director.fallbacks.selfShare",
       "label": "AI 说自己的小事：备用话（中文）",
       "purpose": "AI 说一件自己的小事，没能自己说出来时用。不要写成老人的事。",
+      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
+      "complianceNote": null, "risk": "low", "riskNote": null
+    },
+    {
+      "key": "role:elder-companion/zh/director.fallbacks.selfShareQuestion",
+      "label": "说自己的小事再问一句：备用话（中文）",
+      "purpose": "context/check 段 AI 说自己的小事后必须问老人一句，没能自己说出来时用。",
       "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
       "control": "list", "minItems": 5, "maxItems": 10, "itemMaxChars": { "zh": 30, "ja": 60, "en": 120 },
       "complianceNote": null, "risk": "low", "riskNote": null

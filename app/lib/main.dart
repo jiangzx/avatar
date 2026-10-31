@@ -156,6 +156,9 @@ class _HomeState extends State<_Home> {
     holds: CharacterHolds(_store),
     engines: _engines,
     memory: _memory,
+    onDebugClear: AppConfig.clearHolds
+        ? () => DuixCrashGuard(_store).markCleanExit()
+        : null,
     avatarBuilder: (request) => AvatarPage(
       key: request.key,
       engineFactory: () => _engineFor(request),

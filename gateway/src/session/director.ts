@@ -44,6 +44,8 @@ export interface DirectorDeps {
   requestResponse(kind: ResponseKind, request: ProactiveRequest): void;
   /** Plans the opening and each silence step. The session asks the decision engine first (P3); configured copy is the failure fallback. */
   planProactiveLine?(context: SilenceContext, signal: AbortSignal): SilencePlan | null | Promise<SilencePlan | null>;
+  /** A user-triggered "change topic" question, sent immediately after the current reply ends (no silence timer). */
+  takePendingSwitch?(): ProactiveRequest | null;
   /** Current rendered memory for this session, read at planning time; proactive stages get the safe view. */
   getMemorySnapshot?(stage: ProactivePlanStage): string;
   /** Planner-only extras read at planning time: latest affect card, open loop, localized time words. */
@@ -401,6 +403,14 @@ export class Director {
     // An owed reminder takes the next silence slot, even when the ladder itself is quiet.
     if (this.armReminderSlot()) return;
     if (this.quiet || this.left) return;
+    // The user asked to change the topic: say the new question now, not after the silence delay.
+    const switchRequest = this.deps.takePendingSwitch?.() ?? null;
+    if (switchRequest) {
+      this.pending = 'context';
+      this.rememberLadderText(switchRequest.fallbackText);
+      this.deps.requestResponse('followup', switchRequest);
+      return;
+    }
     if (done === 'repair') {
       const step = this.repairStep;
       this.repairStep = null;

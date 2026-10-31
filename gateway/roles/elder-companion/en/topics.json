@@ -8,5 +8,19 @@
   { "id": "season", "prompt": "This season and its fresh food", "fallbackText": "The vegetables this season are the freshest and taste great." },
   { "id": "flowers", "prompt": "Plants at home or the view outside", "fallbackText": "A few plants at home make the day feel brighter." },
   { "id": "tv", "prompt": "A TV show or opera you enjoy", "fallbackText": "If there's a good show or opera lately, I'd love a tip." },
-  { "id": "snack", "prompt": "A snack you loved as a child", "fallbackText": "I hear the snacks from childhood taste the best." }
+  { "id": "snack", "prompt": "A snack you loved as a child", "fallbackText": "I hear the snacks from childhood taste the best." },
+  { "id": "tea", "prompt": "Tea you like to drink", "fallbackText": "What tea do you like? I'm learning to brew it too." },
+  { "id": "grandchildren", "prompt": "Something funny your grandchildren did", "fallbackText": "Any fun stories about your grandchildren lately?" },
+  { "id": "cooking", "prompt": "A home-style dish you are good at", "fallbackText": "What's your best home-style dish?" },
+  { "id": "radio", "prompt": "A radio show you often listen to", "fallbackText": "Do you listen to the radio? Any favorite show?" },
+  { "id": "opera", "prompt": "An opera you love", "fallbackText": "Do you enjoy opera? Which one is your favorite?" },
+  { "id": "travel", "prompt": "Places you visited when you were young", "fallbackText": "Where did you travel when you were young?" },
+  { "id": "old-photos", "prompt": "Old photos at home", "fallbackText": "Do you have old photos? Would you tell me their stories?" },
+  { "id": "market", "prompt": "Morning markets and grocery shopping", "fallbackText": "Do you like morning markets? Any shopping tips?" },
+  { "id": "sewing", "prompt": "Sewing or handcrafts", "fallbackText": "Do you sew? Did you make clothes yourself before?" },
+  { "id": "chess", "prompt": "Chess or cards", "fallbackText": "Do you prefer chess or cards?" },
+  { "id": "morning-exercise", "prompt": "Morning exercise", "fallbackText": "Do you exercise in the morning? What do you do?" },
+  { "id": "neighbors", "prompt": "Neighbors and the neighborhood", "fallbackText": "Do you often chat with your neighbors?" },
+  { "id": "festival", "prompt": "Holidays and family customs", "fallbackText": "A holiday is coming. Any family customs?" },
+  { "id": "childhood", "prompt": "Fun things from your childhood", "fallbackText": "What fun things do you remember from childhood?" }
 ]

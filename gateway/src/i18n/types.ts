@@ -162,6 +162,18 @@ export interface AffectCopy {
   timeOfDay: { morning: string; noon: string; afternoon: string; evening: string; night: string };
 }
 
+/** Rules for proactive memory/topic-card questions (config/i18n/<lang>/proactivity.json). */
+export interface TopicQuestionRules {
+  /** Explicit "change the topic" requests: switch immediately after the current reply. */
+  switchPhrases: readonly string[];
+  /** "Not interested" style declines: record avoidance, do not re-ask immediately. */
+  topicDeclinePhrases: readonly string[];
+  /** Facts containing one of these are topic-like enough to ask about. */
+  factKeywords: readonly string[];
+  /** Facts containing one of these are never used as a topic question. */
+  factBlockKeywords: readonly string[];
+}
+
 /** Loaded localization bundle: per-language copy plus merged scan lists. */
 export interface I18nBundle {
   language: LanguageRules;
@@ -173,4 +185,5 @@ export interface I18nBundle {
   emotion: EmotionConfig;
   silence: Record<Language, SilenceRules>;
   affect: Record<Language, AffectCopy>;
+  proactivity: Record<Language, TopicQuestionRules>;
 }

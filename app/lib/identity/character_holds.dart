@@ -34,6 +34,18 @@ class CharacterHolds {
 
   bool isHeld(String id) => (_until[id] ?? 0) > _now();
 
+  /// Debug/test only: drops every saved hold; the device token and saved character stay.
+  Future<void> clearAll(Iterable<String> ids) async {
+    _until.clear();
+    for (final id in ids) {
+      try {
+        await _store.delete('$keyPrefix$id');
+      } catch (_) {
+        diag(formatDiag('character_hold_clear_failed', {}));
+      }
+    }
+  }
+
   /// Greys [id] for [duration]; a store failure still holds it for this run.
   Future<void> hold(String id, Duration duration) async {
     final until = _now() + duration.inMilliseconds;

@@ -41,6 +41,24 @@ void main() {
     expect(store.values, isEmpty);
   });
 
+  test('clearAll drops holds but keeps the device token and saved character', () async {
+    final store = MemoryCredentialStore({
+      'device_token': 'keep-me',
+      'character_id': 'xiaonuan',
+      '${CharacterHolds.keyPrefix}xiaonuan': '9999999999999',
+      '${CharacterHolds.keyPrefix}xiaokai': '9999999999999',
+    });
+    final holds = CharacterHolds(store, now: () => 1000, diag: (_) {});
+    await holds.load(['xiaonuan', 'xiaokai', 'xiaoxin']);
+    expect(holds.isHeld('xiaonuan'), isTrue);
+    await holds.clearAll(['xiaonuan', 'xiaokai', 'xiaoxin']);
+    expect(holds.isHeld('xiaonuan'), isFalse);
+    expect(holds.isHeld('xiaokai'), isFalse);
+    expect(store.values['device_token'], 'keep-me');
+    expect(store.values['character_id'], 'xiaonuan');
+    expect(store.values.keys.any((key) => key.startsWith(CharacterHolds.keyPrefix)), isFalse);
+  });
+
   test('a store failure keeps the hold for this run and logs a content-free line', () async {
     final lines = <String>[];
     final holds = CharacterHolds(FailingStore(), now: () => 1000, diag: lines.add);

@@ -95,6 +95,105 @@
       "riskNote": "调得太大，老人可能觉得 AI 一直在提同一件事。"
     },
     {
+      "key": "proactivity:topicQuestion.memoryRatio",
+      "label": "用记忆提问的比例",
+      "purpose": "主动问话题时，用老人真实记忆的比例，其余用准备好的轻松话题。数字越大越常聊到老人说过的事。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动话题",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "level",
+      "storageUnit": "level",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null,
+      "advanced": true
+    },
+    {
+      "key": "proactivity:topicQuestion.recentSessions",
+      "label": "往前找几次谈话",
+      "purpose": "从最近几次已结束的谈话里找老人说过的话题；次数越多，可选材料越多，也可能更旧。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动话题",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "count",
+      "storageUnit": "count",
+      "min": 1,
+      "max": 10,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null,
+      "advanced": true
+    },
+    {
+      "key": "proactivity:topicQuestion.recentDays",
+      "label": "话题只看最近几天",
+      "purpose": "只在最近这些天结束的谈话里找话题，太久以前的不再拿来提问。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动话题",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "day",
+      "storageUnit": "day",
+      "min": 1,
+      "max": 365,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null,
+      "advanced": true
+    },
+    {
+      "key": "proactivity:topicQuestion.declineCooldownDays",
+      "label": "拒绝后多久不再提",
+      "purpose": "老人说过不感兴趣后，这些天内不再问同一个话题；设为 0 表示永远不再提。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动话题",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "day",
+      "storageUnit": "day",
+      "min": 0,
+      "max": 3650,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "medium",
+      "riskNote": "设为 0 后，被拒绝的话题会永久避开。"
+    },
+    {
+      "key": "proactivity:topicQuestion.minStatementChars",
+      "label": "太短的话不提问",
+      "purpose": "太短的原话信息不够，不拿来当话题问句；只使用不少于这个字数的陈述。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动话题",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "char",
+      "storageUnit": "char",
+      "min": 2,
+      "max": 50,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null,
+      "advanced": true
+    },
+    {
       "key": "proactivity:tiers.quiet.threshold",
       "label": "安静档：开口门槛",
       "purpose": "老人选「少说点」后用这一档。数字越大，AI 越少主动开口。",

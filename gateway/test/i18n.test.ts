@@ -31,6 +31,14 @@ describe('loadI18n', () => {
     expect(i18n.silence.en.maxCheckinChars).toBe(80);
   });
 
+  it('loads proactive topic-question rules', () => {
+    expect(i18n.proactivity.zh.switchPhrases).toContain('换个话题');
+    expect(i18n.proactivity.zh.topicDeclinePhrases).toContain('不感兴趣');
+    expect(i18n.proactivity.zh.factKeywords.length).toBeGreaterThan(0);
+    expect(i18n.proactivity.en.switchPhrases).toEqual([]);
+    expect(i18n.proactivity.ja.topicDeclinePhrases).toEqual([]);
+  });
+
   it('localizes perform_action copy for every language', () => {
     for (const language of ['zh', 'ja', 'en'] as const) {
       expect(i18n.memory[language].performAction.toolDescription.length).toBeGreaterThan(0);

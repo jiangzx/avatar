@@ -6,6 +6,7 @@ import '../avatar_engine/avatar_engine.dart';
 import '../avatar_engine/engine_switch_controller.dart';
 import '../avatar_engine/ui/engine_copy.dart';
 import '../companion_config.dart';
+import '../config.dart';
 import '../memory/memory_api.dart';
 import '../native_gateway/gateway_client.dart';
 import 'character_availability.dart';
@@ -64,6 +65,7 @@ class AppShell extends StatefulWidget {
     this.holds,
     this.engines,
     this.memory,
+    this.onDebugClear,
   });
 
   final DeviceIdentity identity;
@@ -81,6 +83,9 @@ class AppShell extends StatefulWidget {
 
   /// Settings reads and deletes memory through it; null hides the memory blocks.
   final MemoryApi? memory;
+
+  /// Debug/test build only: clears engine-level crash-guard keys before availability loads.
+  final Future<void> Function()? onDebugClear;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -133,8 +138,13 @@ class _AppShellState extends State<AppShell> {
     } on Exception {
       error = identityErrorText('storage');
     }
+    final ids = widget.catalog.options.map((option) => option.id);
+    if (AppConfig.clearHolds) {
+      await widget.onDebugClear?.call(); // Duix crash guard, before engine availability
+      await _holds.clearAll(ids);
+    }
     await widget.engines?.load(); // never throws: failures read as hidden or unsupported
-    await _holds.load(widget.catalog.options.map((option) => option.id)); // never throws
+    await _holds.load(ids); // never throws
     if (!mounted) return;
     final saved = character == null ? null : widget.catalog.byId(character);
     setState(() {

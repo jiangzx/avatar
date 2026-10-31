@@ -26,6 +26,8 @@ export interface ProactiveRequest {
   cue: ProactiveCue;
   instruction: string;
   fallbackText: string;
+  /** Internal negative-preference key; never sent to the model or the app. */
+  topicKey?: string;
 }
 
 /** Token counts for one model call. Detail fields are present only when the provider reports them. */

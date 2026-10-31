@@ -378,6 +378,7 @@ export class Session {
         healthWords: this.i18n.memory[language].healthWords,
         declinePhrases: this.i18n.affect[language].declinePhrases,
         evidence: this.i18n.evidence,
+        topicQuestion: this.i18n.proactivity[language],
       }),
       logger: this.log,
     }) : null;
@@ -404,7 +405,13 @@ export class Session {
         firstMeetGreeting: () => this.firstMeetGreeting(),
         openingRequest: () => this.proactive?.openingLine({ language: this.language, name: this.greetingName(), firstMeet: this.context.firstMeet }) ?? null,
         safeGreeting: () => this.safeGreeting(),
-        ...(this.proactive ? { planProactiveLine: (context, signal) => this.planProactiveLine(context, signal) } : {}),
+        ...(this.proactive ? {
+          planProactiveLine: (context, signal) => this.planProactiveLine(context, signal),
+          takePendingSwitch: () => this.proactive?.takeSwitchRequest({
+            card: this.affectCard,
+            lowIntensity: this.deps.affect?.lowIntensity ?? Number.POSITIVE_INFINITY,
+          }) ?? null,
+        } : {}),
         ...(extractor && ownerId && agentId ? { onQuietRest: () => { void extractor.enqueue(ownerId, agentId, 'silence', this.language); } } : {}),
         logger: this.log,
       },

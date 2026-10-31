@@ -61,6 +61,27 @@ describe('substantive conversation silence', () => {
     s.d.stop();
   });
 
+  it('sends a pending topic switch immediately after the reply, not after the silence timer', async () => {
+    const requests: ProactiveRequest[] = [];
+    const switchRequest: ProactiveRequest = { cue: 'followup', instruction: 'switch', fallbackText: '换个话题的备用句' };
+    let pending: ProactiveRequest | null = switchRequest;
+    const d = new Director(cfg, {
+      requestResponse: (_kind, request) => requests.push(request),
+      takePendingSwitch: () => { const request = pending; pending = null; return request; },
+    });
+    d.onUserFinal('换个话题');
+    d.onAiTurnStarted();
+    d.onAiTurnEnded('好，咱们换个话题。');
+    expect(requests).toEqual([switchRequest]);
+    await vi.advanceTimersByTimeAsync(cfg.contextAfterMs - 1);
+    expect(requests).toHaveLength(1);
+    d.onAiTurnStarted();
+    d.onAiTurnEnded('换个话题的备用句');
+    await vi.advanceTimersByTimeAsync(cfg.checkAfterMs);
+    expect(requests).toHaveLength(2);
+    d.stop();
+  });
+
   it('drops a pending memory notice when consent is declined', () => {
     const requests: ProactiveRequest[] = [];
     const d = new Director(cfg, { requestResponse: (_kind, request) => requests.push(request) }, true);

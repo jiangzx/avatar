@@ -30,6 +30,10 @@ describe('zh intent copy', () => {
     expect(zh.intents!.withQuote).toContain('{said}');
     expect(zh.intents!.withQuote).toContain('{material}');
     expect(zh.intents!.withTopic).toContain('{material}');
+    expect(zh.intents!.withQuestionQuote).toContain('{material}');
+    expect(zh.intents!.withQuestionTopic).toContain('{material}');
+    expect(zh.intents!.mustAsk.length).toBeGreaterThan(0);
+    expect(zh.intents!.withFollowUp.length).toBeGreaterThan(0);
     expect(zh.intents!.speakLine).toContain('{line}');
     expect(zh.intents!.saidWhen.days).toHaveLength(5);
     expect(zh.intents!.opening).toContain('{name}');
@@ -56,6 +60,10 @@ describe('zh intent copy', () => {
       }
     }
     for (const line of zh.fallbacks!.restQuiet) expect(line).not.toMatch(/[？?]/);
+    for (const line of zh.fallbacks!.interestTopic) expect(line).toMatch(/[？?]/);
+    for (const line of zh.fallbacks!.selfShareQuestion) expect(line).toMatch(/[？?]/);
+    for (const line of zh.fallbacks!.interestTopicStatement) expect(line).not.toMatch(/[？?]/);
+    for (const line of zh.fallbacks!.selfShare) expect(line).not.toMatch(/[？?]/);
     const rules = i18n.silence.zh;
     for (const line of zh.fallbacks!.presenceCheck) {
       expect(rules.listening.some((w) => containsPhrase(line, w)), line).toBe(true);

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { EvidenceRules } from '../i18n/types.ts';
 
 export type { EvidenceRules };
@@ -27,4 +28,10 @@ export function isMemoryEvidence(text: string, rules: EvidenceRules = EMPTY_EVID
 /** Whitespace, sentence punctuation, and Latin case are not evidence-bearing. */
 function normalizeUtterance(text: string): string {
   return text.replace(/[\s。！？!?，,、.~～…]+/gu, '').toLowerCase();
+}
+
+/** Stable key for a user statement; never stores the text itself (2026-10-31 spec). */
+export function statementKey(text: string): string {
+  const normalized = text.normalize('NFKC').replace(/[\s。！？!?，,、.~～…]+/gu, '').toLowerCase();
+  return `stmt:${createHash('sha256').update(normalized).digest('hex')}`;
 }
