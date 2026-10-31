@@ -307,6 +307,8 @@ export class Session {
   private rebuildAgain: 'forget' | 'decline' | null = null;
   /** Latest accepted analyzer card; session memory only, never logged. */
   private affectCard: AffectCard | null = null;
+  /** Current speech rate; starts at the model default and changes only at an accepted card. */
+  private speechRate = 1;
   /** Highest card intensity this session; feeds the end-of-session mood summary. */
   private moodPeak = 0;
   /** Affect text the last push request was made for. */
@@ -331,6 +333,7 @@ export class Session {
     this.context = ctx;
     this.roleId = deps.characters?.roleOf(ctx.characterId) ?? deps.roles.defaultRole();
     this.i18n = deps.i18n ?? DEFAULT_I18N;
+    this.speechRate = deps.realtime?.speechRate?.default ?? 1;
     this.push = deps.push ?? DEFAULT_PUSH;
     this.gate = new PushGate({
       seamOpen: () => this.pushSeamOpen(),
@@ -808,12 +811,16 @@ export class Session {
   }
 
   /** Ask the gate for one instructions push, only when the rendered affect text changed. */
-  private syncAffectRender(): void {
+  private syncAffectRender(rate?: number): void {
     if (this.ended) return;
     const text = this.affectSection();
-    if (text === this.affectRendered) return;
+    const textChanged = text !== this.affectRendered;
+    if (!textChanged && rate === undefined) return;
     this.affectRendered = text;
-    this.gate.request({ instructions: true });
+    this.gate.request({
+      ...(textChanged ? { instructions: true } : {}),
+      ...(rate !== undefined ? { speechRate: rate } : {}),
+    });
   }
 
   /** Accepted analyzer card: store it, drive the avatar, log a crisis once, then re-render. */
@@ -829,7 +836,13 @@ export class Session {
       this.log.warn('affect_crisis');
     }
     this.emotion?.onAffect(card, isLow(card, config.lowIntensity));
-    this.syncAffectRender();
+    const rateCfg = this.deps.realtime?.speechRate ?? null;
+    const nextRate = rateCfg
+      ? (isLow(card, config.lowIntensity) ? rateCfg.low : rateCfg.default)
+      : undefined;
+    const rateChanged = nextRate !== undefined && nextRate !== this.speechRate;
+    if (rateChanged) this.speechRate = nextRate;
+    this.syncAffectRender(rateChanged ? nextRate : undefined);
   }
 
   /** Forget/decline: drop the session copy of the card. The rebuild reconnects with fresh instructions, so no push is requested. */
@@ -838,6 +851,7 @@ export class Session {
     this.affectRendered = '';
     // The open loop is the user's own words; forget/decline must drop it too (spec §8).
     this.openLoop = undefined;
+    this.speechRate = this.deps.realtime?.speechRate?.default ?? 1;
     this.emotion?.releaseHold();
     this.proactive?.reload();
   }
@@ -915,12 +929,21 @@ export class Session {
   private sendSessionUpdate(update: PushRequest): void {
     const instructions = update.instructions ? this.instructions() : undefined;
     if (instructions !== undefined) this.lastInstructionsChars = instructions.length;
-    this.log.debug('session_push', { instructions: instructions !== undefined, voice: update.voice !== undefined });
+    this.log.debug('session_push', {
+      instructions: instructions !== undefined,
+      voice: update.voice !== undefined,
+      speechRate: update.speechRate !== undefined,
+    });
     if (this.adapter.updateSession) {
-      this.adapter.updateSession({
-        ...(instructions !== undefined ? { instructions } : {}),
-        ...(update.voice ? { voice: update.voice } : {}),
-      });
+      try {
+        this.adapter.updateSession({
+          ...(instructions !== undefined ? { instructions } : {}),
+          ...(update.voice ? { voice: update.voice } : {}),
+          ...(update.speechRate !== undefined ? { speechRate: update.speechRate } : {}),
+        });
+      } catch {
+        this.log.warn('session_push_failed');
+      }
       return;
     }
     if (update.voice) this.adapter.updateVoice(update.voice.value);
@@ -1596,6 +1619,11 @@ export class Session {
       // connect() carried the latest instructions and voice; nothing is left to push.
       this.adapterReady = true;
       this.gate.clearPending();
+      const initialRate = this.deps.realtime?.speechRate?.default;
+      if (initialRate !== undefined && this.speechRate !== initialRate) {
+        // The fresh adapter connected at the model default; restore the current mood rate.
+        this.gate.request({ speechRate: this.speechRate });
+      }
       this.syncInputMute();
       const buffered = this.rebuildMicBuffer.splice(0);
       if (!this.muted) for (const pcm of buffered) this.adapter.sendAudio(pcm);

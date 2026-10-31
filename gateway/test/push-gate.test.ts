@@ -128,4 +128,21 @@ describe('PushGate', () => {
     expect(sent).toHaveLength(1);
     expect(g.hasPending).toBe(false);
   });
+
+  it('sends a speech rate request and merges the latest value with instructions', () => {
+    const { g, sent, setOpen } = gate();
+    setOpen(false);
+    g.request({ speechRate: 0.8 });
+    g.request({ instructions: true });
+    g.request({ speechRate: 0.6 });
+    setOpen(true);
+    g.flush();
+    expect(sent).toEqual([{ instructions: true, speechRate: 0.6 }]);
+  });
+
+  it('treats a speech rate change as a real request', () => {
+    const { g, sent } = gate();
+    g.request({ speechRate: 1 });
+    expect(sent).toEqual([{ speechRate: 1 }]);
+  });
 });

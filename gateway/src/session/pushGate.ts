@@ -3,6 +3,8 @@ export interface PushRequest {
   instructions?: boolean;
   /** Present = change voice; value undefined = adapter default. */
   voice?: { value: string | undefined };
+  /** New speech rate; undefined = leave unchanged. */
+  speechRate?: number;
 }
 
 export interface PushGateDeps {
@@ -33,11 +35,12 @@ export class PushGate {
 
   /** Merge into the pending update, then try to flush. */
   request(update: PushRequest): void {
-    if (this.disposed || (!update.instructions && !update.voice)) return;
+    if (this.disposed || (!update.instructions && !update.voice && update.speechRate === undefined)) return;
     const merged: PushRequest = { ...this.pending };
     if (update.instructions) merged.instructions = true;
     // Latest voice wins; instructions are re-read at send time.
     if (update.voice) merged.voice = { value: update.voice.value };
+    if (update.speechRate !== undefined) merged.speechRate = update.speechRate;
     this.pending = merged;
     this.flush();
   }

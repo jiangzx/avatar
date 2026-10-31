@@ -12,7 +12,8 @@ import type { ReplyMetrics } from '../src/session/metrics.ts';
 import type { MemoryStore } from '../src/memory/store.ts';
 import type { TextModelClient } from '../src/memory/textClient.ts';
 import { PROMPT_LABELS } from '../src/roles/labels.ts';
-import { loadAffectConfig } from '../src/session/affect.ts';
+import { loadAffectConfig, type AffectCard } from '../src/session/affect.ts';
+import type { RealtimeConfig } from '../src/realtime/models.ts';
 import type { PushGate } from '../src/session/pushGate.ts';
 import { InterruptCoordinator } from '../src/session/interrupt.ts';
 import type { PacingConfig } from '../src/session/pacing.ts';
@@ -2002,6 +2003,73 @@ describe('Session affect tracker', () => {
     void view.rebuild('forget', true);
     expect(view.affect.card).toBeNull();
     await vi.advanceTimersByTimeAsync(10);
+    s.session.end();
+  });
+
+  const lowRealtime: RealtimeConfig = {
+    model: 'qwen-audio-3.1-realtime-flash',
+    turnDetection: { type: 'server_vad', silenceDurationMs: 800 },
+    speechRate: { min: 0.5, max: 2, default: 1, low: 0.8 },
+    voiceUpdate: 'connect_only',
+    voices: {} as RealtimeConfig['voices'],
+  };
+
+  it('pushes the low speech rate and restores the default', async () => {
+    const { client } = recordingClient();
+    const s = setup({ textClient: client, affect: affectConfig, realtime: lowRealtime });
+    await greetAndFinish(s);
+    const internals = s.session as unknown as {
+      onAffectCard(card: AffectCard): void;
+      gate: PushGate;
+    };
+    internals.gate.onUserFinal();
+    internals.onAffectCard(JSON.parse(sadCard) as AffectCard);
+    internals.gate.flush();
+    expect(s.mocks[0]!.sessionUpdates.at(-1)).toMatchObject({ speechRate: 0.8 });
+
+    internals.gate.onUserFinal();
+    internals.onAffectCard({
+      ...(JSON.parse(sadCard) as AffectCard),
+      emotion: 'neutral', intensity: 1, need: 'chat', strategy: 'reflect',
+    });
+    internals.gate.flush();
+    expect(s.mocks[0]!.sessionUpdates.at(-1)).toMatchObject({ speechRate: 1 });
+    s.session.end();
+  });
+
+  it('re-pushes the current rate after a reconnect', async () => {
+    const { client } = recordingClient();
+    const s = setup({ textClient: client, affect: affectConfig, realtime: lowRealtime });
+    await greetAndFinish(s);
+    const internals = s.session as unknown as {
+      onAffectCard(card: AffectCard): void;
+      gate: PushGate;
+      rebuild(reason: string): Promise<void>;
+    };
+    internals.gate.onUserFinal();
+    internals.onAffectCard(JSON.parse(sadCard) as AffectCard);
+    internals.gate.flush();
+    expect(s.mocks[0]!.sessionUpdates.at(-1)).toMatchObject({ speechRate: 0.8 });
+
+    await internals.rebuild('error');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(s.mocks[1]!.sessionUpdates.at(-1)).toMatchObject({ speechRate: 0.8 });
+    s.session.end();
+  });
+
+  it('does not push speech rate on a model without support', async () => {
+    const { client } = recordingClient();
+    const s = setup({
+      textClient: client,
+      affect: affectConfig,
+      realtime: { ...lowRealtime, speechRate: null },
+    });
+    await greetAndFinish(s);
+    const internals = s.session as unknown as { onAffectCard(card: AffectCard): void; gate: PushGate };
+    internals.gate.onUserFinal();
+    internals.onAffectCard(JSON.parse(sadCard) as AffectCard);
+    internals.gate.flush();
+    expect(s.mocks[0]!.sessionUpdates.every((update) => update.speechRate === undefined)).toBe(true);
     s.session.end();
   });
 });
