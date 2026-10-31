@@ -565,7 +565,9 @@ export class Session {
           const toolOrigin = this.toolTurn.active && msg.responseSeq === this.toolOriginSeq;
           // Stale end (already cancelled/superseded, a newer turn may be active): ignore.
           // A tool origin stays eligible after the forced finish clears interrupt.active.
-          if (!toolOrigin && this.interrupt.active !== msg.responseSeq) break;
+          if (!toolOrigin && this.interrupt.active !== msg.responseSeq) {
+            break;
+          }
           s.playbackEnded = true;
           this.streamBarge = false;
           this.bargePreroll.length = 0;
