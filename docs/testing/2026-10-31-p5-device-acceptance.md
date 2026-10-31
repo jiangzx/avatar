@@ -48,3 +48,8 @@
 - check/leave 的 `quiet` 来自 `decide()` 的提前返回：`todaySpoken >= maxPerDay`，日志里是 `candidates:0`，不是打分低于阈值。按当前权重，`selfShare` 在 check 的分数约 0.50 > 阈值 0.45；未到上限时 check 会开口。
 - 后台「主动互动」页原本已有三个 `maxPerDay`。本次新增用户详情页「今日主动次数」和「清零今日主动次数」：`GET /admin/api/owners/:oid` 返回 `proactiveDaily`；`POST /admin/api/owners/:oid/proactive-daily/reset` 清零该 owner 当日所有角色的计数并写审计。回归 protocol 3/16、gateway 124/1435、admin 24/130、两个 typecheck、admin build 通过。
 - 重复句仍无法从日志确认（不记正文；会话未结束时 assistant 行不落库）。若继续出现，优先把 `presenceCheck` 改为 5 句固定兜底轮换，或加内容无关的重复度核对；待用户决定。
+
+## 2026-10-31 全新安装复验
+
+- App 重新安装（新 owner）。第 1 项：用户确认通过。
+- 第 5 项：会话 `82c001c3-5022-44d5-a3b3-583d88f1cd26`。第一次沉默的 context 选中 `continueThread`（0.68，用户接受后继续说话）；第二次沉默的 context 选中 `interestTopic`（0.52）；check/leave 为 `quiet`（候选 3/2，未到每日上限）；checkin 为 `presenceCheck` 并开口（28 字），没有 `proactive_grounding_violation`。阶梯 6/6/6。用户确认符合预期。
