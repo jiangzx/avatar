@@ -17,6 +17,8 @@ export interface AdminOwnerRow {
 export interface AdminOwnerDetail extends AdminOwnerRow {
   characters: Array<{ character: string; sessions: number; memoryItems: number; usage: MoneyTokens }>;
   daily: Array<{ day: string; tokens: number; costMicroYuan: number }>;
+  /** Today's proactive line count per character (Asia/Shanghai). */
+  proactiveDaily: Array<{ character: string; count: number }>;
 }
 export interface AdminSessionRow {
   sid: string; oid: string; character: string; adapter: string | null;

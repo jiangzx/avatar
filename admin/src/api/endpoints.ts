@@ -51,6 +51,7 @@ export function adminApi(client: ApiClient) {
     owner: (oid: string, includeMock: boolean) => client.get<AdminOwnerDetail>(`/owners/${seg(oid)}`, { mock: mock(includeMock) }),
     banOwner: (oid: string) => client.post<void>(`/owners/${seg(oid)}/ban`),
     unbanOwner: (oid: string) => client.post<void>(`/owners/${seg(oid)}/unban`),
+    resetProactiveDaily: (oid: string) => client.post<void>(`/owners/${seg(oid)}/proactive-daily/reset`),
     deleteOwner: (oid: string) => client.del<void>(`/owners/${seg(oid)}`, { confirm: oid } satisfies AdminDeleteOwnerRequest),
     sessions: (q: SessionQuery) =>
       client.get<AdminPage<AdminSessionRow>>('/sessions', { oid: q.oid, character: q.character, from: q.from, to: q.to, cursor: q.cursor, mock: mock(q.includeMock) }),

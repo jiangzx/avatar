@@ -42,3 +42,9 @@
 - 决定：改提词并要求问一句；把 check/leave/checkin 从 8/10/10 秒缩到 8/5/5 秒；五种阶梯时长继续在后台「对话节奏」页可配置（`pacing.json` 描述符已有 `role:elder-companion/*/director.*AfterMs`）。
 - 改动：zh `director.json` 的 `presenceCheck` 改为「轻声问一句是否还在听，并说明随时可以接着聊，不催促」；zh/ja/en 的 `leaveAfterMs`、`checkinAfterMs` 改为 5000；`config.test.ts` 同步。`npm test -w gateway` 124 文件 / 1432 项通过；`npm test -w admin` 24 文件 / 129 项通过；两个 typecheck 无输出。
 - 待办：重启 8787 后用新提词与 8/5/5 阶梯重跑第 5 项。
+
+## 后台清零与 check quiet（2026-10-31）
+
+- check/leave 的 `quiet` 来自 `decide()` 的提前返回：`todaySpoken >= maxPerDay`，日志里是 `candidates:0`，不是打分低于阈值。按当前权重，`selfShare` 在 check 的分数约 0.50 > 阈值 0.45；未到上限时 check 会开口。
+- 后台「主动互动」页原本已有三个 `maxPerDay`。本次新增用户详情页「今日主动次数」和「清零今日主动次数」：`GET /admin/api/owners/:oid` 返回 `proactiveDaily`；`POST /admin/api/owners/:oid/proactive-daily/reset` 清零该 owner 当日所有角色的计数并写审计。回归 protocol 3/16、gateway 124/1435、admin 24/130、两个 typecheck、admin build 通过。
+- 重复句仍无法从日志确认（不记正文；会话未结束时 assistant 行不落库）。若继续出现，优先把 `presenceCheck` 改为 5 句固定兜底轮换，或加内容无关的重复度核对；待用户决定。

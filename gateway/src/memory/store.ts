@@ -231,6 +231,8 @@ export interface MemoryStore {
   /** Proactive lines on one Beijing day (YYYY-MM-DD from the caller). Returns the new count; 0 when foreign. */
   incrementProactiveDaily(ownerId: string, agentId: string, day: string): number;
   proactiveDaily(ownerId: string, agentId: string, day: string): number;
+  /** Clears every agent's count for one owner and Beijing day; returns the rows removed. */
+  resetProactiveDaily(ownerId: string, day: string): number;
   /** Indexes of recently used fallback lines for one key, newest first. */
   recentFallbackLines(ownerId: string, agentId: string, key: string, limit: number): number[];
   /** Records a used fallback line and keeps only the newest `keep` for that key. */
@@ -543,6 +545,7 @@ function prepareStatements(db: DatabaseSync) {
       SELECT owner_id, id, ?, 1 FROM agents WHERE id = ? AND owner_id = ?
       ON CONFLICT (owner_id, agent_id, day) DO UPDATE SET count = count + 1`),
     getDaily: p('SELECT count FROM proactive_daily WHERE owner_id = ? AND agent_id = ? AND day = ?'),
+    clearDaily: p('DELETE FROM proactive_daily WHERE owner_id = ? AND day = ?'),
     recentFallbacks: p(`SELECT line FROM proactive_fallbacks WHERE owner_id = ? AND agent_id = ? AND fallback_key = ?
       ORDER BY used_at DESC, line LIMIT ?`),
     useFallback: p(`INSERT INTO proactive_fallbacks (owner_id, agent_id, fallback_key, line, used_at)
@@ -1117,6 +1120,10 @@ export class SqliteMemoryStore implements MemoryStore {
 
   proactiveDaily(ownerId: string, agentId: string, day: string): number {
     return (this.q.getDaily.get(ownerId, agentId, day)?.count as number | undefined) ?? 0;
+  }
+
+  resetProactiveDaily(ownerId: string, day: string): number {
+    return this.tx<number>(() => Number(this.q.clearDaily.run(ownerId, day).changes));
   }
 
   recentFallbackLines(ownerId: string, agentId: string, key: string, limit: number): number[] {

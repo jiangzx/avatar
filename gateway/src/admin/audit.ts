@@ -7,7 +7,7 @@ export type AdminAuditAction =
   | 'login_succeeded' | 'login_failed' | 'logout'
   | 'config_published' | 'config_rolled_back' | 'config_reset'
   | 'secret_updated' | 'secret_revealed' | 'price_added'
-  | 'owner_banned' | 'owner_unbanned' | 'owner_deleted' | 'log_level_changed';
+  | 'owner_banned' | 'owner_unbanned' | 'owner_deleted' | 'proactive_daily_reset' | 'log_level_changed';
 
 export interface AdminAuditEntry { actor: string; action: AdminAuditAction; target?: string | null; detail?: LogFields }
 

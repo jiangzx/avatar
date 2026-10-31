@@ -262,8 +262,8 @@ interface Logger {
 |---|---|
 | `POST /admin/api/login`、`POST /admin/api/logout`、`GET /admin/api/me` | 登录、登出、当前会话（含 CSRF token） |
 | `GET /admin/api/overview?range=today\|7d\|30d` | 简报句数据、按天汇总、按模型拆分、错误率、首音延迟 p50/p95、异常标记 |
-| `GET /admin/api/owners`、`GET /admin/api/owners/:oid` | 用户列表与详情（各角色会话数、记忆条数、累计 token 与费用、每日趋势） |
-| `POST /admin/api/owners/:oid/ban`、`/unban`、`DELETE /admin/api/owners/:oid` | 封禁、解封、删除全部数据（复用现有删除 owner 逻辑） |
+| `GET /admin/api/owners`、`GET /admin/api/owners/:oid` | 用户列表与详情（各角色会话数、记忆条数、累计 token 与费用、每日趋势、今日主动次数） |
+| `POST /admin/api/owners/:oid/ban`、`/unban`、`/proactive-daily/reset`、`DELETE /admin/api/owners/:oid` | 封禁、解封、清零当日主动次数（写审计）、删除全部数据（复用现有删除 owner 逻辑） |
 | `GET /admin/api/sessions?oid&char&from&to` | 会话列表 |
 | `GET /admin/api/sessions/:sid/timeline` | 会话时间线（log_events + usage_events 合并） |
 | `GET /admin/api/logs?sid&oid&event&level&from&to` | 日志筛选，分页 |

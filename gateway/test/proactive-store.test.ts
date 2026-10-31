@@ -57,6 +57,16 @@ describe('proactive store', () => {
     expect(store.proactiveDaily(a.ownerId, a.agentId, '2026-11-02')).toBe(2);
   });
 
+  it('resets the daily count for one day only', () => {
+    const { store, a } = setup();
+    store.incrementProactiveDaily(a.ownerId, a.agentId, '2026-11-02');
+    store.incrementProactiveDaily(a.ownerId, a.agentId, '2026-11-02');
+    store.incrementProactiveDaily(a.ownerId, a.agentId, '2026-11-03');
+    expect(store.resetProactiveDaily(a.ownerId, '2026-11-02')).toBe(1);
+    expect(store.proactiveDaily(a.ownerId, a.agentId, '2026-11-02')).toBe(0);
+    expect(store.proactiveDaily(a.ownerId, a.agentId, '2026-11-03')).toBe(1);
+  });
+
   it('remembers the most recent fallback lines per key, newest first, up to keep', () => {
     const { store, a } = setup();
     store.recordFallbackLine(a.ownerId, a.agentId, 'checkin', 2, 10, 3);

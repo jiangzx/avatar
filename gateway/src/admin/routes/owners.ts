@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { shanghaiDay } from '../days.ts';
 import { sendError, sendNoContent } from '../http.ts';
 import { purgeOwnerLogs, scheduleLogPurge } from '../ownerActions.ts';
 import type { AdminRoute, RouteContext } from './types.ts';
@@ -33,6 +34,15 @@ function unban(ctx: RouteContext): void {
   sendNoContent(ctx.res);
 }
 
+function resetProactiveDaily(ctx: RouteContext): void {
+  const owner = ownerOf(ctx);
+  if (!owner) return;
+  const day = shanghaiDay(ctx.services.now());
+  const rows = ctx.deps.store.resetProactiveDaily(owner.ownerId, day);
+  ctx.services.audit.record({ actor: ctx.session!.actor, action: 'proactive_daily_reset', target: owner.oid, detail: { day, rows } });
+  sendNoContent(ctx.res);
+}
+
 async function remove(ctx: RouteContext): Promise<void> {
   const owner = ownerOf(ctx);
   if (!owner) return;
@@ -62,6 +72,7 @@ export function ownerRoutes(): AdminRoute[] {
   return [
     { method: 'POST', path: new RegExp(`^/admin/api/owners/${OID_PATH}/ban$`), name: 'owner_ban', auth: true, handle: ban },
     { method: 'POST', path: new RegExp(`^/admin/api/owners/${OID_PATH}/unban$`), name: 'owner_unban', auth: true, handle: unban },
+    { method: 'POST', path: new RegExp(`^/admin/api/owners/${OID_PATH}/proactive-daily/reset$`), name: 'proactive_daily_reset', auth: true, handle: resetProactiveDaily },
     { method: 'DELETE', path: new RegExp(`^/admin/api/owners/${OID_PATH}$`), name: 'owner_delete', auth: true, bodyLimit: 1024, handle: remove },
   ];
 }

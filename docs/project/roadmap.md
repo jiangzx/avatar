@@ -26,6 +26,7 @@
 - 计划 4 交付：protocol `SESSION_REJECTIONS` / `SessionCreateResponse.diagId`；App 封禁提示与重试、停用角色置灰（24 小时本地保留）、logcat `session_ready` 诊断行、设置页复制诊断编号。
 - 计划 4 验收（2026-10-28，用户确认手机）：[记录](../testing/2026-10-27-admin-app-acceptance.md)。自动回归 protocol 3/16、gateway 109/1345、admin 24/129、flutter 350、三个 typecheck、admin build、flutter analyze 全通过。真机 A（诊断编号）、B（封禁/解封/重试）、C1–C3（停用/换角色/重启后仍置灰）用户确认通过；C4（24 小时到期恢复）跳过。手机验收使用临时 Mock 库，App 本机 device token 被临时 owner 覆盖；按用户确认切回线上后注册新的线上 owner，旧 owner 记忆不会自动接上（blockers #65 类别），真实库数据未删除。
 - 计划 4 跳过与问题：C4 未实等到期（本机小暖约 24 小时后自动恢复）；临时库身份副作用见 `docs/blockers.md`。
+- 2026-10-31 后台用户详情新增「今日主动次数」：`GET /admin/api/owners/:oid` 返回 `proactiveDaily`（按角色，Asia/Shanghai）；`POST /admin/api/owners/:oid/proactive-daily/reset` 清零该 owner 当日所有角色的 `proactive_daily` 并写审计 `proactive_daily_reset`。回归 protocol 3/16、gateway 124/1435、admin 24/130、两个 typecheck、admin build 通过。
 - 下一步：Plan 4 提交未推送，推送前待用户确认。
 
 ## 关系连续的主动互动（2026-10-28 设计）

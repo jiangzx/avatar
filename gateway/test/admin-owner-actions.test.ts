@@ -55,6 +55,23 @@ describe('ban and unban', () => {
   });
 });
 
+describe('proactive daily reset', () => {
+  it('clears today\'s count for every character and audits it', async () => {
+    const { h, auth } = await seeded();
+    h.db.prepare('INSERT INTO proactive_daily (owner_id, agent_id, day, count) VALUES (?, ?, ?, ?)').run(OWNER_A, AGENT_A, '2026-10-27', 9);
+    expect((await h.api(`/admin/api/owners/${OA}/proactive-daily/reset`, { method: 'POST', auth })).status).toBe(204);
+    const row = h.db.prepare('SELECT COUNT(*) AS n FROM proactive_daily WHERE owner_id = ? AND day = ?').get(OWNER_A, '2026-10-27') as { n: number };
+    expect(row.n).toBe(0);
+    expect(audit(h)).toEqual([{ action: 'proactive_daily_reset', target: OA, detail: '{"day":"2026-10-27","rows":1}' }]);
+  });
+
+  it('404s for an unknown oid and requires csrf', async () => {
+    const { h, auth } = await seeded();
+    expect((await h.api('/admin/api/owners/000000000000/proactive-daily/reset', { method: 'POST', auth })).status).toBe(404);
+    expect((await h.api(`/admin/api/owners/${OA}/proactive-daily/reset`, { method: 'POST', headers: { cookie: auth.cookie } })).status).toBe(403);
+  });
+});
+
 describe('delete', () => {
   it('requires the oid as confirmation', async () => {
     const { h, auth } = await seeded();

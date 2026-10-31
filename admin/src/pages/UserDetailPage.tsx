@@ -19,6 +19,7 @@ export function UserDetailPage({ oid }: { oid: string }) {
   const api = useApi();
   const { includeMock } = useViewOptions();
   const [deleting, setDeleting] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'ban' | 'unban' | null>(null);
   const { state, reload } = useLoad(() => api.owner(oid, includeMock), [api, oid, includeMock]);
 
@@ -53,7 +54,14 @@ export function UserDetailPage({ oid }: { oid: string }) {
         累计 {formatCount(owner.usage.tokens)} token，费用 {formatMoney(owner.usage)}，通话 {owner.sessions} 次，记忆 {owner.memoryItems} 条。
       </p>
       <CharacterTable rows={owner.characters} />
+      <ProactiveDailyTable rows={owner.proactiveDaily} onReset={() => setResetting(true)} />
       <DailyTable rows={owner.daily} />
+      <ResetProactiveDailyModal
+        oid={oid}
+        open={resetting}
+        onClose={() => setResetting(false)}
+        onDone={() => { setResetting(false); reload(); }}
+      />
       <DeleteOwnerModal oid={oid} open={deleting} onClose={() => setDeleting(false)} />
       <ConfirmOwnerModal
         action={confirmAction}
@@ -147,6 +155,72 @@ function CharacterTable({ rows }: { rows: CharacterRow[] }) {
         <Table<CharacterRow> rowKey={(r) => r.character} size="middle" pagination={false} columns={columns} dataSource={rows} />
       )}
     </section>
+  );
+}
+
+function ProactiveDailyTable({ rows, onReset }: { rows: AdminOwnerDetail['proactiveDaily']; onReset: () => void }) {
+  const columns: TableColumnsType<AdminOwnerDetail['proactiveDaily'][number]> = [
+    {
+      title: '角色',
+      dataIndex: 'character',
+      render: (id: string) => (
+        <span>
+          <span className="swatch" style={{ background: CHARACTER_COLORS[id] ?? '#4D5D63' }} aria-hidden="true" />
+          {characterName(id)}
+        </span>
+      ),
+    },
+    { title: '今日主动次数', dataIndex: 'count', align: 'right' },
+  ];
+  return (
+    <section className="section" aria-labelledby="proactive-daily-title">
+      <h2 id="proactive-daily-title">今日主动次数</h2>
+      {rows.length === 0 ? (
+        <p className="caption">这位用户还没和任何角色通过话。</p>
+      ) : (
+        <Table rowKey={(r) => r.character} size="middle" pagination={false} columns={columns} dataSource={rows} />
+      )}
+      <div className="page-actions">
+        <Button onClick={onReset}>清零今日主动次数</Button>
+      </div>
+    </section>
+  );
+}
+
+function ResetProactiveDailyModal({ oid, open, onClose, onDone }: {
+  oid: string; open: boolean; onClose: () => void; onDone: () => void;
+}) {
+  const api = useApi();
+  const { message } = App.useApp();
+  const [busy, setBusy] = useState(false);
+
+  useEscapeClose(open, onClose);
+
+  async function reset() {
+    setBusy(true);
+    try {
+      await api.resetProactiveDaily(oid);
+      message.success('已清零');
+      onDone();
+    } catch (error) {
+      message.error(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      title="清零今天的主动次数？"
+      okText="清零"
+      cancelText="取消"
+      okButtonProps={{ loading: busy }}
+      onOk={() => void reset()}
+      onCancel={onClose}
+    >
+      <p>会把这位用户今天所有角色的主动开口计数清零；记忆、通话和接受率统计都不受影响。</p>
+    </Modal>
   );
 }
 

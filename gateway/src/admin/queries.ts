@@ -61,6 +61,10 @@ const SQL = {
     FROM agents a WHERE a.owner_id = $owner ORDER BY a.created_at, a.id`,
   ownerDaily: `SELECT ${sqlShanghaiDay('u.ts')} AS day, COALESCE(SUM(${TOKENS}), 0) AS tokens, COALESCE(SUM(u.cost_micro_yuan), 0) AS cost
     FROM usage_events u WHERE u.owner_id = $owner AND u.ts >= $from AND ${USAGE_MOCK} GROUP BY day`,
+  ownerProactiveDaily: `SELECT a.character_id AS character, COALESCE(p.count, 0) AS count
+    FROM agents a LEFT JOIN proactive_daily p
+      ON p.owner_id = a.owner_id AND p.agent_id = a.id AND p.day = $day
+    WHERE a.owner_id = $owner ORDER BY a.created_at, a.id`,
   sessions: `SELECT s.id AS sid, a.owner_id AS ownerId, a.character_id AS character, s.adapter AS adapter,
       s.started_at AS startedAt, s.ended_at AS endedAt, s.end_reason AS endReason,
       (SELECT COUNT(*) FROM usage_events u WHERE u.session_id = s.id AND u.kind = 'realtime_reply') AS replies,
@@ -177,6 +181,8 @@ export class AdminQueries {
         const d = daily.get(day);
         return { day, tokens: num(d?.tokens), costMicroYuan: num(d?.cost) };
       }),
+      proactiveDaily: (this.q.ownerProactiveDaily.all({ owner: ownerId, day: shanghaiDay(this.now()) }) as Row[])
+        .map((r) => ({ character: r.character as string, count: num(r.count) })),
     };
   }
 

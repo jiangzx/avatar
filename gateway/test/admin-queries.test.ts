@@ -101,10 +101,12 @@ describe('owners', () => {
 
   it('details one owner per character with 30 days of usage', () => {
     seedStandard(db);
+    db.prepare('INSERT INTO proactive_daily (owner_id, agent_id, day, count) VALUES (?, ?, ?, ?)').run(OWNER_A, AGENT_A, '2026-10-27', 7);
     const detail = q.owner(OA, false)!;
     expect(detail.characters).toEqual([
       { character: 'xiaonuan', sessions: 1, memoryItems: 3, usage: { tokens: 7700, costMicroYuan: 10_000, unpricedCalls: 0 } },
     ]);
+    expect(detail.proactiveDaily).toEqual([{ character: 'xiaonuan', count: 7 }]);
     expect(detail.daily).toHaveLength(30);
     expect(detail.daily.at(-1)).toEqual({ day: '2026-10-27', tokens: 7700, costMicroYuan: 10_000 });
     expect(detail.daily[0]).toEqual({ day: '2026-09-28', tokens: 0, costMicroYuan: 0 });
