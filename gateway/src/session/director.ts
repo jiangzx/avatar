@@ -64,6 +64,10 @@ export interface DirectorDeps {
 
 type SilenceStep = 'context' | 'check' | 'leave' | 'checkin' | 'rest';
 
+const SILENCE_STEPS: readonly SilenceStep[] = ['context', 'check', 'leave', 'checkin', 'rest'];
+const isSilenceStep = (value: SilenceStep | 'notice' | 'repair' | 'resume' | 'reminder' | null): value is SilenceStep =>
+  value !== null && (SILENCE_STEPS as readonly string[]).includes(value);
+
 /** Agreed defaults when a fixture omits the silence fields. Shipped roles set them in director.json. */
 const DEFAULT_CONTEXT_AFTER_MS = 6_000;
 const DEFAULT_CHECK_AFTER_MS = 8_000;
@@ -139,6 +143,8 @@ export class Director {
   private bargeIn = false;
   /** Silence step whose playback is in flight, the memory notice, or the rest reminder. */
   private pending: SilenceStep | 'notice' | 'repair' | 'resume' | 'reminder' | null = null;
+  /** Silence step interrupted by a barge; re-armed after the barge-miss repair. */
+  private repairStep: SilenceStep | null = null;
   /** Still owe the one-time memory notice in this session. */
   private noticePending: boolean;
   /** The notice was cut off. Say it again at the next idle moment. */
@@ -177,6 +183,7 @@ export class Director {
 
   onSessionStart(hasMemory = false): void {
     this.hasMemory = hasMemory;
+    this.repairStep = null;
     this.cancelGreeting();
     this.requestGreeting();
   }
@@ -216,6 +223,7 @@ export class Director {
     this.cancelGreeting();
     if (this.cfg.quietPhrases.some((p) => containsPhrase(text, p))) {
       this.quiet = true;
+      this.repairStep = null;
       this.clear();
       if (this.pending !== 'notice') this.pending = null;
       // A cut-off notice still has to be said. Quiet phrases do not cancel it.
@@ -226,6 +234,7 @@ export class Director {
     }
     const key = normalizeUtterance(text);
     if (!key) return;
+    if (!this.isLight(key)) this.repairStep = null;
     this.clear();
     if (this.pending !== 'notice') this.pending = null;
     if (this.isLight(key)) {
@@ -274,6 +283,7 @@ export class Director {
 
   /** The line was cut off. A real barge-in waits for the reply; a false cut repeats the step. */
   onAssistantInterrupted(): void {
+    const interrupted = this.pending;
     this.aiBusy = false;
     // A reminder the user cut off still counts as given; never replay it.
     if (this.pending === 'reminder') this.pending = null;
@@ -285,6 +295,7 @@ export class Director {
     if (this.userSpeaking) return;
     if (this.noticeRetry) {
       if (this.bargeIn) {
+        this.repairStep = null;
         this.armBargeReplyWait();
         return;
       }
@@ -294,6 +305,7 @@ export class Director {
     if (this.quiet || this.left) return;
     this.pending = null;
     if (this.bargeIn) {
+      this.repairStep = isSilenceStep(interrupted) ? interrupted : null;
       this.armBargeReplyWait();
       return;
     }
@@ -377,7 +389,20 @@ export class Director {
     // An owed reminder takes the next silence slot, even when the ladder itself is quiet.
     if (this.armReminderSlot()) return;
     if (this.quiet || this.left) return;
-    if (done === 'repair' || (done === 'resume' && this.hadContent) || this.silentStretch) {
+    if (done === 'repair') {
+      const step = this.repairStep;
+      this.repairStep = null;
+      if (this.hadContent) {
+        // The user is still there: resume the interrupted stage instead of going quiet.
+        this.silentStretch = false;
+        this.next = step ?? 'context';
+        this.arm();
+        return;
+      }
+      this.waitQuietly();
+      return;
+    }
+    if ((done === 'resume' && this.hadContent) || this.silentStretch) {
       this.waitQuietly();
       return;
     }
@@ -478,6 +503,7 @@ export class Director {
 
   stop(): void {
     this.stopped = true;
+    this.repairStep = null;
     this.cancelGreeting();
     this.clear();
   }

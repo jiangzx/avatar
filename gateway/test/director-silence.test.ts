@@ -331,9 +331,9 @@ describe('substantive conversation silence', () => {
     d.stop();
   });
 
-  it('does not restart the silence ladder after a noise-hearing repair', async () => {
+  it('re-runs the interrupted silence step after a noise-hearing repair', async () => {
     const s = setup();
-    s.d.onAiTurnEnded();
+    s.answer();
     await vi.advanceTimersByTimeAsync(cfg.contextAfterMs);
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded();
@@ -342,7 +342,10 @@ describe('substantive conversation silence', () => {
     s.d.onAiTurnEnded();
     await vi.advanceTimersByTimeAsync(cfg.leaveAfterMs);
     s.d.onAiTurnStarted();
-    expect(s.requests).toHaveLength(3);
+    s.d.onAiTurnEnded();
+    await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
+    s.d.onAiTurnStarted();
+    expect(s.requests).toHaveLength(4);
     s.d.onUserSpeech(true);
     s.d.onUserSpeech(false);
     s.d.onAssistantInterrupted();
@@ -350,8 +353,9 @@ describe('substantive conversation silence', () => {
     expect(s.requests.at(-1)?.fallbackText).toBe('没听清，您再说一遍。');
     s.d.onAiTurnStarted();
     s.d.onAiTurnEnded('没听清，您再说一遍。');
-    await vi.advanceTimersByTimeAsync(600000);
-    expect(s.requests).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
+    expect(s.requests).toHaveLength(6);
+    expect(s.requests.at(-1)?.fallbackText).not.toBe('没听清，您再说一遍。');
     s.d.stop();
   });
 

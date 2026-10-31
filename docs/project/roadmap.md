@@ -57,6 +57,7 @@
 - 2026-10-31 P5-T3 真机（全新安装）：第 1 项过。第 5 项不过：`silenceCheckin` 的 `presenceCheck` 指令把 `allowQuestion` 设为 false 并追加「不要提问」，与「问是否还在听、随时可聊」的目的和兜底句（问句）矛盾；模型生成非问句且缺「随时」类词，事后核对判 `presence` 违规。用户批准最小修复：`buildIntent` 只对 `restQuiet` 禁问，`presenceCheck` 允许问句；测试同步更新。回归 gateway 124 文件 / 1432 项、typecheck、真实库召回 true / true / false。重启网关后重跑第 5 项；其余同日项与多天项待做。验收 [记录](../testing/2026-10-31-p5-device-acceptance.md)。
 - 2026-10-31 第 5 项复现：无静音时阶梯跑通，context/check/leave 都是 `quiet`（`candidates:0`），checkin 在第 34 秒开口并通过 presence 核对。原因是测试 owner 当日 `proactive_daily` 已 15 次，超过 moderate `maxPerDay` 10；到上限后只保留 checkin/rest。用户决定调高每日上限：`proactivity.json` 的 moderate 10→20、active 16→30（quiet 4 不变）。另一次失败是 App 误触静音（`client.mute=true`），不是阶梯问题。待重启后用新配置重跑第 5 项。
 - 2026-10-31 第 5 项第二轮调整：复现显示 context 第 6 秒说 `continueThread`、check/leave 为 quiet、checkin 第 34 秒开口；两句间隔 28.4 秒。用户决定把 `presenceCheck` 提词改为「轻声问一句是否还在听，并说明随时可以接着聊，不催促」；check/leave/checkin 先缩到 8/5/5，随后按用户要求把 **6/6/6 秒设为默认值**（后台版本 1/2 也是 6/6/6）。五种阶梯时长继续在后台「对话节奏」页可配置（`pacing.json` 描述符已有 `role:elder-companion/*/director.*AfterMs`）。回归 gateway 124/1432、admin 24/129、两个 typecheck 通过。
+- 2026-10-31 用户要求 barge-miss 修复后重新走被中断的阶梯步（checkin 重新问；普通回复则从 context 重启），不再直接 silent rest。`Director.repairStep`；测试改为 `re-runs the interrupted silence step after a noise-hearing repair`。全量 gateway 124/1435、typecheck、真实库召回 true/true/false 通过。待真机复验。
 
 ## 多角色与分层记忆（2026-10-26 起）
 
@@ -152,7 +153,7 @@ Plan 4 写 spec 前完成 4 个最小探针，只新增 `gateway/scripts/probe-e
 6. 已经 `response_end` 的回复不要再发 `response.cancel`。打断过程中不要 `session.update` 刷新指令。这两下都会把服务端正在听的声音丢掉。
 7. 给模型看的指令和账本里不要写「被用户打断」。模型会把它读出来。截断只留在内部。
 8. 本地 VAD 的 speaking 要在等待停播之前发出。停播期间已经静音，就不要再补一条 speaking。没有 speaking 边沿的误切，才把同一句沉默步重新排上。真打断之后不要把被打断的那句补完。
-9. 咳嗽、喷嚏、滴一声会触发本地 VAD 并停播，但不是完整的话。大约 2.5 秒后如果没有形成回复，只说「没听清，您再说一遍。」不要说「我在」，不要接被打断的内容。真回复一旦开始，这句必须取消。
+9. 咳嗽、喷嚏、滴一声会触发本地 VAD 并停播，但不是完整的话。大约 2.5 秒后如果没有形成回复，只说「没听清，您再说一遍。」不要说「我在」，不要接被打断的内容。真回复一旦开始，这句必须取消。（2026-10-31 用户修订：修复句结束后重新走被中断的沉默步；被打断的是普通回复则从 context 重新计时；没有内容时仍静下来。`Director.repairStep`。）
 10. 跨会话记忆代码已合并，Mock 进程验收见下文；真实二次通话尚未验收。没有记忆快照时，开场是自我介绍并问称呼，不要假装记得上次。
 11. 启动网关时用 `app/dev.json` 的 `APP_SECRET` 覆盖进程环境。不要改 `.env`，不要把密钥写进日志或提交。
 

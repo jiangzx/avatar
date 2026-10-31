@@ -57,4 +57,4 @@
 ## 同一天项（2026-10-31，新 owner）
 
 - 第 7 项：用户说「多跟我聊聊」，日志 `proactive_tier_changed` `{ from: "moderate", to: "active" }`（14:32:07），通过。
-- 第 8 项（未完成）：checkin 播放中用户插话「嗯」，本地 VAD 取消该句（`vad_edge speaking` + `response_cancel local`），2.5 秒后走 barge-miss 修复句（10 字），随后进入 silent rest，不再主动开口。这是既有插话契约（roadmap 坑位第 9 条），不是第 8 项的失败；第 8 项需等 AI 说完再只答「嗯/好」。
+- 第 8 项（未完成）：checkin 播放中用户插话「嗯」，本地 VAD 取消该句（`vad_edge speaking` + `response_cancel local`），2.5 秒后走 barge-miss 修复句（10 字），随后进入 silent rest（旧行为）。用户要求修复后重新走被中断的阶梯步；代码已改（`Director.repairStep`），待真机复验。这是插话契约，不是第 8 项的失败；第 8 项需等 AI 说完再只答「嗯/好」。
