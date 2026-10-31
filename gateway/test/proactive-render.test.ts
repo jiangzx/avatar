@@ -58,7 +58,6 @@ describe('buildIntent', () => {
     const t = thread();
     const planned = buildIntent(decision('threadFollowup', 't1'), input({ material: { thread: t } }))!;
     expect(planned.purpose).toBe('threadConcern');
-    expect(planned.fallbackOnly).toBe(false);
     expect(planned.allowCare).toBe(false);
     expect(planned.intent.material.quotes).toEqual([{ text: t.quote, said: '三天前' }]);
     expect(planned.intent.fallbackKey).toBe('threadFollowup');
@@ -67,7 +66,6 @@ describe('buildIntent', () => {
   it('locks a sensitive quote and marks it for one care line', () => {
     const t = thread({ sensitive: true, quote: '我有高血压，这几天量着有点高。' });
     const planned = buildIntent(decision('threadFollowup', 't1'), input({ material: { thread: t } }))!;
-    expect(planned.fallbackOnly).toBe(false);
     expect(planned.allowCare).toBe(true);
     expect(planned.intent.material.quotes).toEqual([{ text: t.quote, said: '三天前' }]);
     expect(planned.intent.fallbackKey).toBe('threadSensitive');
@@ -96,7 +94,6 @@ describe('buildIntent', () => {
       .toEqual([{ text: '我那盆君子兰今年还没开花', said: '刚才' }]);
     expect(buildIntent(decision('continueThread'), input())).toBeNull();
     const health = buildIntent(decision('continueThread'), input({ material: { openLoop: '最近膝盖疼得睡不着', openLoopSensitive: true } }))!;
-    expect(health.fallbackOnly).toBe(false);
     expect(health.allowCare).toBe(true);
     expect(health.intent.material.quotes).toEqual([{ text: '最近膝盖疼得睡不着', said: '刚才' }]);
     expect(health.intent.fallbackKey).toBe('continueThread');

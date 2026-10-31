@@ -89,7 +89,7 @@ describe('silenceLine', () => {
     expect(request.instruction).toContain('刚才');
     expect(zh.fallbacks!.continueThread).toContain(request.fallbackText);
     expect(request.instruction).not.toContain(zh.intents!.withCare);
-    expect(logger.info).toHaveBeenCalledWith('proactive_decision', expect.objectContaining({ moment: 'silenceContext', kind: 'continueThread', score: 0.68, tier: 'moderate', fallback: false }));
+    expect(logger.info).toHaveBeenCalledWith('proactive_decision', expect.objectContaining({ moment: 'silenceContext', kind: 'continueThread', score: 0.68, tier: 'moderate' }));
   });
 
   it('never uses a question as material (pitfall 1); a topic card is offered instead', () => {
@@ -197,7 +197,7 @@ describe('counting, mentions and persistence', () => {
     s.runtime.onLineStarted(request);
     expect(store.markThreadMentioned).toHaveBeenCalledWith('o1', 't1', AFTERNOON);
     expect(store.incrementProactiveDaily).toHaveBeenCalledWith('o1', 'a1', '2026-11-03');
-    // Health quotes are no longer fallbackOnly, so the line is recorded only if the timeout path speaks it.
+    // The line is recorded only if the timeout path speaks it.
     expect(store.recordFallbackLine).not.toHaveBeenCalled();
     expect(zh.fallbacks!.threadSensitive).toContain(request.fallbackText);
     s.runtime.onLineEnded(zh.fallbacks!.threadSensitive[0]!, false);

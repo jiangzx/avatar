@@ -26,8 +26,6 @@ export interface IntentMaterial {
 export interface PlannedIntent {
   intent: ProactiveIntent;
   purpose: IntentPurpose;
-  /** True only for the timeout path. Health quotes are false. */
-  fallbackOnly: boolean;
   /** Health quote: append IntentCopy.withCare. */
   allowCare: boolean;
 }
@@ -81,7 +79,7 @@ function threadPurpose(thread: ThreadRecord, now: number): IntentPurpose {
   return thread.kind === 'concern' ? 'threadConcern' : 'threadPlan';
 }
 
-type Shape = { purpose: IntentPurpose; fallbackKey: FallbackKey | 'greetingPlain'; quotes: Array<{ text: string; said: string | null }>; facts: string[]; fallbackOnly?: boolean; allowCare?: boolean };
+type Shape = { purpose: IntentPurpose; fallbackKey: FallbackKey | 'greetingPlain'; quotes: Array<{ text: string; said: string | null }>; facts: string[]; allowCare?: boolean };
 
 function shapeFor(decision: Decision, input: BuildInput): Shape | null {
   const m = input.material;
@@ -153,5 +151,5 @@ export function buildIntent(decision: Decision, input: BuildInput): PlannedInten
     language: input.language,
     fallbackKey: shape.fallbackKey,
   };
-  return { intent, purpose: shape.purpose, fallbackOnly: shape.fallbackOnly ?? false, allowCare: shape.allowCare ?? false };
+  return { intent, purpose: shape.purpose, allowCare: shape.allowCare ?? false };
 }

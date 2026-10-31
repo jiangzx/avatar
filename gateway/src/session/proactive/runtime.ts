@@ -154,7 +154,7 @@ export class ProactiveRuntime {
       moment: 'sessionStart', now, language: input.language, familiarity: this.familiarity, affect: { low: false, stage: 'explore' },
       material: { thread: this.threads.find((t) => t.id === decision.threadId) }, cfg: this.deps.cfg, saidWords: copy.intents.saidWhen,
     });
-    this.logDecision('sessionStart', decision, planned, decideMs);
+    this.logDecision('sessionStart', decision, decideMs);
     if (!planned) return null;
     let line: InFlight['line'];
     if (planned.intent.kind === 'greetingPlain') {
@@ -170,7 +170,7 @@ export class ProactiveRuntime {
     // The opening keeps the greeting cue: Mock scripts and response kinds key on it.
     const request: ProactiveRequest = { ...renderIntent(planned, copy.intents, line.text, { name }), cue: 'greeting' };
     this.inFlight = {
-      request, planned, language: input.language, line, topicIndex: null, spokeFallback: planned.fallbackOnly,
+      request, planned, language: input.language, line, topicIndex: null, spokeFallback: false,
       ...(decision.threadId ? { threadId: decision.threadId } : {}),
     };
     this.opening = { language: input.language, request };
@@ -208,7 +208,7 @@ export class ProactiveRuntime {
       moment, now, language: input.language, familiarity: this.familiarity, affect: { low, stage },
       material, cfg: this.deps.cfg, saidWords: copy.intents.saidWhen,
     });
-    this.logDecision(moment, decision, planned, decideMs);
+    this.logDecision(moment, decision, decideMs);
     if (!planned) return { quiet: true };
     const key = planned.intent.fallbackKey as FallbackKey;
     const lines = copy.fallbacks[key];
@@ -218,7 +218,7 @@ export class ProactiveRuntime {
     this.inFlight = {
       request, planned, language: input.language, line: { key, index, text },
       topicIndex: planned.intent.kind === 'interestTopic' && topic ? topic.index : null,
-      spokeFallback: planned.fallbackOnly,
+      spokeFallback: false,
       ...(decision.threadId ? { threadId: decision.threadId } : {}),
     };
     return { request };
@@ -238,7 +238,7 @@ export class ProactiveRuntime {
       low: isLow(input.card, input.lowIntensity), crisis: input.card?.crisis ?? false, stage: careStage(input.card),
     }, { openLoop: false, interest: false, family: false }, []);
     const { decision, decideMs } = this.timedDecide(ctx);
-    this.logDecision('topicExhausted', decision, null, decideMs);
+    this.logDecision('topicExhausted', decision, decideMs);
     this.exhaustedOk = decision.kind === 'selfShare';
     if (this.exhaustedOk) this.countSpoken('selfShare');
     return this.exhaustedOk;
@@ -368,14 +368,13 @@ export class ProactiveRuntime {
     return { decision, decideMs: Math.round(performance.now() - started) };
   }
 
-  private logDecision(moment: Moment, decision: Decision, planned: PlannedIntent | null, decideMs: number): void {
+  private logDecision(moment: Moment, decision: Decision, decideMs: number): void {
     this.deps.logger.info('proactive_decision', {
       moment,
       kind: decision.kind,
       score: Math.round(decision.score * 100) / 100,
       candidates: decision.candidates,
       tier: this.tier,
-      fallback: planned?.fallbackOnly ?? false,
       decideMs,
     });
   }

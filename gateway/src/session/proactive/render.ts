@@ -13,7 +13,6 @@ export function speakLineRequest(copy: IntentCopy, line: string): ProactiveReque
 }
 
 export function renderIntent(planned: PlannedIntent, copy: IntentCopy, fallbackLine: string, opts: { name?: string } = {}): ProactiveRequest {
-  if (planned.fallbackOnly) return speakLineRequest(copy, fallbackLine);
   const { intent } = planned;
   const head = opts.name && intent.moment === 'sessionStart'
     ? fill(copy.opening, { '{maxChars}': String(intent.constraints.maxChars), '{name}': opts.name, '{purpose}': copy.purposes[planned.purpose] })
