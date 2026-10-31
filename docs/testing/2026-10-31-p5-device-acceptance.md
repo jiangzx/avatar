@@ -58,3 +58,8 @@
 
 - 第 7 项：用户说「多跟我聊聊」，日志 `proactive_tier_changed` `{ from: "moderate", to: "active" }`（14:32:07），通过。
 - 第 8 项（未完成）：checkin 播放中用户插话「嗯」，本地 VAD 取消该句（`vad_edge speaking` + `response_cancel local`），2.5 秒后走 barge-miss 修复句（10 字），随后进入 silent rest（旧行为）。用户要求修复后重新走被中断的阶梯步；代码已改（`Director.repairStep`），待真机复验。这是插话契约，不是第 8 项的失败；第 8 项需等 AI 说完再只答「嗯/好」。
+
+## barge-miss 复验（2026-10-31）
+
+- 会话 `a263f9a8-9f2f-4efd-948a-bce1b9c3aa97`：checkin 播放中用户插话 → 本地 VAD 取消（`response_cancel local`）→ 修复句（10 字）→ 约 6 秒后从 context 重走阶梯（continueThread → check → leave quiet → checkin）。用户确认符合预期。
+- 轻回应会在 `onUserFinal` 清空 `pending`，因此这次从 context 重启；没有清空时 `Director.repairStep` 会重走被打断的那一步。
