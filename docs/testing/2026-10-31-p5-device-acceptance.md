@@ -53,3 +53,8 @@
 
 - App 重新安装（新 owner）。第 1 项：用户确认通过。
 - 第 5 项：会话 `82c001c3-5022-44d5-a3b3-583d88f1cd26`。第一次沉默的 context 选中 `continueThread`（0.68，用户接受后继续说话）；第二次沉默的 context 选中 `interestTopic`（0.52）；check/leave 为 `quiet`（候选 3/2，未到每日上限）；checkin 为 `presenceCheck` 并开口（28 字），没有 `proactive_grounding_violation`。阶梯 6/6/6。用户确认符合预期。
+
+## 同一天项（2026-10-31，新 owner）
+
+- 第 7 项：用户说「多跟我聊聊」，日志 `proactive_tier_changed` `{ from: "moderate", to: "active" }`（14:32:07），通过。
+- 第 8 项（未完成）：checkin 播放中用户插话「嗯」，本地 VAD 取消该句（`vad_edge speaking` + `response_cancel local`），2.5 秒后走 barge-miss 修复句（10 字），随后进入 silent rest，不再主动开口。这是既有插话契约（roadmap 坑位第 9 条），不是第 8 项的失败；第 8 项需等 AI 说完再只答「嗯/好」。
