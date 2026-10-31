@@ -219,7 +219,7 @@ function ResetProactiveDailyModal({ oid, open, onClose, onDone }: {
       onOk={() => void reset()}
       onCancel={onClose}
     >
-      <p>会把这位用户今天所有角色的主动开口计数清零；记忆、通话和接受率统计都不受影响。</p>
+      <p>会把这位用户今天所有角色的主动开口计数清零；记忆、通话和接受率统计都不受影响。对之后开始的新会话生效，正在进行的会话仍按旧计数。</p>
     </Modal>
   );
 }

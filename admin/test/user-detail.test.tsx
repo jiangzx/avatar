@@ -65,7 +65,9 @@ describe('UserDetailPage', () => {
     });
     renderWithProviders(<UserDetailPage oid={OID} />, fetch);
     await userEvent.click(await screen.findByRole('button', { name: '清零今日主动次数' }));
-    expect(await screen.findByText('会把这位用户今天所有角色的主动开口计数清零；记忆、通话和接受率统计都不受影响。')).toBeTruthy();
+    expect(
+      await screen.findByText('会把这位用户今天所有角色的主动开口计数清零；记忆、通话和接受率统计都不受影响。对之后开始的新会话生效，正在进行的会话仍按旧计数。'),
+    ).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: '清零' }));
     await waitFor(() => expect(document.querySelector('.ant-message')?.textContent).toContain('已清零'));
     const reset = calls.find((c) => c.method === 'POST' && c.url.pathname.endsWith('/proactive-daily/reset'))!;

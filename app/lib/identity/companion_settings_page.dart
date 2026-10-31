@@ -402,7 +402,7 @@ class _CompanionSettingsPageState extends State<CompanionSettingsPage> {
             style: TextButton.styleFrom(minimumSize: const Size(72, 60)),
             onPressed: _writing
                 ? null
-                : () => unawaited(_confirmThen(deleteItemConfirm, deleteCancel, deleteOk, (api) => api.deleteItem(mood.id))),
+                : () => unawaited(_confirmThen(deleteMoodConfirm, deleteCancel, deleteOk, (api) => api.deleteItem(mood.id))),
             child: const Text(deleteLabel, style: TextStyle(fontSize: 20)),
           ),
         ),

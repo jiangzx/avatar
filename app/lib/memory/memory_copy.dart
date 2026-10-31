@@ -30,6 +30,7 @@ const profileItemsEmpty = '还没有基本资料';
 const memoryListEmpty = '还没有';
 const clearProfileConfirm = '清除后，所有伙伴都会忘掉您的称呼和基本资料，不能恢复。确定清除吗？';
 const deleteItemConfirm = '删除这一条吗？相关聊天原话会一起删除，不能恢复。';
+const deleteMoodConfirm = '删除这条情绪摘要吗？不能恢复。';
 const deleteLabel = '删除';
 const deleteCancel = '先不删';
 const deleteOk = '确定删除';

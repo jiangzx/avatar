@@ -76,7 +76,14 @@ void main() {
     await tester.tap(find.byKey(const Key('memory-confirm-ok')));
     await tester.pumpAndSettle();
     expect(transport.calls, ['GET /memory', 'DELETE /memory/items/n-thread', 'GET /memory']);
-    expect(find.text('明天去社区合唱团排练'), findsNothing);
+    expect(find.text('要办的事：明天去社区合唱团排练'), findsNothing);
+    await reveal(tester, find.byKey(const Key('delete-n-mood')));
+    await tester.tap(find.byKey(const Key('delete-n-mood')));
+    await tester.pumpAndSettle();
+    expect(find.text(deleteMoodConfirm), findsOneWidget);
+    await tester.tap(find.byKey(const Key('memory-confirm-cancel')));
+    await tester.pumpAndSettle();
+    expect(transport.calls, ['GET /memory', 'DELETE /memory/items/n-thread', 'GET /memory']);
   });
 
   testWidgets('deleting an item asks first; cancel sends nothing; confirm deletes, reloads and reports once', (tester) async {
