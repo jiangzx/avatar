@@ -138,7 +138,8 @@ function shapeFor(decision: Decision, input: BuildInput): Shape | null {
 export function buildIntent(decision: Decision, input: BuildInput): PlannedIntent | null {
   const shape = shapeFor(decision, input);
   if (!shape) return null;
-  const structural = decision.kind === 'presenceCheck' || decision.kind === 'restQuiet';
+  // checkin asks whether the user is still there; only rest must not ask.
+  const noQuestion = decision.kind === 'restQuiet';
   const intent: ProactiveIntent = {
     moment: input.moment,
     kind: decision.kind,
@@ -148,7 +149,7 @@ export function buildIntent(decision: Decision, input: BuildInput): PlannedInten
       stage: input.affect.low ? input.affect.stage : null,
       allowJoke: input.familiarity === 'oldFriend' && !input.affect.low,
     },
-    constraints: { maxChars: input.cfg.maxChars, allowQuestion: !structural, mustExpress: decision.kind === 'presenceCheck' ? 'presence' : null },
+    constraints: { maxChars: input.cfg.maxChars, allowQuestion: !noQuestion, mustExpress: decision.kind === 'presenceCheck' ? 'presence' : null },
     language: input.language,
     fallbackKey: shape.fallbackKey,
   };

@@ -86,7 +86,8 @@ describe('buildIntent', () => {
     expect(buildIntent(decision('routine'), input())!.purpose).toBe('routineMorning');
     expect(buildIntent(decision('routine'), input({ now: Date.parse('2026-11-03T15:00:00+08:00') }))).toBeNull();
     const checkin = buildIntent(decision('presenceCheck'), input({ moment: 'silenceCheckin' }))!;
-    expect(checkin.intent.constraints).toEqual({ maxChars: cfg.maxChars, allowQuestion: false, mustExpress: 'presence' });
+    // checkin asks whether the user is still there; only rest bans questions.
+    expect(checkin.intent.constraints).toEqual({ maxChars: cfg.maxChars, allowQuestion: true, mustExpress: 'presence' });
     expect(buildIntent(decision('restQuiet'), input({ moment: 'silenceRest' }))!.intent.constraints.allowQuestion).toBe(false);
   });
 
@@ -156,7 +157,9 @@ describe('renderIntent', () => {
     expect(topic.instruction).toContain('【今天吃了什么好吃的】');
     const checkin = renderIntent(buildIntent(decision('presenceCheck'), input({ moment: 'silenceCheckin' }))!, copy, 'x');
     expect(checkin.instruction).toContain(copy.withoutMaterial);
-    expect(checkin.instruction.endsWith(copy.noQuestion)).toBe(true);
+    expect(checkin.instruction).not.toContain(copy.noQuestion);
+    const rest = renderIntent(buildIntent(decision('restQuiet'), input({ moment: 'silenceRest' }))!, copy, 'x');
+    expect(rest.instruction.endsWith(copy.noQuestion)).toBe(true);
     const low = renderIntent(buildIntent(decision('moodCheck'), input({ familiarity: 'oldFriend', affect: { low: true, stage: 'explore' } }))!, copy, 'x');
     expect(low.instruction).toContain(copy.tones.familiar);
     expect(low.instruction).not.toContain(copy.tones.oldFriend);

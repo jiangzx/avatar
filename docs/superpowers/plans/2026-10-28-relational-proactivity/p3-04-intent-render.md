@@ -138,6 +138,9 @@ describe('buildIntent', () => {
     expect(buildIntent(decision('restQuiet'), input({ moment: 'silenceRest' }))!.intent.constraints.allowQuestion).toBe(false);
   });
 
+  // 2026-10-31 修正：P5-T3 真机第 5 项发现 checkin 指令与「问是否还在听」矛盾。
+  // presenceCheck 现为 allowQuestion: true；只有 restQuiet 禁问。上面的历史断言保留为当时记录。
+
   it('uses the open loop, topic and family line as locked material, and needs them', () => {
     expect(buildIntent(decision('continueThread'), input({ material: { openLoop: '我那盆君子兰今年还没开花' } }))!.intent.material.quotes)
       .toEqual([{ text: '我那盆君子兰今年还没开花', said: '刚才' }]);
@@ -396,6 +399,8 @@ export function buildIntent(decision: Decision, input: BuildInput): PlannedInten
   return { intent, purpose: shape.purpose, fallbackOnly: shape.fallbackOnly ?? false };
 }
 ```
+
+> **2026-10-31 修正：** 上面的 `structural` 同时包含 `presenceCheck` 与 `restQuiet`，导致 checkin 被禁问。现改为只有 `restQuiet` 禁问；`presenceCheck` 允许问句。当前代码为 `const noQuestion = decision.kind === 'restQuiet'`。
 
 - [x] **Step 4：`render.ts`**
 

@@ -477,3 +477,4 @@ score = (w_rel·情绪相关 + w_urg·紧迫度 + w_imp·重要性 + w_nov·新�
 - 2026-10-30 P4 落地：总览「P4 编写计划时定的取舍」十条，用户已确认。旅程评测编造与挽留通过，共情低于基线，没有为此改代码或调参。P5 未开始。
 - 2026-10-30 用户确认健康原话进当次指令，并修订 Q20 的自然度条款。正文见 [2026-10-30 设计](2026-10-30-health-quote-experience-design.md)。代码与旅程评测已于同日完成。
 - 2026-10-31 用户决定把 Q20 的连续性门槛从「比基线 +0.5」改为「不退步」（基线减 0.2，沿用 P3 口径），`JourneyGate.continuityUpHalf` 改名 `continuityNotDown`。四轮旅程仍因共情低于基线不过；用户决定不阻塞 P5-T2，由共情评估与 plan-a 作最终判定。见 [2026-10-30 设计 › 门槛修订](2026-10-30-health-quote-experience-design.md) 与 `docs/testing/2026-10-30-health-quote-acceptance.md`。
+- 2026-10-31 P5-T3 真机第 5 项：checkin 的 `presenceCheck` 渲染指令自相矛盾（`allowQuestion` 为 false，追加「不要提问」，与「问是否还在听、随时可聊」的目的和兜底句冲突），模型生成非问句且缺「随时」类词，事后核对判 `presence` 违规。用户批准最小修复：`buildIntent` 只对 `restQuiet` 禁问，`presenceCheck` 允许问句。回归 gateway 124 文件 / 1432 项、typecheck、真实库召回三句 true / true / false。见 `docs/testing/2026-10-31-p5-device-acceptance.md`。

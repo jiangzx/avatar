@@ -134,10 +134,13 @@ describe('silenceLine', () => {
     expect(quietTier.runtime.silenceLine(input())).toEqual({ quiet: true });
     const checkin = requestOf(quietTier.runtime.silenceLine(input({ step: 'checkin' })))!;
     expect(zh.fallbacks!.presenceCheck).toContain(checkin.fallbackText);
-    expect(checkin.instruction).toContain(zh.intents!.noQuestion);
+    // checkin asks whether the user is still there; only rest bans questions.
+    expect(checkin.instruction).not.toContain(zh.intents!.noQuestion);
     const s = setup();
     expect(s.runtime.silenceLine(input({ card: crisis }))).toEqual({ quiet: true });
-    expect(requestOf(s.runtime.silenceLine(input({ step: 'rest', card: crisis })))!.instruction).toContain(zh.intents!.purposes.restQuiet);
+    const rest = requestOf(s.runtime.silenceLine(input({ step: 'rest', card: crisis })))!;
+    expect(rest.instruction).toContain(zh.intents!.purposes.restQuiet);
+    expect(rest.instruction).toContain(zh.intents!.noQuestion);
   });
 
   it('stops the ladder once the user says goodbye, until they say something else', () => {
