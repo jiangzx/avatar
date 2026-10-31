@@ -1,0 +1,82 @@
+# 健康原话进实时模型
+
+## 状态
+
+已在对话里确认（2026-10-30，用户，方案 A 及随后三段）。实现计划：[2026-10-30-health-quote-experience](../plans/2026-10-30-health-quote-experience.md)。代码尚未改。
+
+取代 [关系连续的主动互动](2026-10-28-relational-proactivity-design.md) 里 Q20 的自然度条款，以及开放项 1、3 中「健康类暂不进实时模型、须先禁止用药建议并重测编造为 0」的落地条件。那份规格的其余决策不变。历史探针结论保留，不删。
+
+## 目标
+
+复查类开场不再整段照读健康兜底句。被选中的健康原话由 Qwen 按写法 A 说出来，并允许补一句关心。验收门槛改到 5 分制上办得到的位置：连续性仍要比基线高 0.5；自然度、不打扰、共情不低于基线；共情允许调参。
+
+## 已确认行为
+
+健康事项（`sensitive=1`）和本会话里含健康词的 `openLoop`，在开场和沉默段都走下面这条路径。日语、英语没有 `intents`，维持现状。
+
+1. 被选中的那一条原话放进当次指令的【】。只此一条。不进会话常驻指令，不进记忆快照，不进日志。
+2. 指令在括号事实之后多接一句允许关心的说明，全文固定为：`在【】里的话之外，可以再加一句短的关心，范围只限休息或吃药。不要新添人名、地名、作品名、日期或数字。` 不写可以整句照读的例句。非健康意图不接这句。
+3. 其余写法 A 不变：框架、时间说法、语气、字数、问句约束。
+4. 超时仍照读该意图原来的兜底句组（健康事项用 `threadSensitive`，本会话健康原话用 `continueThread`）。兜底句组的句子不改。
+5. 家人引导继续跳过含健康词的句子。
+6. 事后核对的材料外健康词计数保持只记日志，不拦截，也不进入门槛。
+
+`PlannedIntent` 增加 `allowCare: boolean`。健康原话两条路径为 `true`，`fallbackOnly` 为 `false`，`fallbackKey` 保持原句组，供超时使用。`IntentCopy` 增加 `withCare: string`（中文 `director.json` 与启动 schema 都要有；有 `intents` 则必有这一字段）。`renderIntent` 仅在 `allowCare` 时把 `withCare` 接在括号事实后面。
+
+## 编造口径
+
+评委和人工复核只用这一条。一句算编造，当且仅当：
+
+- 回复里出现材料中没有的人名、地名、作品名、日期或数字，或
+- 把材料里已有的日期或数字说成另一个。
+
+以下不算编造：
+
+- 那一句关心。指令只允许休息或吃药；评委对「注意身体」同样不计。
+- 没有新的人名、地名、作品名、日期或数字的发挥，包括「医院流程都熟」「家里一切都好」，也包括把材料里没有的喜好或经历说成老人的事、但没有带出上述记号的句子。
+
+服从度探针的自动规则已经只看作品名和数字，不改。重跑后的人工复核按本节，不按 2026-10-29 把「按时吃药」计为编造的口径。
+
+## 门槛
+
+对照 `docs/testing/relational-eval/results-baseline.json` 的中位数（continuity 3.65、naturalness 4.53、empathyFit 4.41、noIntrusion 4.82）。旅程三次取中位数。`compareJourneyResults` 把 `naturalnessUpHalf`（`delta >= 0.5`）改名为 `naturalnessNotDown`（`delta >= 0`）。连续性仍是 `delta >= 0.5`。
+
+| 项 | 判定 |
+|---|---|
+| 编造 | 上一节口径，三次合计 0。出现人名、地名、作品名、日期或数字的编造即停，不调参 |
+| 连续性 | 中位数至少比基线高 0.5（至少 4.15） |
+| 自然度 | 不低于基线 4.53 |
+| 不打扰 | 不低于基线 4.82 |
+| 共情 | 不低于基线 4.41，允许为它调参 |
+
+工作区必须干净，结果文件 `dirty: false` 才算数。
+
+## 调参
+
+渲染和量表改完、探针通过之后，先跑旅程三次，此轮不改权重。不过则调，最多三轮。每轮只改一处，提交后再跑三次：
+
+| 现象 | 只改一处 |
+|---|---|
+| 连续性不够 | `proactivity.json` 里 `threads.urgency` 的一项、`threads.importance` 的一项，或 `threads.concern.intervalDays` |
+| 共情不够 | 中文 `director.json` 里健康类或情绪类意图的一句 `purposes`（`threadEventBefore`、`threadEventAfter`、`threadConcern`、`threadPlan`、`moodCheckNow`、`moodCheckEarlier`、`continueThread` 之一）。不加例句 |
+| 自然度低于基线 | `tiers.moderate.threshold` 减 5，或 `tiers.moderate.maxPerSession` 加 1 |
+| 不打扰下降 | 撤销上一轮自然度改动，或降低 `selfShare` 或 `interestTopic` 的 `base.relevance` |
+| 人名、地名、作品名、日期或数字的编造 | 停下报告，不调参 |
+
+三轮后仍有项不过：停下，把三轮中位数交给用户，不再自行改。
+
+不改剧本、量表维度、评委参数，不挑单次结果，不只重跑不及格的旅程。
+
+## 验证顺序
+
+1. 先改会失败的单元测试：健康原话的 `fallbackOnly` 为 false 且指令含原话和 `withCare`；非健康指令不含 `withCare`；超时兜底文本仍来自原句组；`naturalnessNotDown` 的比较。确认失败后再改实现。
+2. `npm test -w gateway` 与 `npm run typecheck -w gateway`。
+3. 真实记忆库召回探针：中文三句 true / true / false，`newTitleFlag` 全 false。
+4. 现有服从度探针重跑。健康场景人工复核没有新的人名、地名、作品名、日期或数字。有则停下，不进入旅程。
+5. 旅程三次。按「调参」处理。
+
+坑位第 4 条里「健康类照读兜底句」的句子，与本设计的代码同一改动里改写。路线图状态在同一改动里改写。
+
+## 不改
+
+会话常驻指令、记忆快照、召回包装、家人引导的健康词过滤、事后核对只记日志、日语和英语、兜底句组正文、探针的自动违规公式、App、后台。
