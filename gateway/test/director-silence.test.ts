@@ -346,6 +346,7 @@ describe('substantive conversation silence', () => {
     await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
     s.d.onAiTurnStarted();
     expect(s.requests).toHaveLength(4);
+    expect(s.requests.at(-1)?.fallbackText).toBe(cfg.checkinText);
     s.d.onUserSpeech(true);
     s.d.onUserSpeech(false);
     s.d.onAssistantInterrupted();
@@ -355,7 +356,34 @@ describe('substantive conversation silence', () => {
     s.d.onAiTurnEnded('没听清，您再说一遍。');
     await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
     expect(s.requests).toHaveLength(6);
-    expect(s.requests.at(-1)?.fallbackText).not.toBe('没听清，您再说一遍。');
+    // The interrupted checkin step is re-armed, not restarted from context.
+    expect(s.requests.at(-1)?.fallbackText).toBe(cfg.checkinText);
+    s.d.stop();
+  });
+
+  it('restarts from context after a real reply following a barge', async () => {
+    const s = setup();
+    s.answer();
+    await vi.advanceTimersByTimeAsync(cfg.contextAfterMs);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded();
+    await vi.advanceTimersByTimeAsync(cfg.checkAfterMs);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded();
+    await vi.advanceTimersByTimeAsync(cfg.leaveAfterMs);
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded();
+    await vi.advanceTimersByTimeAsync(cfg.checkinAfterMs);
+    s.d.onAiTurnStarted();
+    expect(s.requests.at(-1)?.fallbackText).toBe(cfg.checkinText);
+    s.d.onUserSpeech(true);
+    s.d.onUserSpeech(false);
+    s.d.onAssistantInterrupted();
+    s.d.onUserFinal('我们接着聊刚才的事。');
+    s.d.onAiTurnStarted();
+    s.d.onAiTurnEnded('好。');
+    await vi.advanceTimersByTimeAsync(cfg.contextAfterMs);
+    expect(s.requests.at(-1)?.fallbackText).toBe(cfg.contextText);
     s.d.stop();
   });
 

@@ -145,6 +145,8 @@ export class Director {
   private pending: SilenceStep | 'notice' | 'repair' | 'resume' | 'reminder' | null = null;
   /** Silence step interrupted by a barge; re-armed after the barge-miss repair. */
   private repairStep: SilenceStep | null = null;
+  /** Same step, captured before onUserSpeech clears `pending`. */
+  private bargedStep: SilenceStep | null = null;
   /** Still owe the one-time memory notice in this session. */
   private noticePending: boolean;
   /** The notice was cut off. Say it again at the next idle moment. */
@@ -184,6 +186,7 @@ export class Director {
   onSessionStart(hasMemory = false): void {
     this.hasMemory = hasMemory;
     this.repairStep = null;
+    this.bargedStep = null;
     this.cancelGreeting();
     this.requestGreeting();
   }
@@ -194,6 +197,8 @@ export class Director {
     this.userSpeaking = speaking;
     if (speaking) {
       if (this.aiBusy || this.pending !== null) this.bargeIn = true;
+      // `pending` is cleared below; keep the interrupted silence step for the repair.
+      if (this.bargeIn && isSilenceStep(this.pending)) this.bargedStep = this.pending;
       this.cancelGreeting();
       this.clear();
       if (this.pending !== 'notice') this.pending = null;
@@ -224,6 +229,7 @@ export class Director {
     if (this.cfg.quietPhrases.some((p) => containsPhrase(text, p))) {
       this.quiet = true;
       this.repairStep = null;
+      this.bargedStep = null;
       this.clear();
       if (this.pending !== 'notice') this.pending = null;
       // A cut-off notice still has to be said. Quiet phrases do not cancel it.
@@ -234,7 +240,10 @@ export class Director {
     }
     const key = normalizeUtterance(text);
     if (!key) return;
-    if (!this.isLight(key)) this.repairStep = null;
+    if (!this.isLight(key)) {
+      this.repairStep = null;
+      this.bargedStep = null;
+    }
     this.clear();
     if (this.pending !== 'notice') this.pending = null;
     if (this.isLight(key)) {
@@ -283,7 +292,7 @@ export class Director {
 
   /** The line was cut off. A real barge-in waits for the reply; a false cut repeats the step. */
   onAssistantInterrupted(): void {
-    const interrupted = this.pending;
+    const interrupted = this.pending ?? this.bargedStep;
     this.aiBusy = false;
     // A reminder the user cut off still counts as given; never replay it.
     if (this.pending === 'reminder') this.pending = null;
@@ -296,6 +305,7 @@ export class Director {
     if (this.noticeRetry) {
       if (this.bargeIn) {
         this.repairStep = null;
+        this.bargedStep = null;
         this.armBargeReplyWait();
         return;
       }
@@ -306,9 +316,11 @@ export class Director {
     this.pending = null;
     if (this.bargeIn) {
       this.repairStep = isSilenceStep(interrupted) ? interrupted : null;
+      this.bargedStep = null;
       this.armBargeReplyWait();
       return;
     }
+    this.bargedStep = null;
     if (!this.opened) {
       this.armOpening();
       return;
@@ -392,6 +404,7 @@ export class Director {
     if (done === 'repair') {
       const step = this.repairStep;
       this.repairStep = null;
+      this.bargedStep = null;
       if (this.hadContent) {
         // The user is still there: resume the interrupted stage instead of going quiet.
         this.silentStretch = false;
@@ -504,6 +517,7 @@ export class Director {
   stop(): void {
     this.stopped = true;
     this.repairStep = null;
+    this.bargedStep = null;
     this.cancelGreeting();
     this.clear();
   }
