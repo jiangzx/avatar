@@ -2,7 +2,7 @@
 import type { ScoredKind } from './config.ts';
 
 export type Verdict = 'light' | 'decline' | 'content';
-export interface PendingLine { kind: ScoredKind; threadId?: string }
+export interface PendingLine { kind: ScoredKind; threadId?: string; topicKey?: string }
 export interface Resolved { line: PendingLine; outcome: 'accepted' | 'rejected' }
 
 export class AcceptanceTracker {

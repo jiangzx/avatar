@@ -23,6 +23,15 @@ describe('proactivity.json', () => {
     }
     expect(cfg.material.familyLookback).toBe(30);
     expect(cfg.threads.quoteMaxChars).toBe(80);
+    expect(cfg.topicQuestion).toEqual({
+      enabled: true,
+      memoryRatio: 70,
+      recentSessions: 3,
+      recentDays: 7,
+      declineCooldownDays: 90,
+      minStatementChars: 5,
+      factCategories: ['preference', 'person', 'other', 'profile'],
+    });
   });
 
   it('sizes the three tiers for a heavy call day', () => {
@@ -54,6 +63,15 @@ describe('proactivity.json', () => {
     const maxDay = raw();
     maxDay.tiers.active.maxPerDay = 120;
     expect(ProactivitySchema.safeParse(maxDay).success).toBe(true);
+    const ratio = raw();
+    ratio.topicQuestion.memoryRatio = 101;
+    expect(ProactivitySchema.safeParse(ratio).success).toBe(false);
+    const categories = raw();
+    categories.topicQuestion.factCategories = ['preference', 'preference'];
+    expect(ProactivitySchema.safeParse(categories).success).toBe(false);
+    const cooldown = raw();
+    cooldown.topicQuestion.declineCooldownDays = -1;
+    expect(ProactivitySchema.safeParse(cooldown).success).toBe(false);
   });
 
   it('is part of the config snapshot and can be overlaid', () => {

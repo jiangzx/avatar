@@ -242,3 +242,10 @@
 - T7 的 S1–S5 全过（报告 `docs/testing/2026-10-30-web-photoreal-spike.md`），按计划进入 T8。
 - 阻塞：T8 需要用户用 Android 真机录一段 Duix Lily 回复、Web 端录屏，并由 3–5 名评审做盲测；这些项目前无法由代理完成。实现与 S1–S5 结果已合并到 `master`（原分支 `photoreal-spike`）。
 - 解除条件：用户提供两段录屏与盲测评分；之后把结果写进 T8 报告、研究文档结论与 roadmap。
+
+## 2026-10-31 主动话题问句：召回探针在 HEAD 已失败（与本次无关）
+
+- `node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp` 在当前 HEAD（`d6d688a`，用户 2026-10-31 的 vague-recall 提交）失败于 `zh_vague_recent_only`。同一脚本在 HEAD~1（`a431aa3`）的独立 worktree 通过 `{"mode":"temp","checks":133,"ok":true}`；HEAD 不包含本次未提交改动，结果相同。说明失败由 `d6d688a` 的 vague-recall 改动引入，不是本次主动话题问句实现。
+- 本次实现后的 gateway 全量 128 文件/1510 项、`npm run typecheck -w gateway`、protocol 3/16 + typecheck、admin 24/132 + typecheck + build 均通过；`git diff --check` clean。
+- `MEMORY_DB_PATH` 未设置，未跑 `--real-db`；真实库迁移 v9 和真机 7 项未做。
+- 解除条件：先修复/回滚 `d6d688a` 的 vague recall，使 `--temp` 探针恢复；再在有真实库的机器上备份、迁移 v9、跑 `--real-db`，并在用户在场时做真机验收。

@@ -99,7 +99,7 @@ describe('per-character isolation: A writes, B reads nothing', () => {
     store.writeExtraction(a.ownerId, a.agentId, change({ facts: [{ op: 'add', category: 'preference', text: '喜欢喝茶' }], notes: [{ op: 'add', text: '喝茶要热的' }] }));
     store.insertPinned({ id: 'pin-a', ownerId: a.ownerId, agentId: a.agentId, text: '喝茶别放糖', sensitive: false, sourceSessionId: 's-a', sourceMessageId: null, now: 5 });
     const result = store.forgetMatches(b.ownerId, b.agentId, '喝茶', ftsMatch('喝茶', 'all'), 's-b', '我喜欢喝茶');
-    expect(result).toEqual({ messages: 0, facts: 0, notes: 0, episodes: 0, followups: 0, pinned: 0, profile: 0, reflections: 0 });
+    expect(result).toEqual({ messages: 0, facts: 0, notes: 0, episodes: 0, followups: 0, pinned: 0, profile: 0, reflections: 0, topicAvoid: 0 });
     expect(store.listAgentFacts(a.ownerId, a.agentId)).toHaveLength(1);
     expect(store.listPinned(a.ownerId, a.agentId)).toHaveLength(1);
     expect(store.memoryForExtract(a.ownerId, a.agentId).notes).toHaveLength(1);

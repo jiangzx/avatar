@@ -6,7 +6,8 @@ export type IntentPurpose = (typeof INTENT_PURPOSES)[number];
 
 /** Fallback line groups; threadSensitive is spoken instead of rendering a health thread (2026-10-29). */
 export const FALLBACK_KEYS = ['threadFollowup', 'threadSensitive', 'moodCheck', 'routine', 'continueThread',
-  'interestTopic', 'humanConnection', 'selfShare', 'presenceCheck', 'restQuiet'] as const;
+  'interestTopic', 'interestTopicStatement', 'humanConnection', 'selfShare', 'selfShareQuestion',
+  'presenceCheck', 'restQuiet'] as const;
 export type FallbackKey = (typeof FALLBACK_KEYS)[number];
 
 /** Plan-A instruction fragments (P3-T0 probe). Repo only; never in the admin console. */
@@ -18,8 +19,12 @@ export interface IntentCopy {
   /** Appended only when PlannedIntent.allowCare is true. No readable example sentence. */
   withCare: string;
   withTopic: string;
+  withQuestionQuote: string;
+  withQuestionTopic: string;
   withoutMaterial: string;
   noQuestion: string;
+  mustAsk: string;
+  withFollowUp: string;
   speakLine: string;
   purposes: Record<IntentPurpose, string>;
   tones: { new: string; familiar: string; oldFriend: string; explore: string; comfort: string; suggest: string };

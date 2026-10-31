@@ -36,7 +36,7 @@ function setup(at: number, over: Record<string, unknown> = {}, copyOver: Record<
       intents: zh.intents, fallbacks: zh.fallbacks, topics: [], quietPhrases: zh.quietPhrases,
       greetingNameTexts: zh.greetingNameTexts, greetingHeads: zh.greetingCareTexts, ...copyOver,
     }),
-    rules: () => ({ silence: i18n.silence.zh, healthWords: i18n.memory.zh.healthWords, declinePhrases: i18n.affect.zh.declinePhrases, evidence: i18n.evidence }),
+    rules: () => ({ silence: i18n.silence.zh, healthWords: i18n.memory.zh.healthWords, declinePhrases: i18n.affect.zh.declinePhrases, evidence: i18n.evidence, topicQuestion: i18n.proactivity.zh }),
     logger: logger as unknown as Logger,
   });
   return { runtime, store, logger };

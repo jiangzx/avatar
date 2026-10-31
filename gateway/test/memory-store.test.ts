@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { bigrams } from '../src/memory/bigram.ts';
 import { openDatabase } from '../src/memory/db.ts';
+import { statementKey } from '../src/memory/evidence.ts';
 import { BASELINE_VERSION, LEGACY_SCHEMA_ERROR, MIGRATIONS, migrate } from '../src/memory/migrations.ts';
 import { ExtractIncompleteError, SqliteMemoryStore, type ExtractionChange } from '../src/memory/store.ts';
 import { agentOf, seedOwner, type Who } from './helpers/memory.ts';
@@ -90,7 +91,7 @@ describe('migrate', () => {
   it('builds the v6 baseline tables (later steps only add)', () => {
     const db = open();
     expect(BASELINE_VERSION).toBe(6);
-    expect(MIGRATIONS).toHaveLength(3);
+    expect(MIGRATIONS).toHaveLength(4);
     const tables = column(db, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name");
     expect(tables).toEqual(expect.arrayContaining([
       'owners', 'devices', 'agents', 'sessions', 'messages', 'messages_fts', 'profile_facts', 'agent_facts',
@@ -701,7 +702,7 @@ describe('forgetMatches scope', () => {
 
     const result = store.forgetMatches(a.ownerId, a.agentId, '王叔', '"王叔"', 's-a');
 
-    expect(result).toEqual({ messages: 1, facts: 1, notes: 1, episodes: 0, followups: 1, pinned: 1, profile: 1, reflections: 0 });
+    expect(result).toEqual({ messages: 1, facts: 1, notes: 1, episodes: 0, followups: 1, pinned: 1, profile: 1, reflections: 0, topicAvoid: 0 });
     expect(store.listProfileFacts(a.ownerId)).toEqual([]);
     expect(store.listAgentFacts(a.ownerId, a.agentId)).toEqual([]);
     expect(store.listPinned(a.ownerId, a.agentId)).toEqual([]);
@@ -762,4 +763,70 @@ describe('care followups', () => {
     expect(count(db, 'SELECT count(*) AS n FROM followups')).toBe(0);
   });
 
+});
+
+describe('proactive topic avoidance', () => {
+  it('records, lists with a cooldown, upserts and stays agent-scoped', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = seedOwner(store, 'avoid-a');
+    const kai = agentOf(store, a.ownerId, 'xiaokai');
+    store.recordTopicAvoid(a.ownerId, a.agentId, 'card:meal', 'card', 100);
+    store.recordTopicAvoid(a.ownerId, a.agentId, 'fact:f1', 'fact', 200);
+    expect(store.listTopicAvoid(a.ownerId, a.agentId, null)).toEqual(new Map([['card:meal', 100], ['fact:f1', 200]]));
+    expect(store.listTopicAvoid(a.ownerId, a.agentId, 150)).toEqual(new Map([['fact:f1', 200]]));
+    expect(store.listTopicAvoid(a.ownerId, kai.agentId, null)).toEqual(new Map());
+    store.recordTopicAvoid(a.ownerId, a.agentId, 'card:meal', 'card', 300);
+    expect(store.listTopicAvoid(a.ownerId, a.agentId, null).get('card:meal')).toBe(300);
+    // A foreign agent writes nothing.
+    store.recordTopicAvoid('missing-owner', a.agentId, 'card:x', 'card', 1);
+    expect(store.listTopicAvoid(a.ownerId, a.agentId, null).size).toBe(2);
+  });
+
+  it('removes keys with forget, item delete, message delete and the clear paths', () => {
+    const db = open();
+    const store = new SqliteMemoryStore(db);
+    const a = seedOwner(store, 'avoid-b');
+    const kai = agentOf(store, a.ownerId, 'xiaokai');
+    const statement = '我今天去了公园';
+    say(store, a, 'm1', statement, 1, { sessionId: 's-a' });
+    store.recordTopicAvoid(a.ownerId, a.agentId, statementKey(statement), 'stmt', 10);
+    expect(store.forgetMatches(a.ownerId, a.agentId, '公园', null, 's-a', statement)).toMatchObject({ messages: 1, topicAvoid: 1 });
+    expect(store.listTopicAvoid(a.ownerId, a.agentId, null)).toEqual(new Map());
+
+    store.writeExtraction(a.ownerId, a.agentId, change({
+      facts: [{ op: 'add', category: 'preference', text: '老人喜欢喝茶' }],
+      followups: [{ op: 'add', text: '问问老人', dueAt: 99 }],
+    }));
+    const factId = store.listAgentFacts(a.ownerId, a.agentId)[0]!.id;
+    store.recordTopicAvoid(a.ownerId, a.agentId, `fact:${factId}`, 'fact', 20);
+    expect(store.forgetMatches(a.ownerId, a.agentId, '茶', null, 's-now')).toMatchObject({ facts: 1, topicAvoid: 1 });
+    expect(store.listTopicAvoid(a.ownerId, a.agentId, null)).toEqual(new Map());
+
+    store.writeExtraction(a.ownerId, a.agentId, change({ facts: [{ op: 'add', category: 'profile', text: '老人老家山东' }] }));
+    const profileId = store.listProfileFacts(a.ownerId).find((row) => row.category === 'profile')!.id;
+    store.recordTopicAvoid(a.ownerId, a.agentId, `fact:${profileId}`, 'fact', 30);
+    store.recordTopicAvoid(a.ownerId, kai.agentId, `fact:${profileId}`, 'fact', 30);
+    store.clearProfile(a.ownerId);
+    expect(store.listTopicAvoid(a.ownerId, a.agentId, null).size).toBe(0);
+    expect(store.listTopicAvoid(a.ownerId, kai.agentId, null).size).toBe(0);
+
+    store.insertPinned({ id: 'pin-1', ownerId: a.ownerId, agentId: a.agentId, text: '老人喜欢听老歌', sensitive: false, sourceSessionId: 's', sourceMessageId: null, now: 3 });
+    store.recordTopicAvoid(a.ownerId, a.agentId, 'pin:pin-1', 'pin', 40);
+    store.deleteMemoryItem(a.ownerId, 'pin-1');
+    expect(store.listTopicAvoid(a.ownerId, a.agentId, null).size).toBe(0);
+
+    say(store, a, 'm2', '我明天想去钓鱼', 5, { sessionId: 's-b' });
+    store.recordTopicAvoid(a.ownerId, a.agentId, statementKey('我明天想去钓鱼'), 'stmt', 50);
+    expect(store.deleteMessagesByIds(a.ownerId, a.agentId, ['m2'])).toBe(1);
+    expect(store.listTopicAvoid(a.ownerId, a.agentId, null).size).toBe(0);
+
+    store.recordTopicAvoid(a.ownerId, a.agentId, 'card:tea', 'card', 60);
+    store.recordTopicAvoid(a.ownerId, kai.agentId, 'card:tea', 'card', 60);
+    store.clearAgentMemory(a.ownerId, a.agentId);
+    expect(store.listTopicAvoid(a.ownerId, a.agentId, null).size).toBe(0);
+    expect(store.listTopicAvoid(a.ownerId, kai.agentId, null).size).toBe(1);
+    store.clearAllMemory(a.ownerId);
+    expect(store.listTopicAvoid(a.ownerId, kai.agentId, null).size).toBe(0);
+  });
 });

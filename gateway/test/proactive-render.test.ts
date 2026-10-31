@@ -85,8 +85,8 @@ describe('buildIntent', () => {
     expect(buildIntent(decision('routine'), input({ now: Date.parse('2026-11-03T15:00:00+08:00') }))).toBeNull();
     const checkin = buildIntent(decision('presenceCheck'), input({ moment: 'silenceCheckin' }))!;
     // checkin asks whether the user is still there; only rest bans questions.
-    expect(checkin.intent.constraints).toEqual({ maxChars: cfg.maxChars, allowQuestion: true, mustExpress: 'presence' });
-    expect(buildIntent(decision('restQuiet'), input({ moment: 'silenceRest' }))!.intent.constraints.allowQuestion).toBe(false);
+    expect(checkin.intent.constraints).toEqual({ maxChars: cfg.maxChars, question: 'allowed', mustExpress: 'presence' });
+    expect(buildIntent(decision('restQuiet'), input({ moment: 'silenceRest' }))!.intent.constraints.question).toBe('forbidden');
   });
 
   it('uses the open loop, topic and family line as locked material, and needs them', () => {
@@ -112,7 +112,7 @@ describe('buildIntent', () => {
   it('sets tone from familiarity and the care stage', () => {
     const low = buildIntent(decision('moodCheck'), input({ familiarity: 'oldFriend', affect: { low: true, stage: 'comfort' } }))!;
     expect(low.intent.tone).toEqual({ familiarity: 'oldFriend', stage: 'comfort', allowJoke: false });
-    const fine = buildIntent(decision('selfShare'), input({ familiarity: 'oldFriend' }))!;
+    const fine = buildIntent(decision('selfShare'), input({ familiarity: 'oldFriend', moment: 'silenceLeave' }))!;
     expect(fine.intent.tone).toEqual({ familiarity: 'oldFriend', stage: null, allowJoke: true });
   });
 });
@@ -186,21 +186,65 @@ describe('checkSpoken', () => {
   const rules = { healthWords: i18n.memory.zh.healthWords, silence: i18n.silence.zh };
 
   it('counts health words that are not in the material (probe: 按时吃药)', () => {
-    const c = checkSpoken('陈叔，血压高了别着急，记得按时吃药。', { material: ['我有高血压，这几天量着有点高。', '昨天'], allowQuestion: true, mustExpress: null }, rules);
+    const c = checkSpoken('陈叔，血压高了别着急，记得按时吃药。', { material: ['我有高血压，这几天量着有点高。', '昨天'], question: 'allowed', mustExpress: null }, rules);
     expect(c.health).toBeGreaterThanOrEqual(1);
     expect(violationsOf(c)).toContainEqual({ kind: 'health', count: c.health });
-    const clean = checkSpoken('陈叔，这几天血压还高吗？', { material: ['我有高血压，这几天量着有点高。'], allowQuestion: true, mustExpress: null }, rules);
+    const clean = checkSpoken('陈叔，这几天血压还高吗？', { material: ['我有高血压，这几天量着有点高。'], question: 'allowed', mustExpress: null }, rules);
     expect(clean.health).toBe(0);
   });
 
   it('counts titles and numbers outside the material, questions and missing presence', () => {
-    const c = checkSpoken('要不听听《茉莉花》？三点钟我再来。', { material: [], allowQuestion: false, mustExpress: 'presence' }, rules);
+    const c = checkSpoken('要不听听《茉莉花》？三点钟我再来。', { material: [], question: 'forbidden', mustExpress: 'presence' }, rules);
     expect(c.titles).toBe(1);
     expect(c.numbers).toBe(1);
     expect(c.question).toBe(true);
     expect(c.presenceMissing).toBe(true);
     expect(violationsOf(c).map((v) => v.kind).sort()).toEqual(['number', 'presence', 'question', 'title']);
-    const ok = checkSpoken('我一直都在，您还在听吗？想聊随时说。', { material: ['我一直都在，您还在听吗？想聊随时说。'], allowQuestion: true, mustExpress: 'presence' }, rules);
+    const ok = checkSpoken('我一直都在，您还在听吗？想聊随时说。', { material: ['我一直都在，您还在听吗？想聊随时说。'], question: 'allowed', mustExpress: 'presence' }, rules);
     expect(violationsOf(ok)).toEqual([]);
+  });
+});
+
+describe('topic-question contract', () => {
+  const quoteMaterial = {
+    source: 'memory' as const, form: 'quote' as const, text: '我最近膝盖疼得睡不着。', said: '昨天', key: 'thread:t1', cardIndex: null,
+  };
+  const topicMaterial = {
+    source: 'memory' as const, form: 'topic' as const, text: '老人喜欢喝茶。', said: null, key: 'fact:f1', cardIndex: null,
+  };
+
+  it('marks interestTopic/selfShare required at context/check and forbidden at leave', () => {
+    expect(buildIntent(decision('interestTopic'), input({ material: { question: topicMaterial } }))!.intent.constraints.question).toBe('required');
+    expect(buildIntent(decision('selfShare'), input({ moment: 'silenceCheck', material: { question: quoteMaterial } }))!.intent.constraints.question).toBe('required');
+    expect(buildIntent(decision('interestTopic'), input({ moment: 'silenceLeave', material: { question: topicMaterial } }))!.intent.constraints.question).toBe('forbidden');
+    expect(buildIntent(decision('selfShare'), input({ moment: 'silenceLeave' }))!.intent.constraints.question).toBe('forbidden');
+    expect(buildIntent(decision('routine'), input())!.intent.constraints.question).toBe('allowed');
+    expect(buildIntent(decision('presenceCheck'), input({ moment: 'silenceCheckin' }))!.intent.constraints.question).toBe('allowed');
+  });
+
+  it('renders selfShare question material, mustAsk and the follow-up, and carries the key', () => {
+    const planned = buildIntent(decision('selfShare'), input({
+      moment: 'silenceCheck', material: { question: quoteMaterial }, followUp: true,
+    }))!;
+    const request = renderIntent(planned, copy, 'x');
+    expect(request.instruction).toContain('再问老人一个问题');
+    expect(request.instruction).toContain('【我最近膝盖疼得睡不着。】');
+    expect(request.instruction).toContain(copy.mustAsk);
+    expect(request.instruction).toContain(copy.withFollowUp);
+    expect(request.topicKey).toBe('thread:t1');
+  });
+
+  it('renders interestTopic once with mustAsk and the topic key', () => {
+    const request = renderIntent(buildIntent(decision('interestTopic'), input({ material: { question: topicMaterial } }))!, copy, 'x');
+    expect(request.instruction).toContain('【老人喜欢喝茶。】');
+    expect(request.instruction).not.toContain('再问老人一个问题');
+    expect(request.instruction).toContain(copy.mustAsk);
+    expect(request.topicKey).toBe('fact:f1');
+  });
+
+  it('logs a missing question for required lines', () => {
+    const c = checkSpoken('今天天气不错。', { material: [], question: 'required', mustExpress: null }, { healthWords: i18n.memory.zh.healthWords, silence: i18n.silence.zh });
+    expect(c.questionMissing).toBe(true);
+    expect(violationsOf(c)).toContainEqual({ kind: 'questionMissing', count: 1 });
   });
 });

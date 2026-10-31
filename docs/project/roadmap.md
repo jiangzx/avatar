@@ -12,6 +12,18 @@
 - 未做：60 秒内 resume、通话摘要/时长。
 - 下一项：用户复验开场/对话不再听到代码音频（#77）；再说「点点头」确认只做动作、不念动作名（#78）；主观听音确认重开后的音质/垫话；再决定是否加 60 秒内 resume。
 
+## 主动记忆/随机话题问句（2026-10-31）
+
+状态：**T1–T6 实现完成；T0 真实模型探针未跑；T7 部分完成（全量/typecheck/protocol/admin 通过；召回 `--temp` 在 HEAD 失败，见 blockers；真实库 v9 迁移、`--real-db`、真机 7 项待做）**。
+
+- 设计：[spec](../superpowers/specs/2026-10-31-proactive-memory-topic-question-design.md)（已批准，2026-10-31）；计划：[plan](../superpowers/plans/2026-10-31-proactive-memory-topic-question.md)。
+- 内容：zh 的 context/check 的 `interestTopic`/`selfShare` 必带一个记忆/话题卡问句；70/30 每轮一次；材料优先级事项→话题型非敏感 facts→最近 3 个已结束会话/7 天原话；leave/rest/checkin 与其他意图不变。负偏好 v9 `proactive_topic_avoid`（只存 key，90 天/0 永久，随记忆删除）；“换个话题”当前回复结束后立即新问句，不 arm 6 秒。
+- 实现：`gateway/src/session/proactive/questionMaterial.ts`、`runtime.ts`、`assemble.ts`、`render.ts`、`check.ts`、`memory/store.ts`、migrations v9、Director/Session 接线、zh 24 条话题卡与文案、en/ja topic id 对齐。
+- 回归（实际跑过）：gateway 128 文件/1510 项、typecheck；protocol 3/16、typecheck；admin 24/132、typecheck、build；`git diff --check` clean。
+- 未完成：T0 Qwen `mustAsk` 探针；真实库备份/v9 迁移/`--real-db` 三角色召回探针（`MEMORY_DB_PATH` 未设置）；真机 7 项。召回 `--temp` 当前 HEAD 失败于 `zh_vague_recent_only`；HEAD~1 通过 133，HEAD 独立 worktree 同样失败，归因到 `d6d688a` 的 vague-recall 提交，与本次无关。详见 [验收记录](../testing/2026-10-31-proactive-topic-question-acceptance.md) 与 `docs/blockers.md`。
+- 当前计时以代码为准：`context/check/leave/checkin = 6/6/6/6`，`rest=180s`；`roadmap.md:148`/`:217` 的 6/8/10/10 和文本规划器是历史描述，不要按那段改回。
+- 下一步：先修复/回滚 `d6d688a` 的 vague recall 使召回探针恢复；再有真实库的机器上备份、迁移 v9、跑 `--real-db`；用户在场时做真机 7 项。
+
 ## 模糊回忆召回修复（2026-10-31）
 
 状态：**已修复并通过 gateway 1476 项、typecheck、真实记忆库召回探针；用户选定「先确认再引用」（A）并已实现；重启 8787 后待用户真机复验（#79）**。设计：[spec](../superpowers/specs/2026-10-31-vague-recall-fix-design.md)。
@@ -201,11 +213,11 @@ Plan 4 写 spec 前完成 4 个最小探针，只新增 `gateway/scripts/probe-e
 1. **证据只认用户陈述句。** 当前提问、旧提问（有/无问号）、质疑/否认（我什么时候、没说过、记错、不记得）、轻回应（好的、我知道了）都不能作为召回证据。`isMemoryEvidence`、`recallSkipPatterns`、当前句排除共同负责。
 2. **检索只命中 `role='user'`。** FTS 候选至少取 50 条再过滤；12 条会被大量提问挤掉真正的陈述（“电影”曾因此误报找不到）。
 3. **模糊回忆走最近陈述。** “上次聊过什么/聊到哪/上次聊过…”由 `recallRecentQueries` 触发，从最近已结束会话的用户陈述里取，不走 FTS；当前会话永远不算“上次”。
-4. **快照只注入用户可核对的内容。** 完整快照 = 称呼 + 非敏感事实 + 最近已结束会话的用户陈述；开场快照 = 称呼 + 非敏感事实；主动接话 = 非敏感事实。episode、关系备注、敏感事实、助手原文一律不进提示词。例外（2026-10-23 Plan 4 契约修订）：开场关怀是唯一例外：可以使用一条最近 7 天内、来自已结束会话、通过证据校验的用户原话（可以是敏感内容）。原话本身只作为关怀句生成器的输入，不进入实时模型指令、快照或规划器。由它生成并通过校验的关怀句是助手自己的话：它作为开场发给实时模型（Qwen 的 item 模式下会成为一条消息），播出后作为助手文本进入 ledger，并随最近对话进入后续指令。这是允许的。（P4 修订：开场关怀已删除，这条例外作废。开场的事项原话按本条「补充（P3）」进入开场指令；健康类同样进入当次开场指令，超时才照读兜底句。）第 4 条已按 Q33 修订，见第 14 条。补充（2026-10-29 P3）：反思结论只给决策层，绝不进入指令、快照、规划器。决策引擎选中的那一条非敏感事项原话、本会话的 `openLoop` 或用户最后一句陈述（须过 `isMemoryEvidence`）、已结束会话里提到家人的用户陈述，可以作为锁定材料进入当次 Qwen 主动指令（写法 A：只能用【】里的事实，不补充人名、地名、作品名、日期、数字），不进会话常驻指令、快照或规划器。健康类（`sensitive=1` 或含 `healthWords`）的被选中原话进入当次指令，并允许一句休息或吃药的关心（见 2026-10-30 设计）；超时仍照读兜底句组（`fallbacks.threadSensitive` / `continueThread`）。家人引导仍跳过含健康词的句子。熟悉度语气进入会话指令属于 P4。
+4. **快照只注入用户可核对的内容。** 完整快照 = 称呼 + 非敏感事实 + 最近已结束会话的用户陈述；开场快照 = 称呼 + 非敏感事实；主动接话 = 非敏感事实。episode、关系备注、敏感事实、助手原文一律不进提示词。例外（2026-10-23 Plan 4 契约修订）：开场关怀是唯一例外：可以使用一条最近 7 天内、来自已结束会话、通过证据校验的用户原话（可以是敏感内容）。原话本身只作为关怀句生成器的输入，不进入实时模型指令、快照或规划器。由它生成并通过校验的关怀句是助手自己的话：它作为开场发给实时模型（Qwen 的 item 模式下会成为一条消息），播出后作为助手文本进入 ledger，并随最近对话进入后续指令。这是允许的。（P4 修订：开场关怀已删除，这条例外作废。开场的事项原话按本条「补充（P3）」进入开场指令；健康类同样进入当次开场指令，超时才照读兜底句。）第 4 条已按 Q33 修订，见第 14 条。补充（2026-10-29 P3）：反思结论只给决策层，绝不进入指令、快照、规划器。决策引擎选中的那一条非敏感事项原话、本会话的 `openLoop` 或用户最后一句陈述（须过 `isMemoryEvidence`）、已结束会话里提到家人的用户陈述，可以作为锁定材料进入当次 Qwen 主动指令（写法 A：只能用【】里的事实，不补充人名、地名、作品名、日期、数字），不进会话常驻指令、快照或规划器。健康类（`sensitive=1` 或含 `healthWords`）的被选中原话进入当次指令，并允许一句休息或吃药的关心（见 2026-10-30 设计）；超时仍照读兜底句组（`fallbacks.threadSensitive` / `continueThread`）。家人引导仍跳过含健康词的句子。熟悉度语气进入会话指令属于 P4。（2026-10-31 增补：主动记忆/随机话题问句的材料只进当次 Qwen 指令，不进会话常驻指令、快照或规划器；负偏好只存 key，见第 16 条。）
 5. **有称呼时开场由决策引擎选意图（P4 修订）。** 首次见面且知道称呼：角色卡 `greetingsFirstMeet` 模板。不是首次见面：引擎在事项回访 / 情绪关心 / 作息问候 / 简单问候中选一个，由 Qwen 按开场指令说（先叫一次称呼；材料只限被选中的那一条原话；健康类照读「开头 + 兜底句」）；引擎不给时用 `greetingNameTexts` 称呼模板。开场被打断后重说同一句。不知道称呼：按 `greetingInstruction` 自我介绍并问称呼。不要让模型自由挑开场话题，否则会编「您喜欢听京剧」。
 6. **召回表达交给模型包装，但事实锁死。** `roles/_shared/recall.md` 只接收一条用户原话；新增 `《》/「」/『』/“”` 作品名、丢失原话关键词、超 60 字、超时 1.5s 都退回逐字原话。不要退回固定模板，也不要允许包装模型补充事实。
 7. **（已删除）** Seeduplex 已于 2026-10-28 下架（P0）。工具轮的规则见第 6 条：召回播报句由网关交给实时模型照读，不退回通用「来，咱们接着说」。
-8. **四段式由决策引擎运行（2026-10-29 P3 修订）。** 每段先问决策引擎：context/check/leave 可以开口，也可以选安静并直接进入下一段计时；checkin 固定为「确认还在听 + 随时可以聊」，rest 固定为安静陪伴、不提问；要说的话由 Qwen 按写法 A 说，材料只限锁定原话或话题卡，禁止补充材料外的具体人名/作品名/地名/数字；说完事后核对只记日志（作品名、数字、材料外健康词、问句、checkin 要义），不拦截。保留各段时长、`quietPhrases`、rest 不提问。用户说告别短语时收住，不挽留。回忆问句不能当 `continueThread` 的材料，但也不要因此跳过引擎。引擎不处理的情况（ja/en、zh 不知道称呼且还没开口）说配置指令；文本模型规划器与 checkin 逐句词表校验已在 P4 删除。
+8. **四段式由决策引擎运行（2026-10-29 P3 修订）。** 每段先问决策引擎：context/check/leave 可以开口，也可以选安静并直接进入下一段计时；checkin 固定为「确认还在听 + 随时可以聊」，rest 固定为安静陪伴、不提问；要说的话由 Qwen 按写法 A 说，材料只限锁定原话或话题卡，禁止补充材料外的具体人名/作品名/地名/数字；说完事后核对只记日志（作品名、数字、材料外健康词、问句、checkin 要义），不拦截。保留各段时长、`quietPhrases`、rest 不提问。用户说告别短语时收住，不挽留。回忆问句不能当 `continueThread` 的材料，但也不要因此跳过引擎。引擎不处理的情况（ja/en、zh 不知道称呼且还没开口）说配置指令；文本模型规划器与 checkin 逐句词表校验已在 P4 删除。（2026-10-31 增补：zh 的 context/check 的 `interestTopic`/`selfShare` 必须带一个问句；leave/rest/checkin 不强制；问题材料只进当次指令；其他意图不追加新问句。）
 9. **配置文案只是失败兜底。** 不要把兜底句写回规划器指令或当固定话术；否定句里含具体作品名也会被模型照读。
 10. **抽取/摘要只以用户原话为依据。** 助手回复只推进 `extracted` 水位，不写成用户事实；健康事实必须 `sensitive=1`。
 11. **回归清单。** 至少跑 `npm test -w gateway`、`npm run typecheck -w gateway`，并用真实记忆库验证：“上次聊到哪儿了 / 上次聊过电影吗 / 我说过喜欢喝茶吗”。前两个只能引用真实用户陈述并自然包装，第三个必须找不到；不得出现新作品名或固定模板句。
@@ -213,6 +225,7 @@ Plan 4 写 spec 前完成 4 个最小探针，只新增 `gateway/scripts/probe-e
 13. **私有记忆一律按 `agent_id` 划分。** 作用域键只来自服务端 `SessionContext`（`ownerId`/`agentId`/`characterId`），绝不取自工具参数、模型输出或 HTTP body。FTS 和最近陈述查询都必须带 `agent_id`；跨角色隔离测试（`iso_*`）不能删。
 14. **钉住的敏感项只进完整快照。** 第 4 条按 Q33 修订：用户明确钉住的敏感记忆（如健康）可以进完整快照，不进开场快照和主动接话快照；设置页能看到，语音列表只给一句「在设置里能看到」。
 15. **模糊回忆以用户原话判定、按会话取实质陈述（2026-10-31）。** 不能只看模型传入的 `query`；`ctx.triggerText` 存在时优先用它；没有时要先等本回合用户终稿（`turn.currentFinal`），因为 Qwen 可能先调工具、后下发转写——2026-10-31 真机回归就是 `trigger=0` 导致又答「找不到」。等待超时（`recallFinalWaitMs`，默认 1000ms）后才回退模型 query，zh 另有精确模糊词（上次/上次的事等）。候选按会话分组，优先最近含 ≥15 字强陈述的已结束会话，回退最近含普通实质陈述的会话；过滤空消息、问句、轻回应、短动作指令（≥5 字且 `matchKeyword` ≤20 字的排除）。窗口/阈值在 `gateway/config/memory.json` 的 `recallRecentWindow`/`recallRecentMinChars`/`recallActionCommandMaxChars`/`recallStrongChars`。模糊回忆的确认句**要带出具体内容并自然改写**（用户选择 A + 两次反馈）：只问不带内容用户无从确认；逐字引用又太生硬。先走 `recall.md` 的 `confirm` 模式自然改写（grounding + 必须问句结尾 + 1.5s 超时），失败回退逐字模板 `recentConfirmText`。原话全集留在模型可见的工具文本里，确认后由模型接着聊。详见 [spec](../superpowers/specs/2026-10-31-vague-recall-fix-design.md)；真机复验前不要改回只看 query 或全局 12 条窗口。
+16. **主动话题负偏好只存 key（2026-10-31）。** `proactive_topic_avoid` 按 agent 隔离，只存 `card/fact/pin/thread/stmt` key 与时间，不存原话/事实/话题文本；默认 90 天冷却，0=永久；随 `clearAgentMemory`/`clearAllMemory`/`forgetMatches`/`deleteMemoryItem`/`clearProfile` 和 `deleteMessagesByIds` 删除；日志只记 key 类型，不记 key 值。
 
 ## 沉默话术（2026-10-18，已由 2026-10-21 四段式取代）
 

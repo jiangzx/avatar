@@ -28,6 +28,19 @@ const Kind = z.object({
 const Window = z.object({ start: z.number().int().min(0).max(23), end: z.number().int().min(1).max(24) }).strict()
   .refine((w) => w.end > w.start, { message: 'window end must be after start' });
 
+/** Memory-vs-topic-card split for proactive topic questions (2026-10-31 spec). */
+const TopicQuestion = z.object({
+  enabled: z.boolean(),
+  memoryRatio: Pct,
+  recentSessions: z.number().int().min(1).max(10),
+  recentDays: z.number().int().min(1).max(365),
+  /** 0 = keep the avoidance forever. */
+  declineCooldownDays: z.number().int().min(0).max(3650),
+  minStatementChars: z.number().int().min(2).max(50),
+  factCategories: z.array(z.enum(['preference', 'person', 'other', 'profile'])).max(4)
+    .refine((list) => new Set(list).size === list.length, { message: 'factCategories must be unique' }),
+}).strict();
+
 export const ProactivitySchema = z.object({
   enabled: z.boolean(),
   defaultTier: z.enum(PROACTIVE_TIERS),
@@ -65,6 +78,7 @@ export const ProactivitySchema = z.object({
   humanConnection: z.object({ lowRelevance: Pct, minIntervalDays: Days(1, 30) }).strict(),
   /** How far back (user lines of ended sessions) a family line is looked for. */
   material: z.object({ familyLookback: z.number().int().min(1).max(200) }).strict(),
+  topicQuestion: TopicQuestion,
   kinds: z.object({
     threadFollowup: Kind, moodCheck: Kind, continueThread: Kind, routine: Kind,
     humanConnection: Kind, interestTopic: Kind, selfShare: Kind,

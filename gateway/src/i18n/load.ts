@@ -19,6 +19,7 @@ import type {
   LanguageRules,
   MemoryCopy,
   SilenceRules,
+  TopicQuestionRules,
 } from './types.ts';
 
 const EDGE_PUNCTUATION = /^[\s\p{P}]+|[\s\p{P}]+$/gu;
@@ -145,6 +146,14 @@ const SilenceFileSchema = z.object({
   anytime: PhraseList,
   maxCheckinChars: z.number().int().min(1).max(500),
   tierDown: PhraseList, tierUp: PhraseList, farewell: PhraseList, familyWords: PhraseList,
+}).strict();
+
+/** Empty lists are allowed in en/ja: the topic-question runtime only runs where intents exist (zh). */
+const ProactivityFileSchema = z.object({
+  switchPhrases: StringList,
+  topicDeclinePhrases: StringList,
+  factKeywords: StringList,
+  factBlockKeywords: StringList,
 }).strict();
 
 const AffectLine = z.string().min(1).max(200);
@@ -315,6 +324,12 @@ function loadSilence(configRoot: string): Record<Language, SilenceRules> {
   return rules;
 }
 
+function loadProactivity(configRoot: string): Record<Language, TopicQuestionRules> {
+  const rules = {} as Record<Language, TopicQuestionRules>;
+  for (const language of LANGUAGES) rules[language] = parseFile(ProactivityFileSchema, configRoot, language, 'proactivity');
+  return rules;
+}
+
 /** Every pack must name the same 24 dates, so a solar term never moves with the language. */
 function loadAffect(configRoot: string): Record<Language, AffectCopy> {
   const copy = {} as Record<Language, AffectCopy>;
@@ -357,7 +372,10 @@ export function loadI18n(configRoot: string): I18nBundle {
   const safety = mergeSafety(loadSharedSafety(join(configRoot, 'safety.json')), loadSafety(configRoot));
   const emotion = mergeEmotion(loadSharedEmotion(join(configRoot, 'emotion.json')), loadEmotion(configRoot));
 
-  return { language, memory, evidence, recentQueries, safety, emotion, silence: loadSilence(configRoot), affect: loadAffect(configRoot) };
+  return {
+    language, memory, evidence, recentQueries, safety, emotion,
+    silence: loadSilence(configRoot), affect: loadAffect(configRoot), proactivity: loadProactivity(configRoot),
+  };
 }
 
 /** Loaded once for tests and default parameters; production startup calls loadI18n explicitly. */

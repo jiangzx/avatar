@@ -44,22 +44,23 @@ const fakeLogger = () => {
   return logger;
 };
 
-function setup(opts: { store?: ReturnType<typeof fakeStore>; persist?: boolean; intents?: boolean; topics?: typeof TOPICS } = {}) {
+function setup(opts: { store?: ReturnType<typeof fakeStore>; persist?: boolean; intents?: boolean; topics?: typeof TOPICS; random?: () => number; cfg?: typeof cfg } = {}) {
   let now = AFTERNOON;
   const store = opts.store ?? fakeStore();
   const logger = fakeLogger();
   const runtime = new ProactiveRuntime({
-    cfg,
+    cfg: opts.cfg ?? cfg,
     sessionId: 's-now',
     store: store as unknown as MemoryStore,
     ownerId: 'o1',
     agentId: 'a1',
     now: () => now,
+    ...(opts.random ? { random: opts.random } : {}),
     canPersist: () => opts.persist ?? true,
     copy: () => (opts.intents === false
       ? { topics: opts.topics ?? TOPICS, quietPhrases: zh.quietPhrases }
       : { intents: zh.intents, fallbacks: zh.fallbacks, topics: opts.topics ?? TOPICS, quietPhrases: zh.quietPhrases }),
-    rules: () => ({ silence: i18n.silence.zh, healthWords: i18n.memory.zh.healthWords, declinePhrases: i18n.affect.zh.declinePhrases, evidence: i18n.evidence }),
+    rules: () => ({ silence: i18n.silence.zh, healthWords: i18n.memory.zh.healthWords, declinePhrases: i18n.affect.zh.declinePhrases, evidence: i18n.evidence, topicQuestion: i18n.proactivity.zh }),
     logger: logger as unknown as Logger,
   });
   return { runtime, store, logger, advance: (ms: number) => { now += ms; }, at: () => now };
@@ -334,5 +335,161 @@ describe('fallback, post-hoc check and topic exhaustion', () => {
     const quiet = setup({ store: fakeStore({ getProactiveTier: vi.fn(() => 'quiet') }) });
     expect(quiet.runtime.approveExhausted(1, at)).toBe(false);
     expect(setup({ intents: false }).runtime.approveExhausted(1, at)).toBe(true);
+  });
+});
+
+describe('topic-question runtime', () => {
+  const factStore = () => fakeStore({
+    listProfileFacts: vi.fn(() => [{ id: 'f1', category: 'profile', text: '老人喜欢喝茶。' }]),
+    listAgentFacts: vi.fn(() => []),
+    listPinned: vi.fn(() => []),
+    listSessions: vi.fn(() => []),
+    listSessionUserLines: vi.fn(() => []),
+  });
+  const check = (over: Partial<SilenceInput> = {}) => input({ step: 'check', hadContent: false, lastUtterance: '', ...over });
+
+  it('uses memory at 70/30 = 0 and topic cards otherwise', () => {
+    const memory = setup({ store: factStore(), random: () => 0 });
+    const memoryRequest = requestOf(memory.runtime.silenceLine(check()))!;
+    expect(memoryRequest.instruction).toContain('【老人喜欢喝茶。】');
+    expect(memoryRequest.instruction).toContain(zh.intents!.mustAsk);
+    expect(memoryRequest.topicKey).toBe('fact:f1');
+
+    const topic = setup({ store: factStore(), random: () => 0.99 });
+    const topicRequest = requestOf(topic.runtime.silenceLine(check()))!;
+    expect(topicRequest.instruction).toContain('【今天吃了什么好吃的】');
+    expect(topicRequest.instruction).toContain(zh.intents!.mustAsk);
+    expect(topicRequest.topicKey).toBe('card:meal');
+  });
+
+  it('rolls once per silence episode, reuses the same material and marks the follow-up', () => {
+    let rolls = 0;
+    const s = setup({ store: factStore(), random: () => { rolls++; return 0; } });
+    const first = requestOf(s.runtime.silenceLine(check()))!;
+    s.runtime.onLineStarted(first);
+    s.runtime.onLineEnded('好，您平时爱喝什么茶？', false);
+    const second = requestOf(s.runtime.silenceLine(check()))!;
+    expect(rolls).toBe(1);
+    expect(second.topicKey).toBe(first.topicKey);
+    expect(second.instruction).toContain(zh.intents!.withFollowUp);
+  });
+
+  it('keeps the episode after a light reply', () => {
+    let rolls = 0;
+    const s = setup({ store: factStore(), random: () => { rolls++; return 0; } });
+    const first = requestOf(s.runtime.silenceLine(check()))!;
+    s.runtime.onLineStarted(first);
+    s.runtime.onLineEnded('好，您平时爱喝什么茶？', false);
+    s.runtime.onUserFinal('嗯', true, 'zh');
+    const kept = requestOf(s.runtime.silenceLine(check()))!;
+    expect(rolls).toBe(1);
+    expect(kept.topicKey).toBe(first.topicKey);
+    expect(kept.instruction).toContain(zh.intents!.withFollowUp);
+  });
+
+  it('resets after a content reply and starts a new question', () => {
+    let rolls = 0;
+    const s = setup({ store: factStore(), random: () => { rolls++; return 0; } });
+    const first = requestOf(s.runtime.silenceLine(check()))!;
+    s.runtime.onLineStarted(first);
+    s.runtime.onLineEnded('好，您平时爱喝什么茶？', false);
+    s.runtime.onUserFinal('我今天去了公园。', false, 'zh');
+    const reset = requestOf(s.runtime.silenceLine(check()))!;
+    expect(rolls).toBe(2);
+    expect(reset.instruction).not.toContain(zh.intents!.withFollowUp);
+  });
+
+  it('keeps leave a statement with no new question', () => {
+    const s = setup({ store: factStore(), random: () => 0 });
+    const first = requestOf(s.runtime.silenceLine(check()))!;
+    s.runtime.onLineStarted(first);
+    s.runtime.onLineEnded('好，您平时爱喝什么茶？', false);
+    const leave = requestOf(s.runtime.silenceLine(input({ step: 'leave', hadContent: false, lastUtterance: '' })))!;
+    expect(leave.instruction).toContain(zh.intents!.noQuestion);
+    expect(leave.instruction).not.toContain(zh.intents!.mustAsk);
+  });
+
+  it('gives selfShare its own question material at check', () => {
+    const noInterest = {
+      ...cfg,
+      kinds: { ...cfg.kinds, interestTopic: { ...cfg.kinds.interestTopic, enabled: false } },
+    };
+    const s = setup({ store: factStore(), random: () => 0, cfg: noInterest });
+    const request = requestOf(s.runtime.silenceLine(check()))!;
+    expect(request.instruction).toContain('再问老人一个问题');
+    expect(request.instruction).toContain('【老人喜欢喝茶。】');
+    expect(request.instruction).toContain(zh.intents!.mustAsk);
+    expect(request.topicKey).toBe('fact:f1');
+  });
+
+  it('records a declined topic and avoids it on the next selection', () => {
+    const avoided = new Map<string, number>();
+    const store = {
+      ...factStore(),
+      listTopicAvoid: vi.fn(() => new Map(avoided)),
+      recordTopicAvoid: vi.fn((_owner: string, _agent: string, key: string, _source: string, now: number) => { avoided.set(key, now); }),
+    };
+    const s = setup({ store, random: () => 0 });
+    const first = requestOf(s.runtime.silenceLine(check()))!;
+    s.runtime.onLineStarted(first);
+    s.runtime.onLineEnded('好，您平时爱喝什么茶？', false);
+    s.runtime.onUserFinal('不感兴趣', false, 'zh');
+    expect(store.recordTopicAvoid).toHaveBeenCalledWith('o1', 'a1', 'fact:f1', 'fact', AFTERNOON);
+    expect(s.logger.info).toHaveBeenCalledWith('proactive_topic_declined', { source: 'fact', keyType: 'fact', switch: false });
+    const next = requestOf(s.runtime.silenceLine(check()))!;
+    expect(next.topicKey).toBe('card:meal');
+    // A new runtime reads the persisted avoidance.
+    const reopened = setup({ store, random: () => 0 });
+    expect(requestOf(reopened.runtime.silenceLine(check()))!.topicKey).toBe('card:meal');
+  });
+
+  it('treats 换个话题 as a decline and marks it for an immediate switch', () => {
+    const store = {
+      ...factStore(),
+      listTopicAvoid: vi.fn(() => new Map<string, number>()),
+      recordTopicAvoid: vi.fn(),
+    };
+    const s = setup({ store, random: () => 0 });
+    const first = requestOf(s.runtime.silenceLine(check()))!;
+    s.runtime.onLineStarted(first);
+    s.runtime.onLineEnded('好，您平时爱喝什么茶？', false);
+    s.runtime.onUserFinal('换个话题', false, 'zh');
+    expect(store.recordTopicAvoid).toHaveBeenCalledWith('o1', 'a1', 'fact:f1', 'fact', AFTERNOON);
+    expect(s.logger.info).toHaveBeenCalledWith('proactive_topic_declined', { source: 'fact', keyType: 'fact', switch: true });
+  });
+
+  it('builds the switch question from a new material and clears the pending switch', () => {
+    const avoided = new Map<string, number>();
+    const store = {
+      ...factStore(),
+      listTopicAvoid: vi.fn(() => new Map(avoided)),
+      recordTopicAvoid: vi.fn((_owner: string, _agent: string, key: string, _source: string, now: number) => { avoided.set(key, now); }),
+    };
+    const s = setup({ store, random: () => 0 });
+    const first = requestOf(s.runtime.silenceLine(check()))!;
+    s.runtime.onLineStarted(first);
+    s.runtime.onLineEnded('好，您平时爱喝什么茶？', false);
+    s.runtime.onUserFinal('换个话题', false, 'zh');
+    const switched = s.runtime.takeSwitchRequest({ card: null, lowIntensity: 2 })!;
+    expect(switched.topicKey).toBe('card:meal');
+    expect(switched.instruction).toContain(zh.intents!.mustAsk);
+    expect(s.runtime.takeSwitchRequest({ card: null, lowIntensity: 2 })).toBeNull();
+    expect(s.logger.info).toHaveBeenCalledWith('proactive_switch', expect.objectContaining({ fromKind: 'interestTopic', source: 'fact' }));
+  });
+
+  it('cancels a switch that went stale before the reply ended', () => {
+    const store = {
+      ...factStore(),
+      listTopicAvoid: vi.fn(() => new Map<string, number>()),
+      recordTopicAvoid: vi.fn(),
+    };
+    const s = setup({ store, random: () => 0 });
+    const first = requestOf(s.runtime.silenceLine(check()))!;
+    s.runtime.onLineStarted(first);
+    s.runtime.onLineEnded('好，您平时爱喝什么茶？', false);
+    s.runtime.onUserFinal('换个话题', false, 'zh');
+    s.advance(10_001);
+    expect(s.runtime.takeSwitchRequest({ card: null, lowIntensity: 2 })).toBeNull();
+    expect(s.logger.info).toHaveBeenCalledWith('proactive_switch_cancelled', { code: 'timeout' });
   });
 });

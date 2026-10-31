@@ -3,9 +3,10 @@ import type { Language } from '@anyidea/protocol';
 import type { ThreadRecord } from '../../memory/store.ts';
 import type { FallbackKey, IntentCopy, IntentPurpose } from '../../roles/types.ts';
 import type { AffectCard } from '../affect.ts';
-import type { ProactivityConfig } from './config.ts';
+import type { IntentKind, ProactivityConfig } from './config.ts';
 import { beijingHour, type CareStage, type Decision, type Familiarity, type Moment } from './engine.ts';
-import type { ProactiveIntent } from './intent.ts';
+import type { ProactiveIntent, QuestionMode } from './intent.ts';
+import type { QuestionMaterial } from './questionMaterial.ts';
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -21,6 +22,8 @@ export interface IntentMaterial {
   topic?: string;
   /** A remembered user line that names family. */
   family?: string;
+  /** Memory or topic-card material for the one question this line must ask. */
+  question?: QuestionMaterial;
 }
 
 export interface PlannedIntent {
@@ -28,6 +31,8 @@ export interface PlannedIntent {
   purpose: IntentPurpose;
   /** Health quote: append IntentCopy.withCare. */
   allowCare: boolean;
+  /** Same-episode second question: append withFollowUp. */
+  followUp: boolean;
 }
 
 export interface BuildInput {
@@ -39,6 +44,8 @@ export interface BuildInput {
   material: IntentMaterial;
   cfg: ProactivityConfig;
   saidWords: IntentCopy['saidWhen'];
+  /** A question was already asked in this silence episode. */
+  followUp?: boolean;
 }
 
 export function beijingDay(at: number): string {
@@ -79,7 +86,30 @@ function threadPurpose(thread: ThreadRecord, now: number): IntentPurpose {
   return thread.kind === 'concern' ? 'threadConcern' : 'threadPlan';
 }
 
-type Shape = { purpose: IntentPurpose; fallbackKey: FallbackKey | 'greetingPlain'; quotes: Array<{ text: string; said: string | null }>; facts: string[]; allowCare?: boolean };
+/** Question contract per kind and moment (2026-10-31 spec §3.1). */
+export function questionMode(kind: IntentKind, moment: Moment, enabled = true): QuestionMode {
+  if (kind === 'restQuiet') return 'forbidden';
+  if (!enabled) return 'allowed';
+  const questionMoment = moment === 'silenceContext' || moment === 'silenceCheck';
+  if ((kind === 'interestTopic' || kind === 'selfShare') && questionMoment) return 'required';
+  if ((kind === 'interestTopic' || kind === 'selfShare') && moment === 'silenceLeave') return 'forbidden';
+  return 'allowed';
+}
+
+function fallbackKeyFor(kind: IntentKind, moment: Moment, enabled: boolean): FallbackKey | 'greetingPlain' {
+  if (kind === 'interestTopic') return questionMode(kind, moment, enabled) === 'required' ? 'interestTopic' : 'interestTopicStatement';
+  if (kind === 'selfShare') return questionMode(kind, moment, enabled) === 'required' ? 'selfShareQuestion' : 'selfShare';
+  return kind as FallbackKey | 'greetingPlain';
+}
+
+type Shape = {
+  purpose: IntentPurpose;
+  fallbackKey: FallbackKey | 'greetingPlain';
+  quotes: Array<{ text: string; said: string | null }>;
+  facts: string[];
+  allowCare?: boolean;
+  question?: QuestionMaterial;
+};
 
 function shapeFor(decision: Decision, input: BuildInput): Shape | null {
   const m = input.material;
@@ -114,12 +144,34 @@ function shapeFor(decision: Decision, input: BuildInput): Shape | null {
         };
       }
       return { purpose: 'continueThread', fallbackKey: 'continueThread', quotes: [{ text: m.openLoop, said: words.justNow }], facts: [] };
-    case 'interestTopic':
-      return m.topic ? { purpose: 'interestTopic', fallbackKey: 'interestTopic', quotes: [], facts: [m.topic] } : null;
+    case 'interestTopic': {
+      // T3 fallback: the runtime still supplies `topic` until T4 wires the memory/card material.
+      const q = m.question ?? (m.topic
+        ? { source: 'card' as const, form: 'topic' as const, text: m.topic, said: null, key: 'card:', cardIndex: null }
+        : undefined);
+      if (!q) return null;
+      const required = questionMode('interestTopic', input.moment, input.cfg.topicQuestion.enabled) === 'required';
+      return {
+        purpose: 'interestTopic',
+        fallbackKey: fallbackKeyFor('interestTopic', input.moment, input.cfg.topicQuestion.enabled),
+        quotes: q.form === 'quote' ? [{ text: q.text, said: q.said }] : [],
+        facts: q.form === 'topic' ? [q.text] : [],
+        question: q,
+      };
+    }
     case 'humanConnection':
       return m.family ? { purpose: 'humanConnection', fallbackKey: 'humanConnection', quotes: [{ text: m.family, said: words.earlier }], facts: [] } : null;
-    case 'selfShare':
-      return { purpose: 'selfShare', fallbackKey: 'selfShare', quotes: [], facts: [] };
+    case 'selfShare': {
+      const required = questionMode('selfShare', input.moment, input.cfg.topicQuestion.enabled) === 'required';
+      if (required && !m.question) return null;
+      return {
+        purpose: 'selfShare',
+        fallbackKey: fallbackKeyFor('selfShare', input.moment, input.cfg.topicQuestion.enabled),
+        quotes: [],
+        facts: [],
+        ...(m.question ? { question: m.question } : {}),
+      };
+    }
     case 'presenceCheck':
       return { purpose: 'presenceCheck', fallbackKey: 'presenceCheck', quotes: [], facts: [] };
     case 'restQuiet':
@@ -136,20 +188,30 @@ function shapeFor(decision: Decision, input: BuildInput): Shape | null {
 export function buildIntent(decision: Decision, input: BuildInput): PlannedIntent | null {
   const shape = shapeFor(decision, input);
   if (!shape) return null;
-  // checkin asks whether the user is still there; only rest must not ask.
-  const noQuestion = decision.kind === 'restQuiet';
+  const question = questionMode(decision.kind, input.moment, input.cfg.topicQuestion.enabled);
   const intent: ProactiveIntent = {
     moment: input.moment,
     kind: decision.kind,
-    material: { quotes: shape.quotes, facts: shape.facts },
+    material: {
+      quotes: shape.quotes,
+      facts: shape.facts,
+      ...(shape.question
+        ? { question: { text: shape.question.text, said: shape.question.said, topic: shape.question.form === 'topic' } }
+        : {}),
+    },
     tone: {
       familiarity: input.familiarity,
       stage: input.affect.low ? input.affect.stage : null,
       allowJoke: input.familiarity === 'oldFriend' && !input.affect.low,
     },
-    constraints: { maxChars: input.cfg.maxChars, allowQuestion: !noQuestion, mustExpress: decision.kind === 'presenceCheck' ? 'presence' : null },
+    constraints: {
+      maxChars: input.cfg.maxChars,
+      question,
+      mustExpress: decision.kind === 'presenceCheck' ? 'presence' : null,
+    },
     language: input.language,
     fallbackKey: shape.fallbackKey,
+    ...(shape.question ? { questionKey: shape.question.key } : {}),
   };
-  return { intent, purpose: shape.purpose, allowCare: shape.allowCare ?? false };
+  return { intent, purpose: shape.purpose, allowCare: shape.allowCare ?? false, followUp: input.followUp ?? false };
 }

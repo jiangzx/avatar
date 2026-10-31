@@ -23,13 +23,27 @@ export function renderIntent(planned: PlannedIntent, copy: IntentCopy, fallbackL
   if (quote) lines.push(fill(copy.withQuote, { '{said}': quote.said ?? copy.saidWhen.earlier, '{material}': quote.text }));
   else if (fact) lines.push(fill(copy.withTopic, { '{material}': fact }));
   else lines.push(copy.withoutMaterial);
+  // interestTopic already put the question material in its main quote/fact; selfShare needs it separately.
+  const question = intent.material.question;
+  if (question && planned.purpose !== 'interestTopic' && intent.constraints.question !== 'forbidden') {
+    lines.push(fill(question.topic ? copy.withQuestionTopic : copy.withQuestionQuote, { '{material}': question.text }));
+  }
   if (planned.allowCare) lines.push(copy.withCare);
   // An old friend who is low gets the familiar tone: no jokes while comforting.
   const familiarity = intent.tone.familiarity === 'oldFriend' && !intent.tone.allowJoke ? 'familiar' : intent.tone.familiarity;
   lines.push(copy.tones[familiarity]);
   if (intent.tone.stage) lines.push(copy.tones[intent.tone.stage]);
-  if (!intent.constraints.allowQuestion) lines.push(copy.noQuestion);
-  return { cue: 'followup', instruction: lines.join('\n'), fallbackText: fallbackLine };
+  if (intent.constraints.question === 'forbidden') lines.push(copy.noQuestion);
+  else if (intent.constraints.question === 'required') {
+    lines.push(copy.mustAsk);
+    if (planned.followUp) lines.push(copy.withFollowUp);
+  }
+  return {
+    cue: 'followup',
+    instruction: lines.join('\n'),
+    fallbackText: fallbackLine,
+    ...(intent.questionKey ? { topicKey: intent.questionKey } : {}),
+  };
 }
 
 /** Opening head with the name filled in, then a fallback line. Latin text needs a space between sentences. */

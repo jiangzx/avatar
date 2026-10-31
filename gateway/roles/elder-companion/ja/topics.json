@@ -8,5 +8,19 @@
   { "id": "season", "prompt": "今の季節と旬の食べ物", "fallbackText": "この季節の野菜は一番新鮮で、おいしいですよね。" },
   { "id": "flowers", "prompt": "家の草花や窓の外の景色", "fallbackText": "家に草花があると、気持ちも明るくなりますね。" },
   { "id": "tv", "prompt": "最近好きなテレビや芝居", "fallbackText": "最近のおすすめのテレビ番組や芝居があったら教えてください。" },
-  { "id": "snack", "prompt": "子どものころ好きだったおやつ", "fallbackText": "子どものころのおやつで、好きだったものはありますか？" }
+  { "id": "snack", "prompt": "子どものころ好きだったおやつ", "fallbackText": "子どものころのおやつで、好きだったものはありますか？" },
+  { "id": "tea", "prompt": "普段飲んでいるお茶", "fallbackText": "普段はどんなお茶を飲みますか？" },
+  { "id": "grandchildren", "prompt": "お孫さんの最近の話", "fallbackText": "お孫さんの最近の面白い話はありますか？" },
+  { "id": "cooking", "prompt": "得意な家庭料理", "fallbackText": "一番得意な家庭料理は何ですか？" },
+  { "id": "radio", "prompt": "よく聞くラジオ番組", "fallbackText": "ラジオはよく聞きますか？好きな番組は？" },
+  { "id": "opera", "prompt": "好きな芝居", "fallbackText": "芝居はお好きですか？一番好きなのは？" },
+  { "id": "travel", "prompt": "若いころ行った場所", "fallbackText": "若いころはどこへ行きましたか？" },
+  { "id": "old-photos", "prompt": "家の古い写真", "fallbackText": "古い写真はありますか？写真の話を聞かせてください。" },
+  { "id": "market", "prompt": "朝市や買い物", "fallbackText": "朝市はよく行きますか？買い物のコツは？" },
+  { "id": "sewing", "prompt": "針仕事や手芸", "fallbackText": "針仕事はされますか？昔は服を自分で作りましたか？" },
+  { "id": "chess", "prompt": "将棋やトランプ", "fallbackText": "将棋とトランプ、どちらが好きですか？" },
+  { "id": "morning-exercise", "prompt": "朝の運動", "fallbackText": "朝は運動しますか？何をされていますか？" },
+  { "id": "neighbors", "prompt": "ご近所さんとの付き合い", "fallbackText": "ご近所さんとはよく話しますか？" },
+  { "id": "festival", "prompt": "お祭りと家の習慣", "fallbackText": "もうすぐお祭りですね。家の習慣はありますか？" },
+  { "id": "childhood", "prompt": "子どものころの楽しい話", "fallbackText": "子どものころの楽しい思い出を聞かせてください。" }
 ]

@@ -178,8 +178,12 @@ const DirectorSchema = z.object({
     withQuote: z.string().includes('{said}').includes('{material}'),
     withCare: z.string().min(1),
     withTopic: z.string().includes('{material}'),
+    withQuestionQuote: z.string().includes('{material}'),
+    withQuestionTopic: z.string().includes('{material}'),
     withoutMaterial: z.string().min(1),
     noQuestion: z.string().min(1),
+    mustAsk: z.string().min(1),
+    withFollowUp: z.string().min(1),
     speakLine: z.string().includes('{line}'),
     purposes: z.object(Object.fromEntries(INTENT_PURPOSES.map((p) => [p, z.string().min(1).max(80)])) as Record<(typeof INTENT_PURPOSES)[number], z.ZodString>).strict(),
     tones: z.object({
