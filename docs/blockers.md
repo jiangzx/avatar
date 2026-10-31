@@ -249,3 +249,10 @@
 - 本次实现后的 gateway 全量 128 文件/1510 项、`npm run typecheck -w gateway`、protocol 3/16 + typecheck、admin 24/132 + typecheck + build 均通过；`git diff --check` clean。
 - `MEMORY_DB_PATH` 未设置，未跑 `--real-db`；真实库迁移 v9 和真机 7 项未做。
 - 解除条件：先修复/回滚 `d6d688a` 的 vague recall，使 `--temp` 探针恢复；再在有真实库的机器上备份、迁移 v9、跑 `--real-db`，并在用户在场时做真机验收。
+
+## 2026-10-31 主动话题真机：负偏好/换话题待角色解锁
+
+- App `CharacterHolds` 锁小暖/小凯（`character_hold_until.xiaonuan`/`.xiaokai`），网关 `session_rejected char xiaoxin reason character_disabled`；小欣被网关禁用。设备时间不能改（`date` Operation not permitted），未用改时间的方式清 hold。
+- 未清 App `FlutterSecureStorage` 的 hold 键：key/值加密，整文件清会丢 `device_token` 与真实记忆（用户确认“宝仔/美国”是真实记忆）。记忆问句已通过；负偏好/换话题的单元测试通过。
+- 解除：后台启用一个可用角色，或按既有方法只清 hold 键并保留 `device_token`/`character_id`；之后补真机“不感兴趣”“换个话题”。
+- 临时关闭 `routine`/`continueThread` 的测试配置已用 `git checkout` 恢复并重启网关；真实库 v9；备份 `~/.avatar/memory.db.bak-v8-20261031-topicq`；`proactive_topic_avoid` 0。

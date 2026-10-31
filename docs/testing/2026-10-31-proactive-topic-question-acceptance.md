@@ -12,7 +12,7 @@
 - T5 负偏好（v9 表/store/检测/删除）：完成。
 - T6 立即换话题：完成。
 - T0 真实 Qwen `mustAsk` 探针：**未运行**（未新建探针脚本；`gateway/.env` 有 Key，但没有跑真实模型调用）。
-- T7 收尾：**部分完成**。全量/typecheck/protocol/admin 通过；召回 `--temp` 探针在 HEAD 已失败（见 blockers，与本次无关）；`MEMORY_DB_PATH` 未设置，真实库 v9 迁移与 `--real-db` 未做；真机 7 项未做。
+- T7 收尾：**部分完成**。全量/typecheck/protocol/admin 通过；召回 `--temp` 探针在 HEAD 已失败（见 blockers，与本次无关）；真实库已备份并迁移 v9；`--real-db` 未跑（`MEMORY_DB_PATH` 未设置）；真机记忆问句通过，负偏好/换话题真机路径待角色解锁后补。
 
 ## 实际命令与结果（2026-10-31）
 
@@ -52,10 +52,19 @@ node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp
 - 文案：zh 24 条话题卡；`interestTopic` 问句组、`interestTopicStatement`、`selfShare`、`selfShareQuestion`；`mustAsk`/`withFollowUp`/`withQuestion*`。
 - en/ja：只补 topic id/短翻译和空 i18n 数组；引擎行为不变。
 
+## 真机验收（2026-10-31，已连机）
+
+- 设备：小米 22101317C / Android 13；App debug APK 安装；`adb reverse tcp:8787 tcp:8787`；网关 `launchd` 重启，DB v9；备份 `~/.avatar/memory.db.bak-v8-20261031-topicq`（v8，4 owners/6 agents/69 sessions/389 messages）。
+- 实机新 owner `{E}bd20acedc95e` / agent `b1d103f2-…`；真实记忆“宝仔/美国”来自用户此前原话；用户确认不是编造。
+- **记忆问句通过**：受控临时关闭 `routine`/`continueThread` 后，context `interestTopic`、check `selfShare` 出问句；小暖说“刚才听您提到在餐厅打工的宝仔……您觉得在美国的华人，日子过得怎么样呀？”；leave `quiet`。配置已恢复并重启网关。
+- **未完成**：用户说“不感兴趣”/“换个话题”的真机路径。App `CharacterHolds` 锁住小暖/小凯（网关曾报 disabled 的本地 hold）；网关 `session_rejected char xiaoxin reason character_disabled`；小欣被网关禁用。设备时间不能改（`date` Operation not permitted），未清 App 安全存储的 hold 键（避免丢 device_token/真实记忆）。单元测试覆盖这两条路径，真机待角色解锁后补。
+- 设备/App 观察：`assistant_tool_syntax` 取消了开场问候（既有 textGuard）；一次 name followup 后 `reply_metrics` 缺失、会话停住，Mac TTS 用户终稿后恢复；均非本次问句逻辑。
+- 真实库已迁移 v9；`proactive_topic_avoid` 0（负偏好真机未触发）。T0 Qwen `mustAsk` 探针未跑；`--real-db` 未跑（`MEMORY_DB_PATH` 未设置）。
+
 ## 未做/待用户
 
-- 真机 7 项（有记忆、无记忆、用户不接、不感兴趣、换个话题、敏感健康、en/ja 不变）；需要用户在场。
-- 真实库 `VACUUM INTO` 备份、v9 迁移、`--real-db` 三角色召回探针；`MEMORY_DB_PATH` 未设置。
+- 真机“不感兴趣”/“换个话题”：需要先解锁一个可用角色（后台启用小欣/小暖，或清理 App 的 `character_hold_until.*` 安全存储键并保留 `device_token`/`character_id`）。当前小暖/小凯被 App `CharacterHolds` 锁住，小欣网关 `character_disabled`。
+- 真实库 `--real-db` 三角色召回探针：`MEMORY_DB_PATH` 未设置；另受 HEAD `d6d688a` 的 `zh_vague_recent_only` 失败阻塞（见 blockers）。
 - T0 真实 Qwen `mustAsk` 探针（问句率/两个问号/材料外事实）。
 - 后台 `proactivity.json` 的数值描述符没有新增；当前只能改 baseline 文件，`memoryRatio` 等未进后台 UI。`copy.json` 已加两组兜底句描述符。
 
@@ -71,4 +80,4 @@ node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp
 
 ## 结论
 
-代码与自动化测试已完成；真实模型探针、真实库迁移和真机验收未完成，不能声称 T7 全通过。召回 `--temp` 的失败已定位为 HEAD 既有 vague-recall 提交，不是本次改动。
+代码与自动化测试已完成；真机记忆问句已用真实记忆验证通过。负偏好/换话题的真机路径因 App `CharacterHolds` 与网关角色 disabled 未完成，真实库 `--real-db` 召回探针也因既有 vague-recall 失败未做；不能声称 T7 全通过。
