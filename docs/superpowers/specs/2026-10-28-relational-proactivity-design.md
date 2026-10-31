@@ -2,7 +2,7 @@
 
 ## 状态
 
-已批准（2026-10-28，用户）。
+已批准（2026-10-28，用户）；已实施（2026-10-31，带跳过项）。P5-T1 门槛未通过（用户决定连续性改为不倒退并继续），P5-T2 通过，P5-T3 第 1、5–10 项通过、第 2/3/4/11/12 项跳过，P5-T4 盲测跳过，P5-T5 收尾。验收记录见 roadmap 与 `docs/testing/2026-10-31-p5-eval-gate.md`、`docs/testing/2026-10-31-p5-device-acceptance.md`。
 
 - 决策来源：2026-10-28 grilling 会话 Q1–Q26。用户逐轮确认；Q8 按用户修订（保留适配器框架），Q22 按用户修订（控制台计划全部完成后才开工）。
 - 调研：代码现状与竞品/学术调研各一份，结论写在「现状事实」和附录 A。
@@ -482,3 +482,4 @@ score = (w_rel·情绪相关 + w_urg·紧迫度 + w_imp·重要性 + w_nov·新�
 - 2026-10-31 后台：用户详情新增「今日主动次数」与「清零今日主动次数」（`proactive_daily_reset` 审计）；审计表列宽修复。主动互动页的简化方案待用户确认。
 - 2026-10-31 用户要求「没听清」修复后重新走被中断的沉默步（checkin 重新问；普通回复从 context 重启），不再直接 silent rest。`Director.repairStep` 记录被打断的步骤；测试改为 `re-runs the interrupted silence step after a noise-hearing repair`。
 - 2026-10-31 第 12 项 App 设置页：App 解析并展示事项、反思、情绪摘要，可单条删除；P2-T8 留下的 App 展示缺口已补齐。
+- 2026-10-31 P5 收尾：最终回归 protocol 3/16、gateway 124/1436、admin 24/131、flutter 351、三个 typecheck、admin build、召回 `--temp` 133、`--real-db` 三角色 zh true/true/false、`git diff --check` 通过。P5-T1 旅程门槛未过（用户决定连续性不倒退并继续）；P5-T2 通过；P5-T3 第 1、5–10 项通过，第 2/3/4/11/12 项跳过；P5-T4 盲测跳过；见 `docs/blockers.md` #68–#71 与 P5 验收记录。

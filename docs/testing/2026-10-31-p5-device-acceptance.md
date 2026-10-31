@@ -57,15 +57,21 @@
 ## 同一天项（2026-10-31，新 owner）
 
 - 第 7 项：用户说「多跟我聊聊」，日志 `proactive_tier_changed` `{ from: "moderate", to: "active" }`（14:32:07），通过。
-- 第 8 项（未完成）：checkin 播放中用户插话「嗯」，本地 VAD 取消该句（`vad_edge speaking` + `response_cancel local`），2.5 秒后走 barge-miss 修复句（10 字），随后进入 silent rest（旧行为）。用户要求修复后重新走被中断的阶梯步；代码已改（`Director.repairStep`），待真机复验。这是插话契约，不是第 8 项的失败；第 8 项需等 AI 说完再只答「嗯/好」。
+- 第 8 项（未完成）：checkin 播放中用户插话「嗯」，本地 VAD 取消该句（`vad_edge speaking` + `response_cancel local`），2.5 秒后走 barge-miss 修复句（10 字），随后进入 silent rest（旧行为）。用户要求修复后重新走被中断的阶梯步；代码已改（`Director.repairStep`），随后做了 barge-miss 复验并再次修复（见下两节）。这是插话契约，不是第 8 项的失败；第 8 项需等 AI 说完再只答「嗯/好」。
 
 ## barge-miss 复验（2026-10-31）
 
 - 会话 `a263f9a8-9f2f-4efd-948a-bce1b9c3aa97`：checkin 播放中用户插话 → 本地 VAD 取消（`response_cancel local`）→ 修复句（10 字）→ 约 6 秒后从 context 重走阶梯（continueThread → check → leave quiet → checkin）。用户确认符合预期。
-- 轻回应会在 `onUserFinal` 清空 `pending`，因此这次从 context 重启；没有清空时 `Director.repairStep` 会重走被打断的那一步。
+- 真实路径上 `onUserSpeech` 先清空 `pending`，旧代码因此总是从 context 重启；代码审查后已修：`bargedStep` 在清空前记录被打断的步骤，修复后重走 checkin。这次设备记录是修复前的 context 重启；修复后的真机 barge 复验已按用户决定跳过。
 
 ## 第 12 项 App 设置页（2026-10-31 实现）
 
 - `app/lib/memory/memory_overview.dart` 解析 `threads` / `reflections` / `moods`；`companion_settings_page.dart` 在每个角色下新增「还没了结的事」「最近的感受」「情绪摘要」，复用 `DELETE /memory/items/:id` 单条删除；`memory_copy.dart` 加中文标签。
 - 测试：`flutter test` 351 项通过、`flutter analyze` 无问题；debug APK 已覆盖安装（保留 owner 数据）。
 - 待办：第 2/3 项事项线落库后，在设置页删除「合唱团」事项，再打小暖确认不再提；同时确认事项/反思/情绪摘要可见、可删。
+
+## P5-T5 最终回归（2026-10-31）
+
+- protocol 3 文件 / 16 项、gateway 124 文件 / 1436 项、admin 24 文件 / 131 项、flutter 351 项全部通过；protocol / gateway / admin typecheck 通过；admin build 通过；`git diff --check` 与角色 id 检查通过。
+- 召回 `--temp` 133 项通过；`--real-db` 小暖 / 小凯 / 小新中文三句 true / true / false，`newTitleFlag` 全 false。
+- 跳过：P5-T3 第 2/3/4/11/12 项（blockers #68/#70）、P5-T4 盲测（#69）、60 分钟休息提醒（#70）；P5-T1 门槛未过（#71，用户决定连续性不倒退并继续）。
