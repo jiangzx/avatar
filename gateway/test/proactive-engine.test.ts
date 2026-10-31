@@ -68,8 +68,8 @@ describe('scoring', () => {
   });
 
   it('gets quieter as the session goes on (fatigue)', () => {
-    // After 6 of 8 lines: interestTopic 0.36875 and selfShare 0.35625 are both under 0.40.
-    expect(decide(ctx({ has: { openLoop: false, interest: true, family: false }, sessionSpoken: 6 }), cfg).kind).toBe('quiet');
+    // After 8 of 12 lines: interestTopic 0.3933 and selfShare 0.38 are both under 0.40.
+    expect(decide(ctx({ has: { openLoop: false, interest: true, family: false }, sessionSpoken: 8 }), cfg).kind).toBe('quiet');
   });
 
   it('opens with a mood check after a low last session, ahead of a due event and the morning greeting', () => {

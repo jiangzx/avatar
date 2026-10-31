@@ -29,8 +29,8 @@ describe('proactivity.json', () => {
     const cfg = loadProactivity(path);
     expect(cfg.tiers).toEqual({
       quiet: { threshold: 65, maxPerSession: 4, maxPerDay: 12 },
-      moderate: { threshold: 40, maxPerSession: 8, maxPerDay: 60 },
-      active: { threshold: 30, maxPerSession: 10, maxPerDay: 100 },
+      moderate: { threshold: 40, maxPerSession: 12, maxPerDay: 60 },
+      active: { threshold: 30, maxPerSession: 16, maxPerDay: 100 },
     });
   });
 
