@@ -1,6 +1,7 @@
 // gateway/scripts/probe-emotion-p2-qwen-style.ts
 // P2: can Qwen session instructions (and per-response instructions) change the spoken style?
 // Fixed synthetic sentence, same voice; prints counts/levels only and writes WAVs for blind listening.
+// QWEN_TURN_DETECTION=server_vad for models that reject semantic_vad (qwen-audio-3.1-realtime-flash).
 // Run from gateway/: node --env-file-if-exists=.env --import tsx scripts/probe-emotion-p2-qwen-style.ts [--runs 5] [--per-response-runs 3]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { sameText } from './lib/pcm-tools.ts';
@@ -14,6 +15,10 @@ const flag = (name: string, fallback: number): number => {
 };
 const runs = flag('runs', 5);
 const perResponseRuns = flag('per-response-runs', 3);
+// The default keeps the gateway's session shape; other models accept a different turn detector.
+const turnDetection = process.env.QWEN_TURN_DETECTION ?? 'semantic_vad';
+const sessionFor = (instructions: string) =>
+  baseSession(instructions, env.voice, { turn_detection: { type: turnDetection } });
 const dir = '/tmp/avatar-emotion-probe/qwen';
 mkdirSync(dir, { recursive: true });
 const out = (o: Json) => process.stdout.write(`${JSON.stringify(o)}\n`);
@@ -42,12 +47,14 @@ async function runSet(kind: 'session' | 'per-response'): Promise<void> {
         apiKey: env.apiKey,
         endpoint: env.endpoint,
         model: env.model,
-        session: baseSession(INSTRUCTIONS[kind === 'session' ? ab : 'A'], env.voice),
+        session: sessionFor(INSTRUCTIONS[kind === 'session' ? ab : 'A']),
       });
       const perResponse = kind === 'per-response' && ab === 'B';
       // Session-level runs use a normal text turn; per-response runs pass the task as response instructions.
       const r = await c.collect(() => {
         if (perResponse) {
+          // The text turn is required: qwen-audio-3.1-realtime-flash rejects response.create on an empty conversation.
+          c.send(userText(PROMPT));
           c.send({ type: 'response.create', response: { instructions: `${INSTRUCTIONS.B}\n${PROMPT}` } });
         } else {
           c.send(userText(PROMPT));
@@ -55,6 +62,10 @@ async function runSet(kind: 'session' | 'per-response'): Promise<void> {
         }
       }, 45_000);
       c.close();
+      if (r.error) {
+        const lastError = c.events.map((x) => x.event).filter((e) => e.type === 'error').at(-1);
+        out({ probe: 'p2', kind, run: i, ab, errorDetail: lastError?.error ?? null });
+      }
       const audioMs = Math.round(r.audio.length / 24);
       const chars = [...r.transcript.replace(/\s/g, '')].length;
       const lv = levels(r.audio);
