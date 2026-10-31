@@ -1,125 +1,278 @@
 {
   "scene": "proactivity",
   "title": "主动互动",
-  "intro": "AI 什么时候主动开口、一天最多说几次、老人说过的事隔多久再关心。",
+  "intro": "先决定要不要按关系主动开口；日常主要调「每次通话最多提几件事」和回访间隔。三档的门槛和上限收在「高级设置」里，一般保持默认。",
   "order": 3,
   "items": [
     {
       "key": "proactivity:enabled",
       "label": "按关系主动开口",
       "purpose": "打开后，AI 会根据老人说过的事、心情和作息决定要不要主动开口；关掉就维持原来的方式。",
-      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
+      "impact": {
+        "characters": "all",
+        "stage": "主动开口",
+        "effective": "next_session"
+      },
       "control": "switch",
-      "complianceNote": null, "risk": "medium",
+      "complianceNote": null,
+      "risk": "medium",
       "riskNote": "关掉后，AI 不会再按老人说过的事回访，也不会按作息问候。"
-    },
-    {
-      "key": "proactivity:tiers.quiet.threshold",
-      "label": "安静档：开口门槛",
-      "purpose": "老人选「少说点」后用这一档。数字越大，AI 越少主动开口。",
-      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
-      "control": "number", "unit": "level", "storageUnit": "level", "min": 10, "max": 95, "step": 5,
-      "complianceNote": null, "risk": "low", "riskNote": null
-    },
-    {
-      "key": "proactivity:tiers.moderate.threshold",
-      "label": "适中档：开口门槛",
-      "purpose": "默认用这一档。数字越大，AI 越少主动开口。",
-      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
-      "control": "number", "unit": "level", "storageUnit": "level", "min": 10, "max": 95, "step": 5,
-      "complianceNote": null, "risk": "medium",
-      "riskNote": "调得太小，AI 会频繁找话说，老人可能觉得被打扰。"
-    },
-    {
-      "key": "proactivity:tiers.active.threshold",
-      "label": "活跃档：开口门槛",
-      "purpose": "老人选「多跟我聊聊」后用这一档。数字越大，AI 越少主动开口。",
-      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
-      "control": "number", "unit": "level", "storageUnit": "level", "min": 10, "max": 95, "step": 5,
-      "complianceNote": null, "risk": "low", "riskNote": null
-    },
-    {
-      "key": "proactivity:tiers.quiet.maxPerSession",
-      "label": "安静档：每次通话上限",
-      "purpose": "一次通话里 AI 最多主动开口几次（不算开场和确认老人是否还在听）。",
-      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
-      "control": "number", "unit": "count", "storageUnit": "count", "min": 0, "max": 10, "step": 1,
-      "complianceNote": null, "risk": "low", "riskNote": null
-    },
-    {
-      "key": "proactivity:tiers.moderate.maxPerSession",
-      "label": "适中档：每次通话上限",
-      "purpose": "一次通话里 AI 最多主动开口几次（不算开场和确认老人是否还在听）。",
-      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
-      "control": "number", "unit": "count", "storageUnit": "count", "min": 0, "max": 10, "step": 1,
-      "complianceNote": null, "risk": "medium",
-      "riskNote": "调得太大，老人不说话时 AI 会一直找话说。"
-    },
-    {
-      "key": "proactivity:tiers.active.maxPerSession",
-      "label": "活跃档：每次通话上限",
-      "purpose": "一次通话里 AI 最多主动开口几次（不算开场和确认老人是否还在听）。",
-      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
-      "control": "number", "unit": "count", "storageUnit": "count", "min": 0, "max": 10, "step": 1,
-      "complianceNote": null, "risk": "low", "riskNote": null
-    },
-    {
-      "key": "proactivity:tiers.quiet.maxPerDay",
-      "label": "安静档：每天上限",
-      "purpose": "同一个角色一天里最多主动开口几次，跨通话累计。",
-      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
-      "control": "number", "unit": "count", "storageUnit": "count", "min": 0, "max": 40, "step": 1,
-      "complianceNote": null, "risk": "low", "riskNote": null
-    },
-    {
-      "key": "proactivity:tiers.moderate.maxPerDay",
-      "label": "适中档：每天上限",
-      "purpose": "同一个角色一天里最多主动开口几次，跨通话累计。",
-      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
-      "control": "number", "unit": "count", "storageUnit": "count", "min": 0, "max": 40, "step": 1,
-      "complianceNote": null, "risk": "low", "riskNote": null
-    },
-    {
-      "key": "proactivity:tiers.active.maxPerDay",
-      "label": "活跃档：每天上限",
-      "purpose": "同一个角色一天里最多主动开口几次，跨通话累计。",
-      "impact": { "characters": "all", "stage": "主动开口", "effective": "next_session" },
-      "control": "number", "unit": "count", "storageUnit": "count", "min": 0, "max": 40, "step": 1,
-      "complianceNote": null, "risk": "low", "riskNote": null
     },
     {
       "key": "proactivity:threads.maxPerSession",
       "label": "每次通话最多提几件事",
       "purpose": "一次通话里 AI 最多主动提起几件老人说过、还没了结的事。",
-      "impact": { "characters": "all", "stage": "回访", "effective": "next_session" },
-      "control": "number", "unit": "count", "storageUnit": "count", "min": 0, "max": 3, "step": 1,
-      "complianceNote": null, "risk": "medium",
+      "impact": {
+        "characters": "all",
+        "stage": "回访",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "count",
+      "storageUnit": "count",
+      "min": 0,
+      "max": 3,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "medium",
       "riskNote": "调成 0 后，AI 不会再主动关心老人说过的事。"
     },
     {
       "key": "proactivity:threads.event.postDays",
       "label": "事情过后几天内回访",
       "purpose": "老人说过要去办的事（比如复查），过后这些天内 AI 会问问结果，再晚就不提了。",
-      "impact": { "characters": "all", "stage": "回访", "effective": "next_session" },
-      "control": "number", "unit": "day", "storageUnit": "day", "min": 1, "max": 14, "step": 1,
-      "complianceNote": null, "risk": "low", "riskNote": null
+      "impact": {
+        "characters": "all",
+        "stage": "回访",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "day",
+      "storageUnit": "day",
+      "min": 1,
+      "max": 14,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null
     },
     {
       "key": "proactivity:threads.concern.intervalDays",
       "label": "牵挂的事隔几天再问",
       "purpose": "老人说过的不舒服、烦心事，AI 关心过一次后，至少隔这些天再问。",
-      "impact": { "characters": "all", "stage": "回访", "effective": "next_session" },
-      "control": "number", "unit": "day", "storageUnit": "day", "min": 1, "max": 14, "step": 1,
-      "complianceNote": null, "risk": "low", "riskNote": null
+      "impact": {
+        "characters": "all",
+        "stage": "回访",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "day",
+      "storageUnit": "day",
+      "min": 1,
+      "max": 14,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null
     },
     {
       "key": "proactivity:threads.concern.maxMentions",
       "label": "牵挂的事最多问几次",
       "purpose": "同一件不舒服或烦心的事，AI 最多主动关心这么多次。",
-      "impact": { "characters": "all", "stage": "回访", "effective": "next_session" },
-      "control": "number", "unit": "count", "storageUnit": "count", "min": 1, "max": 6, "step": 1,
-      "complianceNote": null, "risk": "medium",
+      "impact": {
+        "characters": "all",
+        "stage": "回访",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "count",
+      "storageUnit": "count",
+      "min": 1,
+      "max": 6,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "medium",
       "riskNote": "调得太大，老人可能觉得 AI 一直在提同一件事。"
+    },
+    {
+      "key": "proactivity:tiers.quiet.threshold",
+      "label": "安静档：开口门槛",
+      "purpose": "老人选「少说点」后用这一档。数字越大，AI 越少主动开口。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动开口",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "level",
+      "storageUnit": "level",
+      "min": 10,
+      "max": 95,
+      "step": 5,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null,
+      "advanced": true
+    },
+    {
+      "key": "proactivity:tiers.quiet.maxPerSession",
+      "label": "安静档：每次通话上限",
+      "purpose": "一次通话里 AI 最多主动开口几次（不算开场和确认老人是否还在听）。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动开口",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "count",
+      "storageUnit": "count",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null,
+      "advanced": true
+    },
+    {
+      "key": "proactivity:tiers.quiet.maxPerDay",
+      "label": "安静档：每天上限",
+      "purpose": "同一个角色一天里最多主动开口几次，跨通话累计。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动开口",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "count",
+      "storageUnit": "count",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null,
+      "advanced": true
+    },
+    {
+      "key": "proactivity:tiers.moderate.threshold",
+      "label": "适中档：开口门槛",
+      "purpose": "默认用这一档。数字越大，AI 越少主动开口。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动开口",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "level",
+      "storageUnit": "level",
+      "min": 10,
+      "max": 95,
+      "step": 5,
+      "complianceNote": null,
+      "risk": "medium",
+      "riskNote": "调得太小，AI 会频繁找话说，老人可能觉得被打扰。",
+      "advanced": true
+    },
+    {
+      "key": "proactivity:tiers.moderate.maxPerSession",
+      "label": "适中档：每次通话上限",
+      "purpose": "一次通话里 AI 最多主动开口几次（不算开场和确认老人是否还在听）。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动开口",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "count",
+      "storageUnit": "count",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "medium",
+      "riskNote": "调得太大，老人不说话时 AI 会一直找话说。",
+      "advanced": true
+    },
+    {
+      "key": "proactivity:tiers.moderate.maxPerDay",
+      "label": "适中档：每天上限",
+      "purpose": "同一个角色一天里最多主动开口几次，跨通话累计。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动开口",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "count",
+      "storageUnit": "count",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null,
+      "advanced": true
+    },
+    {
+      "key": "proactivity:tiers.active.threshold",
+      "label": "活跃档：开口门槛",
+      "purpose": "老人选「多跟我聊聊」后用这一档。数字越大，AI 越少主动开口。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动开口",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "level",
+      "storageUnit": "level",
+      "min": 10,
+      "max": 95,
+      "step": 5,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null,
+      "advanced": true
+    },
+    {
+      "key": "proactivity:tiers.active.maxPerSession",
+      "label": "活跃档：每次通话上限",
+      "purpose": "一次通话里 AI 最多主动开口几次（不算开场和确认老人是否还在听）。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动开口",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "count",
+      "storageUnit": "count",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null,
+      "advanced": true
+    },
+    {
+      "key": "proactivity:tiers.active.maxPerDay",
+      "label": "活跃档：每天上限",
+      "purpose": "同一个角色一天里最多主动开口几次，跨通话累计。",
+      "impact": {
+        "characters": "all",
+        "stage": "主动开口",
+        "effective": "next_session"
+      },
+      "control": "number",
+      "unit": "count",
+      "storageUnit": "count",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "complianceNote": null,
+      "risk": "low",
+      "riskNote": null,
+      "advanced": true
     }
   ],
   "readonly": [

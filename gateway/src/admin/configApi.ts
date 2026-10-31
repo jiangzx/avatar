@@ -277,6 +277,7 @@ export class ConfigAdminApi {
       purpose: item.purpose,
       impact: { characters: this.characterText(item), stage: item.impact.stage, effective: 'next_session' },
       control: item.control,
+      advanced: item.advanced ?? false,
       unit: item.unit ? UNIT_WORDS[item.unit] ?? null : null,
       unitId: item.unit ?? null,
       min: item.min ?? null,

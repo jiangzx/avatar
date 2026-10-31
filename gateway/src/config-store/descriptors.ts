@@ -24,6 +24,8 @@ export const DescriptorItemSchema = z.object({
     effective: z.literal('next_session'),
   }).strict(),
   control: z.enum(['number', 'switch', 'text', 'textarea', 'list', 'select']),
+  /** Hidden behind the scene's advanced toggle by default. */
+  advanced: z.boolean().optional(),
   unit: z.enum(['second', 'minute', 'day', 'count', 'char', 'level']).optional(),
   storageUnit: z.enum(['ms', 'day', 'count', 'char', 'level']).optional(),
   min: z.number().optional(),

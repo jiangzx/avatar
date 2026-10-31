@@ -47,6 +47,8 @@ export interface AdminConfigItem {
   key: string; descriptorKey: string; label: string; purpose: string;
   impact: { characters: string; stage: string; effective: 'next_session' };
   control: AdminConfigControl;
+  /** Hidden behind the scene's advanced toggle by default. */
+  advanced?: boolean;
   unit: string | null;                 // display word: '秒' | '分钟' | '天' | '条' | '字' | '级'
   unitId: 'second' | 'minute' | 'day' | 'count' | 'char' | 'level' | null; // stable id for client logic (pacing ruler)
   min: number | null; max: number | null; step: number | null;

@@ -41,6 +41,16 @@ describe('ConfigScenePage', () => {
     expect((within(row).getByRole('spinbutton') as HTMLInputElement).value).toBe('90');
   });
 
+  it('keeps advanced rows behind a toggle', async () => {
+    const advanced = { ...restItem, key: 'role:elder-companion/zh/director.advanced', label: '高级门槛', advanced: true };
+    const { fetch } = fakeFetch({ [SCENE]: scene([contextItem, advanced]) });
+    renderWithProviders(<ConfigScenePage scene="pacing" />, fetch);
+    expect(await screen.findByRole('region', { name: '老人停下后多久接第一句' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: '高级门槛' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /高级设置/ }));
+    expect(await screen.findByRole('region', { name: '高级门槛' })).toBeTruthy();
+  });
+
   it('marks the risk level on the row and explains out-of-range values', async () => {
     const { fetch } = fakeFetch({ [SCENE]: scene([careDaysItem, restItem]) });
     renderWithProviders(<ConfigScenePage scene="pacing" />, fetch);

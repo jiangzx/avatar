@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Alert, Segmented, Spin } from 'antd';
+import { Alert, Button, Segmented, Spin } from 'antd';
 import type { AdminConfigItem, AdminConfigScene, AdminConfigValue } from '@anyidea/protocol';
 import { useApi } from '../auth/AuthContext.tsx';
 import { effectiveValue, resetToDefault, setValue, toDraft, type DraftMap } from './draft.ts';
@@ -31,6 +31,7 @@ export function ConfigScenePage({ scene, aside, below }: ConfigScenePageProps) {
   const [draft, setDraft] = useState<DraftMap>({});
   const [language, setLanguage] = useState<Language>('zh');
   const [reviewing, setReviewing] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -65,6 +66,17 @@ export function ConfigScenePage({ scene, aside, below }: ConfigScenePageProps) {
 
   const perLanguage = data.items.some((item) => item.language !== null);
   const visible = data.items.filter((item) => item.language === null || item.language === language);
+  const basic = visible.filter((item) => !item.advanced);
+  const advanced = visible.filter((item) => item.advanced);
+  const row = (item: AdminConfigItem) => (
+    <SettingRow
+      key={item.key}
+      item={item}
+      draft={draft}
+      onChange={(value) => setDraft((d) => setValue(d, item, value))}
+      onReset={() => setDraft((d) => resetToDefault(d, item))}
+    />
+  );
 
   return (
     <div className={`config-page${aside ? ' has-aside' : ''}`}>
@@ -74,15 +86,15 @@ export function ConfigScenePage({ scene, aside, below }: ConfigScenePageProps) {
         {perLanguage && (
           <Segmented<Language> className="config-language" options={LANGUAGE_OPTIONS} value={language} onChange={setLanguage} />
         )}
-        {visible.map((item) => (
-          <SettingRow
-            key={item.key}
-            item={item}
-            draft={draft}
-            onChange={(value) => setDraft((d) => setValue(d, item, value))}
-            onReset={() => setDraft((d) => resetToDefault(d, item))}
-          />
-        ))}
+        {basic.map(row)}
+        {advanced.length > 0 && (
+          <section className="config-advanced" aria-label="高级设置">
+            <Button type="link" onClick={() => setShowAdvanced((open) => !open)} aria-expanded={showAdvanced}>
+              {showAdvanced ? '收起高级设置' : `高级设置（${advanced.length} 项）`}
+            </Button>
+            {showAdvanced && advanced.map(row)}
+          </section>
+        )}
         {data.readonly.length > 0 && (
           <section className="config-readonly" aria-label="只读说明">
             <h2>这些只能看，不能在这里改</h2>
