@@ -1,5 +1,7 @@
 # Plan 2 WSS 部署运行手册
 
+日常启停、密码、健康检查等命令见 [ops-runbook.md](./ops-runbook.md)。
+
 此文档只描述可验证的部署边界，不包含域名、证书、模型 Key 或 App Secret。
 
 ## 网关进程

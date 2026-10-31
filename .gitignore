@@ -10,6 +10,7 @@ build/
 !.env.example
 
 # generated / third-party assets
+gateway/logs/
 gateway/mock/speech-24k.pcm
 avatar-core/public/spike/speech-24k.pcm
 avatar-core/public/vad/

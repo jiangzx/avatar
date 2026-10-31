@@ -5,6 +5,7 @@
 - 实施计划：`docs/superpowers/plans/2026-10-12-avatar-poc-plan1/`
 - 阻塞记录：`docs/blockers.md`
 - 新电脑迁移与环境复现：`docs/migration/new-machine-setup.md`
+- 运维启停 / 密码 / 健康检查：`docs/deployment/ops-runbook.md`
 
 ## 本地运行（Mock）
 
