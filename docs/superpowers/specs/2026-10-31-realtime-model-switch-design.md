@@ -418,3 +418,10 @@ this.syncAffectRender(rateChanged ? nextRate : undefined);
 ## 10. 后续
 
 路线 A 完成并验证后，再评估 LivePortrait / EchoMimic / Sonic 等端侧表情驱动方案的可行性、性能和授权；不在本设计范围内。
+
+## 11. 实现后修正（2026-10-31）
+
+- 3.1 的 tool schema 必须在 `parameters` 里带 `required`；`list_memory` 和 `get_weather` 缺失时会让 `response.create` 返回 `InternalError`。适配器统一补 `[]`（已有则保留），有回归测试。3.8 不受影响。
+- `qwen-audio-3.1-realtime-flash` 已设为默认；3.8 保留可切回。
+- `affect.policy.timeoutMs` 从 2500 改为 4000。qwen-plus 用同一 affect prompt 实测约 1s；线上超时是瞬时抖动贴到 2.5s 预算。摘要/affect/抽取都是异步的，不阻塞实时音频；失败只影响卡片/摘要。
+- qwen-plus 基线价格保留 0.8 / 2 元每百万 token（800000 / 2000000 微元），来源更新为百炼 qwen-plus 详情页。admin 的 `unpricedModels` 只列真正没有价格条目的模型；失败且无 token 的调用不再被误报为未定价。

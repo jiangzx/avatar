@@ -185,12 +185,14 @@ export class ConfigAdminApi {
   pricing(): AdminPricing {
     const adminIds = new Set((this.deps.db.prepare('SELECT id FROM price_entries').all() as Array<{ id: string }>).map((row) => row.id));
     const now = this.now();
-    // Real calls the price book could not price (cost NULL). Mock rows are synthetic and never priced.
+    // Calls with no cost and no price entry. Failed calls with no usage are not "unpriced".
     const unpriced = this.deps.db.prepare(`SELECT model, COUNT(*) AS calls FROM usage_events
       WHERE cost_micro_yuan IS NULL AND adapter <> 'mock' GROUP BY model ORDER BY calls DESC, model`).all() as Array<{ model: string; calls: number }>;
     return {
       prices: this.deps.prices.list().map((entry) => this.priceRow(entry, adminIds, now)),
-      unpricedModels: unpriced.map((row) => ({ model: row.model, calls: Number(row.calls) })),
+      unpricedModels: unpriced
+        .filter((row) => this.deps.prices.priceFor(row.model, now) === null)
+        .map((row) => ({ model: row.model, calls: Number(row.calls) })),
     };
   }
 

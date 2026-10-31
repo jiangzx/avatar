@@ -145,11 +145,15 @@ git diff --check              # 无输出
 | 5 | 1028 ms | 113 | 无 |
 | 6 | 991 ms | 113 | 无 |
 
-结论：`qwen-plus` 本身没有超过 2.5s；6 次都在约 1.0–1.2s。线上两次超时是客户端在 2.5s 预算处中止（没有 HTTP 错误，也没有上游错误码），属于瞬时延迟/抖动贴近预算；另一次 `invalid` 是返回内容没解析成 JSON，和超时不是同一类。当前 `affect.policy.timeoutMs = 2500`、`retries = 0`，建议把超时提高到 4000ms 或加一次重试；affect 失败时保留旧卡片，不会造成死气，只是本轮语速可能不更新。
+结论：`qwen-plus` 本身没有超过 2.5s；6 次都在约 1.0–1.2s。线上两次超时是客户端在 2.5s 预算处中止（没有 HTTP 错误，也没有上游错误码），属于瞬时延迟/抖动贴近预算；另一次 `invalid` 是返回内容没解析成 JSON，和超时不是同一类。2026-10-31 已把 `affect.policy.timeoutMs` 从 2500 改为 4000，`retries` 仍为 0；affect 失败时保留旧卡片，不会造成死气，只是本轮语速可能不更新。
+
+异步性：`maybeSummarize`（`gateway/src/session/session.ts:1551`）用 `void runWithPolicy(...)`，不阻塞回复；`AffectTracker.onUserFinal`（`gateway/src/session/affect.ts:239`）也是 `void this.analyze(...).catch(...)`。实时回复走独立的 Qwen WebSocket，文本模型（qwen-plus）的摘要/affect/抽取只共享进程和网络，不在音频路径上；慢或失败会延迟 affect 卡片/摘要，不会让回复停住。真机上 3.1 回复正常完成时，affect 正在超时的日志就是证据。
+
+价格：`gateway/config/pricing.json` 的 qwen-plus 基线本来就是 0.8 / 2 元每百万 token（800000 / 2000000 微元），与官方页一致；本次把来源改为百炼 qwen-plus 详情页、`checkedAt` 改为 2026-10-31。admin 之前把「调用失败、没有 token、cost 为 NULL」的 qwen-plus 行也算进「未定价模型」；已改为只列真正没有价格条目的模型，并加测试。成功调用的文本行本来就有 `cost_micro_yuan`，例如 memory_extract 1941/267 token 计 2087 微元、affect 1120/35 token 计 966 微元。
 
 ## 8. 结论
 
 - `speech_rate` 是 3.1 上唯一可靠的语气补偿：0.8 约 +25%，中途更新生效；affect → 0.8 / 1.0 的实现有测试覆盖。
 - 3.1 tool schema 必须带 `required`；适配器已归一化。修复后真机 3.1 问候/回复正常，用户确认可用；3.1 已设为默认，3.8 保留可切回。
-- `qwen-plus` 实测约 1s；线上 affect 超时是 2.5s 预算下的瞬时抖动，建议 4s 或一次重试；`max_response_output_tokens` 在 3.1 上仍不生效（#74），当前 `pacing.output.maxTokens` 为 null。
+- `qwen-plus` 实测约 1s；线上 affect 超时是 2.5s 预算下的瞬时抖动，已把 `affect.policy.timeoutMs` 改为 4000；qwen-plus 价格基线 0.8/2 已存在，admin 的「未定价」误报已修；`max_response_output_tokens` 在 3.1 上仍不生效（#74），当前 `pacing.output.maxTokens` 为 null。
 - 训练/评估结论不变：`instructions` 不能控语气，路线 A 的语音补偿只到语速层面。

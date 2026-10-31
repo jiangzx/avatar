@@ -6,10 +6,10 @@
 - 交付：`gateway/config/realtime.json` 模型注册表（turn detection / speechRate / voiceUpdate / 音色目录 / 每角色基线）；`voice:<model>/<character>.<lang>` 覆盖层与旧 `character:...voices...` 兼容优先级；`ConfigSnapshot.realtime`；`QwenAdapter` 按模型发 `turn_detection` / `speech_rate`、`supportsVoiceUpdate`；affect 低情绪 → `speech_rate=0.8`（经 `PushGate` 安全缝隙，重连后补推）；管理端每模型音色行与发布校验；3.1 价格条目；`qwenModel` env/构造默认改为 3.1。
 - 实测（raw Qwen，合成句）：3.8 instructions 对语气无效（session +1.0%，per-response −1.0%）；3.1 `speech_rate` 1.0/0.8/0.6 = 3520/4400/5934 ms（+25% / +68.6%），中途 update 到 0.8 的下一轮比值 1.196/1.250；3.1 `server_vad` 连接、zh/ja/en 出声。
 - 真机切换 3.1 后最初所有回复 `InternalError`；根因是 3.1 要求每个 tool 的 `parameters` 都带 `required`（`list_memory` 空参数、`get_weather` 有参数但都没有），3.8 容忍。适配器 `toQwenTool` 已归一化（缺失补 `[]`，已有保留），有单元测试；修复后真机问候/回复正常，用户确认可用，3.1 设为默认。见 blockers #72/#73。
-- `qwen-plus` affect 超时排查：用同一 affect prompt 复测 6 次 991–1176 ms，均在 2.5s 内；线上 09:36/09:37 的两次 2503/2504 ms 是客户端 2.5s 预算处中止（无 HTTP 错误），另一次 `invalid` 是 JSON 解析失败。建议把 `affect.policy.timeoutMs` 提到 4000ms 或加一次重试；尚未改配置，见 blocker #75。
+- `qwen-plus` affect 超时排查：用同一 affect prompt 复测 6 次 991–1176 ms，均在 2.5s 内；线上 09:36/09:37 的两次 2503/2504 ms 是客户端 2.5s 预算处中止（无 HTTP 错误），另一次 `invalid` 是 JSON 解析失败。2026-10-31 已把 `affect.policy.timeoutMs` 改为 4000（`retries` 0）；摘要/affect/抽取均为异步，不阻塞实时音频。qwen-plus 基线价格 0.8/2 已存在，补充了百炼来源和查询日期；admin 不再把「失败、无 token、cost NULL」的调用误报为未定价。见 blocker #75（已解除）。
 - 回归：protocol 3 文件 16 项、gateway 126 文件 1466 项、admin 24 文件 132 项，三个 typecheck、admin build、`git diff --check` 通过。第一次全量 gateway 有 1 次既有 `qwen.test.ts intentional_close` 时序 flaky（单文件通过，重跑全量通过），未改代码。
 - 开放项：`max_response_output_tokens` 在 3.1 上不生效（#74；当前 `pacing.output.maxTokens` 为 null，默认配置没有发送该上限）；`smart_turn_v2` 对比未做；per-character/语言音色未逐项试听（#73 仅小暖 zh 由用户确认）。
-- 下一步：处理 #74 的输出上限（若将来配置 maxTokens），按用户决定调 affect 超时/重试，再做 LivePortrait / EchoMimic / Sonic 的端侧可行性调研。
+- 下一步：处理 #74 的输出上限（若将来配置 maxTokens），再做 LivePortrait / EchoMimic / Sonic 的端侧可行性调研。
 
 ## Web 真人说话头 spike（路线 C，2026-10-30）
 

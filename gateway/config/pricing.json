@@ -18,8 +18,8 @@
     "outputText": 2000000,
     "outputAudio": null,
     "cached": null,
-    "source": "https://help.aliyun.com/zh/model-studio/model-pricing",
-    "checkedAt": "2026-10-27"
+    "source": "https://bailian.console.aliyun.com/cn-beijing/model/market/detail/qwen-plus?serviceSite=asia-pacific-china",
+    "checkedAt": "2026-10-31"
   },
   {
     "model": "qwen-flash",

@@ -239,4 +239,12 @@ describe('prices', () => {
     insert.run(NOW, 'mock', 'mock');
     expect(api.pricing().unpricedModels).toEqual([{ model: 'qwen-max', calls: 2 }]);
   });
+
+  it('does not report a priced model when a call failed without usage', () => {
+    db.prepare(`INSERT INTO usage_events (ts, kind, adapter, model, estimated, price_id, cost_micro_yuan)
+      VALUES (?, 'affect', 'text', 'qwen-plus', 0, NULL, NULL)`).run(NOW);
+    const pricing = api.pricing();
+    expect(pricing.unpricedModels).toEqual([]);
+    expect(pricing.prices.some((p) => p.model === 'qwen-plus' && p.inputText === 800_000 && p.outputText === 2_000_000)).toBe(true);
+  });
 });
