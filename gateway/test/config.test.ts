@@ -127,9 +127,9 @@ describe('config', () => {
     expect(d.maxPerWindow).toBe(8);
     expect(d.companyAfterMs).toBe(45000);
     expect(d.contextAfterMs).toBe(6000);
-    expect(d.checkAfterMs).toBe(8000);
-    expect(d.leaveAfterMs).toBe(5000);
-    expect(d.checkinAfterMs).toBe(5000);
+    expect(d.checkAfterMs).toBe(6000);
+    expect(d.leaveAfterMs).toBe(6000);
+    expect(d.checkinAfterMs).toBe(6000);
     expect(d.restAfterMs).toBe(180000);
     expect(d.presenceText).toBe('我在');
     expect(d.checkText).toBe('您还方便吗，称呼不急，您方便的时候再说就好。');

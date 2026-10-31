@@ -29,9 +29,9 @@ export function formatAuditDetail(detail: Record<string, unknown>): string {
 }
 
 const columns: TableColumnsType<AdminAuditRow> = [
-  { title: '时间', dataIndex: 'ts', render: (ts: number) => formatDateTime(ts) },
-  { title: '操作', dataIndex: 'action', render: (action: string) => actionLabel(action) },
-  { title: '对象', dataIndex: 'target', render: (target: string | null) => target ?? '—' },
+  { title: '时间', dataIndex: 'ts', width: 170, ellipsis: true, render: (ts: number) => formatDateTime(ts) },
+  { title: '操作', dataIndex: 'action', width: 110, ellipsis: true, render: (action: string) => actionLabel(action) },
+  { title: '对象', dataIndex: 'target', width: 140, ellipsis: true, render: (target: string | null) => target ?? '—' },
   { title: '详情', dataIndex: 'detail', render: (detail: Record<string, unknown>) => formatAuditDetail(detail) },
 ];
 

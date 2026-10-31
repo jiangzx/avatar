@@ -26,7 +26,7 @@
 - 计划 4 交付：protocol `SESSION_REJECTIONS` / `SessionCreateResponse.diagId`；App 封禁提示与重试、停用角色置灰（24 小时本地保留）、logcat `session_ready` 诊断行、设置页复制诊断编号。
 - 计划 4 验收（2026-10-28，用户确认手机）：[记录](../testing/2026-10-27-admin-app-acceptance.md)。自动回归 protocol 3/16、gateway 109/1345、admin 24/129、flutter 350、三个 typecheck、admin build、flutter analyze 全通过。真机 A（诊断编号）、B（封禁/解封/重试）、C1–C3（停用/换角色/重启后仍置灰）用户确认通过；C4（24 小时到期恢复）跳过。手机验收使用临时 Mock 库，App 本机 device token 被临时 owner 覆盖；按用户确认切回线上后注册新的线上 owner，旧 owner 记忆不会自动接上（blockers #65 类别），真实库数据未删除。
 - 计划 4 跳过与问题：C4 未实等到期（本机小暖约 24 小时后自动恢复）；临时库身份副作用见 `docs/blockers.md`。
-- 2026-10-31 后台用户详情新增「今日主动次数」：`GET /admin/api/owners/:oid` 返回 `proactiveDaily`（按角色，Asia/Shanghai）；`POST /admin/api/owners/:oid/proactive-daily/reset` 清零该 owner 当日所有角色的 `proactive_daily` 并写审计 `proactive_daily_reset`。回归 protocol 3/16、gateway 124/1435、admin 24/130、两个 typecheck、admin build 通过。
+- 2026-10-31 后台用户详情新增「今日主动次数」：`GET /admin/api/owners/:oid` 返回 `proactiveDaily`（按角色，Asia/Shanghai）；`POST /admin/api/owners/:oid/proactive-daily/reset` 清零该 owner 当日所有角色的 `proactive_daily` 并写审计 `proactive_daily_reset`。审计表列宽修复：时间 170、操作 110、对象 140，前三列省略号。回归 protocol 3/16、gateway 124/1435、admin 24/130、两个 typecheck、admin build 通过。
 - 下一步：Plan 4 提交未推送，推送前待用户确认。
 
 ## 关系连续的主动互动（2026-10-28 设计）
@@ -56,7 +56,7 @@
 - 2026-10-31 P5-T2：共情评估两次（`dirty:false`，提交 `b046ca7`）六维两次平均 holdEmotion 3.79、nameFeeling 3.54、proactive 3.50、noSycophancy 4.75、noFabrication 5、noIntrusion 4.63，均不低于 Plan 4 基准 `4843882` −0.3；两次 `noFabricationAllFive` 为真。plan-a 退出码 0，questionRatio 0.23、avgChars 25.55 均通过。日志统计：`proactive_decision` / `proactive_grounding_violation` 未出现，`affect_summary` 44 条（calls 138、failures 76、crisis 2）。第一次尝试因第二次运行 `dirty:true` 整对作废并重跑。下一步：P5-T3 真机验收（需要用户在场；不在场则记 blockers 并跳过）。验收 [记录](../testing/2026-10-31-p5-eval-gate.md)。
 - 2026-10-31 P5-T3 真机（全新安装）：第 1 项过。第 5 项不过：`silenceCheckin` 的 `presenceCheck` 指令把 `allowQuestion` 设为 false 并追加「不要提问」，与「问是否还在听、随时可聊」的目的和兜底句（问句）矛盾；模型生成非问句且缺「随时」类词，事后核对判 `presence` 违规。用户批准最小修复：`buildIntent` 只对 `restQuiet` 禁问，`presenceCheck` 允许问句；测试同步更新。回归 gateway 124 文件 / 1432 项、typecheck、真实库召回 true / true / false。重启网关后重跑第 5 项；其余同日项与多天项待做。验收 [记录](../testing/2026-10-31-p5-device-acceptance.md)。
 - 2026-10-31 第 5 项复现：无静音时阶梯跑通，context/check/leave 都是 `quiet`（`candidates:0`），checkin 在第 34 秒开口并通过 presence 核对。原因是测试 owner 当日 `proactive_daily` 已 15 次，超过 moderate `maxPerDay` 10；到上限后只保留 checkin/rest。用户决定调高每日上限：`proactivity.json` 的 moderate 10→20、active 16→30（quiet 4 不变）。另一次失败是 App 误触静音（`client.mute=true`），不是阶梯问题。待重启后用新配置重跑第 5 项。
-- 2026-10-31 第 5 项第二轮调整：复现显示 context 第 6 秒说 `continueThread`、check/leave 为 quiet、checkin 第 34 秒开口；两句间隔 28.4 秒。用户决定把 `presenceCheck` 提词改为「轻声问一句是否还在听，并说明随时可以接着聊，不催促」，并把 check/leave/checkin 从 8/10/10 缩到 8/5/5 秒；五种阶梯时长继续在后台「对话节奏」页可配置（`pacing.json` 描述符已有 `role:elder-companion/*/director.*AfterMs`）。回归 gateway 124/1432、admin 24/129、两个 typecheck 通过。待重启后重跑第 5 项。
+- 2026-10-31 第 5 项第二轮调整：复现显示 context 第 6 秒说 `continueThread`、check/leave 为 quiet、checkin 第 34 秒开口；两句间隔 28.4 秒。用户决定把 `presenceCheck` 提词改为「轻声问一句是否还在听，并说明随时可以接着聊，不催促」；check/leave/checkin 先缩到 8/5/5，随后按用户要求把 **6/6/6 秒设为默认值**（后台版本 1/2 也是 6/6/6）。五种阶梯时长继续在后台「对话节奏」页可配置（`pacing.json` 描述符已有 `role:elder-companion/*/director.*AfterMs`）。回归 gateway 124/1432、admin 24/129、两个 typecheck 通过。
 
 ## 多角色与分层记忆（2026-10-26 起）
 
