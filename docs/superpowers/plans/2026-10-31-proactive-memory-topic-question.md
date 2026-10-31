@@ -1,7 +1,7 @@
 # 主动记忆/随机话题问句实施计划
 
 日期：2026-10-31
-状态：**T1–T6 实现完成；T0 真实模型探针未跑；T7 部分完成（gateway/protocol/admin 回归通过；召回 `--temp` 在 HEAD 失败，见 blockers；真实库已备份并迁移 v9；真机记忆问句与“不感兴趣”卡片负偏好通过；换个话题真机待角色解锁；`--real-db` 待做）。**
+状态：**T1–T6 实现完成；T0 真实模型探针未跑；T7 部分完成（gateway/protocol/admin/flutter 回归通过；召回 `--temp` 在 HEAD 失败，见 blockers；真实库已备份并迁移 v9；真机记忆问句与“不感兴趣”卡片负偏好通过；App 已用 debug 清锁恢复小暖；换个话题待下一轮会话；`--real-db` 待做）。**
 设计：`docs/superpowers/specs/2026-10-31-proactive-memory-topic-question-design.md`（已批准）
 
 ## 执行方式
@@ -246,4 +246,4 @@ IntentCopy += withQuestionQuote, withQuestionTopic, mustAsk, withFollowUp;
 - [x] T4 概率/轮次
 - [x] T5 负偏好
 - [x] T6 立即换话题
-- [x] T7 收尾（部分）：gateway 128/1510、typecheck；protocol 3/16 + typecheck；admin 24/132 + typecheck + build；`git diff --check` clean。真实库已备份（`~/.avatar/memory.db.bak-v8-20261031-topicq`，v8）并迁移 v9；真机记忆问句通过（小暖，用户确认真实记忆）；“不感兴趣”卡片负偏好通过（`card:walk`，DB 行）；换个话题真机待角色解锁；`--real-db` 与 T0 未做。`--temp` 召回探针在 HEAD 失败于 `zh_vague_recent_only`；HEAD~1 通过 133，HEAD 独立 worktree 同样失败，归因 `d6d688a`。详见 `docs/testing/2026-10-31-proactive-topic-question-acceptance.md` 与 `docs/blockers.md`。
+- [x] T7 收尾（部分）：gateway 128/1510、typecheck；protocol 3/16 + typecheck；admin 24/132 + typecheck + build；app `flutter test` 364、analyze；`git diff --check` clean。真实库已备份（`~/.avatar/memory.db.bak-v8-20261031-topicq`，v8）并迁移 v9；真机记忆问句通过（小暖，用户确认真实记忆）；“不感兴趣”卡片负偏好通过（`card:walk`，DB 行）；App 三角色离线已用 debug `CLEAR_HOLDS=true` 清 hold/Duix guard 恢复小暖（保留 device_token/记忆）；换个话题待下一轮会话；`--real-db` 与 T0 未做。`--temp` 召回探针在 HEAD 失败于 `zh_vague_recent_only`；HEAD~1 通过 133，HEAD 独立 worktree 同样失败，归因 `d6d688a`。详见 `docs/testing/2026-10-31-proactive-topic-question-acceptance.md` 与 `docs/blockers.md`。

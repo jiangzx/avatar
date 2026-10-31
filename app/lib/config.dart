@@ -11,6 +11,8 @@ class AppConfig {
     defaultValue: 'native',
   );
   static const echo = String.fromEnvironment('ECHO', defaultValue: 'true');
+  /// Debug/test build: drop local character holds once at startup; keeps device identity.
+  static const clearHolds = String.fromEnvironment('CLEAR_HOLDS', defaultValue: 'false') == 'true';
   static const gatewayRequestTimeout = Duration(
     milliseconds: int.fromEnvironment(
       'GATEWAY_REQUEST_TIMEOUT_MS',

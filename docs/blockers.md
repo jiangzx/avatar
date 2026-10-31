@@ -250,10 +250,9 @@
 - `MEMORY_DB_PATH` 未设置，未跑 `--real-db`；真实库迁移 v9 和真机 7 项未做。
 - 解除条件：先修复/回滚 `d6d688a` 的 vague recall，使 `--temp` 探针恢复；再在有真实库的机器上备份、迁移 v9、跑 `--real-db`，并在用户在场时做真机验收。
 
-## 2026-10-31 主动话题真机：换个话题待角色解锁
+## 2026-10-31 主动话题真机：换个话题待下一轮会话
 
 - 真机记忆问句已通过；“不感兴趣”卡片路径已通过：check `selfShare` 选 `card:walk`，`proactive_topic_declined source=card`，DB `proactive_topic_avoid` 写入 `card:walk`；`owner.notified_at` 已置。
-- 随后 App 三角色都显示离线：App `CharacterHolds`（网关曾报 disabled 的本地 hold）+ 网关 `character_disabled`；没有可用角色开新会话，真机“换个话题”未完成。
-- 设备时间不能改（`date: Operation not permitted`）；未清 App `FlutterSecureStorage` 的 hold 键（key/值加密，整文件清会丢 `device_token` 与真实记忆）。记忆负偏好（`stmt:` key）由单元测试覆盖，本轮真机记录的是卡片负偏好。
-- 解除：后台启用一个可用角色，或按既有方法只清 hold 键并保留 `device_token`/`character_id`；之后补真机“换个话题”。
+- App 三角色随后都显示离线（`CharacterHolds` + Duix crash guard + 网关 `character_disabled`）。已用 debug 构建 `--dart-define=CLEAR_HOLDS=true` 只清 `character_hold_until.*`/`duix_crash_count`/`duix_inflight`，保留 `device_token`/`character_id`/真实记忆；覆盖安装后小暖已重新进入通话。未直接编辑加密的 FlutterSecureStorage 文件。
+- 真机“换个话题”待下一轮会话；单元测试已覆盖。记忆负偏好（`stmt:` key）本轮未真机触发（check 选中的是 `card:walk`），由单元测试覆盖。
 - 临时关闭 `routine`/`continueThread` 的测试配置已用 `git checkout` 恢复并重启网关；真实库 v9；备份 `~/.avatar/memory.db.bak-v8-20261031-topicq`；`proactive_topic_avoid` 有 1 行 `card:walk`。
