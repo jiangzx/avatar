@@ -1,0 +1,63 @@
+{
+  "models": {
+    "qwen3.8-omni-flash-realtime": {
+      "label": "Qwen3.8 Omni Flash 实时版",
+      "turnDetection": { "type": "semantic_vad", "silenceDurationMs": 800 },
+      "speechRate": null,
+      "voiceUpdate": "live",
+      "voices": {
+        "catalog": {
+          "zh": [
+            { "value": "longanlingxin", "label": "龙安灵心（温柔女声）" },
+            { "value": "Tina", "label": "Tina（女声）" },
+            { "value": "Evan", "label": "Evan（男声）" },
+            { "value": "Ryan", "label": "Ryan（男声）" }
+          ],
+          "ja": [
+            { "value": "Tina", "label": "Tina（女声）" },
+            { "value": "Evan", "label": "Evan（男声）" }
+          ],
+          "en": [
+            { "value": "Tina", "label": "Tina（女声）" },
+            { "value": "Evan", "label": "Evan（男声）" }
+          ]
+        },
+        "byCharacter": {
+          "xiaokai": { "zh": "Evan", "ja": "Evan", "en": "Evan" },
+          "xiaonuan": { "zh": "longanlingxin", "ja": "Tina", "en": "Tina" },
+          "xiaoxin": { "zh": "Tina", "ja": "Tina", "en": "Tina" }
+        }
+      }
+    },
+    "qwen-audio-3.1-realtime-flash": {
+      "label": "Qwen-Audio 3.1 Flash 实时版",
+      "turnDetection": { "type": "server_vad", "silenceDurationMs": 800 },
+      "speechRate": { "min": 0.5, "max": 2.0, "default": 1.0, "low": 0.8 },
+      "voiceUpdate": "connect_only",
+      "voices": {
+        "catalog": {
+          "zh": [
+            { "value": "longanlingxin_v3.1", "label": "龙安灵心 v3.1（温柔女声，多语种）" },
+            { "value": "longanqian_v3.1", "label": "龙安千 v3.1（女声，多语种）" },
+            { "value": "xunanchuan_v3.1", "label": "徐南川 v3.1（男声候选，待试听）" }
+          ],
+          "ja": [
+            { "value": "longanlingxin_v3.1", "label": "龙安灵心 v3.1（多语种）" },
+            { "value": "longanqian_v3.1", "label": "龙安千 v3.1（多语种）" },
+            { "value": "xunanchuan_v3.1", "label": "徐南川 v3.1（男声候选，待试听）" }
+          ],
+          "en": [
+            { "value": "longanlingxin_v3.1", "label": "龙安灵心 v3.1（多语种）" },
+            { "value": "longanqian_v3.1", "label": "龙安千 v3.1（多语种）" },
+            { "value": "xunanchuan_v3.1", "label": "徐南川 v3.1（男声候选，待试听）" }
+          ]
+        },
+        "byCharacter": {
+          "xiaokai": { "zh": "xunanchuan_v3.1", "ja": "xunanchuan_v3.1", "en": "xunanchuan_v3.1" },
+          "xiaonuan": { "zh": "longanlingxin_v3.1", "ja": "longanlingxin_v3.1", "en": "longanlingxin_v3.1" },
+          "xiaoxin": { "zh": "longanqian_v3.1", "ja": "longanqian_v3.1", "en": "longanqian_v3.1" }
+        }
+      }
+    }
+  }
+}

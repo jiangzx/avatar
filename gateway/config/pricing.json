@@ -31,5 +31,16 @@
     "cached": null,
     "source": "https://help.aliyun.com/zh/model-studio/model-pricing",
     "checkedAt": "2026-10-27"
+  },
+  {
+    "model": "qwen-audio-3.1-realtime-flash",
+    "effectiveFrom": 1767196800000,
+    "inputText": 1500000,
+    "inputAudio": 6000000,
+    "outputText": 4500000,
+    "outputAudio": 12000000,
+    "cached": null,
+    "source": "https://help.aliyun.com/zh/model-studio/qwen-audio-3-1-realtime-flash",
+    "checkedAt": "2026-10-31"
   }
 ]
