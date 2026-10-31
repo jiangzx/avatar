@@ -17,7 +17,8 @@ export type OverlayTarget =
   | { kind: 'json'; file: string; path: readonly string[] }
   | { kind: 'text'; file: string }
   | { kind: 'characterEnabled'; characterId: CharacterId }
-  | { kind: 'model'; field: ModelField };
+  | { kind: 'model'; field: ModelField }
+  | { kind: 'voice'; model: string; character: CharacterId; language: Language };
 
 const CONFIG_FILES = {
   pacing: 'config/pacing.json',
@@ -76,6 +77,13 @@ export function parseOverlayKey(key: string): OverlayTarget {
       if (!match || !(MODEL_FIELDS as readonly string[]).includes(match[1]!)) return fail();
       return { kind: 'model', field: match[1] as ModelField };
     }
+    case 'voice': {
+      const match = /^([A-Za-z0-9][A-Za-z0-9.-]*)\/([a-z]+)\.(zh|ja|en)$/.exec(rest);
+      if (!match) return fail();
+      const [, model, character, language] = match;
+      if (!(CHARACTER_IDS as readonly string[]).includes(character!)) return fail();
+      return { kind: 'voice', model: model!, character: character as CharacterId, language: language as Language };
+    }
     default:
       return fail();
   }
@@ -129,6 +137,17 @@ export function readTargetValue(root: string, target: OverlayTarget, models: Mod
       const file = targetFiles(root, target)[0]!;
       const value = getJsonPath(JSON.parse(readFileSync(join(root, file), 'utf8')), target.path);
       if (!isOverlayValue(value)) throw new Error(`overlay_target_missing:${file}:${target.path.join('.')}`);
+      return value;
+    }
+    case 'voice': {
+      const file = join(root, 'config/realtime.json');
+      const doc = JSON.parse(readFileSync(file, 'utf8')) as {
+        models?: Record<string, { voices?: { byCharacter?: Record<string, Record<string, unknown>> } }>;
+      };
+      const value = doc.models?.[target.model]?.voices?.byCharacter?.[target.character]?.[target.language];
+      if (!isOverlayValue(value)) {
+        throw new Error(`overlay_target_missing:voice:${target.model}/${target.character}.${target.language}`);
+      }
       return value;
     }
   }

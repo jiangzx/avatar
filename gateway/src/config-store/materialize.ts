@@ -1,7 +1,7 @@
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { CharacterId } from '@anyidea/protocol';
+import type { CharacterId, Language } from '@anyidea/protocol';
 import { ConfigInvalidError } from './errors.ts';
 import { parseOverlayKey, setJsonPath, targetFiles, type ModelDefaults, type Overlay, type OverlayValue } from './keys.ts';
 
@@ -21,6 +21,7 @@ export function materializeConfigTree(gatewayRoot: string, overlay: Overlay, tmp
   try {
     for (const dir of TREE_DIRS) cpSync(join(gatewayRoot, dir), join(root, dir), { recursive: true });
     const edits = new Map<string, Array<{ key: string; path: readonly string[]; value: OverlayValue }>>();
+    const voiceEdits: Array<{ key: string; model: string; character: CharacterId; language: Language; value: string }> = [];
     for (const [key, value] of Object.entries(overlay)) {
       const target = parseOverlayKey(key);
       if (target.kind === 'text') {
@@ -32,6 +33,11 @@ export function materializeConfigTree(gatewayRoot: string, overlay: Overlay, tmp
           list.push({ key, path: target.path, value });
           edits.set(file, list);
         }
+      } else if (target.kind === 'voice') {
+        if (typeof value !== 'string') throw new Error(`overlay_value_invalid:${key}`);
+        voiceEdits.push({
+          key, model: target.model, character: target.character, language: target.language, value,
+        });
       }
     }
     for (const [file, list] of edits) {
@@ -45,6 +51,18 @@ export function materializeConfigTree(gatewayRoot: string, overlay: Overlay, tmp
         }
       }
       writeFileSync(path, `${JSON.stringify(doc, null, 2)}\n`);
+    }
+    if (voiceEdits.length > 0) {
+      const file = join(root, 'config/realtime.json');
+      const doc = JSON.parse(readFileSync(file, 'utf8')) as {
+        models?: Record<string, { voices?: { byCharacter?: Record<string, Record<string, unknown>> } }>;
+      };
+      for (const edit of voiceEdits) {
+        const node = doc.models?.[edit.model]?.voices?.byCharacter?.[edit.character];
+        if (!node || !Object.hasOwn(node, edit.language)) throw new Error(`overlay_target_missing:${edit.key}`);
+        node[edit.language] = edit.value;
+      }
+      writeFileSync(file, `${JSON.stringify(doc, null, 2)}\n`);
     }
     return { root, dispose };
   } catch (error) {

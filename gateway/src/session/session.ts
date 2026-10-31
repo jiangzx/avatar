@@ -26,6 +26,7 @@ import { runWithPolicy, type PolicySpec } from '../reliability/policy.ts';
 import { ActionRouter } from './actions.ts';
 import { AffectTracker, affectSummaryFields, isLow, type AffectCard, type AffectConfig, type AffectSummary } from './affect.ts';
 import type { ProactivityConfig } from './proactive/config.ts';
+import type { RealtimeConfig } from '../realtime/models.ts';
 import { ProactiveRuntime } from './proactive/runtime.ts';
 import { summarizeMood } from './mood.ts';
 import { renderAffect } from './affectRender.ts';
@@ -140,6 +141,8 @@ export interface SessionDeps {
   emotion?: EmotionConfig;
   /** Affect analyzer (gateway/config/affect.json). Runs only with a textClient and enabled=true. */
   affect?: AffectConfig;
+  /** Current model capability and resolved voices; undefined in bare unit tests. */
+  realtime?: RealtimeConfig;
   /** proactivity.json from the session snapshot; read by the decision engine (P3). */
   proactivity?: ProactivityConfig;
   /** Optional. flush() returns immediately when this is absent. */

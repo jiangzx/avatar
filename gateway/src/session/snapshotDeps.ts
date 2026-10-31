@@ -12,7 +12,7 @@ export type SnapshotSessionKey = 'adapterFactory' | 'summarizer' | 'roles' | 'ch
   | 'budget' | 'budgets' | 'i18n' | 'recallClipChars' | 'recallPhraseTimeoutMs' | 'noticeKeywordsByLanguage'
   | 'modelContextTokenLimit' | 'rebuildTriggerRatio' | 'rebuildAfterTurns' | 'summarizePolicy' | 'maxOutputTokens'
   | 'tailGuardMs' | 'slim' | 'push' | 'restReminder' | 'toolTurnTimeoutMs' | 'pin' | 'listMaxItems' | 'emotion'
-  | 'affect' | 'proactivity' | 'languageRules' | 'extractEveryUserTurns' | 'extractSilenceMs';
+  | 'affect' | 'proactivity' | 'languageRules' | 'extractEveryUserTurns' | 'extractSilenceMs' | 'realtime';
 
 export type SessionRuntimeDeps = Omit<SessionDeps, SnapshotSessionKey>;
 
@@ -74,6 +74,7 @@ export function sessionDepsFromSnapshot(
     emotion: i18n.emotion,
     affect: snapshot.affect,
     proactivity: snapshot.proactivity,
+    realtime: snapshot.realtime,
     languageRules: i18n.language,
     ...(runtime.worker ? {
       extractEveryUserTurns: memory.extractEveryUserTurns ?? 10,

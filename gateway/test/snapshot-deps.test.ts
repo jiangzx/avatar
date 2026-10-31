@@ -24,7 +24,7 @@ const models: ModelDefaults = {
 const script = loadMockScript(`${root}mock/script.json`);
 
 function snap(overlay: Overlay = {}, version = 0): ConfigSnapshot {
-  return buildConfigSnapshot({ gatewayRoot: root, overlay, version, ledger: env.ledger, sessionStartTimeoutMs: env.sessionStartTimeoutMs, models });
+  return buildConfigSnapshot({ gatewayRoot: root, overlay, version, ledger: env.ledger, sessionStartTimeoutMs: env.sessionStartTimeoutMs, models, voiceDefaults: env.qwenVoices });
 }
 
 function factories(calls: { apiKey: number; adapter: string[] } = { apiKey: 0, adapter: [] }): SnapshotFactories {

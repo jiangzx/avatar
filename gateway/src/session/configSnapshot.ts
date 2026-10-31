@@ -6,6 +6,7 @@ import type { ModelDefaults, Overlay } from '../config-store/keys.ts';
 import { materializeConfigTree, virtualSettings, type MaterializedTree, type VirtualSettings } from '../config-store/materialize.ts';
 import { loadI18n } from '../i18n/load.ts';
 import type { I18nBundle } from '../i18n/types.ts';
+import { loadRealtimeRegistry, type RealtimeConfig, type RealtimeModel } from '../realtime/models.ts';
 import { missingRoleLanguages } from '../roles/catalog.ts';
 import { loadRoleCatalog, type FileRoleCatalog } from '../roles/fileCatalog.ts';
 import { loadAffectConfig, type AffectConfig } from './affect.ts';
@@ -28,6 +29,7 @@ export interface ConfigSnapshot {
   characters: CharacterRegistry;
   budgets: BudgetReport;
   model: ModelSettings;
+  realtime: RealtimeConfig;
   disabledCharacters: ReadonlySet<CharacterId>;
 }
 
@@ -38,6 +40,7 @@ export interface SnapshotInput {
   ledger: LedgerOptions;
   sessionStartTimeoutMs: number;
   models: ModelDefaults;
+  voiceDefaults: Record<Language, string>;
   tmpRoot?: string;
 }
 
@@ -91,6 +94,16 @@ export function buildConfigSnapshot(input: SnapshotInput): ConfigSnapshot {
         throw new Error(`proactive_fallback_exceeds_silence: ${proactivity.fallbackAfterMs} > ${shortest}`);
       }
     }
+    const registry = loadRealtimeRegistry(`${root}/config/realtime.json`, { defaultModel: input.models.realtimeModel });
+    const activeId = virtual.models.realtimeModel;
+    const active = registry.get(activeId);
+    const realtime: RealtimeConfig = {
+      model: activeId,
+      turnDetection: active.turnDetection,
+      speechRate: active.speechRate,
+      voiceUpdate: active.voiceUpdate,
+      voices: resolveVoices(active, input, characters, registry.defaultModel),
+    };
     return {
       version: input.version,
       pacing,
@@ -102,6 +115,7 @@ export function buildConfigSnapshot(input: SnapshotInput): ConfigSnapshot {
       characters,
       budgets,
       model: { ...virtual.models, extractModel: memory.extractModel ?? 'qwen-plus' },
+      realtime,
       disabledCharacters: virtual.disabledCharacters,
     };
   } catch (error) {
@@ -109,6 +123,33 @@ export function buildConfigSnapshot(input: SnapshotInput): ConfigSnapshot {
   } finally {
     tree.dispose();
   }
+}
+
+/** New voice overlay wins; the old character-card overlay stays effective only on the env default model. */
+function resolveVoices(
+  model: RealtimeModel,
+  input: SnapshotInput,
+  characters: CharacterRegistry,
+  defaultModel: string,
+): Record<CharacterId, Record<Language, string>> {
+  const out = {} as Record<CharacterId, Record<Language, string>>;
+  for (const characterId of CHARACTER_IDS) {
+    out[characterId] = {} as Record<Language, string>;
+    for (const language of LANGUAGES) {
+      const newKey = `voice:${model.id}/${characterId}.${language}`;
+      const oldKey = `character:${characterId}.voices.qwen.${language}`;
+      const cardVoice = characters.voiceFor(characterId, 'qwen', language);
+      const baseline = model.voices.byCharacter[characterId]?.[language];
+      const useOld = !Object.hasOwn(input.overlay, newKey)
+        && model.id === defaultModel
+        && Object.hasOwn(input.overlay, oldKey)
+        && cardVoice !== undefined;
+      out[characterId][language] = useOld
+        ? cardVoice!
+        : baseline ?? cardVoice ?? input.voiceDefaults[language];
+    }
+  }
+  return out;
 }
 
 const CODE_MESSAGES: ReadonlyArray<[RegExp, string]> = [
@@ -123,6 +164,10 @@ const CODE_MESSAGES: ReadonlyArray<[RegExp, string]> = [
   [/^character_card_invalid/, '角色设置的格式不对。'],
   [/^proactive_fallback_exceeds_silence/, '主动开口的兜底等待时间比最短的沉默等待还长，请调短兜底等待或调长沉默等待。'],
   [/^all_characters_disabled/, '至少要留一个角色开着。'],
+  [/^realtime_model_unknown/, '后台选择的通话模型不存在，请重新选择。'],
+  [/^realtime_voice_invalid/, '角色音色不属于当前模型的音色列表。'],
+  [/^realtime_voice_missing/, '当前模型缺少某个角色的音色配置。'],
+  [/^realtime_speech_rate_invalid/, '语速配置超出允许范围。'],
   [/^overlay_key_invalid/, '有一项配置的名字无法识别'],
   [/^overlay_target_missing/, '有一项配置在当前版本的默认配置里已经不存在'],
   [/^overlay_value_invalid/, '有一项配置的值类型不对'],

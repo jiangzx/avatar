@@ -29,6 +29,7 @@ import { TextClientCache, switchingTextClient } from './memory/textClientCache.t
 import { MemoryWorker, withExtraction } from './memory/worker.ts';
 import { SqliteTranscriptWriter } from './memory/writer.ts';
 import { SqlitePriceBook, loadPricingBaseline } from './usage/pricing.ts';
+import { loadRealtimeRegistry, missingRealtimePrices } from './realtime/models.ts';
 import { SqliteUsageRecorder } from './usage/recorder.ts';
 import { purgeExpiredUsage } from './usage/retention.ts';
 import type { ModelDefaults, Overlay } from './config-store/keys.ts';
@@ -74,6 +75,7 @@ const buildSnapshot = (overlay: Overlay, version: number): ConfigSnapshot => bui
   ledger: config.ledger,
   sessionStartTimeoutMs: config.sessionStartTimeoutMs,
   models: modelDefaults,
+  voiceDefaults: config.qwenVoices,
 });
 // Identity on: the admin can publish overlays. Dev mode: the repo baseline only. An invalid baseline still fails startup.
 const configSource: ConfigSource<ConfigSnapshot> | SqliteConfigStore<ConfigSnapshot> = memoryDb
@@ -122,6 +124,17 @@ if (!speech) logger.warn('mock_speech_missing', { hint: 'run scripts/make-mock-s
 // Validated at every start, even without a DB, so a bad price file fails fast.
 const pricingBaseline = loadPricingBaseline(`${root}config/pricing.json`);
 const prices = memoryDb ? new SqlitePriceBook(memoryDb, pricingBaseline) : null;
+// Every selectable realtime model must be audio-priced before the gateway serves it.
+const realtimeRegistry = loadRealtimeRegistry(`${root}config/realtime.json`, { defaultModel: config.qwenModel });
+const audioPriced = new Set(
+  [...pricingBaseline, ...(prices?.list() ?? [])]
+    .filter((entry) => entry.inputAudio !== null && entry.outputAudio !== null)
+    .map((entry) => entry.model),
+);
+const missingRealtimePriceModels = missingRealtimePrices(realtimeRegistry, audioPriced);
+if (missingRealtimePriceModels.length > 0) {
+  throw new Error(`realtime_price_missing:${missingRealtimePriceModels.join(',')}`);
+}
 const usage = memoryDb && prices
   ? new SqliteUsageRecorder({ db: memoryDb, prices, logger, flushMs: adminConfig.usageSink.flushMs, maxBatch: adminConfig.usageSink.maxBatch })
   : null;
@@ -218,7 +231,7 @@ const manager = new SessionManager(
     textClient: (snapshot) => (config.adapter !== 'mock' ? textClientFor(snapshot) : undefined),
     // Character card voice for the active adapter, then the env default.
     voiceFor: (snapshot, characterId, language) => config.adapter === 'qwen'
-      ? snapshot.characters.voiceFor(characterId, 'qwen', language) ?? config.qwenVoices[language]
+      ? snapshot.realtime.voices[characterId]?.[language]
       : undefined,
   }, {
     ledger: config.ledger,

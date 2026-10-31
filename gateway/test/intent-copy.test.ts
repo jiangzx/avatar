@@ -15,7 +15,8 @@ import { buildConfigSnapshot } from '../src/session/configSnapshot.ts';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const zhPath = `${root}roles/elder-companion/zh/director.json`;
 const raw = () => JSON.parse(readFileSync(zhPath, 'utf8')) as Record<string, any>;
-const models = { realtimeEndpoint: '', realtimeModel: 'm', textEndpoint: '', summarizerModel: 'm' };
+const models = { realtimeEndpoint: '', realtimeModel: 'qwen3.8-omni-flash-realtime', textEndpoint: '', summarizerModel: 'm' };
+const voiceDefaults = { zh: 'longanlingxin', ja: 'Tina', en: 'Tina' };
 const ledger = { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6_000 };
 const i18n = loadI18n(`${root}config`);
 
@@ -92,12 +93,12 @@ describe('zh intent copy', () => {
 
 describe('fallbackAfterMs cross-check', () => {
   it('rejects a fallback wait longer than the shortest silence step', () => {
-    expect(() => buildConfigSnapshot({ gatewayRoot: root, overlay: {}, version: 1, ledger, sessionStartTimeoutMs: 10_000, models })).not.toThrow();
+    expect(() => buildConfigSnapshot({ gatewayRoot: root, overlay: {}, version: 1, ledger, sessionStartTimeoutMs: 10_000, models, voiceDefaults })).not.toThrow();
     try {
       buildConfigSnapshot({
         gatewayRoot: root,
         overlay: { 'role:elder-companion/*/director.contextAfterMs': 3_000, 'proactivity:fallbackAfterMs': 3_500 },
-        version: 2, ledger, sessionStartTimeoutMs: 10_000, models,
+        version: 2, ledger, sessionStartTimeoutMs: 10_000, models, voiceDefaults,
       });
       expect.fail('expected ConfigInvalidError');
     } catch (error) {
@@ -108,7 +109,7 @@ describe('fallbackAfterMs cross-check', () => {
     expect(() => buildConfigSnapshot({
       gatewayRoot: root,
       overlay: { 'role:elder-companion/*/director.contextAfterMs': 3_000 },
-      version: 3, ledger, sessionStartTimeoutMs: 10_000, models,
+      version: 3, ledger, sessionStartTimeoutMs: 10_000, models, voiceDefaults,
     })).not.toThrow();
   });
 });
@@ -121,7 +122,7 @@ describe('familiarity tones', () => {
       buildConfigSnapshot({
         gatewayRoot: root,
         overlay: { 'role:elder-companion/zh/director.familiarityTones.oldFriend': '很长的语气说明。'.repeat(250) },
-        version: 9, ledger, sessionStartTimeoutMs: 10_000, models,
+        version: 9, ledger, sessionStartTimeoutMs: 10_000, models, voiceDefaults,
       });
       expect.fail('expected ConfigInvalidError');
     } catch (error) {

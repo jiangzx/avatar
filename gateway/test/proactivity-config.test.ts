@@ -8,7 +8,8 @@ import { SCORED_KINDS, loadProactivity, ProactivitySchema } from '../src/session
 const root = fileURLToPath(new URL('..', import.meta.url));
 const path = `${root}config/proactivity.json`;
 const raw = () => JSON.parse(readFileSync(path, 'utf8')) as Record<string, any>;
-const models = { realtimeEndpoint: '', realtimeModel: 'm', textEndpoint: '', summarizerModel: 'm' };
+const models = { realtimeEndpoint: '', realtimeModel: 'qwen3.8-omni-flash-realtime', textEndpoint: '', summarizerModel: 'm' };
+const voiceDefaults = { zh: 'longanlingxin', ja: 'Tina', en: 'Tina' };
 const ledger = { keepRecentTurns: 8, summarizeAfterTurns: 16, summarizeAfterTokens: 6_000 };
 
 describe('proactivity.json', () => {
@@ -42,10 +43,10 @@ describe('proactivity.json', () => {
 
   it('is part of the config snapshot and can be overlaid', () => {
     expect(parseOverlayKey('proactivity:tiers.quiet.threshold')).toEqual({ kind: 'json', file: 'config/proactivity.json', path: ['tiers', 'quiet', 'threshold'] });
-    const snap = buildConfigSnapshot({ gatewayRoot: root, overlay: { 'proactivity:tiers.quiet.threshold': 80 }, version: 3, ledger, sessionStartTimeoutMs: 10_000, models });
+    const snap = buildConfigSnapshot({ gatewayRoot: root, overlay: { 'proactivity:tiers.quiet.threshold': 80 }, version: 3, ledger, sessionStartTimeoutMs: 10_000, models, voiceDefaults });
     expect(snap.proactivity.tiers.quiet.threshold).toBe(80);
-    expect(() => buildConfigSnapshot({ gatewayRoot: root, overlay: { 'proactivity:tiers.quiet.missing': 1 }, version: 4, ledger, sessionStartTimeoutMs: 10_000, models })).toThrow();
+    expect(() => buildConfigSnapshot({ gatewayRoot: root, overlay: { 'proactivity:tiers.quiet.missing': 1 }, version: 4, ledger, sessionStartTimeoutMs: 10_000, models, voiceDefaults })).toThrow();
     // affect.care is retired but kept: a stored overlay that still sets it must keep building.
-    expect(() => buildConfigSnapshot({ gatewayRoot: root, overlay: { 'affect:care.maxAgeDays': 5 }, version: 5, ledger, sessionStartTimeoutMs: 10_000, models })).not.toThrow();
+    expect(() => buildConfigSnapshot({ gatewayRoot: root, overlay: { 'affect:care.maxAgeDays': 5 }, version: 5, ledger, sessionStartTimeoutMs: 10_000, models, voiceDefaults })).not.toThrow();
   });
 });

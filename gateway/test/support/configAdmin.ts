@@ -35,7 +35,7 @@ export interface BuildConfigAdminOptions {
 /** A real ConfigAdminApi on the given DB, with the shipped descriptors and prices. */
 export function buildConfigAdmin(db: DatabaseSync, opts: BuildConfigAdminOptions = {}) {
   const build = (overlay: Overlay, version: number): ConfigSnapshot =>
-    buildConfigSnapshot({ gatewayRoot: root, overlay, version, ledger: env.ledger, sessionStartTimeoutMs: env.sessionStartTimeoutMs, models: TEST_MODELS });
+    buildConfigSnapshot({ gatewayRoot: root, overlay, version, ledger: env.ledger, sessionStartTimeoutMs: env.sessionStartTimeoutMs, models: TEST_MODELS, voiceDefaults: env.qwenVoices });
   const store = new SqliteConfigStore<ConfigSnapshot>({ db, build, logger: defaultLogger() });
   const secrets = new SqliteSecretStore({
     db,

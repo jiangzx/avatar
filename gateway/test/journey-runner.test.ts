@@ -14,7 +14,8 @@ const snapshot = buildConfigSnapshot({
   version: 0,
   ledger,
   sessionStartTimeoutMs: 10_000,
-  models: { realtimeEndpoint: '', realtimeModel: 'mock', textEndpoint: '', summarizerModel: 'mock' },
+  models: { realtimeEndpoint: '', realtimeModel: 'qwen3.8-omni-flash-realtime', textEndpoint: '', summarizerModel: 'mock' },
+  voiceDefaults: { zh: 'longanlingxin', ja: 'Tina', en: 'Tina' },
 });
 const script = loadMockScript(`${root}mock/script.json`);
 const base = loadEvalConfig(`${root}config/eval.json`);

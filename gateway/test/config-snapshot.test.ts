@@ -30,7 +30,10 @@ const tmpRoot = mkdtempSync(join(tmpdir(), 'snapshot-test-'));
 afterAll(() => rmSync(tmpRoot, { recursive: true, force: true }));
 
 function build(overlay: Overlay, version = 1) {
-  return buildConfigSnapshot({ gatewayRoot: root, overlay, version, ledger: env.ledger, sessionStartTimeoutMs: env.sessionStartTimeoutMs, models, tmpRoot });
+  return buildConfigSnapshot({
+    gatewayRoot: root, overlay, version, ledger: env.ledger,
+    sessionStartTimeoutMs: env.sessionStartTimeoutMs, models, voiceDefaults: env.qwenVoices, tmpRoot,
+  });
 }
 
 function issuesOf(overlay: Overlay): string[] {

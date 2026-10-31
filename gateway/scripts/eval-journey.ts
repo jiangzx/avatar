@@ -77,6 +77,7 @@ const snapshot = buildConfigSnapshot({
   ledger: config.ledger,
   sessionStartTimeoutMs: config.sessionStartTimeoutMs,
   models: { realtimeEndpoint: config.qwenEndpoint, realtimeModel: config.qwenModel, textEndpoint: config.summarizerEndpoint, summarizerModel: config.summarizerModel },
+  voiceDefaults: config.qwenVoices,
 });
 const evalCfg = loadEvalConfig(`${root}config/eval.json`);
 const only = args.only;
@@ -106,7 +107,7 @@ const env: JourneyEnv = {
     // Same as scripts/eval.ts: summaries are not under test.
     summarizer: () => new MockSummarizer(),
     textClient: () => (adapter === 'qwen' && textClient ? textClient : undefined),
-    voiceFor: (s, characterId, language) => (adapter === 'qwen' ? s.characters.voiceFor(characterId, 'qwen', language) ?? config.qwenVoices[language] : undefined),
+    voiceFor: (s, characterId, language) => (adapter === 'qwen' ? s.realtime.voices[characterId]?.[language] : undefined),
   },
   runtime: { ledger: config.ledger, modelOwnsTurns: adapter === 'qwen', logger },
   ...(adapter === 'qwen' && textClient ? { extractClient: textClient } : {}),
