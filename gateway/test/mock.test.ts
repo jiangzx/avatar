@@ -209,3 +209,15 @@ describe('MockAdapter synthetic usage', () => {
     }
   });
 });
+
+describe('MockAdapter session updates', () => {
+  it('records speech rate updates', async () => {
+    const m = new MockAdapter({
+      script: { greeting: 'g', followup: 'f', memoryNotice: 'm', fallbackReply: 'r', turns: [] },
+    });
+    await m.connect({ instructions: 'x', tools: [] });
+    m.updateSession({ speechRate: 0.8 });
+    expect(m.sessionUpdates).toEqual([{ speechRate: 0.8 }]);
+    m.close();
+  });
+});

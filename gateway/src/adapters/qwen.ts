@@ -1,9 +1,20 @@
 import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import { AI_SAMPLE_RATE, MIC_SAMPLE_RATE } from '@anyidea/protocol';
+import type { TurnDetection } from '../realtime/models.ts';
 import type { AdapterEvents, ProactiveRequest, RealtimeAdapter, SessionConfig, TokenUsage, ToolSpec } from './types.ts';
 
-export interface QwenOptions { apiKey: string; endpoint: string; model?: string; voice: string; connectTimeoutMs?: number; }
+export interface QwenOptions {
+  apiKey: string;
+  endpoint: string;
+  model?: string;
+  voice: string;
+  connectTimeoutMs?: number;
+  turnDetection?: TurnDetection;
+  /** null = model does not support speech_rate. */
+  speechRate?: number | null;
+  supportsVoiceUpdate?: boolean;
+}
 type Json = Record<string, unknown>;
 
 export type ResponseInstructionMode = 'replace' | 'append' | 'item';
@@ -35,6 +46,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   readonly supportsPlaybackTruncate = false;
   readonly verbatimFallback = false;
   readonly supportsUserText = true;
+  readonly supportsVoiceUpdate: boolean;
   private ws: WebSocket | null = null;
   private connected = false;
   private closed = false;
@@ -50,7 +62,15 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   constructor(options: QwenOptions) {
     super();
     if (!options.apiKey) throw new Error('DASHSCOPE_API_KEY is required');
-    this.opts = { model: 'qwen3.8-omni-flash-realtime', connectTimeoutMs: 10000, ...options };
+    this.opts = {
+      model: 'qwen3.8-omni-flash-realtime',
+      connectTimeoutMs: 10000,
+      turnDetection: { type: 'semantic_vad', silenceDurationMs: 800 },
+      speechRate: null,
+      supportsVoiceUpdate: true,
+      ...options,
+    };
+    this.supportsVoiceUpdate = this.opts.supportsVoiceUpdate;
   }
   async connect(config: SessionConfig): Promise<void> {
     if (this.ws || this.closed) throw new Error('adapter_not_connectable');
@@ -71,7 +91,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
         else if (!this.closed) this.emit('closed');
       });
       this.connectTimer = setTimeout(() => this.failInitialization('qwen_connect_timeout'), this.opts.connectTimeoutMs);
-      ws.once('open', () => { if (!this.closed) this.send({ type: 'session.update', session: { modalities: ['text', 'audio'], instructions: config.instructions, turn_detection: { type: 'semantic_vad', silence_duration_ms: 800 }, input_audio_transcription: { model: 'qwen3-asr-flash-realtime' }, audio: { input: { format: { type: 'pcm', sample_rate: MIC_SAMPLE_RATE, sample_format: 's16le', channels: 1, packing: 'interleaved', channel_layout: 'mono' } }, output: { voice: this.voice, format: { type: 'pcm', sample_rate: AI_SAMPLE_RATE } } }, tools: config.tools.map(toQwenTool), ...(config.maxOutputTokens !== undefined ? { max_response_output_tokens: config.maxOutputTokens } : {}) } }); });
+      ws.once('open', () => { if (!this.closed) this.send({ type: 'session.update', session: { modalities: ['text', 'audio'], instructions: config.instructions, turn_detection: { type: this.opts.turnDetection.type, ...(this.opts.turnDetection.type !== 'smart_turn' && this.opts.turnDetection.type !== 'smart_turn_v2' && this.opts.turnDetection.silenceDurationMs !== undefined ? { silence_duration_ms: this.opts.turnDetection.silenceDurationMs } : {}) }, ...(this.opts.speechRate !== null ? { speech_rate: this.opts.speechRate } : {}), input_audio_transcription: { model: 'qwen3-asr-flash-realtime' }, audio: { input: { format: { type: 'pcm', sample_rate: MIC_SAMPLE_RATE, sample_format: 's16le', channels: 1, packing: 'interleaved', channel_layout: 'mono' } }, output: { voice: this.voice, format: { type: 'pcm', sample_rate: AI_SAMPLE_RATE } } }, tools: config.tools.map(toQwenTool), ...(config.maxOutputTokens !== undefined ? { max_response_output_tokens: config.maxOutputTokens } : {}) } }); });
     });
   }
 
@@ -95,19 +115,23 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   }
   /** Voice updates apply to the next response; a partial session.update is accepted (probe 2026-10-21). */
   updateVoice(voice: string | undefined): void {
+    if (!this.opts.supportsVoiceUpdate) return;
     this.voice = voice ?? this.opts.voice;
     if (this.connected) this.send({ type: 'session.update', session: { audio: { output: { voice: this.voice } } } });
   }
   /** One partial session.update with only the changed fields; same keys as the connect payload. */
-  updateSession(update: { instructions?: string; voice?: { value: string | undefined } }): void {
+  updateSession(update: { instructions?: string; voice?: { value: string | undefined }; speechRate?: number }): void {
     const session: Json = {};
     if (update.instructions !== undefined) {
       this.instructions = update.instructions;
       session.instructions = update.instructions;
     }
-    if (update.voice) {
+    if (update.voice && this.opts.supportsVoiceUpdate) {
       this.voice = update.voice.value ?? this.opts.voice;
       session.audio = { output: { voice: this.voice } };
+    }
+    if (update.speechRate !== undefined && this.opts.speechRate !== null) {
+      session.speech_rate = update.speechRate;
     }
     if (this.connected && Object.keys(session).length > 0) this.send({ type: 'session.update', session });
   }

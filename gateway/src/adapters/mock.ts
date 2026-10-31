@@ -43,6 +43,8 @@ export interface MockOptions {
   cancelGapMs?: number;
   /** Emit a synthetic, estimated responseUsage before responseDone (admin pipeline without a model key). */
   emitUsage?: boolean;
+  /** False = only apply voice changes at connect time (tests for 3.1). */
+  supportsVoiceUpdate?: boolean;
 }
 
 /** Keeps a cancelled reply from flowing straight into the next clip. TUNABLE. */
@@ -58,12 +60,17 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
   readonly supportsPlaybackTruncate = false;
   readonly verbatimFallback = false;
   readonly supportsUserText = true;
+  readonly supportsVoiceUpdate: boolean;
   instructions = '';
   voice: string | undefined;
   readonly notes: string[] = [];
   readonly toolResults: Array<{ callId: string; result: unknown }> = [];
   /** Every combined session change, in order (tests assert the push gate). */
-  readonly sessionUpdates: Array<{ instructions?: string; voice?: { value: string | undefined } }> = [];
+  readonly sessionUpdates: Array<{
+    instructions?: string;
+    voice?: { value: string | undefined };
+    speechRate?: number;
+  }> = [];
 
   private turnIndex = 0;
   private speaking = false;
@@ -77,6 +84,7 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
 
   constructor(private readonly opts: MockOptions) {
     super();
+    this.supportsVoiceUpdate = opts.supportsVoiceUpdate ?? true;
   }
 
   async connect(config: SessionConfig): Promise<void> {
@@ -117,7 +125,7 @@ export class MockAdapter extends EventEmitter<AdapterEvents> implements Realtime
     this.voice = voice;
   }
 
-  updateSession(update: { instructions?: string; voice?: { value: string | undefined } }): void {
+  updateSession(update: { instructions?: string; voice?: { value: string | undefined }; speechRate?: number }): void {
     this.sessionUpdates.push({ ...update });
     if (update.instructions !== undefined) this.instructions = update.instructions;
     if (update.voice) this.voice = update.voice.value;

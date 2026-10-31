@@ -79,8 +79,14 @@ export interface RealtimeAdapter extends EventEmitter<AdapterEvents> {
   updateInstructions(text: string): void;
   /** Move the session to another voice without reconnecting; undefined = the adapter default. */
   updateVoice(voice: string | undefined): void;
+  /** False when the model only applies voice changes at connect time (3.1). Omitted = true. */
+  readonly supportsVoiceUpdate?: boolean;
   /** One combined session change. Qwen sends a single partial session.update. */
-  updateSession?(update: { instructions?: string; voice?: { value: string | undefined } }): void;
+  updateSession?(update: {
+    instructions?: string;
+    voice?: { value: string | undefined };
+    speechRate?: number;
+  }): void;
   createResponse(request?: ProactiveRequest): void;
   cancelResponse(): void;
   sendToolResult(callId: string, result: unknown): void;

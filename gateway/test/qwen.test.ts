@@ -318,4 +318,100 @@ describe('QwenAdapter', () => {
     ]);
     a.close();
   });
+
+  it('uses the configured turn detection and initial speech rate', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s);
+    await new Promise<void>((r) => s.once('listening', r));
+    const port = (s.address() as { port: number }).port;
+    const updates: Array<Record<string, any>> = [];
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString());
+      if (e.type === 'session.update') {
+        updates.push(e.session);
+        ws.send(JSON.stringify({ type: 'session.created' }));
+        ws.send(JSON.stringify({ type: 'session.updated' }));
+      }
+    }));
+    const a = new QwenAdapter({
+      apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture',
+      turnDetection: { type: 'server_vad', silenceDurationMs: 800 }, speechRate: 1,
+    });
+    await a.connect({ instructions: 'fixture', tools: [] });
+    expect(updates[0]).toMatchObject({
+      turn_detection: { type: 'server_vad', silence_duration_ms: 800 },
+      speech_rate: 1,
+    });
+    a.close();
+  });
+
+  it('omits speech_rate when the model does not support it', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s);
+    await new Promise<void>((r) => s.once('listening', r));
+    const port = (s.address() as { port: number }).port;
+    const updates: Array<Record<string, any>> = [];
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString());
+      if (e.type === 'session.update') {
+        updates.push(e.session);
+        ws.send(JSON.stringify({ type: 'session.created' }));
+        ws.send(JSON.stringify({ type: 'session.updated' }));
+      }
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture', speechRate: null });
+    await a.connect({ instructions: 'fixture', tools: [] });
+    expect(updates[0]).not.toHaveProperty('speech_rate');
+    a.close();
+  });
+
+  it('adds speech_rate to a partial session.update only when supported', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s);
+    await new Promise<void>((r) => s.once('listening', r));
+    const port = (s.address() as { port: number }).port;
+    const sent: Array<Record<string, any>> = [];
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString());
+      sent.push(e);
+      if (e.type === 'session.update') {
+        ws.send(JSON.stringify({ type: 'session.created' }));
+        ws.send(JSON.stringify({ type: 'session.updated' }));
+      }
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture', speechRate: 1 });
+    await a.connect({ instructions: 'fixture', tools: [] });
+    a.updateSession({ speechRate: 0.8 });
+    a.updateSession({ instructions: 'next', speechRate: 0.6 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const updates = sent.filter((e) => e.type === 'session.update').map((e) => e.session);
+    expect(updates.slice(1)).toEqual([
+      { speech_rate: 0.8 },
+      { instructions: 'next', speech_rate: 0.6 },
+    ]);
+    a.close();
+  });
+
+  it('does not send voice updates on a connect-only model', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s);
+    await new Promise<void>((r) => s.once('listening', r));
+    const port = (s.address() as { port: number }).port;
+    const sent: Array<Record<string, any>> = [];
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString());
+      sent.push(e);
+      if (e.type === 'session.update') {
+        ws.send(JSON.stringify({ type: 'session.created' }));
+        ws.send(JSON.stringify({ type: 'session.updated' }));
+      }
+    }));
+    const a = new QwenAdapter({
+      apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture', supportsVoiceUpdate: false,
+    });
+    await a.connect({ instructions: 'fixture', tools: [] });
+    a.updateVoice('voice-two');
+    a.updateSession({ voice: { value: 'voice-three' } });
+    a.updateSession({ instructions: 'next' });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const updates = sent.filter((e) => e.type === 'session.update').map((e) => e.session);
+    expect(updates).toEqual([expect.objectContaining({ instructions: 'fixture' }), { instructions: 'next' }]);
+    a.close();
+  });
 });

@@ -217,7 +217,15 @@ const manager = new SessionManager(
   makeSessionFactory(configSource, {
     apiKey: resolveApiKey,
     adapter: ({ snapshot, characterId, apiKey }) => config.adapter === 'qwen'
-      ? new QwenAdapter({ apiKey: apiKey!, endpoint: snapshot.model.realtimeEndpoint, model: snapshot.model.realtimeModel, voice: config.qwenVoice })
+      ? new QwenAdapter({
+          apiKey: apiKey!,
+          endpoint: snapshot.model.realtimeEndpoint,
+          model: snapshot.model.realtimeModel,
+          voice: config.qwenVoice,
+          turnDetection: snapshot.realtime.turnDetection,
+          speechRate: snapshot.realtime.speechRate?.default ?? null,
+          supportsVoiceUpdate: snapshot.realtime.voiceUpdate === 'live',
+        })
       : new MockAdapter({ script: withCharacterName(script, snapshot.characters.name(characterId, 'zh')), speech, speechThreshold: config.mockSpeechThreshold, paceFactor: config.mockPaceFactor, emitUsage: usage !== null }),
     summarizer: ({ snapshot, apiKey, ctx, sessionId }) => config.summarizer === 'qwen'
       ? new QwenSummarizer({
