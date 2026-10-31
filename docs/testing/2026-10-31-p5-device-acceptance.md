@@ -33,3 +33,12 @@
 - 原因：该测试 owner / 小暖的 `proactive_daily` 当日计数为 15，超过 moderate 档 `maxPerDay` 10。到上限后引擎只保留 checkin 与 rest，所以前三段不主动开口。
 - 用户决定调高每日上限：`gateway/config/proactivity.json` 的 moderate `maxPerDay` 10→20、active 16→30（quiet 4 不变）。待重启后用新配置重跑第 5 项。
 - 另一次失败（会话 `c567a024-73dd-4b10-a356-dbaea5ff6e19`）：App 在 12:44:01 发送 `client.mute=true`，`setMuted(true)` 清掉了阶梯；App 里只有底部静音按钮会发这条消息，属于误触，不计入阶梯失败。
+
+## 第 5 项第二轮调整（2026-10-31，用户决定）
+
+- 复现（会话 `21127886-f828-47b4-a6de-c66a468d9d4e`）：最后一句结束后，context 在第 6 秒选中 `continueThread`（第 1 句）；check / leave 都是 `quiet`；checkin 在第 34 秒开口（第 2 句）。第 1 句结束到第 2 句开始约 28.4 秒，来自 8/10/10 秒阶梯。
+- 用户反馈：间隔偏长；第 2 句没有问「是否还在听」。
+- 原因：checkin 的引擎路径用 `intents.purposes.presenceCheck`，原文写「让老人知道你在听、随时可以接着聊，不追问」，模型因此说陈述句；事后核对只要求「听着 + 随时」两类词，不要求问句。
+- 决定：改提词并要求问一句；把 check/leave/checkin 从 8/10/10 秒缩到 8/5/5 秒；五种阶梯时长继续在后台「对话节奏」页可配置（`pacing.json` 描述符已有 `role:elder-companion/*/director.*AfterMs`）。
+- 改动：zh `director.json` 的 `presenceCheck` 改为「轻声问一句是否还在听，并说明随时可以接着聊，不催促」；zh/ja/en 的 `leaveAfterMs`、`checkinAfterMs` 改为 5000；`config.test.ts` 同步。`npm test -w gateway` 124 文件 / 1432 项通过；`npm test -w admin` 24 文件 / 129 项通过；两个 typecheck 无输出。
+- 待办：重启 8787 后用新提词与 8/5/5 阶梯重跑第 5 项。

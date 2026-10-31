@@ -49,7 +49,7 @@
 | Q13 | 决策算法 | 时机 → 候选意图 → 打分 → 最高分且过阈值才开口；「保持安静」是正式候选；接受/拒绝计次；权重阈值在角色配置 |
 | Q14 | 意图契约 | 与模型无关的 `ProactiveIntent`；Qwen 渲染成指令，三段式链路以后做成 `CascadeAdapter` |
 | Q15 | 已知称呼的开场 | 放开给模型说，材料只限决策层交给它的已核实原话、事项线、情绪摘要、作息；无材料就简单问候；模板只兜底 |
-| Q16 | 四段沉默 | 变成决策层的四个开口时机；保留各段时长、`quietPhrases`、rest 不提问；checkin 要求改为意图约束 + 事后核对；删逐句词表硬校验 |
+| Q16 | 四段沉默 | 变成决策层的四个开口时机；保留各段时长（2026-10-31 用户决定 check/leave/checkin 改为 8/5/5 秒，后台「对话节奏」可配置）、`quietPhrases`、rest 不提问；checkin 要求改为意图约束 + 事后核对；删逐句词表硬校验 |
 | Q17 | 延迟预算 | 决策 ≤50ms 本地计算；会话中不同步调文本模型（情绪卡维持异步）；抽取、反思、情绪摘要在会话结束或沉默 180s 时异步做；开场材料在连接期间预取 |
 | Q18 | 用户控制 | 安静 / 适中 / 活跃三档，默认档在角色配置；语音可调，偏好跨会话保存；不改 App |
 | Q19 | 多角色隔离 | 关系画像、事项线、反思、情绪轨迹、主动偏好、接受率都按 `agent_id`；只有称呼与基本资料共享 |
@@ -66,7 +66,7 @@
 **对话行为**
 
 - **开场**（`session.ts` `start()`，`director.ts:605-612` `requestGreeting`）：首次见面用角色卡（`characters/*.json`）的 `greetingsFirstMeet`；已知称呼时优先用 care 关怀句（模板开头 + 模型一句），没有就从 `greetingNameTexts` 3 条随机取（`session.ts:1716-1730`）；不知道称呼才由规划器生成。坑位第 5 条禁止已知称呼时走规划器。
-- **四段沉默**（`director.ts` `onAiTurnEnded`/`fire`，`silence.ts`）：context/check/leave/checkin/rest 为 6/8/10/10/180s（`director.json:42-46`）。每段先调文本模型规划器（2s、不重试、≤60 字），失败、与已说过的话重复或不过校验就说配置文案。checkin 必须同时含「在听」类和「随时」类词且 ≤30 字，rest 不能提问（`silence.ts:17-22`，词表 `config/i18n/zh/silence.json`）。
+- **四段沉默**（`director.ts` `onAiTurnEnded`/`fire`，`silence.ts`）：context/check/leave/checkin/rest 为 6/8/5/5/180s（2026-10-31 用户决定；后台「对话节奏」页可配置）。每段先调文本模型规划器（2s、不重试、≤60 字），失败、与已说过的话重复或不过校验就说配置文案。checkin 必须同时含「在听」类和「随时」类词且 ≤30 字，rest 不能提问（`silence.ts:17-22`，词表 `config/i18n/zh/silence.json`）。
 - **固定口语**（zh `director.json`）：18 句 `*Text` + 3 句 `greetingNameTexts` + 3 句 `greetingCareTexts`，共 24 句；指令模板 19 段（17 个顶层 `*Instruction` + `silenceDecision.instruction` + `speakInstruction`）。`topics.json` 10 张卡只在 `fileCatalog.ts:271` 加载校验，session 任何地方都不用（含 `topicInstruction`）。
 - **跨会话跟进**：只有 care。会话结束抽取 `followups.quote`（逐字原话）；开场选 1 条（未完成、有原话、来源会话已结束且非本会话、7 天内，`store.ts:408-413`），模型写一句关怀，播出即关闭并清空原话；每日任务清理过期原话（`clearStaleCareQuotes`）。
 - **情绪**：`EmotionTagger` 词表只驱动头像；`AffectTracker` 每条非轻回应终稿调一次文本模型（2.5s、不重试），情绪卡字段 emotion/intensity/trend/need/strategy/mismatch/crisis/openLoop（`affect.ts:24-32`），由 `renderAffect` 用固定短句拼成指令（zh ≤150 字，`memory.json` `affectMaxChars`），经 `PushGate` 推送。卡只在会话内存。
@@ -275,7 +275,7 @@ score = (w_rel·情绪相关 + w_urg·紧迫度 + w_imp·重要性 + w_nov·新�
 
 ### 四段沉默与话题聊干（Q16）
 
-- 各段时长、`quietPhrases`、`lightPhrases` 的步骤规则、rest 不提问：保留。
+- 各段时长（2026-10-31 修订为 6/8/5/5/180s，后台「对话节奏」页可配置）、`quietPhrases`、`lightPhrases` 的步骤规则、rest 不提问：保留。
 - 每段调用决策引擎；context/check/leave 可以选 `quiet`，此时直接进入下一段计时。
 - checkin 固定为 `presence_check`，必须表达「我在听、随时可以聊」写在 `constraints`，由事后核对检查；删掉 `silence.ts` 的逐句词表硬校验。
 - 话题聊干沿用现有判定和冷却，触发后作为一个时机交给决策引擎。
@@ -478,3 +478,4 @@ score = (w_rel·情绪相关 + w_urg·紧迫度 + w_imp·重要性 + w_nov·新�
 - 2026-10-30 用户确认健康原话进当次指令，并修订 Q20 的自然度条款。正文见 [2026-10-30 设计](2026-10-30-health-quote-experience-design.md)。代码与旅程评测已于同日完成。
 - 2026-10-31 用户决定把 Q20 的连续性门槛从「比基线 +0.5」改为「不退步」（基线减 0.2，沿用 P3 口径），`JourneyGate.continuityUpHalf` 改名 `continuityNotDown`。四轮旅程仍因共情低于基线不过；用户决定不阻塞 P5-T2，由共情评估与 plan-a 作最终判定。见 [2026-10-30 设计 › 门槛修订](2026-10-30-health-quote-experience-design.md) 与 `docs/testing/2026-10-30-health-quote-acceptance.md`。
 - 2026-10-31 P5-T3 真机第 5 项：checkin 的 `presenceCheck` 渲染指令自相矛盾（`allowQuestion` 为 false，追加「不要提问」，与「问是否还在听、随时可聊」的目的和兜底句冲突），模型生成非问句且缺「随时」类词，事后核对判 `presence` 违规。用户批准最小修复：`buildIntent` 只对 `restQuiet` 禁问，`presenceCheck` 允许问句。回归 gateway 124 文件 / 1432 项、typecheck、真实库召回三句 true / true / false。见 `docs/testing/2026-10-31-p5-device-acceptance.md`。
+- 2026-10-31 P5-T3 第 5 项第二轮：用户决定把 `presenceCheck` 提词改为「轻声问一句是否还在听，并说明随时可以接着聊，不催促」，并把 check/leave/checkin 的等待从 8/10/10 缩到 8/5/5 秒；五种阶梯时长继续在后台「对话节奏」页配置（`pacing.json` 描述符已有）。回归 gateway 124 / 1432、admin 24 / 129、两个 typecheck 通过。见 `docs/testing/2026-10-31-p5-device-acceptance.md`。
