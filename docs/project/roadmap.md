@@ -1,5 +1,13 @@
 # Roadmap
 
+## Web 真人说话头 spike（路线 C，2026-10-30）
+
+状态：**T1–T7 完成；S1–S5 全过，待 T8 盲测**。范围与决策：[plan](../superpowers/plans/2026-10-30-web-photoreal-demo/00-overview.md)。结果：[记录](../testing/2026-10-30-web-photoreal-spike.md)。已合并到 `master`（原分支 `photoreal-spike`）；模型、视频、帧序列不进仓库，哈希在 `scripts/photoreal-assets.lock.json`。
+- 实测（M3 Max / 36 GB / macOS 26.3.1 / Chrome 156.0.8078.74 / WebGPU）：S1 25.09 fps（250 帧，repeated 0，maxBehind 0）；S2 冷启动 54 + 5 = 59 ms；S3 打断 10/10/13 ms；S4 断网 `offline:true`、25.09 fps；S5 齐全。WASM 对照推理 2044.56 ms/批（约 3.9 帧/s）。
+- 回归：`npm test -w avatar-core` 29 文件 166 项通过（1 跳过）；`npm run typecheck -w avatar-core` 无输出。资产流水线 `./scripts/photoreal/build-assets.sh` 退出码 0：250 帧、250 脸、960×540、单文件 ONNX 145 MB，lock 已更新。
+- 已知实现偏差：ORT WebGPU 1.30 对 6 通道输入的 Conv 结果错误（CPU 对照 max abs diff 0.7）；导出时把人脸输入补零到 8 通道（与 CPU 差 1.7e-6），`packBatch` 在运行时补两平面零。
+- 下一步：T8 Android Duix 并排盲测（需要真机录音与人工评分），随后回写研究结论与路线图。
+
 ## 后台管理与可观测（2026-10-27 起）
 
 状态：**计划 1（可观测基础）完成；计划 2 完成并验收（2026-10-28，用户确认浏览器）；计划 3（配置覆盖层）完成并验收（2026-10-28，用户确认截图）；计划 4（App 改动）完成并验收（2026-10-28，用户确认手机 A/B/C；C4 到期恢复跳过）**。

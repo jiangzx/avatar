@@ -5,7 +5,9 @@
   "scripts": {
     "assets": "node scripts/copy-vad-assets.mjs",
     "dev": "npm run assets && vite",
+    "dev:photoreal": "vite --config vite.photoreal.config.ts",
     "build": "npm run assets && vite build",
+    "build:photoreal": "vite build --config vite.photoreal.config.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },

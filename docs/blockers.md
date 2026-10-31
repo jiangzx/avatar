@@ -218,3 +218,15 @@
 
 - Step 6（八项真机开场：称呼、只提一件事、健康类兜底、打断重说、不知称呼、ja/en 配置指令、告别不挽留、要求少说后降档）跳过：用户在对话里，不在手机旁。没有重启 8787。
 - 旅程评测未过 P4 门槛（共情 4.24，基线 4.41）。编造 0、挽留 0、不打扰 4.82。没有改代码。记录在 `docs/testing/2026-10-30-p4-opening-acceptance.md`。P5-T1 未开始。
+
+## 2026-10-30 Web 真人说话头 spike：用户前置未就位
+
+- 计划 `docs/superpowers/plans/2026-10-30-web-photoreal-demo/` 的 T1b 需要 `build/photoreal/wav2lip_gan.pth`（Wav2Lip GAN 官方 checkpoint，仅研究用）。worktree `.worktrees/photoreal-spike` 下缺失，因此 ONNX、frames/faces、`manifest.json`、`speech-24k.pcm`、mel filterbank/fixture 和资产 lock 都未生成。
+- 目标机只装了 Safari；ORT WebGPU 只支持桌面 Chrome/Edge。T1a 只用 `curl` 验证了页面 HTML 与模块转换，WebGPU、S1–S5 和 T7 基准都未验证。
+- 解除条件：用户手动下载 checkpoint 到 `build/photoreal/wav2lip_gan.pth`，并安装 Chrome/Edge；之后继续 T1b，再跑 T3/T5/T7。
+
+## 2026-10-30 Web 真人说话头 T8 盲测待用户
+
+- T7 的 S1–S5 全过（报告 `docs/testing/2026-10-30-web-photoreal-spike.md`），按计划进入 T8。
+- 阻塞：T8 需要用户用 Android 真机录一段 Duix Lily 回复、Web 端录屏，并由 3–5 名评审做盲测；这些项目前无法由代理完成。实现与 S1–S5 结果已合并到 `master`（原分支 `photoreal-spike`）。
+- 解除条件：用户提供两段录屏与盲测评分；之后把结果写进 T8 报告、研究文档结论与 roadmap。
