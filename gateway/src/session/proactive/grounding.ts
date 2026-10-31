@@ -1,7 +1,8 @@
 // Post-hoc grounding check for proactive lines (spec 意图渲染与生成 › 事后核对). Logs only; never blocks speech.
 const TITLE = /[《「『“]([^》」』”]{1,30})[》」』”]/g;
 // Arabic digits, or Chinese numerals directly followed by a time/date/amount unit ("一直" and "一起" are not numbers).
-const NUMBER = /\d+(?:[.:：]\d+)?|[零一二两三四五六七八九十百千]+(?:点|号|日|月|岁|年|天|斤|块|元|周|星期|小时|分钟|次)/g;
+// "一块儿" is "together", not an amount; "一块钱"/"三块" still are.
+const NUMBER = /\d+(?:[.:：]\d+)?|[零一二两三四五六七八九十百千]+(?:点|号|日|月|岁|年|天|斤|块|元|周|星期|小时|分钟|次)(?!儿)/g;
 
 export interface Ungrounded { titles: string[]; numbers: string[] }
 

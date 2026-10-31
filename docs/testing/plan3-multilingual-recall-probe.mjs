@@ -14,8 +14,8 @@
 // Synthetic text may be printed only in this mode.
 //
 // --real-db opens the given SQLite file read-only (no migrations, no PRAGMA journal_mode,
-// no writes). It requires the multi-character baseline migrated to user_version 8; anything older
-// prints NOT RUN db_schema_incompatible. For the first owner that has messages, it runs the
+// no writes). It requires the multi-character baseline migrated to user_version 8 or newer
+// (v9 only adds the proactive topic-avoid table); anything older prints NOT RUN db_schema_incompatible. For the first owner that has messages, it runs the
 // three roadmap zh queries per agent (character), plus read-only ja/en diagnostics through
 // each language's production recall path with no text client (verbatim fallback only).
 // The ja/en rows are diagnostics, not assertions: a zh-only database may legitimately
@@ -108,8 +108,11 @@ function toolContext(store, ownerId, extra = {}) {
 /** History lines that survived the evidence filter, without the wrap text. */
 function historyLines(outcome, language) {
   const wrap = i18n.memory[language].recall.wrapText;
-  if (typeof outcome.text !== 'string' || !outcome.text.startsWith(`${wrap}\n`)) return [];
-  return outcome.text.slice(wrap.length + 1).split('\n').filter(Boolean);
+  if (typeof outcome.text !== 'string') return [];
+  // The recent-statement path prefixes its confirm instruction before the same wrap header.
+  const lines = outcome.text.split('\n');
+  const index = lines.indexOf(wrap);
+  return index < 0 ? [] : lines.slice(index + 1).filter(Boolean);
 }
 
 /** Same title gate as grounded(): a quoted title absent from the source is a new fact. */
@@ -196,7 +199,8 @@ async function runTemp() {
     check(vague.spokenFound === true, 'zh_vague_not_found');
     check(JSON.stringify(historyLines(vague, 'zh')) === JSON.stringify(['我最近在看老电影。']), 'zh_vague_recent_only');
     check(!vague.text.includes('这是还没结束的会话里的句子。'), 'zh_vague_active_session');
-    check(vague.spokenText === `${i18n.memory.zh.recall.foundPrefix}我最近在看老电影。`, 'zh_vague_verbatim');
+    // Vague recall now states the line and asks a confirm question (roadmap pitfall 15).
+    check(vague.spokenText === i18n.memory.zh.recall.recentConfirmText.replace('{line}', '我最近在看老电影'), 'zh_vague_confirm');
 
     // zh: the stored question is not evidence, so asking again finds nothing.
     const zhQuestion = await zh.handle('recall_memory', { query: '我说过喜欢喝茶吗' }, ctx());
@@ -416,8 +420,8 @@ async function runRealDb(path) {
     } catch {
       return notRun('db_unreadable');
     }
-    // The store prepares v8 statements: the real DB must be migrated to v8 first (P2-T9 migrates a copy).
-    if (version !== 8) return notRun('db_schema_incompatible');
+    // The store prepares v8 statements; later additive migrations keep those columns intact.
+    if (version < 8) return notRun('db_schema_incompatible');
 
     let store;
     try {

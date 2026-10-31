@@ -1,7 +1,7 @@
 # 主动记忆/随机话题问句实施计划
 
 日期：2026-10-31
-状态：**T1–T6 实现完成；T0 真实模型探针未跑；T7 部分完成（gateway/protocol/admin/flutter 回归通过；召回 `--temp` 在 HEAD 失败，见 blockers；真实库已备份并迁移 v9；真机记忆问句、“不感兴趣”卡片负偏好、“换个话题”立即换题均通过；`--real-db` 待做）。**
+状态：**T1–T7 完成（2026-10-31 补测）：T0 真实 Qwen 探针通过；`--temp` 133、`--real-db` 只读通过；后台数值描述符、不带 `CLEAR_HOLDS` 的 debug 包完成；真机记忆问句、卡片负偏好、换话题、空上下文 check 文案通过。**
 设计：`docs/superpowers/specs/2026-10-31-proactive-memory-topic-question-design.md`（已批准）
 
 ## 执行方式
@@ -239,11 +239,11 @@ IntentCopy += withQuestionQuote, withQuestionTopic, mustAsk, withFollowUp;
 
 ## 执行结果
 
-- [ ] T0 探针（未运行；`gateway/.env` 有 Key，但没有跑真实模型调用）
+- [x] T0 探针（`gateway/scripts/probe-topic-question.ts`，30 次真实 Qwen；问句率 1.00、双问号 0、材料外事实 0、材料外健康词 0；结果 `docs/testing/2026-10-31-topic-question-probe.json`）
 - [x] T1 配置/文案/话题卡
 - [x] T2 记忆材料
 - [x] T3 意图/渲染
 - [x] T4 概率/轮次
 - [x] T5 负偏好
 - [x] T6 立即换话题
-- [x] T7 收尾（部分）：gateway 128/1510、typecheck；protocol 3/16 + typecheck；admin 24/132 + typecheck + build；app `flutter test` 364、analyze；`git diff --check` clean。真实库已备份（`~/.avatar/memory.db.bak-v8-20261031-topicq`，v8）并迁移 v9；真机记忆问句通过（小暖，用户确认真实记忆）；“不感兴趣”卡片负偏好通过（`card:walk`，DB 行）；“换个话题”通过（`proactive_topic_declined switch=true` source stmt；`proactive_switch` fromKind interestTopic, delayMs 5066, capped false；App 新问句“那您平时喜欢什么运动呀？”；DB 2 行 `card:walk`、`stmt:<hash>`）；App 三角色离线已用 debug `CLEAR_HOLDS=true` 清 hold/Duix guard 恢复小暖（保留 device_token/记忆）。`--real-db` 与 T0 未做。`--temp` 召回探针在 HEAD 失败于 `zh_vague_recent_only`；HEAD~1 通过 133，HEAD 独立 worktree 同样失败，归因 `d6d688a`。详见 `docs/testing/2026-10-31-proactive-topic-question-acceptance.md` 与 `docs/blockers.md`。
+- [x] T7 收尾：gateway 128/1510、typecheck；protocol 3/16 + typecheck；admin 24/132 + typecheck + build；app `flutter test` 364、analyze；`git diff --check` clean。真实库已备份（`~/.avatar/memory.db.bak-v8-20261031-topicq`，v8）并迁移 v9；真机记忆问句通过（小暖，用户确认真实记忆）；“不感兴趣”卡片负偏好通过（`card:walk`，DB 行）；“换个话题”通过（`proactive_topic_declined switch=true` source stmt；`proactive_switch` fromKind interestTopic, delayMs 5066, capped false；App 新问句“那您平时喜欢什么运动呀？”；DB 2 行 `card:walk`、`stmt:<hash>`）；App 三角色离线已用 debug `CLEAR_HOLDS=true` 清 hold/Duix guard 恢复小暖（保留 device_token/记忆），随后改用不带该 flag 的 `--dart-define-from-file=dev.json` 包覆盖安装。2026-10-31 补测：`--temp` 133 通过（此前失败是探针 `historyLines`/确认句断言过期，不是 `d6d688a` 产品回归）；`--real-db` 只读：xiaonuan/xiaoxin zh true/true/false、xiaokai 无消息 false/false/false，`newTitleFlag` 全 false；T0 通过；后台新增 5 个 `topicQuestion` 数值描述符；check 段空上下文文案去掉“刚才那件事”并真机复验。剩余：T7 真机 7 项中的敏感健康、en/ja 逐项未重跑。详见 `docs/testing/2026-10-31-proactive-topic-question-acceptance.md` 与 `docs/blockers.md`。

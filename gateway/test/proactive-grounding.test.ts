@@ -18,6 +18,9 @@ describe('findUngrounded', () => {
 
   it('does not treat common words with 一 as numbers', () => {
     expect(findUngrounded('我一直记着呢，咱们一起等结果。', material)).toEqual({ titles: [], numbers: [] });
+    // 一块儿 = together; 一块钱 is still a number.
+    expect(findUngrounded('大家伙儿一块儿唱歌，挺热闹的。', material)).toEqual({ titles: [], numbers: [] });
+    expect(findUngrounded('买茶叶花了三块钱。', material)).toEqual({ titles: [], numbers: ['三块'] });
   });
 });
 

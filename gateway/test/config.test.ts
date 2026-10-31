@@ -133,6 +133,10 @@ describe('config', () => {
     expect(d.restAfterMs).toBe(180000);
     expect(d.presenceText).toBe('我在');
     expect(d.checkText).toBe('您还方便吗，称呼不急，您方便的时候再说就好。');
+    // No name known: the check copy must not assume an earlier topic was mentioned.
+    expect(d.checkMemoryText).toBe('您还方便吗，不着急，您想说的时候再说。');
+    expect(d.checkMemoryText).not.toContain('刚才那件事');
+    expect(d.checkMemoryInstruction).not.toContain('刚才那件事');
     expect(d.checkContextInstruction).toContain('{utterance}');
     expect(d.checkContextInstruction).not.toContain('我在');
     expect(d.contextText).toBe('您想接着聊点什么？我听着呢。');
@@ -191,7 +195,7 @@ describe('config', () => {
     expect(ja.bargeMissText).toBe('うまく聞き取れませんでした。もう一度言ってください。');
     expect(ja.checkText).toBe('お名前のことは急がなくて大丈夫ですよ。');
     expect(ja.checkContextText).toBe('別のお話でも大丈夫ですよ。ここにいますから。');
-    expect(ja.checkMemoryText).toBe('さっきのお話、急がなくて大丈夫です。話したくなったら聞かせてください。');
+    expect(ja.checkMemoryText).toBe('今は大丈夫ですか。急がなくて大丈夫です。話したくなったら聞かせてください。');
     expect(ja.leaveText).toBe('少し静かにしますね。話したくなったら呼んでください。');
     expect(ja.checkinText).toBe('まだ聞こえていますか？急がなくて大丈夫です。いつでもお話しできますよ。');
     expect(ja.restText).toBe('しばらくご自分でゆっくりしてください。急いで返事をしなくて大丈夫です。');
@@ -210,7 +214,7 @@ describe('config', () => {
     expect(en.bargeMissText).toBe("I didn't quite catch that. Could you say it again?");
     expect(en.checkText).toBe("There's no rush about your name. Whenever you're comfortable.");
     expect(en.checkContextText).toBe("We can talk about something else too. I'm here with you.");
-    expect(en.checkMemoryText).toBe("That earlier thing can wait. Tell me whenever you feel like it.");
+    expect(en.checkMemoryText).toBe("Are you comfortable? No rush — tell me whenever you feel like it.");
     expect(en.leaveText).toBe("I'll be quiet for a little while. Call me whenever you'd like to talk.");
     expect(en.checkinText).toBe("Are you still there? No rush—we can talk anytime.");
     expect(en.restText).toBe("Take some time for yourself. No need to reply.");

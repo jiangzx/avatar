@@ -11,8 +11,8 @@
 - T4 概率/轮次：完成。
 - T5 负偏好（v9 表/store/检测/删除）：完成。
 - T6 立即换话题：完成。
-- T0 真实 Qwen `mustAsk` 探针：**未运行**（未新建探针脚本；`gateway/.env` 有 Key，但没有跑真实模型调用）。
-- T7 收尾：**部分完成**。全量/typecheck/protocol/admin 通过；召回 `--temp` 探针在 HEAD 已失败（见 blockers，与本次无关）；真实库已备份并迁移 v9；`--real-db` 未跑（`MEMORY_DB_PATH` 未设置）；真机记忆问句通过，负偏好/换话题真机路径待角色解锁后补。
+- T0 真实 Qwen `mustAsk` 探针：**完成**。30 次真实调用（6 个合成场景 × 5），问句率 1.00、双问号 0、材料外作品名/数字 0、材料外健康词 0。
+- T7 收尾：**完成（带剩余真机项）**。全量/typecheck/protocol/admin 通过；召回 `--temp` 133 项通过；真实库已备份并迁移 v9，`--real-db` 只读通过；后台新增 `topicQuestion` 数值描述符；真机记忆问句、卡片负偏好、换话题、空上下文 check 文案通过；常规 debug 包（不带 `CLEAR_HOLDS`）已覆盖安装。T7 真机 7 项中的敏感健康、en/ja 逐项未重跑。
 
 ## 实际命令与结果（2026-10-31）
 
@@ -33,15 +33,18 @@ npm run build -w admin
 # passed (chunk-size warning only)
 git diff --check
 # clean
-node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp
-# PROBE FAILED zh_vague_recent_only
+node --env-file-if-exists=gateway/.env --import tsx gateway/scripts/probe-topic-question.ts
+# {"calls":30,"failures":0,"askedRate":1,"twoQuestionRate":0,"ungroundedRows":0,"healthOutsideRows":0,"overMaxChars":4}
+node docs/testing/plan3-multilingual-recall-probe.mjs --temp
+# {"mode":"temp","checks":133,"ok":true}
+node docs/testing/plan3-multilingual-recall-probe.mjs --real-db "$HOME/.avatar/memory.db"
+# xiaonuan/xiaoxin zh true/true/false；xiaokai 无消息 false/false/false；newTitleFlag 全 false
 ```
 
-探针归因：
+探针归因修正：
 
-- 当前 HEAD（`d6d688a`）失败；HEAD~1（`a431aa3`）在独立 worktree 通过 133 项。
-- 在 HEAD 的独立 worktree（不含本次未提交改动）运行同样失败，说明失败由 `d6d688a` 的 vague-recall 改动引入，不是本次主动话题问句实现。
-- 已记入 `docs/blockers.md`。
+- 此前 `--temp` 在 HEAD 失败于 `zh_vague_recent_only`，不是 `d6d688a` 的产品回归：探针的 `historyLines` 只接受“wrapText 开头”的文本，而新的模糊回忆路径在 `wrapText` 前多了 `recentConfirmInstruction`；下一处 `zh_vague_verbatim` 也仍按旧的逐字 `foundPrefix` 断言，未适配 `recentConfirmText` 确认句模板。
+- 已更新探针：从任意位置定位 `wrapText` 行后取原话，并把断言改为 `recentConfirmText`；`--temp` 133 项、`--real-db` 均通过。产品代码未因该失败改动。
 
 ## 本次实现覆盖
 
@@ -58,18 +61,23 @@ node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp
 - 实机新 owner `{E}bd20acedc95e` / agent `b1d103f2-…`；真实记忆“宝仔/美国”来自用户此前原话；用户确认不是编造。
 - **记忆问句通过**：受控临时关闭 `routine`/`continueThread` 后，context `interestTopic`、check `selfShare` 出问句；小暖说“刚才听您提到在餐厅打工的宝仔……您觉得在美国的华人，日子过得怎么样呀？”；leave `quiet`。配置已恢复并重启网关。
 - **“不感兴趣”卡片路径通过**：check `selfShare` 选了 `card:walk`；用户说“不感兴趣”；日志 `proactive_topic_declined source=card`；DB `proactive_topic_avoid` 写入 `card:walk`；`owner.notified_at` 已置，`canPersist` 通过。
-- **App 角色锁恢复**：App `CharacterHolds` 与 Duix crash guard 把三个角色都锁了；用 debug 构建 `--dart-define=CLEAR_HOLDS=true` 只清 `character_hold_until.*`、`duix_crash_count`、`duix_inflight`，保留 `device_token`/`character_id`/真实记忆；覆盖安装后小暖已重新进入通话。App 全量 364 项、`flutter analyze` 通过。
+- **App 角色锁恢复**：App `CharacterHolds` 与 Duix crash guard 把三个角色都锁了；用 debug 构建 `--dart-define=CLEAR_HOLDS=true` 只清 `character_hold_until.*`、`duix_crash_count`、`duix_inflight`，保留 `device_token`/`character_id`/真实记忆；覆盖安装后小暖已重新进入通话。App 全量 364 项、`flutter analyze` 通过。随后已重新构建不带该 flag 的包。
 - **“换个话题”通过**：context `interestTopic`（真实记忆 `stmt`）问完后，用户说“换个话题”；日志 `proactive_topic_declined source=stmt switch=true`；当前回复结束后 `proactive_switch`（fromKind `interestTopic`，source `stmt`，delayMs 5066，capped false），App 立刻问新话题“那您平时喜欢什么运动呀？”。DB `proactive_topic_avoid` 现有 2 行：`card:walk`、`stmt:<hash>`。
-- **未完成**：T0 Qwen `mustAsk` 探针；`--real-db` 召回探针（`MEMORY_DB_PATH` 未设置，且受 HEAD `d6d688a` 的 `zh_vague_recent_only` 阻塞）；后台 `topicQuestion` 数值描述符未加。
 - 设备/App 观察：`assistant_tool_syntax` 取消了开场问候（既有 textGuard）；一次 name followup 后 `reply_metrics` 缺失、会话停住，Mac TTS 用户终稿后恢复；均非本次问句逻辑。
-- 真实库已迁移 v9；`proactive_topic_avoid` 有 1 行 `card:walk`（“不感兴趣”卡片路径）。T0 Qwen `mustAsk` 探针未跑；`--real-db` 未跑（`MEMORY_DB_PATH` 未设置）。
+- 真实库已迁移 v9；`proactive_topic_avoid` 有 2 行：`card:walk`、`stmt:<hash>`。
+
+## 补测（2026-10-31 晚）
+
+- **check 段空上下文文案**：用户反馈小暖常说“刚才那件事不急”，但本次没有任何上下文。根因：无称呼且本次未开口时，`silenceLine` 返回 null，Director 走 `checkMemoryText`；旧文案假设有一件以前的事。zh/en/ja 文案和指令改为“不着急，您想说的时候再说”一类，并明确不要假设未说完的事。真机重新打开 App、小暖重新进入通话后，界面显示“您还方便吗，不着急，您想说的时候再说。”；`config.test.ts` 增加了“不得包含刚才那件事”的断言。
+- **T0 探针**：`gateway/scripts/probe-topic-question.ts` 用生产 `buildIntent`/`renderIntent` 和真实 `realtime.json` 音色/`server_vad`，跑 6 个合成场景 × 5：记忆原话/记忆话题/随机话题卡的 `interestTopic`、两种 `selfShareQuestion`、同轮 `followUp`。结果：30/30 成功，问句率 1.00，双问号 0，材料外作品名/数字 0，材料外健康词 0；超 50 字 4 条（非 T0 门槛）。同时修正 `findUngrounded` 把“一块儿”当数字的误报（新增回归测试；“三块钱”仍识别）。
+- **`--real-db`**：只读打开 `$HOME/.avatar/memory.db`（v9）：xiaonuan 与 xiaoxin 的 zh 三句为 true/true/false、`newTitleFlag` 全 false；xiaokai 没有消息，三句 false/false/false。`--temp` 133 项通过。探针改动只是适配新确认句和 v9，不写库。
+- **后台描述符**：`gateway/config/admin/descriptors/proactivity.json` 新增 `memoryRatio`、`recentSessions`、`recentDays`、`declineCooldownDays`、`minStatementChars` 五个数值项；范围与 `ProactivitySchema` 对齐（最短原话 2–50）。`config-descriptors` 与 `config-snapshot` 均通过。
+- **APK**：`cd app && flutter build apk --debug --dart-define-from-file=dev.json`（不带 `CLEAR_HOLDS`）构建成功，`adb install -r` 覆盖安装成功；启动后进入小暖通话，角色可选。
 
 ## 未做/待用户
 
-- 真实库 `--real-db` 三角色召回探针：`MEMORY_DB_PATH` 未设置；另受 HEAD `d6d688a` 的 `zh_vague_recent_only` 失败阻塞（见 blockers）。
-- T0 真实 Qwen `mustAsk` 探针（问句率/两个问号/材料外事实）。
-- 后台 `proactivity.json` 的数值描述符没有新增；当前只能改 baseline 文件，`memoryRatio` 等未进后台 UI。`copy.json` 已加两组兜底句描述符。
-- App 当前装的是 `CLEAR_HOLDS=true` debug 包；需要时可再构建不带该 flag 的 debug 包覆盖安装（角色锁/Duix guard 已清，不会再锁）。
+- T7 真机 7 项中的敏感健康、en/ja 逐项与打断组合未重跑；已通过的 4 项见上。
+- App 仍是 debug 包（`dev.json` 指向 `http://127.0.0.1:8787`，需要 `adb reverse`）；release/正式地址不在本计划范围。
 
 ## 真机验收脚本（合成，不含真实对话）
 
@@ -83,4 +91,4 @@ node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp
 
 ## 结论
 
-代码与自动化测试已完成；真机记忆问句、“不感兴趣”卡片负偏好、以及“换个话题”立即换题都已验证通过。剩余 T0 Qwen 探针与真实库 `--real-db` 召回探针（受既有 vague-recall 失败阻塞）未做；不能声称 T7 全通过。
+代码与自动化测试已完成；T0、`--temp`、`--real-db`、后台描述符和常规 debug 包均完成。真机记忆问句、“不感兴趣”卡片负偏好、“换个话题”立即换题、空上下文 check 文案都已验证通过。T7 真机 7 项中的敏感健康、en/ja 逐项与打断组合未重跑，不能声称 7 项全通过。

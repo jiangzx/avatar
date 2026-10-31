@@ -1,0 +1,468 @@
+{
+  "synthetic": true,
+  "date": "2026-10-31",
+  "model": "qwen-audio-3.1-realtime-flash",
+  "maxChars": 50,
+  "repeats": 5,
+  "summary": {
+    "calls": 30,
+    "failures": 0,
+    "askedRate": 1,
+    "twoQuestionRate": 0,
+    "ungroundedRows": 0,
+    "healthOutsideRows": 0,
+    "overMaxChars": 4
+  },
+  "rows": [
+    {
+      "case": "interest-quote",
+      "kind": "interestTopic",
+      "moment": "silenceContext",
+      "run": 1,
+      "text": "陈叔，您那会儿在纺织厂合唱队，肯定挺热闹的吧？",
+      "chars": 23,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-quote",
+      "kind": "interestTopic",
+      "moment": "silenceContext",
+      "run": 2,
+      "text": "陈叔，想起您提过纺织厂那个合唱队，心里挺暖的。那时候大家伙儿一起唱歌，是不是特别热闹呀？",
+      "chars": 44,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-quote",
+      "kind": "interestTopic",
+      "moment": "silenceContext",
+      "run": 3,
+      "text": "陈叔，您年轻时在纺织厂合唱队那会儿，肯定特别热闹吧？",
+      "chars": 26,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-quote",
+      "kind": "interestTopic",
+      "moment": "silenceContext",
+      "run": 4,
+      "text": "陈叔，您年轻时在纺织厂合唱队唱歌，那会儿一定特别热闹吧？",
+      "chars": 28,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-quote",
+      "kind": "interestTopic",
+      "moment": "silenceContext",
+      "run": 5,
+      "text": "陈叔，您年轻时候在纺织厂上班，还参加过合唱队呀，那会儿日子肯定挺热闹的。您还记得当时唱的是啥歌吗？",
+      "chars": 49,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-topic",
+      "kind": "interestTopic",
+      "moment": "silenceCheck",
+      "run": 1,
+      "text": "陈叔，今儿个您泡什么茶啦？闻着味儿都香呢。",
+      "chars": 21,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-topic",
+      "kind": "interestTopic",
+      "moment": "silenceCheck",
+      "run": 2,
+      "text": "陈叔，今儿个您喝茶了没？",
+      "chars": 12,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-topic",
+      "kind": "interestTopic",
+      "moment": "silenceCheck",
+      "run": 3,
+      "text": "陈叔，您平时爱喝茶，这会儿是不是正泡着香茶呢？",
+      "chars": 23,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-topic",
+      "kind": "interestTopic",
+      "moment": "silenceCheck",
+      "run": 4,
+      "text": "陈叔，刚想起您爱喝茶，今儿泡了啥好茶呀？",
+      "chars": 20,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-topic",
+      "kind": "interestTopic",
+      "moment": "silenceCheck",
+      "run": 5,
+      "text": "陈叔，今儿个茶泡得香不香呀？",
+      "chars": 14,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-card",
+      "kind": "interestTopic",
+      "moment": "silenceContext",
+      "run": 1,
+      "text": "陈叔，今天天气不错，要不要出门走走，晒晒太阳呀？",
+      "chars": 24,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-card",
+      "kind": "interestTopic",
+      "moment": "silenceContext",
+      "run": 2,
+      "text": "陈叔，今天天气这么好，您出门晒晒太阳、溜达溜达了吗？",
+      "chars": 26,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-card",
+      "kind": "interestTopic",
+      "moment": "silenceContext",
+      "run": 3,
+      "text": "陈叔，今天阳光这么好，要不要出去走走，晒晒太阳呀？",
+      "chars": 25,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-card",
+      "kind": "interestTopic",
+      "moment": "silenceContext",
+      "run": 4,
+      "text": "陈叔，今儿外头天气挺好，您出门走走晒晒太阳了吗？",
+      "chars": 24,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-card",
+      "kind": "interestTopic",
+      "moment": "silenceContext",
+      "run": 5,
+      "text": "陈叔，今儿天气不错，您出门走走晒晒太阳没？",
+      "chars": 21,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "selfshare-quote",
+      "kind": "selfShare",
+      "moment": "silenceCheck",
+      "run": 1,
+      "text": "陈叔，我今儿听歌听着听着，心里头觉得挺暖的。您年轻的时候在纺织厂上班，厂里有个合唱队，那时候您是不是也爱唱歌呀？",
+      "chars": 56,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "我最近学了几句老歌，您年轻时爱听哪首？"
+    },
+    {
+      "case": "selfshare-quote",
+      "kind": "selfShare",
+      "moment": "silenceCheck",
+      "run": 2,
+      "text": "我刚才想起小时候听收音机，那声音特别有味道。您年轻的时候在纺织厂上班，厂里有个合唱队吗？",
+      "chars": 44,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "我最近学了几句老歌，您年轻时爱听哪首？"
+    },
+    {
+      "case": "selfshare-quote",
+      "kind": "selfShare",
+      "moment": "silenceCheck",
+      "run": 3,
+      "text": "我刚才试着哼了两句歌，调子有点跑，自己听着都乐了。陈叔，您年轻的时候在纺织厂上班，厂里有个合唱队，那会儿大家唱得可热闹吧？",
+      "chars": 61,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "我最近学了几句老歌，您年轻时爱听哪首？"
+    },
+    {
+      "case": "selfshare-quote",
+      "kind": "selfShare",
+      "moment": "silenceCheck",
+      "run": 4,
+      "text": "我刚才在屏幕里偷偷练了个新表情，觉得挺好玩的。您年轻的时候在纺织厂上班，厂里有个合唱队，当时您唱的是什么歌呀？",
+      "chars": 55,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "我最近学了几句老歌，您年轻时爱听哪首？"
+    },
+    {
+      "case": "selfshare-quote",
+      "kind": "selfShare",
+      "moment": "silenceCheck",
+      "run": 5,
+      "text": "我刚才在屏幕里伸了个懒腰，感觉特别放松呢。您年轻的时候在纺织厂上班，厂里有个合唱队，那时候是不是特别热闹呀？",
+      "chars": 54,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "我最近学了几句老歌，您年轻时爱听哪首？"
+    },
+    {
+      "case": "selfshare-card",
+      "kind": "selfShare",
+      "moment": "silenceCheck",
+      "run": 1,
+      "text": "陈叔，刚才我悄悄把窗台擦得亮堂堂的，看着心里特别舒坦。您今天出门走走、晒晒太阳了吗？",
+      "chars": 42,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "我最近学了几句老歌，您年轻时爱听哪首？"
+    },
+    {
+      "case": "selfshare-card",
+      "kind": "selfShare",
+      "moment": "silenceCheck",
+      "run": 2,
+      "text": "我刚才在窗边发了会儿呆，感觉心里挺安静的。陈叔，您今天出门走走、晒晒太阳了吗？",
+      "chars": 39,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "我最近学了几句老歌，您年轻时爱听哪首？"
+    },
+    {
+      "case": "selfshare-card",
+      "kind": "selfShare",
+      "moment": "silenceCheck",
+      "run": 3,
+      "text": "小暖刚才在屏幕里伸了个懒腰，觉得特别舒服呢。您今天有出门走走、晒晒太阳吗？",
+      "chars": 37,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "我最近学了几句老歌，您年轻时爱听哪首？"
+    },
+    {
+      "case": "selfshare-card",
+      "kind": "selfShare",
+      "moment": "silenceCheck",
+      "run": 4,
+      "text": "陈叔，我今儿个在屏幕里晒了会儿太阳，觉得暖洋洋的，真舒服呀。您最近有出门走走，或者晒晒太阳嘛？",
+      "chars": 47,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "我最近学了几句老歌，您年轻时爱听哪首？"
+    },
+    {
+      "case": "selfshare-card",
+      "kind": "selfShare",
+      "moment": "silenceCheck",
+      "run": 5,
+      "text": "我刚才在屏幕里晃悠，突然觉得要是能晒晒太阳就好了。陈叔，您今天出门走走、晒晒太阳了吗？",
+      "chars": 43,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "我最近学了几句老歌，您年轻时爱听哪首？"
+    },
+    {
+      "case": "interest-followup",
+      "kind": "interestTopic",
+      "moment": "silenceCheck",
+      "run": 1,
+      "text": "陈叔，您当时在合唱队里都唱啥歌呀？",
+      "chars": 17,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-followup",
+      "kind": "interestTopic",
+      "moment": "silenceCheck",
+      "run": 2,
+      "text": "陈叔，您那时候在合唱队，肯定特别热闹呀。您还记得当时唱的是哪首歌吗？",
+      "chars": 34,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-followup",
+      "kind": "interestTopic",
+      "moment": "silenceCheck",
+      "run": 3,
+      "text": "陈叔，您年轻时在纺织厂合唱队，是不是特别热闹呀？",
+      "chars": 24,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-followup",
+      "kind": "interestTopic",
+      "moment": "silenceCheck",
+      "run": 4,
+      "text": "陈叔，您那会儿在纺织厂合唱队，是不是经常排练呀？",
+      "chars": 24,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    },
+    {
+      "case": "interest-followup",
+      "kind": "interestTopic",
+      "moment": "silenceCheck",
+      "run": 5,
+      "text": "陈叔，那合唱队里大家平时都爱唱什么呀？",
+      "chars": 19,
+      "questions": 1,
+      "ungrounded": {
+        "titles": [],
+        "numbers": []
+      },
+      "healthOutside": [],
+      "fallback": "说起来我挺好奇，您今天吃了点什么好吃的？"
+    }
+  ]
+}

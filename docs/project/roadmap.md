@@ -14,16 +14,17 @@
 
 ## 主动记忆/随机话题问句（2026-10-31）
 
-状态：**T1–T6 实现完成；T0 真实模型探针未跑；T7 部分完成（全量/typecheck/protocol/admin/flutter 通过；召回 `--temp` 在 HEAD 失败，见 blockers；真实库已备份并迁移 v9；真机记忆问句、“不感兴趣”卡片负偏好、“换个话题”立即换题均通过；`--real-db` 待做）**。
+状态：**T1–T7 实现与验收完成（2026-10-31 补测）：T0 Qwen 探针、`--real-db`、后台数值描述符、不带 `CLEAR_HOLDS` 的常规 debug 包均完成；check 段空上下文兜底已改为不假设“刚才那件事”，并真机复验。召回 `--temp` 133 项通过（此前失败是探针未适配新确认句，已修正）。**
 
 - 设计：[spec](../superpowers/specs/2026-10-31-proactive-memory-topic-question-design.md)（已批准，2026-10-31）；计划：[plan](../superpowers/plans/2026-10-31-proactive-memory-topic-question.md)。
 - 内容：zh 的 context/check 的 `interestTopic`/`selfShare` 必带一个记忆/话题卡问句；70/30 每轮一次；材料优先级事项→话题型非敏感 facts→最近 3 个已结束会话/7 天原话；leave/rest/checkin 与其他意图不变。负偏好 v9 `proactive_topic_avoid`（只存 key，90 天/0 永久，随记忆删除）；“换个话题”当前回复结束后立即新问句，不 arm 6 秒。
 - 实现：`gateway/src/session/proactive/questionMaterial.ts`、`runtime.ts`、`assemble.ts`、`render.ts`、`check.ts`、`memory/store.ts`、migrations v9、Director/Session 接线、zh 24 条话题卡与文案、en/ja topic id 对齐。
 - 回归（实际跑过）：gateway 128 文件/1510 项、typecheck；protocol 3/16、typecheck；admin 24/132、typecheck、build；`git diff --check` clean。
 - 真机（2026-10-31）：小米 22101317C / Android 13；App debug APK；网关重启后 DB v9；备份 `~/.avatar/memory.db.bak-v8-20261031-topicq`（v8，4 owners/6 agents/69 sessions/389 messages）。实机新 owner `{E}bd20acedc95e`；真实记忆“宝仔/美国”由用户确认。受控临时关闭 `routine`/`continueThread` 后，context `interestTopic` + check `selfShare` 出记忆问句（“刚才听您提到在餐厅打工的宝仔……您觉得在美国的华人，日子过得怎么样呀？”），leave `quiet`；配置已恢复并重启网关。“不感兴趣”卡片路径通过：check `selfShare` 选 `card:walk`，日志 `proactive_topic_declined source=card`，DB `proactive_topic_avoid` 写入 `card:walk`。“换个话题”通过：context 记忆问句后，`proactive_topic_declined source=stmt switch=true`；当前回复结束后 `proactive_switch`（fromKind `interestTopic`，source `stmt`，delayMs 5066，capped false），App 立刻问“那您平时喜欢什么运动呀？”；DB 现有 2 行 `card:walk`、`stmt:<hash>`。App 三角色曾离线，已用 debug `CLEAR_HOLDS=true` 只清 `character_hold_until.*`/`duix_crash_count`/`duix_inflight`（保留 device_token/真实记忆）恢复小暖。
-- 未完成：T0 Qwen `mustAsk` 探针；`MEMORY_DB_PATH` 未设置，`--real-db` 三角色召回探针未跑。召回 `--temp` 当前 HEAD 失败于 `zh_vague_recent_only`；HEAD~1 通过 133，HEAD 独立 worktree 同样失败，归因到 `d6d688a` 的 vague-recall 提交，与本次无关。详见 [验收记录](../testing/2026-10-31-proactive-topic-question-acceptance.md) 与 `docs/blockers.md`。
+- 补测（2026-10-31）：T0 30 次真实 Qwen（6 个合成场景 × 5，覆盖记忆原话/记忆话题卡/随机话题卡/selfShare/同轮追问），问句率 1.00、双问号 0、材料外作品名/数字 0、材料外健康词 0；探针 `gateway/scripts/probe-topic-question.ts`，结果 `docs/testing/2026-10-31-topic-question-probe.json`。修正 `findUngrounded` 把“一块儿”当数字的误报。`--real-db` 只读通过：xiaonuan/xiaoxin 的 zh 三句 true/true/false，xiaokai 无消息 false/false/false；`newTitleFlag` 全 false。`--temp` 133 通过；此前 `zh_vague_recent_only` 失败是探针 `historyLines` 没适配 `recentConfirmInstruction` 前缀、verbatim 断言早于确认句模板，不是产品回归。后台新增 `topicQuestion` 五个数值描述符（记忆比例、最近会话数、最近天数、拒绝冷却、最短原话字数），`minStatementChars` 范围与 schema 对齐 2–50。App 用 `flutter build apk --debug --dart-define-from-file=dev.json`（不带 `CLEAR_HOLDS`）构建并覆盖安装，启动进入小暖通话、角色可选。
+- check 段空上下文文案（2026-10-31 用户反馈）：无称呼且本次未开口时，引擎不接管，Director 会走 `checkMemoryText`；旧文案“您还方便吗，刚才那件事不急”会让老人以为 AI 在说一件没提过的事。zh/en/ja 已改为“不着急，您想说的时候再说”类文案；真机打开 App 后已听到新句。详见 [验收记录](../testing/2026-10-31-proactive-topic-question-acceptance.md)。
 - 当前计时以代码为准：`context/check/leave/checkin = 6/6/6/6`，`rest=180s`；`roadmap.md:148`/`:217` 的 6/8/10/10 和文本规划器是历史描述，不要按那段改回。
-- 下一步：先修复/回滚 `d6d688a` 的 vague recall 使召回探针恢复；再有真实库的机器上跑 `--real-db`；T0 Qwen 探针。真机三项已过。
+- 剩余：T7 真机 7 项中敏感健康、en/ja 逐项与打断组合未重跑；本次核心 4 项（记忆问句、卡片负偏好、换话题、空上下文 check 文案）已通过。分支 `feat/proactive-topic-question` 未推送/未合并。
 
 ## 模糊回忆召回修复（2026-10-31）
 
@@ -227,6 +228,7 @@ Plan 4 写 spec 前完成 4 个最小探针，只新增 `gateway/scripts/probe-e
 14. **钉住的敏感项只进完整快照。** 第 4 条按 Q33 修订：用户明确钉住的敏感记忆（如健康）可以进完整快照，不进开场快照和主动接话快照；设置页能看到，语音列表只给一句「在设置里能看到」。
 15. **模糊回忆以用户原话判定、按会话取实质陈述（2026-10-31）。** 不能只看模型传入的 `query`；`ctx.triggerText` 存在时优先用它；没有时要先等本回合用户终稿（`turn.currentFinal`），因为 Qwen 可能先调工具、后下发转写——2026-10-31 真机回归就是 `trigger=0` 导致又答「找不到」。等待超时（`recallFinalWaitMs`，默认 1000ms）后才回退模型 query，zh 另有精确模糊词（上次/上次的事等）。候选按会话分组，优先最近含 ≥15 字强陈述的已结束会话，回退最近含普通实质陈述的会话；过滤空消息、问句、轻回应、短动作指令（≥5 字且 `matchKeyword` ≤20 字的排除）。窗口/阈值在 `gateway/config/memory.json` 的 `recallRecentWindow`/`recallRecentMinChars`/`recallActionCommandMaxChars`/`recallStrongChars`。模糊回忆的确认句**要带出具体内容并自然改写**（用户选择 A + 两次反馈）：只问不带内容用户无从确认；逐字引用又太生硬。先走 `recall.md` 的 `confirm` 模式自然改写（grounding + 必须问句结尾 + 1.5s 超时），失败回退逐字模板 `recentConfirmText`。原话全集留在模型可见的工具文本里，确认后由模型接着聊。详见 [spec](../superpowers/specs/2026-10-31-vague-recall-fix-design.md)；真机复验前不要改回只看 query 或全局 12 条窗口。
 16. **主动话题负偏好只存 key（2026-10-31）。** `proactive_topic_avoid` 按 agent 隔离，只存 `card/fact/pin/thread/stmt` key 与时间，不存原话/事实/话题文本；默认 90 天冷却，0=永久；随 `clearAgentMemory`/`clearAllMemory`/`forgetMatches`/`deleteMemoryItem`/`clearProfile` 和 `deleteMessagesByIds` 删除；日志只记 key 类型，不记 key 值。
+17. **check 段没有上下文时不要假设“刚才那件事”（2026-10-31 用户反馈）。** 无称呼且本次未开口时，zh 引擎不接管，Director 走 `checkMemoryText`；旧文案“您还方便吗，刚才那件事不急”会让老人以为 AI 在说一件没提过的事。现行 zh/en/ja 只说“不着急，您想说的时候再说”一类话；不要再写回“刚才那件事 / さっきのお話 / That earlier thing”。`memoryFollowText` 的同类问题已于 2026-10-20 修过。
 
 ## 沉默话术（2026-10-18，已由 2026-10-21 四段式取代）
 

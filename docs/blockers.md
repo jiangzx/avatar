@@ -243,18 +243,20 @@
 - 阻塞：T8 需要用户用 Android 真机录一段 Duix Lily 回复、Web 端录屏，并由 3–5 名评审做盲测；这些项目前无法由代理完成。实现与 S1–S5 结果已合并到 `master`（原分支 `photoreal-spike`）。
 - 解除条件：用户提供两段录屏与盲测评分；之后把结果写进 T8 报告、研究文档结论与 roadmap。
 
-## 2026-10-31 主动话题问句：召回探针在 HEAD 已失败（与本次无关）
+## 2026-10-31 主动话题问句：召回探针断言过期（已解除）
 
-- `node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp` 在当前 HEAD（`d6d688a`，用户 2026-10-31 的 vague-recall 提交）失败于 `zh_vague_recent_only`。同一脚本在 HEAD~1（`a431aa3`）的独立 worktree 通过 `{"mode":"temp","checks":133,"ok":true}`；HEAD 不包含本次未提交改动，结果相同。说明失败由 `d6d688a` 的 vague-recall 改动引入，不是本次主动话题问句实现。
-- 本次实现后的 gateway 全量 128 文件/1510 项、`npm run typecheck -w gateway`、protocol 3/16 + typecheck、admin 24/132 + typecheck + build 均通过；`git diff --check` clean。
-- `MEMORY_DB_PATH` 未设置，未跑 `--real-db`；真实库迁移 v9 和真机 7 项未做。
-- 解除条件：先修复/回滚 `d6d688a` 的 vague recall，使 `--temp` 探针恢复；再在有真实库的机器上备份、迁移 v9、跑 `--real-db`，并在用户在场时做真机验收。
+- 此前 `--temp` 在 HEAD（`d6d688a`）失败于 `zh_vague_recent_only`，一度误判为 vague-recall 产品回归。实际是探针没有适配新的确认句：`historyLines` 只接受 `wrapText` 开头的工具文本，而模糊回忆路径在 `wrapText` 前多了一行 `recentConfirmInstruction`；下一处 `zh_vague_verbatim` 也仍按旧的逐字 `foundPrefix` 断言，未适配 `recentConfirmText`。
+- 已更新 `docs/testing/plan3-multilingual-recall-probe.mjs`：按行定位 `wrapText` 后取原话；确认句断言改为 `recentConfirmText`；`--real-db` 接受 v8 及更新 schema（v9 只加 `proactive_topic_avoid` 表）。产品代码未因该失败改动。
+- 解除证据（2026-10-31）：`--temp` 133 项通过；`--real-db` 只读通过（xiaonuan/xiaoxin zh true/true/false，xiaokai 无消息 false/false/false，`newTitleFlag` 全 false）；gateway 128 文件/1510 项、typecheck、`git diff --check` 通过。
 
-## 2026-10-31 主动话题真机：三项通过，剩余 T0/--real-db
+## 2026-10-31 主动话题真机与收尾（已解除）
 
 - 真机记忆问句已通过；用户确认“宝仔/美国”是真实记忆。
 - “不感兴趣”卡片路径已通过：check `selfShare` 选 `card:walk`，`proactive_topic_declined source=card`，DB `proactive_topic_avoid` 写入 `card:walk`。
 - “换个话题”已通过：context 记忆问句后 `proactive_topic_declined source=stmt switch=true`；当前回复结束后 `proactive_switch`（fromKind `interestTopic`，source `stmt`，delayMs 5066，capped false）；App 立即问“那您平时喜欢什么运动呀？”。DB 现有 2 行：`card:walk`、`stmt:<hash>`。
-- App 三角色曾离线（`CharacterHolds` + Duix crash guard + 网关 `character_disabled`）；已用 debug `--dart-define=CLEAR_HOLDS=true` 只清 `character_hold_until.*`/`duix_crash_count`/`duix_inflight`，保留 `device_token`/`character_id`/真实记忆；小暖已恢复。
-- 剩余：T0 Qwen `mustAsk` 探针；`--real-db` 三角色召回探针（`MEMORY_DB_PATH` 未设置；另受 HEAD `d6d688a` 的 `zh_vague_recent_only` 失败阻塞）。
+- App 三角色曾离线（`CharacterHolds` + Duix crash guard + 网关 `character_disabled`）；已用 debug `--dart-define=CLEAR_HOLDS=true` 只清 `character_hold_until.*`/`duix_crash_count`/`duix_inflight`，保留 `device_token`/`character_id`/真实记忆；小暖已恢复。随后已用 `flutter build apk --debug --dart-define-from-file=dev.json`（不带 `CLEAR_HOLDS`）重新构建并覆盖安装，启动后进入小暖通话。
+- T0 真实 Qwen `mustAsk` 探针完成：30 次调用，问句率 1.00、双问号 0、材料外事实 0、材料外健康词 0。
+- 后台新增 `topicQuestion` 五个数值描述符；`minStatementChars` 范围与 schema 对齐 2–50。
+- 用户反馈“总是说刚才那件事不急”：check 段空上下文文案已去掉该假设，zh/en/ja 同步修改，真机已显示“您还方便吗，不着急，您想说的时候再说。”。
 - 临时关闭 `routine`/`continueThread` 的测试配置已用 `git checkout` 恢复并重启网关；真实库 v9；备份 `~/.avatar/memory.db.bak-v8-20261031-topicq`。
+- 剩余：T7 真机 7 项中的敏感健康、en/ja 逐项与打断组合未重跑。
