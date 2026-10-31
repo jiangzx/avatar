@@ -6,7 +6,7 @@ import { PublishDialog } from '../src/config/PublishDialog.tsx';
 import { PromptDiff } from '../src/config/PromptDiff.tsx';
 import { fakeFetch, renderWithProviders } from './helpers.tsx';
 import {
-  bodyOf, careDaysItem, contextItem, contextTextItem, IMPACT, jaContextTextItem, personaItem, preview, restItem, scene, version,
+  bodyOf, careDaysItem, contextItem, contextTextItem, IMPACT, item, jaContextTextItem, personaItem, preview, restItem, scene, version,
 } from './fixtures/config.ts';
 
 const SCENE = 'GET /admin/api/config/scenes/pacing';
@@ -176,6 +176,41 @@ describe('ConfigScenePage', () => {
     expect(screen.getByRole('region', { name: '连续聊多久提醒休息' })).toBeTruthy();
     expect(screen.getByText('这些只能看，不能在这里改')).toBeTruthy();
     expect(screen.getByText('顺序固定，这里只能改等待时间和备用话。')).toBeTruthy();
+  });
+
+  it('renders one voice row per model with that model options', async () => {
+    const voice38 = item({
+      key: 'voice:qwen3.8-omni-flash-realtime/xiaonuan.zh',
+      label: '声音（Qwen3.8 Omni Flash 实时版）',
+      control: 'select',
+      language: 'zh',
+      character: 'xiaonuan',
+      model: 'qwen3.8-omni-flash-realtime',
+      impact: { characters: '小暖', stage: '声音', effective: 'next_session' },
+      options: [{ value: 'longanlingxin', label: '龙安灵心（温柔女声）', priceNote: null }],
+      baseline: 'longanlingxin',
+      current: 'longanlingxin',
+    });
+    const voice31 = item({
+      key: 'voice:qwen-audio-3.1-realtime-flash/xiaonuan.zh',
+      label: '声音（Qwen-Audio 3.1 Flash 实时版）',
+      control: 'select',
+      language: 'zh',
+      character: 'xiaonuan',
+      model: 'qwen-audio-3.1-realtime-flash',
+      impact: { characters: '小暖', stage: '声音', effective: 'next_session' },
+      options: [{ value: 'longanlingxin_v3.1', label: '龙安灵心 v3.1（温柔女声，多语种）', priceNote: null }],
+      baseline: 'longanlingxin_v3.1',
+      current: 'longanlingxin_v3.1',
+    });
+    const { fetch } = fakeFetch({
+      'GET /admin/api/config/scenes/characters': scene([voice38, voice31], { id: 'characters', title: '角色' }),
+    });
+    renderWithProviders(<ConfigScenePage scene="characters" />, fetch);
+    const row38 = await screen.findByRole('region', { name: '声音（Qwen3.8 Omni Flash 实时版）（小暖）' });
+    const row31 = await screen.findByRole('region', { name: '声音（Qwen-Audio 3.1 Flash 实时版）（小暖）' });
+    expect(within(row38).getByText('龙安灵心（温柔女声）')).toBeTruthy();
+    expect(within(row31).getByText('龙安灵心 v3.1（温柔女声，多语种）')).toBeTruthy();
   });
 });
 

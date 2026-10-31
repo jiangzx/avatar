@@ -23,6 +23,7 @@ export function item(over: Partial<AdminConfigItem> & Pick<AdminConfigItem, 'key
     riskNote: null,
     language: null,
     character: null,
+    model: null,
     baseline: 0,
     current: 0,
     changed: false,
