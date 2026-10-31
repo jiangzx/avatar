@@ -1,5 +1,14 @@
 # Roadmap
 
+## 实时模型切换与每模型音色（路线 A 语音补偿，2026-10-31）
+
+状态：**T1–T7 完成；T8 部分完成**。默认仍是 `qwen3.8-omni-flash-realtime`；`qwen-audio-3.1-realtime-flash` 可在后台切换，但在真机冒烟、音色试听和输出上限解决前不设默认。设计：[spec](../superpowers/specs/2026-10-31-realtime-model-switch-design.md)；计划：[overview](../superpowers/plans/2026-10-31-realtime-model-switch/00-overview.md)；冒烟：[记录](../testing/2026-10-31-realtime-model-switch-smoke.md)。
+- 交付：`gateway/config/realtime.json` 模型注册表（turn detection / speechRate / voiceUpdate / 音色目录 / 每角色基线）；`voice:<model>/<character>.<lang>` 覆盖层与旧 `character:...voices...` 兼容优先级；`ConfigSnapshot.realtime`；`QwenAdapter` 按模型发 `turn_detection` / `speech_rate`、`supportsVoiceUpdate`；affect 低情绪 → `speech_rate=0.8`（经 `PushGate` 安全缝隙，重连后补推）；管理端每模型音色行与发布校验；3.1 价格条目。
+- 实测（raw Qwen，合成句）：3.8 instructions 对语气无效（session +1.0%，per-response −1.0%）；3.1 `speech_rate` 1.0/0.8/0.6 = 3520/4400/5934 ms（+25% / +68.6%），中途 update 到 0.8 的下一轮比值 1.196/1.250；3.1 `server_vad` 连接、zh/ja/en 出声、工具定义被接受；3.1 不执行 `max_response_output_tokens`（16 仍回复 113 字），见 blocker #74。
+- 回归：protocol 3 文件 16 项、gateway 126 文件 1466 项、admin 24 文件 132 项，三个 typecheck、admin build、`git diff --check` 通过。第一次全量 gateway 有 1 次既有 `qwen.test.ts intentional_close` 时序 flaky（单文件通过，重跑全量通过），未改代码。
+- 跳过：真机 App 冒烟（#72）、3.1 每角色/每语言音色试听（#73）、`smart_turn_v2` 对比、3.1 默认评估。音色候选（`longanlingxin_v3.1` / `xunanchuan_v3.1`）只验证了能出声，未听音质。
+- 下一步：用户真机 + 试听；通过后再评估是否把 3.1 设为默认；随后再做 LivePortrait / EchoMimic / Sonic 的端侧可行性调研。
+
 ## Web 真人说话头 spike（路线 C，2026-10-30）
 
 状态：**T1–T7 完成；S1–S5 全过，待 T8 盲测**。范围与决策：[plan](../superpowers/plans/2026-10-30-web-photoreal-demo/00-overview.md)。结果：[记录](../testing/2026-10-30-web-photoreal-spike.md)。已合并到 `master`（原分支 `photoreal-spike`）；模型、视频、帧序列不进仓库，哈希在 `scripts/photoreal-assets.lock.json`。
