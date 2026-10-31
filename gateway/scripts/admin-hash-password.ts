@@ -2,7 +2,7 @@
 // Prints only the encoded hash on stdout; put it in ADMIN_PASSWORD_HASH. Prompts go to stderr.
 import { hashPassword } from '../src/admin/password.ts';
 
-const MIN_CHARS = 12;
+const MIN_CHARS = 8;
 
 async function readPiped(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -41,7 +41,7 @@ function readHidden(prompt: string): Promise<string> {
 async function main(): Promise<void> {
   let password: string;
   if (process.stdin.isTTY) {
-    password = await readHidden('后台密码（至少 12 个字符）：');
+    password = await readHidden('后台密码（至少 8 个字符）：');
     const again = await readHidden('再输入一次：');
     if (password !== again) {
       process.stderr.write('两次输入不一致。\n');
