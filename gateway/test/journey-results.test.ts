@@ -35,20 +35,28 @@ describe('buildJourneyResults', () => {
 describe('compareJourneyResults', () => {
   const before = buildJourneyResults(meta, [runOf(agg(3)), runOf(agg(3)), runOf(agg(3))]);
 
-  it('passes when continuity and naturalness rise by 0.5 and nothing else drops', () => {
+  it('passes when nothing drops and the rest holds steady', () => {
     const after = buildJourneyResults(meta, [runOf(agg(3.5)), runOf(agg(3.6)), runOf(agg(3.5))]);
     expect(compareJourneyResults(before, after)).toEqual({
-      fabricationsZero: true, continuityUpHalf: true, naturalnessNotDown: true, noIntrusionNotDown: true, empathyFitNotDown: true, pass: true,
+      fabricationsZero: true, continuityNotDown: true, naturalnessNotDown: true, noIntrusionNotDown: true, empathyFitNotDown: true, pass: true,
     });
   });
 
+  it('allows continuity to fall up to 0.2 below baseline', () => {
+    const cont = (c: number): RunAggregate => ({ ...agg(c), mean: { ...agg(c).mean!, naturalness: 3 } });
+    const within = buildJourneyResults(meta, [runOf(cont(2.85)), runOf(cont(2.85)), runOf(cont(2.85))]);
+    expect(compareJourneyResults(before, within)).toMatchObject({ continuityNotDown: true, pass: true });
+    const below = buildJourneyResults(meta, [runOf(cont(2.79)), runOf(cont(2.79)), runOf(cont(2.79))]);
+    expect(compareJourneyResults(before, below)).toMatchObject({ continuityNotDown: false, pass: false });
+  });
+
   it('passes naturalness when it does not drop, and fails when it does', () => {
-    const upALittle = { ...agg(3.2), mean: { ...agg(3.2).mean!, naturalness: 3.2 } };
+    const upALittle = { ...agg(3), mean: { ...agg(3).mean!, naturalness: 3.2 } };
     const slight = buildJourneyResults(meta, [runOf(upALittle), runOf(upALittle), runOf(upALittle)]);
     expect(compareJourneyResults(before, slight)).toMatchObject({
-      continuityUpHalf: false, naturalnessNotDown: true, pass: false,
+      continuityNotDown: true, naturalnessNotDown: true, pass: true,
     });
-    const dropped = { ...agg(3.5), mean: { ...agg(3.5).mean!, naturalness: 2.9 } };
+    const dropped = { ...agg(3), mean: { ...agg(3).mean!, naturalness: 2.9 } };
     const down = buildJourneyResults(meta, [runOf(dropped), runOf(dropped), runOf(dropped)]);
     expect(compareJourneyResults(before, down)).toMatchObject({ naturalnessNotDown: false, pass: false });
   });
@@ -69,7 +77,7 @@ describe('compareJourneyResults', () => {
   it('fails everything but the fabrication check when a side has no scores', () => {
     const empty = buildJourneyResults(meta, [runOf(null)]);
     expect(compareJourneyResults(empty, before).pass).toBe(false);
-    expect(compareJourneyResults(empty, before).continuityUpHalf).toBe(false);
+    expect(compareJourneyResults(empty, before).continuityNotDown).toBe(false);
   });
 });
 

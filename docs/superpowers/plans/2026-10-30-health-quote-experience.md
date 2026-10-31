@@ -18,7 +18,7 @@
 - 超时仍照读 `threadSensitive` 或 `continueThread`。兜底句组正文不改。
 - 家人引导继续跳过含健康词的句子。事后核对的健康词计数仍只记日志。
 - 编造只计材料外的人名、地名、作品名、日期或数字，以及把已有日期或数字说错。关心句（休息、吃药、注意身体）和没有这些记号的发挥不算。
-- 连续性仍要 `delta >= 0.5`。自然度、不打扰、共情是 `delta >= 0`。对照 `docs/testing/relational-eval/results-baseline.json`。
+- 连续性要 `delta >= -0.2`（2026-10-31 修订，原为 `>= 0.5`）。自然度、不打扰、共情是 `delta >= 0`。对照 `docs/testing/relational-eval/results-baseline.json`。
 - 调参最多三轮，每轮只改一处。出现人名、地名、作品名、日期或数字的编造就停，不调参。
 - 不改剧本、量表维度、评委参数。不 `git add -A`。
 
@@ -290,6 +290,8 @@ EOF
 
 ### Task 3: 自然度门槛改为不低于基线
 
+> **2026-10-31 后续修订：** 连续性门槛在 P5 改为「不退步」，`continuityUpHalf` 改名 `continuityNotDown`（`delta >= -0.2`）。下面的任务记录保留当时写法；当前契约以 spec「门槛修订」与 `gateway/src/eval/journeyResults.ts` 为准。
+
 **Files:**
 - Modify: `gateway/src/eval/journeyResults.ts`（`JourneyGate`、`compareJourneyResults`）
 - Test: `gateway/test/journey-results.test.ts`
@@ -398,7 +400,7 @@ EOF
 
 ```ts
 export interface PlannedIntent { intent: ProactiveIntent; purpose: IntentPurpose; fallbackOnly: boolean; allowCare: boolean }
-export interface JourneyGate { fabricationsZero: boolean; continuityUpHalf: boolean; naturalnessNotDown: boolean; noIntrusionNotDown: boolean; empathyFitNotDown: boolean; pass: boolean }
+export interface JourneyGate { fabricationsZero: boolean; continuityNotDown: boolean; naturalnessNotDown: boolean; noIntrusionNotDown: boolean; empathyFitNotDown: boolean; pass: boolean }
 ```
 
 `p5-01-eval-gate.md` 的 Expected 门槛字段改为 `naturalnessNotDown`。调参表换成：
@@ -475,7 +477,7 @@ node --env-file-if-exists=gateway/.env --import tsx gateway/scripts/eval-journey
   --compare docs/testing/relational-eval/results-baseline.json docs/testing/relational-eval/results-health-quote.json; echo "gate=$?"
 ```
 
-Expected: `dirty: false`，三轮 `failures` 为 0。`fabricationsZero`、`continuityUpHalf`、`naturalnessNotDown`、`noIntrusionNotDown`、`empathyFitNotDown` 全为真。抽查只记会话编号和意图名，不摘录正文。
+Expected: `dirty: false`，三轮 `failures` 为 0。`fabricationsZero`、`continuityNotDown`、`naturalnessNotDown`、`noIntrusionNotDown`、`empathyFitNotDown` 全为真（连续性门槛 2026-10-31 修订）。抽查只记会话编号和意图名，不摘录正文。
 
 - [ ] **Step 4: 不过则调参**
 

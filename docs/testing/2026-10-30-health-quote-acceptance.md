@@ -54,3 +54,7 @@
 ## 调参
 
 三轮已用完，仍不过。配置停在 `concern` 紧急度 70、`sensitive` 重要度 90、牵挂间隔 2 天。不再改。
+
+## 2026-10-31 门槛修订
+
+用户决定把 Q20 连续性门槛从「比基线 +0.5」改为「不退步」（基线减 0.2，至少 3.45），`JourneyGate.continuityUpHalf` 改名 `continuityNotDown`。上表的 `continuityUpHalf` 列是修订前的判定，保留原样。按新门槛，三轮调参的连续性都过（3.59/3.47/3.59），未调参轮 3.41 仍不过；四轮仍因共情 4.18–4.35 低于 4.41、第 3 轮另有 1 次编造而 `pass:false`。用户同日决定不阻塞 P5-T2，由共情评估与 plan-a 作最终判定。见 [spec › 门槛修订](../superpowers/specs/2026-10-30-health-quote-experience-design.md)。

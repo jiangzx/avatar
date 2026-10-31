@@ -21,6 +21,8 @@ export interface JourneyResults {
 export type JourneyResultsMeta = Pick<JourneyResults, 'commit' | 'dirty' | 'date' | 'adapter' | 'journeyFile' | 'rubricFile' | 'judgeModel'>;
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
+/** Q20 continuity "not down" allows the same 0.2 tolerance as the P3 journey gate. */
+const CONTINUITY_TOLERANCE = 0.2;
 
 function median(values: readonly number[]): number {
   const s = [...values].sort((a, b) => a - b);
@@ -47,7 +49,7 @@ export function buildJourneyResults(meta: JourneyResultsMeta, runs: JourneyResul
 
 export interface JourneyGate {
   fabricationsZero: boolean;
-  continuityUpHalf: boolean;
+  continuityNotDown: boolean;
   naturalnessNotDown: boolean;
   noIntrusionNotDown: boolean;
   empathyFitNotDown: boolean;
@@ -55,6 +57,7 @@ export interface JourneyGate {
 }
 
 /** Spec Q20. A session the judge failed to score cannot prove it had no fabrication. */
+// Continuity is "not down" (baseline - 0.2), not "+0.5" (user decision, 2026-10-31).
 export function compareJourneyResults(before: JourneyResults, after: JourneyResults): JourneyGate {
   const fabricationsZero = after.runs.length > 0
     && after.runs.every((r) => r.aggregate !== null && r.aggregate.failures === 0 && r.aggregate.scored > 0)
@@ -64,7 +67,7 @@ export function compareJourneyResults(before: JourneyResults, after: JourneyResu
   const delta = (d: JourneyDimension) => (a && b ? round2(a[d] - b[d]) : Number.NEGATIVE_INFINITY);
   const gate = {
     fabricationsZero,
-    continuityUpHalf: delta('continuity') >= 0.5,
+    continuityNotDown: delta('continuity') >= -CONTINUITY_TOLERANCE,
     naturalnessNotDown: delta('naturalness') >= 0,
     noIntrusionNotDown: delta('noIntrusion') >= 0,
     empathyFitNotDown: delta('empathyFit') >= 0,

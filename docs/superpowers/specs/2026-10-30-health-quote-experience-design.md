@@ -2,13 +2,13 @@
 
 ## 状态
 
-已在对话里确认（2026-10-30，用户，方案 A 及随后三段）。实现计划：[2026-10-30-health-quote-experience](../plans/2026-10-30-health-quote-experience.md)。代码尚未改。
+已在对话里确认（2026-10-30，用户，方案 A 及随后三段）。实现计划：[2026-10-30-health-quote-experience](../plans/2026-10-30-health-quote-experience.md)。代码与旅程评测已完成（2026-10-30）；2026-10-31 用户决定把连续性门槛改为「不退步」，见文末「门槛修订」。
 
 取代 [关系连续的主动互动](2026-10-28-relational-proactivity-design.md) 里 Q20 的自然度条款，以及开放项 1、3 中「健康类暂不进实时模型、须先禁止用药建议并重测编造为 0」的落地条件。那份规格的其余决策不变。历史探针结论保留，不删。
 
 ## 目标
 
-复查类开场不再整段照读健康兜底句。被选中的健康原话由 Qwen 按写法 A 说出来，并允许补一句关心。验收门槛改到 5 分制上办得到的位置：连续性仍要比基线高 0.5；自然度、不打扰、共情不低于基线；共情允许调参。
+复查类开场不再整段照读健康兜底句。被选中的健康原话由 Qwen 按写法 A 说出来，并允许补一句关心。验收门槛改到 5 分制上办得到的位置：连续性不低于基线减 0.2（2026-10-31 修订，原为 +0.5）；自然度、不打扰、共情不低于基线；共情允许调参。
 
 ## 已确认行为
 
@@ -39,12 +39,12 @@
 
 ## 门槛
 
-对照 `docs/testing/relational-eval/results-baseline.json` 的中位数（continuity 3.65、naturalness 4.53、empathyFit 4.41、noIntrusion 4.82）。旅程三次取中位数。`compareJourneyResults` 把 `naturalnessUpHalf`（`delta >= 0.5`）改名为 `naturalnessNotDown`（`delta >= 0`）。连续性仍是 `delta >= 0.5`。
+对照 `docs/testing/relational-eval/results-baseline.json` 的中位数（continuity 3.65、naturalness 4.53、empathyFit 4.41、noIntrusion 4.82）。旅程三次取中位数。`compareJourneyResults` 把 `naturalnessUpHalf`（`delta >= 0.5`）改名为 `naturalnessNotDown`（`delta >= 0`）。连续性由 `continuityUpHalf`（`delta >= 0.5`）改为 `continuityNotDown`（`delta >= -0.2`，2026-10-31）。
 
 | 项 | 判定 |
 |---|---|
 | 编造 | 上一节口径，三次合计 0。出现人名、地名、作品名、日期或数字的编造即停，不调参 |
-| 连续性 | 中位数至少比基线高 0.5（至少 4.15） |
+| 连续性 | 不低于基线减 0.2（至少 3.45；2026-10-31 修订，原为至少 4.15） |
 | 自然度 | 不低于基线 4.53 |
 | 不打扰 | 不低于基线 4.82 |
 | 共情 | 不低于基线 4.41，允许为它调参 |
@@ -57,7 +57,7 @@
 
 | 现象 | 只改一处 |
 |---|---|
-| 连续性不够 | `proactivity.json` 里 `threads.urgency` 的一项、`threads.importance` 的一项，或 `threads.concern.intervalDays` |
+| 连续性低于基线减 0.2 | `proactivity.json` 里 `threads.urgency` 的一项、`threads.importance` 的一项，或 `threads.concern.intervalDays` |
 | 共情不够 | 中文 `director.json` 里健康类或情绪类意图的一句 `purposes`（`threadEventBefore`、`threadEventAfter`、`threadConcern`、`threadPlan`、`moodCheckNow`、`moodCheckEarlier`、`continueThread` 之一）。不加例句 |
 | 自然度低于基线 | `tiers.moderate.threshold` 减 5，或 `tiers.moderate.maxPerSession` 加 1 |
 | 不打扰下降 | 撤销上一轮自然度改动，或降低 `selfShare` 或 `interestTopic` 的 `base.relevance` |
@@ -80,3 +80,10 @@
 ## 不改
 
 会话常驻指令、记忆快照、召回包装、家人引导的健康词过滤、事后核对只记日志、日语和英语、兜底句组正文、探针的自动违规公式、App、后台。
+
+## 门槛修订（2026-10-31 用户决定）
+
+- 原因：健康原话旅程四轮（未调参 + 三轮调参）连续性中位数 3.41、3.59、3.47、3.59，均未到 4.15；调参已用尽，用户决定不再以 +0.5 作为连续性门槛。
+- 决定：连续性改为「不退步」，沿用 P3 旅程不退步的容忍 −0.2，即 `delta >= -0.2`（基线 3.65，至少 3.45）。`JourneyGate.continuityUpHalf` 改名 `continuityNotDown`。编造、自然度、不打扰、共情门槛不变。
+- 影响：新门槛下三轮调参的连续性都过；未调参轮 3.41（−0.24）仍不过。四轮仍因共情 4.18–4.35 低于 4.41 而 `pass:false`，第 3 轮另有 1 次编造。用户同日决定不把它当作进入 P5-T2 的阻塞，由 P5-T2 的共情评估（基准 −0.3 口径）与 plan-a 作最终判定。
+- 证据：`docs/testing/2026-10-30-health-quote-acceptance.md`。

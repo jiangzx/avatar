@@ -1,6 +1,6 @@
 # P5-T1：旅程评测过 Q20 门槛
 
-**Spec：** Q20（编造 0 次一票否决；连续性、自然度各比基线 +0.5 以上；不打扰、共情不退步）、「测试与验收」旅程评测、风险第 7 条（门槛按多次运行的中位数判定）。
+**Spec：** Q20（编造 0 次一票否决；连续性不低于基线减 0.2；自然度、不打扰、共情不退步；连续性门槛 2026-10-31 由 +0.5 修订）、「测试与验收」旅程评测、风险第 7 条（门槛按多次运行的中位数判定）。
 
 **前置：** P4 验收通过。工作区干净（结果文件里 `dirty:false` 才算数）。`gateway/.env` 有模型 Key。
 
@@ -34,7 +34,7 @@ node --env-file-if-exists=gateway/.env --import tsx gateway/scripts/eval-journey
   --compare docs/testing/relational-eval/results-baseline.json docs/testing/relational-eval/results-after.json; echo "gate=$?"
 ```
 
-Expected：`results-after.json` 的 `dirty` 为 false，三轮 `failures` 为 0、没有 `judge_failed`；`--compare` 打印 `JourneyGate`。门槛：`fabricationsZero`、`continuityUpHalf`、`naturalnessNotDown`、`noIntrusionNotDown`、`empathyFitNotDown` 全为真（`pass: true`）。
+Expected：`results-after.json` 的 `dirty` 为 false，三轮 `failures` 为 0、没有 `judge_failed`；`--compare` 打印 `JourneyGate`。门槛：`fabricationsZero`、`continuityNotDown`、`naturalnessNotDown`、`noIntrusionNotDown`、`empathyFitNotDown` 全为真（`pass: true`）。
 
 - [ ] **Step 3：逐条抽查**
 
@@ -52,7 +52,7 @@ Expected：`results-after.json` 的 `dirty` 为 false，三轮 `failures` 为 0�
 
 | 现象 | 只改一处 |
 |---|---|
-| 连续性不够 | 第一轮 `threads.urgency.concern` 60→70；下一轮仍是连续性则 `threads.importance.sensitive` 80→90；再一轮则 `threads.concern.intervalDays` 3→2 |
+| 连续性低于基线减 0.2 | 第一轮 `threads.urgency.concern` 60→70；下一轮仍是连续性则 `threads.importance.sensitive` 80→90；再一轮则 `threads.concern.intervalDays` 3→2 |
 | 共情不够 | `purposes.threadConcern` 改为「老人前些天说过一件挂心的事，先接住这件事，再轻轻问现在怎么样」。不加例句 |
 | 自然度低于基线 | `tiers.moderate.threshold` 45→40。若该键已改过，则 `tiers.moderate.maxPerSession` 4→5 |
 | 不打扰下降 | 撤销上一轮自然度改动；若上一轮不是自然度，则 `selfShare.base.relevance` 40→30 |
@@ -61,6 +61,8 @@ Expected：`results-after.json` 的 `dirty` 为 false，三轮 `failures` 为 0�
 多条同时不过时，每轮只处理最先的一项，顺序：编造、连续性、共情、自然度、不打扰。
 
 每一轮的改动、提交号、五项结果记进验收文档。三轮后仍不过：停下，把三轮数据交给用户决定（接受现状、调整门槛或改设计），不再自行尝试。
+
+**2026-10-31 用户决定：** 连续性门槛改为「不退步」（基线 −0.2），并继续 P5-T2。健康原话旅程四轮已用尽调参，四轮仍因共情低于基线不过（第 3 轮另有 1 次编造）；P5-T1 不以 `pass:true` 结束，交给 P5-T2 的共情评估与 plan-a 作最终判定。证据与数值见 `docs/testing/2026-10-30-health-quote-acceptance.md`。
 
 - [ ] **Step 5：记录与提交**
 

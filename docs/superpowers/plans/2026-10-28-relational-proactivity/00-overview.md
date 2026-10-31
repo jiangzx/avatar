@@ -239,7 +239,7 @@ get exhaustedArmedCount(): number;
 
 | 任务 | 文件 | 内容 | 依赖 |
 |---|---|---|---|
-| P5-T1 | `p5-01-eval-gate.md` | Q20 门槛：真实 Qwen 旅程评测 3 次中位数对比基线（编造 0、连续性与自然度各 +0.5、不打扰与共情不退步）；不达标按规则调参重跑，最多三轮 | P4 |
+| P5-T1 | `p5-01-eval-gate.md` | Q20 门槛：真实 Qwen 旅程评测 3 次中位数对比基线（编造 0、连续性不低于基线减 0.2、自然度/不打扰/共情不退步）；不达标按规则调参重跑，最多三轮 | P4 |
 | P5-T2 | `p5-02-regression-evals.md` | 共情评估两次（不退步口径）与 plan-a persona 门槛 | P5-T1 |
 | P5-T3 | `p5-03-device-acceptance.md` | 真机验收清单 12 项（用户在场），只记通过与否 | P5-T2 |
 | P5-T4 | `p5-04-blind-test.md` | 小范围真人盲测：同一套脚本卡在基线与新版本上各聊一次，测试者不知道哪个是哪个，只收分数 | P5-T3 |
@@ -249,8 +249,10 @@ get exhaustedArmedCount(): number;
 
 1. **真人盲测用合成剧本的转写稿**：隐私规则不允许保存真实对话或音频，所以盲测让 3–5 位测试者给「基线 vs 最终版本」同一会话的 A/B 转写稿打分（随机标号、只收分数、测试者用代号）。两套网关跨三天的语音盲测作为可选项，默认不做。
 2. **盲测只出报告**，不设自动门槛；建议口径是连续性、自然度高于基线，不打扰、共情不低于基线，结论由用户定。
-3. **共情评估的「不退步」口径**：六个维度两次平均不低于 Plan 4 合并基准 −0.3，`noFabricationAllFive` 两次为真；不用 `compare.mjs` 的「前三项 +1」退出码。旅程评测在 P3 的「不退步」容忍 −0.2（P5 用 Q20 原门槛）。
+3. **共情评估的「不退步」口径**：六个维度两次平均不低于 Plan 4 合并基准 −0.3，`noFabricationAllFive` 两次为真；不用 `compare.mjs` 的「前三项 +1」退出码。旅程评测的连续性沿用 P3 的「不退步」容忍 −0.2（2026-10-31 用户修订；原为 +0.5）。
 4. **调参最多三轮**，三轮仍不过就停下交给用户；编造不调参，直接报告。
+
+**2026-10-31 修订：** 健康原话旅程四轮连续性均未到 4.15，用户决定把 Q20 连续性门槛改为「不退步」（基线 −0.2）。四轮仍因共情低于基线不过；用户决定不阻塞 P5-T2，由共情评估与 plan-a 作最终判定。见 [2026-10-30 设计 › 门槛修订](../specs/2026-10-30-health-quote-experience-design.md)。
 
 ### P4 冻结契约（在 P3 后半契约之上增加）
 
@@ -352,7 +354,7 @@ export interface JourneyResults { commit: string; dirty: boolean; date: string; 
   runs: Array<{ aggregate: RunAggregate | null; journeys: Array<{ id: string; title: string; sessions: Array<SessionRun & { scores: SessionScores | null }> }> }>;
   median: Record<JourneyDimension, number> | null; fabricationsTotal: number; retentionPressureTotal: number }
 export function medianOf(runs: JourneyResults['runs']): Record<JourneyDimension, number> | null;
-export interface JourneyGate { fabricationsZero: boolean; continuityUpHalf: boolean; naturalnessNotDown: boolean; noIntrusionNotDown: boolean; empathyFitNotDown: boolean; pass: boolean }
+export interface JourneyGate { fabricationsZero: boolean; continuityNotDown: boolean; naturalnessNotDown: boolean; noIntrusionNotDown: boolean; empathyFitNotDown: boolean; pass: boolean }
 export function compareJourneyResults(before: JourneyResults, after: JourneyResults): JourneyGate;
 ```
 
