@@ -57,13 +57,15 @@ node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp
 - 设备：小米 22101317C / Android 13；App debug APK 安装；`adb reverse tcp:8787 tcp:8787`；网关 `launchd` 重启，DB v9；备份 `~/.avatar/memory.db.bak-v8-20261031-topicq`（v8，4 owners/6 agents/69 sessions/389 messages）。
 - 实机新 owner `{E}bd20acedc95e` / agent `b1d103f2-…`；真实记忆“宝仔/美国”来自用户此前原话；用户确认不是编造。
 - **记忆问句通过**：受控临时关闭 `routine`/`continueThread` 后，context `interestTopic`、check `selfShare` 出问句；小暖说“刚才听您提到在餐厅打工的宝仔……您觉得在美国的华人，日子过得怎么样呀？”；leave `quiet`。配置已恢复并重启网关。
-- **未完成**：用户说“不感兴趣”/“换个话题”的真机路径。App `CharacterHolds` 锁住小暖/小凯（网关曾报 disabled 的本地 hold）；网关 `session_rejected char xiaoxin reason character_disabled`；小欣被网关禁用。设备时间不能改（`date` Operation not permitted），未清 App 安全存储的 hold 键（避免丢 device_token/真实记忆）。单元测试覆盖这两条路径，真机待角色解锁后补。
+- **“不感兴趣”卡片路径通过**：check `selfShare` 选了 `card:walk`；用户说“不感兴趣”；日志 `proactive_topic_declined source=card`；DB `proactive_topic_avoid` 写入 `card:walk`；`owner.notified_at` 已置，`canPersist` 通过。
+- **未完成**：“换个话题”真机路径。随后 App 三个角色都显示离线：App `CharacterHolds`（网关曾报 disabled 的本地 hold）+ 网关 `character_disabled`；没有可用角色开新会话。设备时间不能改（`date: Operation not permitted`），未清 App 安全存储的 hold 键（避免丢 device_token/真实记忆）。单元测试覆盖“换个话题”和记忆负偏好。
 - 设备/App 观察：`assistant_tool_syntax` 取消了开场问候（既有 textGuard）；一次 name followup 后 `reply_metrics` 缺失、会话停住，Mac TTS 用户终稿后恢复；均非本次问句逻辑。
-- 真实库已迁移 v9；`proactive_topic_avoid` 0（负偏好真机未触发）。T0 Qwen `mustAsk` 探针未跑；`--real-db` 未跑（`MEMORY_DB_PATH` 未设置）。
+- 真实库已迁移 v9；`proactive_topic_avoid` 有 1 行 `card:walk`（“不感兴趣”卡片路径）。T0 Qwen `mustAsk` 探针未跑；`--real-db` 未跑（`MEMORY_DB_PATH` 未设置）。
 
 ## 未做/待用户
 
-- 真机“不感兴趣”/“换个话题”：需要先解锁一个可用角色（后台启用小欣/小暖，或清理 App 的 `character_hold_until.*` 安全存储键并保留 `device_token`/`character_id`）。当前小暖/小凯被 App `CharacterHolds` 锁住，小欣网关 `character_disabled`。
+- 真机“换个话题”：需要先解锁一个可用角色（后台启用小欣/小暖，或清理 App 的 `character_hold_until.*` 安全存储键并保留 `device_token`/`character_id`）。当前三个角色都显示离线（App CharacterHolds + 网关 character_disabled）。
+- 真机记忆负偏好（`stmt:` key）：本轮 check 选中的是 `card:walk`，记录的是卡片负偏好；记忆负偏好由单元测试覆盖。
 - 真实库 `--real-db` 三角色召回探针：`MEMORY_DB_PATH` 未设置；另受 HEAD `d6d688a` 的 `zh_vague_recent_only` 失败阻塞（见 blockers）。
 - T0 真实 Qwen `mustAsk` 探针（问句率/两个问号/材料外事实）。
 - 后台 `proactivity.json` 的数值描述符没有新增；当前只能改 baseline 文件，`memoryRatio` 等未进后台 UI。`copy.json` 已加两组兜底句描述符。
@@ -80,4 +82,4 @@ node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp
 
 ## 结论
 
-代码与自动化测试已完成；真机记忆问句已用真实记忆验证通过。负偏好/换话题的真机路径因 App `CharacterHolds` 与网关角色 disabled 未完成，真实库 `--real-db` 召回探针也因既有 vague-recall 失败未做；不能声称 T7 全通过。
+代码与自动化测试已完成；真机记忆问句和“不感兴趣”卡片负偏好已验证通过。真机“换个话题”因三角色离线未完成，真实库 `--real-db` 召回探针也因既有 vague-recall 失败未做；不能声称 T7 全通过。

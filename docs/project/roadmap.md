@@ -14,16 +14,16 @@
 
 ## 主动记忆/随机话题问句（2026-10-31）
 
-状态：**T1–T6 实现完成；T0 真实模型探针未跑；T7 部分完成（全量/typecheck/protocol/admin 通过；召回 `--temp` 在 HEAD 失败，见 blockers；真实库已备份并迁移 v9；真机记忆问句通过；负偏好/换话题真机路径待角色解锁；`--real-db` 待做）**。
+状态：**T1–T6 实现完成；T0 真实模型探针未跑；T7 部分完成（全量/typecheck/protocol/admin 通过；召回 `--temp` 在 HEAD 失败，见 blockers；真实库已备份并迁移 v9；真机记忆问句与“不感兴趣”卡片负偏好通过；换个话题真机待角色解锁；`--real-db` 待做）**。
 
 - 设计：[spec](../superpowers/specs/2026-10-31-proactive-memory-topic-question-design.md)（已批准，2026-10-31）；计划：[plan](../superpowers/plans/2026-10-31-proactive-memory-topic-question.md)。
 - 内容：zh 的 context/check 的 `interestTopic`/`selfShare` 必带一个记忆/话题卡问句；70/30 每轮一次；材料优先级事项→话题型非敏感 facts→最近 3 个已结束会话/7 天原话；leave/rest/checkin 与其他意图不变。负偏好 v9 `proactive_topic_avoid`（只存 key，90 天/0 永久，随记忆删除）；“换个话题”当前回复结束后立即新问句，不 arm 6 秒。
 - 实现：`gateway/src/session/proactive/questionMaterial.ts`、`runtime.ts`、`assemble.ts`、`render.ts`、`check.ts`、`memory/store.ts`、migrations v9、Director/Session 接线、zh 24 条话题卡与文案、en/ja topic id 对齐。
 - 回归（实际跑过）：gateway 128 文件/1510 项、typecheck；protocol 3/16、typecheck；admin 24/132、typecheck、build；`git diff --check` clean。
-- 真机（2026-10-31）：小米 22101317C / Android 13；App debug APK；网关重启后 DB v9；备份 `~/.avatar/memory.db.bak-v8-20261031-topicq`（v8，4 owners/6 agents/69 sessions/389 messages）。实机新 owner `{E}bd20acedc95e`；真实记忆“宝仔/美国”由用户确认。受控临时关闭 `routine`/`continueThread` 后，context `interestTopic` + check `selfShare` 出记忆问句（“刚才听您提到在餐厅打工的宝仔……您觉得在美国的华人，日子过得怎么样呀？”），leave `quiet`；配置已恢复并重启网关。负偏好/换话题真机未完成：App `CharacterHolds` 锁小暖/小凯，网关 `session_rejected char xiaoxin character_disabled`；设备时间不能改，未清安全存储 hold 键以免丢 device_token/真实记忆。`proactive_topic_avoid` 0。
-- 未完成：T0 Qwen `mustAsk` 探针；`MEMORY_DB_PATH` 未设置，`--real-db` 三角色召回探针未跑；真机负偏好/换话题待角色解锁。召回 `--temp` 当前 HEAD 失败于 `zh_vague_recent_only`；HEAD~1 通过 133，HEAD 独立 worktree 同样失败，归因到 `d6d688a` 的 vague-recall 提交，与本次无关。详见 [验收记录](../testing/2026-10-31-proactive-topic-question-acceptance.md) 与 `docs/blockers.md`。
+- 真机（2026-10-31）：小米 22101317C / Android 13；App debug APK；网关重启后 DB v9；备份 `~/.avatar/memory.db.bak-v8-20261031-topicq`（v8，4 owners/6 agents/69 sessions/389 messages）。实机新 owner `{E}bd20acedc95e`；真实记忆“宝仔/美国”由用户确认。受控临时关闭 `routine`/`continueThread` 后，context `interestTopic` + check `selfShare` 出记忆问句（“刚才听您提到在餐厅打工的宝仔……您觉得在美国的华人，日子过得怎么样呀？”），leave `quiet`；配置已恢复并重启网关。“不感兴趣”卡片路径通过：check `selfShare` 选 `card:walk`，日志 `proactive_topic_declined source=card`，DB `proactive_topic_avoid` 写入 `card:walk`。随后 App 三角色离线（App `CharacterHolds` + 网关 `character_disabled`），真机“换个话题”未完成；设备时间不能改，未清安全存储 hold 键以免丢 device_token/真实记忆。
+- 未完成：T0 Qwen `mustAsk` 探针；`MEMORY_DB_PATH` 未设置，`--real-db` 三角色召回探针未跑；真机“换个话题”待角色解锁。召回 `--temp` 当前 HEAD 失败于 `zh_vague_recent_only`；HEAD~1 通过 133，HEAD 独立 worktree 同样失败，归因到 `d6d688a` 的 vague-recall 提交，与本次无关。详见 [验收记录](../testing/2026-10-31-proactive-topic-question-acceptance.md) 与 `docs/blockers.md`。
 - 当前计时以代码为准：`context/check/leave/checkin = 6/6/6/6`，`rest=180s`；`roadmap.md:148`/`:217` 的 6/8/10/10 和文本规划器是历史描述，不要按那段改回。
-- 下一步：先修复/回滚 `d6d688a` 的 vague recall 使召回探针恢复；再有真实库的机器上跑 `--real-db`；解锁一个 App 角色（后台启用小欣/小暖，或清 `character_hold_until.*` 并保留 `device_token`）后补负偏好/换话题真机；T0 Qwen 探针。
+- 下一步：先修复/回滚 `d6d688a` 的 vague recall 使召回探针恢复；再有真实库的机器上跑 `--real-db`；解锁一个 App 角色（后台启用小欣/小暖，或清 `character_hold_until.*` 并保留 `device_token`）后补“换个话题”真机；T0 Qwen 探针。
 
 ## 模糊回忆召回修复（2026-10-31）
 
