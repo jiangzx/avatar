@@ -150,3 +150,9 @@ git diff --check
 - `server_vad` 打断体感未知：T8 真机对比；不通过保留 `server_vad` 并记录，不改成未验证的 `smart_turn_v2`。
 - `max_response_output_tokens` 在 3.1 上未回显：T8 检查；无效则记 blocker，不假设它生效。
 - 真实 Key 不可用：T8 标 blocker，跳过真实冒烟，不声称通过；其余测试必须跑。
+
+## 执行后变更（2026-10-31）
+
+- 真机切换 3.1 后所有回复 `InternalError`；根因是 3.1 要求每个 tool 的 `parameters` 带 `required`，适配器 `toQwenTool` 已归一化并有回归测试。见冒烟记录 §4.1。
+- 用户确认 3.1 会话可用后，`qwen-audio-3.1-realtime-flash` 设为默认：`config.ts` 的 env fallback、`QwenAdapter` 构造默认和本地 `.env` 都改为 3.1；3.8 保留可切回。
+- `qwen-plus` affect 超时排查：同 prompt 复测约 1s；线上 2.5s 超时是预算处中止，建议 4000ms 或一次重试，尚未改配置。见 blockers #75。

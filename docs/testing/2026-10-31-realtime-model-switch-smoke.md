@@ -78,6 +78,23 @@ QWEN_MODEL=qwen-audio-3.1-realtime-flash QWEN_TURN_DETECTION=server_vad \
 
 结论：3.1 能连接、能出声、三语会话被接受、工具定义被接受；**未触发真实工具调用**，音色质量未试听（见阻塞 #73）。
 
+### 4.1 3.1 tool schema 兼容修复（2026-10-31）
+
+真机切换 3.1 后，问候和回复都只返回 `InternalError`；`response.create` 后 0 字、0 音频。用网关的真实 tool 定义逐个复现：
+
+| 用例 | 结果 |
+|---|---|
+| 7 个工具全发 | `InternalError` |
+| 去掉 `get_weather`（6 个） | 仍 `InternalError` |
+| 只发 `perform_action` / `recall_memory` / `forget_memory` / `pin_memory` / `set_memory_consent` | completed |
+| 只发 `list_memory` | `InternalError` |
+| 只发 `get_weather` | `InternalError` |
+| `list_memory` 补 `required: []` | completed |
+| `get_weather` 补 `required: ['location']` 或 `required: []` | completed |
+| 只改短 description、仍缺 `required` | 仍 `InternalError` |
+
+结论：3.1 要求每个 tool 的 `parameters` 都包含 `required` 数组，缺失时在生成阶段返回 `InternalError`；3.8 不要求。修复在 `QwenAdapter.toQwenTool`：缺失时补 `[]`，已有则保留，并在 `qwen.test.ts` 加回归测试。修复后真机 3.1 会话正常出问候（`usage_events` 模型为 `qwen-audio-3.1-realtime-flash`，无 `InternalError`）。2026-10-31 用户确认可用了，3.1 已设为默认（3.8 保留可切回）。
+
 ## 5. `max_response_output_tokens`（3.1）
 
 raw WS：`session.update` 带 `max_response_output_tokens: 16`，请求一个约一百字的故事。
@@ -115,8 +132,24 @@ git diff --check              # 无输出
 | P5 旅程/共情评估（3.1） | 3.1 不设为默认，未改默认模型 | 只在决定默认时重跑 |
 | 管理端浏览器手动检查 | 未开浏览器；admin 测试/typecheck/build 通过 | 真机验收时一并看 |
 
+## 7.1 `qwen-plus` affect 超时排查（2026-10-31）
+
+真机 3.1 会话期间出现 `affect` 失败：09:36:56 与 09:37:12 各一次 `affect_timeout`（2503/2504 ms），09:37:24 一次 `invalid`（2406 ms）。用同一个 affect system prompt、类似的 6 条 history 和 `qwen-plus` 直接复测 6 次：
+
+| run | 耗时 | 返回字数 | 错误 |
+|---|---|---|---|
+| 1 | 1136 ms | 113 | 无 |
+| 2 | 1176 ms | 113 | 无 |
+| 3 | 1126 ms | 113 | 无 |
+| 4 | 998 ms | 113 | 无 |
+| 5 | 1028 ms | 113 | 无 |
+| 6 | 991 ms | 113 | 无 |
+
+结论：`qwen-plus` 本身没有超过 2.5s；6 次都在约 1.0–1.2s。线上两次超时是客户端在 2.5s 预算处中止（没有 HTTP 错误，也没有上游错误码），属于瞬时延迟/抖动贴近预算；另一次 `invalid` 是返回内容没解析成 JSON，和超时不是同一类。当前 `affect.policy.timeoutMs = 2500`、`retries = 0`，建议把超时提高到 4000ms 或加一次重试；affect 失败时保留旧卡片，不会造成死气，只是本轮语速可能不更新。
+
 ## 8. 结论
 
 - `speech_rate` 是 3.1 上唯一可靠的语气补偿：0.8 约 +25%，中途更新生效；affect → 0.8 / 1.0 的实现有测试覆盖。
-- 3.8 保持默认；3.1 可在后台切换，但真机、音色试听和输出上限未过，暂不设默认。
+- 3.1 tool schema 必须带 `required`；适配器已归一化。修复后真机 3.1 问候/回复正常，用户确认可用；3.1 已设为默认，3.8 保留可切回。
+- `qwen-plus` 实测约 1s；线上 affect 超时是 2.5s 预算下的瞬时抖动，建议 4s 或一次重试；`max_response_output_tokens` 在 3.1 上仍不生效（#74），当前 `pacing.output.maxTokens` 为 null。
 - 训练/评估结论不变：`instructions` 不能控语气，路线 A 的语音补偿只到语速层面。

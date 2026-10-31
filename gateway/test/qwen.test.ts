@@ -414,4 +414,33 @@ describe('QwenAdapter', () => {
     expect(updates).toEqual([expect.objectContaining({ instructions: 'fixture' }), { instructions: 'next' }]);
     a.close();
   });
+
+  it('normalizes tool schemas so every function has required', async () => {
+    const s = new WebSocketServer({ port: 0 }); servers.push(s);
+    await new Promise<void>((r) => s.once('listening', r));
+    const port = (s.address() as { port: number }).port;
+    const updates: Array<Record<string, any>> = [];
+    s.on('connection', (ws) => ws.on('message', (raw) => {
+      const e = JSON.parse(raw.toString());
+      if (e.type === 'session.update') {
+        updates.push(e.session);
+        ws.send(JSON.stringify({ type: 'session.created' }));
+        ws.send(JSON.stringify({ type: 'session.updated' }));
+      }
+    }));
+    const a = new QwenAdapter({ apiKey: 'fixture', endpoint: `ws://127.0.0.1:${port}`, voice: 'fixture' });
+    await a.connect({
+      instructions: 'fixture',
+      tools: [
+        { name: 'list_memory', description: 'x', parameters: { type: 'object', properties: {} } },
+        { name: 'get_weather', description: 'x', parameters: { type: 'object', properties: { location: { type: 'string' } } } },
+        { name: 'perform_action', description: 'x', parameters: { type: 'object', properties: { action: { type: 'string' } }, required: ['action'] } },
+      ],
+    });
+    const tools = updates[0]!.tools as Array<Record<string, any>>;
+    expect(tools[0]!.parameters.required).toEqual([]);
+    expect(tools[1]!.parameters.required).toEqual([]);
+    expect(tools[2]!.parameters.required).toEqual(['action']);
+    a.close();
+  });
 });

@@ -32,7 +32,7 @@
 - 管理员在后台切换实时模型，下一通会话生效；正在进行的通话不受影响。
 - 每个模型独立配置每个角色、每种语言的音色；切模型自动使用该模型的音色。
 - 支持 `speech_rate` 的模型在低情绪时把语速降到配置值（初值 0.8），其余时候回到 1.0；在安全缝隙推送，不打断当前播放。
-- 默认模型仍是 `qwen3.8-omni-flash-realtime`；3.1 作为可选项，验证通过前不设为默认。
+- `qwen-audio-3.1-realtime-flash` 已是默认模型（2026-10-31 用户确认）；`qwen3.8-omni-flash-realtime` 保留为可切回的回退。
 - 不改变会话协议和 App 正常会话行为；管理端配置协议只增加一个可选字段。
 
 **非目标**
@@ -41,7 +41,7 @@
 - 不做语音音高/音色情绪控制；`speech_rate` 只改语速。
 - 不做运行时新增模型（新增模型仍需改配置并重启）；后台只做已有模型之间的切换。
 - 不做声音复刻、灰度、A/B、自动降级到另一个模型。
-- 不改变默认模型；不把 3.1 设为默认需要单独的评估结论。
+- 默认模型已由用户决定切到 3.1；仍不做自动降级、灰度或 A/B。
 
 ## 3. 已确认决策
 
@@ -55,6 +55,7 @@
 | D6 | 每模型音色是主数据源；角色卡 `voices.qwen` 仅作兼容兜底。env 默认实时模型上旧的角色音色覆盖继续生效，新的 `voice:` 覆盖优先。 |
 | D7 | `speech_rate` 的推送沿用 `PushGate` 的安全缝隙语义；当前正在播放的回复不变，从下一次可推送的回复开始生效。 |
 | D8 | 3.1 与 3.8 同价（北京：文本输入 1.5 / 音频输入 6 / 文本输出 4.5 / 音频输出 12 元每百万 token），价格基线加一行。 |
+| D9 | 2026-10-31 用户确认 3.1 设为默认；3.8 保留可切回。真机/音色试听已由用户确认基本可用（blockers #72/#73）；`max_response_output_tokens` 仍不被 3.1 执行（#74），当前 `pacing.output.maxTokens` 为 null，所以默认配置没有发送该上限。 |
 
 ## 4. 配置设计
 
@@ -285,6 +286,8 @@ updateSession?(update: {
 
 Qwen 只在 `speechRate !== undefined` 且模型支持时把 `speech_rate` 放进同一次部分 `session.update`。`MockAdapter` 记录 `speechRate` 供测试断言。
 
+Tool schemas are normalized at the adapter boundary: every function's `parameters` gets a `required` array (empty when absent). `qwen-audio-3.1-realtime-flash` returns `InternalError` during `response.create` when any tool schema omits `required`; 3.8 tolerated it. The adapter preserves an existing `required` list and adds `[]` only when missing.
+
 新增只读能力：
 
 ```ts
@@ -406,7 +409,7 @@ this.syncAffectRender(rateChanged ? nextRate : undefined);
 
 ## 9. 兼容性与回滚
 
-- 默认模型不变；未切换时行为与现在一致。
+- 默认模型已是 3.1；管理端可切回 3.8。切换仍是下一通会话生效。
 - 管理端切换是覆盖层发布，可回滚到上一版本；切回 3.8 即恢复旧模型。
 - 旧 `character:...voices.qwen...` 覆盖在 3.8 上继续生效；新的 `voice:` 覆盖优先。
 - `realtime.json` 是基线；新增模型仍需改配置并重启，不在后台热加模型。

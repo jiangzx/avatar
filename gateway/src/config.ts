@@ -112,7 +112,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     adapter,
     ...(qwenApiKey ? { qwenApiKey } : {}),
     qwenEndpoint,
-    qwenModel: env.QWEN_MODEL ?? 'qwen3.8-omni-flash-realtime',
+    qwenModel: env.QWEN_MODEL ?? 'qwen-audio-3.1-realtime-flash',
     qwenVoice: qwenVoices.zh,
     qwenVoices,
     summarizer,

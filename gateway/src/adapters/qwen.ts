@@ -63,7 +63,7 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
     super();
     if (!options.apiKey) throw new Error('DASHSCOPE_API_KEY is required');
     this.opts = {
-      model: 'qwen3.8-omni-flash-realtime',
+      model: 'qwen-audio-3.1-realtime-flash',
       connectTimeoutMs: 10000,
       turnDetection: { type: 'semantic_vad', silenceDurationMs: 800 },
       speechRate: null,
@@ -219,7 +219,11 @@ export class QwenAdapter extends EventEmitter<AdapterEvents> implements Realtime
   private responseIdFrom(e: Json): string { return typeof e.response_id === 'string' ? e.response_id : (this.responseId ?? 'unknown'); }
   private clearConnectTimer(): void { if (this.connectTimer) clearTimeout(this.connectTimer); this.connectTimer = null; }
 }
-function toQwenTool(tool: ToolSpec): Json { return { type: 'function', name: tool.name, description: tool.description, parameters: tool.parameters }; }
+function toQwenTool(tool: ToolSpec): Json {
+  // qwen-audio-3.1 rejects response generation when any tool schema omits `required`.
+  const required = Array.isArray(tool.parameters.required) ? tool.parameters.required : [];
+  return { type: 'function', name: tool.name, description: tool.description, parameters: { ...tool.parameters, required } };
+}
 function decode(value: unknown): Int16Array | null { if (typeof value !== 'string') return null; try { const b = Buffer.from(value, 'base64'); const n = b.byteLength - b.byteLength % 2; return new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + n)); } catch { return null; } }
 
 function parseUsage(raw: unknown): TokenUsage | null {
