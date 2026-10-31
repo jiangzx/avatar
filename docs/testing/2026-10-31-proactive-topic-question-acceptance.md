@@ -59,17 +59,17 @@ node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp
 - **记忆问句通过**：受控临时关闭 `routine`/`continueThread` 后，context `interestTopic`、check `selfShare` 出问句；小暖说“刚才听您提到在餐厅打工的宝仔……您觉得在美国的华人，日子过得怎么样呀？”；leave `quiet`。配置已恢复并重启网关。
 - **“不感兴趣”卡片路径通过**：check `selfShare` 选了 `card:walk`；用户说“不感兴趣”；日志 `proactive_topic_declined source=card`；DB `proactive_topic_avoid` 写入 `card:walk`；`owner.notified_at` 已置，`canPersist` 通过。
 - **App 角色锁恢复**：App `CharacterHolds` 与 Duix crash guard 把三个角色都锁了；用 debug 构建 `--dart-define=CLEAR_HOLDS=true` 只清 `character_hold_until.*`、`duix_crash_count`、`duix_inflight`，保留 `device_token`/`character_id`/真实记忆；覆盖安装后小暖已重新进入通话。App 全量 364 项、`flutter analyze` 通过。
-- **未完成**：“换个话题”真机路径（App 已恢复可选，等下一轮会话；单元测试已覆盖）。记忆负偏好（`stmt:` key）本轮真机选中的是卡片，记录的是卡片负偏好。
+- **“换个话题”通过**：context `interestTopic`（真实记忆 `stmt`）问完后，用户说“换个话题”；日志 `proactive_topic_declined source=stmt switch=true`；当前回复结束后 `proactive_switch`（fromKind `interestTopic`，source `stmt`，delayMs 5066，capped false），App 立刻问新话题“那您平时喜欢什么运动呀？”。DB `proactive_topic_avoid` 现有 2 行：`card:walk`、`stmt:<hash>`。
+- **未完成**：T0 Qwen `mustAsk` 探针；`--real-db` 召回探针（`MEMORY_DB_PATH` 未设置，且受 HEAD `d6d688a` 的 `zh_vague_recent_only` 阻塞）；后台 `topicQuestion` 数值描述符未加。
 - 设备/App 观察：`assistant_tool_syntax` 取消了开场问候（既有 textGuard）；一次 name followup 后 `reply_metrics` 缺失、会话停住，Mac TTS 用户终稿后恢复；均非本次问句逻辑。
 - 真实库已迁移 v9；`proactive_topic_avoid` 有 1 行 `card:walk`（“不感兴趣”卡片路径）。T0 Qwen `mustAsk` 探针未跑；`--real-db` 未跑（`MEMORY_DB_PATH` 未设置）。
 
 ## 未做/待用户
 
-- 真机“换个话题”：App 已用 debug `CLEAR_HOLDS=true` 恢复小暖（保留 device_token/真实记忆），下一轮会话补测即可。
-- 真机记忆负偏好（`stmt:` key）：本轮 check 选中的是 `card:walk`，记录的是卡片负偏好；记忆负偏好由单元测试覆盖。
 - 真实库 `--real-db` 三角色召回探针：`MEMORY_DB_PATH` 未设置；另受 HEAD `d6d688a` 的 `zh_vague_recent_only` 失败阻塞（见 blockers）。
 - T0 真实 Qwen `mustAsk` 探针（问句率/两个问号/材料外事实）。
 - 后台 `proactivity.json` 的数值描述符没有新增；当前只能改 baseline 文件，`memoryRatio` 等未进后台 UI。`copy.json` 已加两组兜底句描述符。
+- App 当前装的是 `CLEAR_HOLDS=true` debug 包；需要时可再构建不带该 flag 的 debug 包覆盖安装（角色锁/Duix guard 已清，不会再锁）。
 
 ## 真机验收脚本（合成，不含真实对话）
 
@@ -83,4 +83,4 @@ node --import tsx docs/testing/plan3-multilingual-recall-probe.mjs --temp
 
 ## 结论
 
-代码与自动化测试已完成；真机记忆问句和“不感兴趣”卡片负偏好已验证通过。真机“换个话题”因三角色离线未完成，App 已用 debug 清锁恢复小暖；真实库 `--real-db` 召回探针也因既有 vague-recall 失败未做；不能声称 T7 全通过。
+代码与自动化测试已完成；真机记忆问句、“不感兴趣”卡片负偏好、以及“换个话题”立即换题都已验证通过。剩余 T0 Qwen 探针与真实库 `--real-db` 召回探针（受既有 vague-recall 失败阻塞）未做；不能声称 T7 全通过。

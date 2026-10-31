@@ -250,9 +250,11 @@
 - `MEMORY_DB_PATH` 未设置，未跑 `--real-db`；真实库迁移 v9 和真机 7 项未做。
 - 解除条件：先修复/回滚 `d6d688a` 的 vague recall，使 `--temp` 探针恢复；再在有真实库的机器上备份、迁移 v9、跑 `--real-db`，并在用户在场时做真机验收。
 
-## 2026-10-31 主动话题真机：换个话题待下一轮会话
+## 2026-10-31 主动话题真机：三项通过，剩余 T0/--real-db
 
-- 真机记忆问句已通过；“不感兴趣”卡片路径已通过：check `selfShare` 选 `card:walk`，`proactive_topic_declined source=card`，DB `proactive_topic_avoid` 写入 `card:walk`；`owner.notified_at` 已置。
-- App 三角色随后都显示离线（`CharacterHolds` + Duix crash guard + 网关 `character_disabled`）。已用 debug 构建 `--dart-define=CLEAR_HOLDS=true` 只清 `character_hold_until.*`/`duix_crash_count`/`duix_inflight`，保留 `device_token`/`character_id`/真实记忆；覆盖安装后小暖已重新进入通话。未直接编辑加密的 FlutterSecureStorage 文件。
-- 真机“换个话题”待下一轮会话；单元测试已覆盖。记忆负偏好（`stmt:` key）本轮未真机触发（check 选中的是 `card:walk`），由单元测试覆盖。
-- 临时关闭 `routine`/`continueThread` 的测试配置已用 `git checkout` 恢复并重启网关；真实库 v9；备份 `~/.avatar/memory.db.bak-v8-20261031-topicq`；`proactive_topic_avoid` 有 1 行 `card:walk`。
+- 真机记忆问句已通过；用户确认“宝仔/美国”是真实记忆。
+- “不感兴趣”卡片路径已通过：check `selfShare` 选 `card:walk`，`proactive_topic_declined source=card`，DB `proactive_topic_avoid` 写入 `card:walk`。
+- “换个话题”已通过：context 记忆问句后 `proactive_topic_declined source=stmt switch=true`；当前回复结束后 `proactive_switch`（fromKind `interestTopic`，source `stmt`，delayMs 5066，capped false）；App 立即问“那您平时喜欢什么运动呀？”。DB 现有 2 行：`card:walk`、`stmt:<hash>`。
+- App 三角色曾离线（`CharacterHolds` + Duix crash guard + 网关 `character_disabled`）；已用 debug `--dart-define=CLEAR_HOLDS=true` 只清 `character_hold_until.*`/`duix_crash_count`/`duix_inflight`，保留 `device_token`/`character_id`/真实记忆；小暖已恢复。
+- 剩余：T0 Qwen `mustAsk` 探针；`--real-db` 三角色召回探针（`MEMORY_DB_PATH` 未设置；另受 HEAD `d6d688a` 的 `zh_vague_recent_only` 失败阻塞）。
+- 临时关闭 `routine`/`continueThread` 的测试配置已用 `git checkout` 恢复并重启网关；真实库 v9；备份 `~/.avatar/memory.db.bak-v8-20261031-topicq`。
