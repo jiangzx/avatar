@@ -25,6 +25,15 @@ describe('proactivity.json', () => {
     expect(cfg.threads.quoteMaxChars).toBe(80);
   });
 
+  it('sizes the three tiers for a heavy call day', () => {
+    const cfg = loadProactivity(path);
+    expect(cfg.tiers).toEqual({
+      quiet: { threshold: 65, maxPerSession: 4, maxPerDay: 12 },
+      moderate: { threshold: 40, maxPerSession: 8, maxPerDay: 60 },
+      active: { threshold: 30, maxPerSession: 10, maxPerDay: 100 },
+    });
+  });
+
   it('rejects weights that do not sum to 100, unknown keys and out-of-range values', () => {
     const bad = raw();
     bad.kinds.routine.weights.novelty += 1;
@@ -39,6 +48,12 @@ describe('proactivity.json', () => {
     const lookback = raw();
     lookback.material.familyLookback = 0;
     expect(ProactivitySchema.safeParse(lookback).success).toBe(false);
+    const day = raw();
+    day.tiers.active.maxPerDay = 121;
+    expect(ProactivitySchema.safeParse(day).success).toBe(false);
+    const maxDay = raw();
+    maxDay.tiers.active.maxPerDay = 120;
+    expect(ProactivitySchema.safeParse(maxDay).success).toBe(true);
   });
 
   it('is part of the config snapshot and can be overlaid', () => {

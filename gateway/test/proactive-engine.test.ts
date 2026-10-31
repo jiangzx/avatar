@@ -68,8 +68,8 @@ describe('scoring', () => {
   });
 
   it('gets quieter as the session goes on (fatigue)', () => {
-    // After 2 of 4 lines: interestTopic 0.4425 and selfShare 0.4275 are both under 0.45.
-    expect(decide(ctx({ has: { openLoop: false, interest: true, family: false }, sessionSpoken: 2 }), cfg).kind).toBe('quiet');
+    // After 6 of 8 lines: interestTopic 0.36875 and selfShare 0.35625 are both under 0.40.
+    expect(decide(ctx({ has: { openLoop: false, interest: true, family: false }, sessionSpoken: 6 }), cfg).kind).toBe('quiet');
   });
 
   it('opens with a mood check after a low last session, ahead of a due event and the morning greeting', () => {
@@ -87,7 +87,7 @@ describe('scoring', () => {
   });
 
   it('opens with a plain greeting when nothing clears the threshold', () => {
-    expect(decide(ctx({ moment: 'sessionStart', now: AFTERNOON }), cfg)).toEqual({ kind: 'greetingPlain', score: 0.45, candidates: 0 });
+    expect(decide(ctx({ moment: 'sessionStart', now: AFTERNOON }), cfg)).toEqual({ kind: 'greetingPlain', score: 0.4, candidates: 0 });
   });
 
   it('lowers a kind the user keeps turning down', () => {

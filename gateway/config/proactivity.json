@@ -2,9 +2,9 @@
   "enabled": true,
   "defaultTier": "moderate",
   "tiers": {
-    "quiet": { "threshold": 70, "maxPerSession": 2, "maxPerDay": 4 },
-    "moderate": { "threshold": 45, "maxPerSession": 4, "maxPerDay": 20 },
-    "active": { "threshold": 30, "maxPerSession": 6, "maxPerDay": 30 }
+    "quiet": { "threshold": 65, "maxPerSession": 4, "maxPerDay": 12 },
+    "moderate": { "threshold": 40, "maxPerSession": 8, "maxPerDay": 60 },
+    "active": { "threshold": 30, "maxPerSession": 10, "maxPerDay": 100 }
   },
   "acceptance": { "priorAccepted": 2, "priorRejected": 2, "windowMs": 15000 },
   "familiarity": { "familiarMinSessions": 3, "familiarMinDays": 2, "oldFriendMinSessions": 15, "oldFriendMinDays": 10 },

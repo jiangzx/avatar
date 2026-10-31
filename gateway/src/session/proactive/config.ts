@@ -13,7 +13,7 @@ const Pct = z.number().int().min(0).max(100);
 const Count = (max: number) => z.number().int().min(0).max(max);
 const Days = (min: number, max: number) => z.number().int().min(min).max(max);
 
-const Tier = z.object({ threshold: Pct, maxPerSession: Count(20), maxPerDay: Count(60) }).strict();
+const Tier = z.object({ threshold: Pct, maxPerSession: Count(20), maxPerDay: Count(120) }).strict();
 
 const Kind = z.object({
   enabled: z.boolean(),
